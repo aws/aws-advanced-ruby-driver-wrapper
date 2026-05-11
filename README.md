@@ -1,17 +1,16 @@
-## My Project
+# AWS Advanced Ruby Wrapper
 
-TODO: Fill this README out!
+AWS Advanced Ruby Wrapper for AWS MySQL and PostgreSQL databases, providing fast failover, topology caching, and enhanced monitoring.
 
-Be sure to:
+## Installation
 
-* Change the title in this README
-* Edit your repository description on GitHub
+Add this line to your application's Gemfile:
 
-## Security
+```ruby
+gem 'aws-advanced-ruby-wrapper'
+```
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
+For MySQL users, also install `gem 'mysql2'`<br>
+For PostgreSQL users, also install `gem 'pg'`
 
-## License
-
-This project is licensed under the Apache-2.0 License.
-
+Then execute `bundle install`

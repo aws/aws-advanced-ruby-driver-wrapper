@@ -1,0 +1,31 @@
+AllCops:
+  NewCops: enable
+  TargetRubyVersion: 2.7
+  Exclude:
+    - 'vendor/**/*'
+    - 'bin/**/*'
+
+Lint/UnusedBlockArgument:
+  Exclude:
+    - '*.gemspec'
+
+Metrics/AbcSize:
+  Enabled: false
+
+Metrics/BlockLength:
+  Enabled: false
+
+Metrics/TooManyInstanceVariables:
+  Enabled: false
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/ModuleLength:
+  Enabled: false
+
+Metrics/ParameterLists:
+  Enabled: false
+
+Style/MultilineTernaryOperator:
+  Enabled: false
