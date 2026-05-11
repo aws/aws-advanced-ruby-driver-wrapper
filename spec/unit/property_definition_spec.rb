@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_advanced_ruby_wrapper/property_definition'
+require 'aws_ruby_database_driver_wrapper/property_definition'
 
-RSpec.describe AwsAdvancedRubyWrapper::PropertyDefinition do
+RSpec.describe AwsRubyDatabaseDriverWrapper::PropertyDefinition do
   describe '.wrapper_property?' do
     it 'returns true for known wrapper properties' do
       expect(described_class.wrapper_property?(:plugins)).to be true

@@ -37,7 +37,7 @@ module PgTestHelper
   end
 
   def self.wrapper_connect
-    AwsAdvancedRubyWrapper::WrapperPgConnection.new(**native_config)
+    AwsRubyDatabaseDriverWrapper::WrapperPgConnection.new(**native_config)
   end
 
   def self.native_connect

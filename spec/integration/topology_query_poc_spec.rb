@@ -14,12 +14,12 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_advanced_ruby_wrapper/db_dialects/aurora_pg_dialect'
-require 'aws_advanced_ruby_wrapper/db_dialects/aurora_mysql_dialect'
-require 'aws_advanced_ruby_wrapper/host/host_availability'
-require 'aws_advanced_ruby_wrapper/host/host_availability_strategy'
-require 'aws_advanced_ruby_wrapper/host/host_info'
-require 'aws_advanced_ruby_wrapper/host/host_role'
+require 'aws_ruby_database_driver_wrapper/db_dialects/aurora_pg_dialect'
+require 'aws_ruby_database_driver_wrapper/db_dialects/aurora_mysql_dialect'
+require 'aws_ruby_database_driver_wrapper/host/host_availability'
+require 'aws_ruby_database_driver_wrapper/host/host_availability_strategy'
+require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper/host/host_role'
 
 RSpec.shared_examples 'Direct driver Aurora topology querying' do |driver_helper|
   include driver_helper
@@ -28,8 +28,8 @@ RSpec.shared_examples 'Direct driver Aurora topology querying' do |driver_helper
     conn = driver_helper.native_connect
     # This should be replaced with actual db dialect detection in implementation.
     db_dialect = conn.instance_of?(Mysql2::Client) ?
-                   AwsAdvancedRubyWrapper::DbDialects::AuroraMysqlDialect.new :
-                   AwsAdvancedRubyWrapper::DbDialects::AuroraPgDialect.new
+                   AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect.new :
+                   AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect.new
     result = db_dialect.execute(conn, db_dialect.class::TOPOLOGY_QUERY)
     hosts = result.map do |row|
       Host::HostInfo.new(
@@ -51,7 +51,7 @@ RSpec.shared_examples 'Direct driver Aurora topology querying' do |driver_helper
 end
 
 RSpec.describe 'Direct driver Aurora topology querying' do
-  Host = AwsAdvancedRubyWrapper::Host
+  Host = AwsRubyDatabaseDriverWrapper::Host
 
   context 'PostgreSQL' do
     include_examples 'Direct driver Aurora topology querying', PgTestHelper

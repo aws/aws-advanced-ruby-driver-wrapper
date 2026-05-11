@@ -15,9 +15,9 @@
 # limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_advanced_ruby_wrapper/utils/storage/expiration_cache'
+require 'aws_ruby_database_driver_wrapper/utils/storage/expiration_cache'
 
-RSpec.describe AwsAdvancedRubyWrapper::Utils::Storage::ExpirationCache do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::ExpirationCache do
   subject(:cache) { described_class.new(ttl: 1) }
 
   describe '#put and #get' do
@@ -124,7 +124,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::Storage::ExpirationCache do
 
   describe 'thread safety' do
     it 'handles concurrent put and get without errors' do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           50.times do |j|
             key = :"key_#{j % 10}"
@@ -141,7 +141,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::Storage::ExpirationCache do
     end
 
     it 'handles concurrent mixed operations without errors' do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |_i|
         Thread.new do
           50.times do |j|
             key = :"key_#{j % 10}"

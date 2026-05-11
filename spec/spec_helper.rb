@@ -21,7 +21,8 @@ SimpleCov.start do
   # Generate both HTML and XML formats
   SimpleCov.formatters =
     SimpleCov::Formatter::MultiFormatter.new(
-      [SimpleCov::Formatter::HTMLFormatter, SimpleCov::Formatter::CoberturaFormatter])
+      [SimpleCov::Formatter::HTMLFormatter, SimpleCov::Formatter::CoberturaFormatter]
+    )
 
   # Filter out test files and vendor code from coverage analysis
   add_filter '/spec/'
@@ -38,14 +39,14 @@ $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 Dir[File.join(__dir__, 'support', '**', '*.rb')].sort.each { |f| require f }
 
 require 'bundler/setup'
-require 'aws_advanced_ruby_wrapper/postgresql'
-require 'aws_advanced_ruby_wrapper/mysql'
+require 'aws_ruby_database_driver_wrapper/postgresql'
+require 'aws_ruby_database_driver_wrapper/mysql'
 require 'dotenv/load'
 require 'pg'
 require 'mysql2'
 require 'active_record'
-require 'aws_advanced_ruby_wrapper/activerecord/aws_mysql2_adapter'
-require 'aws_advanced_ruby_wrapper/activerecord/aws_postgresql_adapter'
+require 'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
+require 'aws_ruby_database_driver_wrapper/activerecord/aws_postgresql_adapter'
 
 # Load environment variables for tests
 Dotenv.load

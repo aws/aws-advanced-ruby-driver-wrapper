@@ -1,3 +1,6 @@
+plugins:
+  - rubocop-performance
+
 AllCops:
   NewCops: enable
   TargetRubyVersion: 2.7
@@ -9,14 +12,21 @@ Lint/UnusedBlockArgument:
   Exclude:
     - '*.gemspec'
 
+Lint/UnusedMethodArgument:
+  AllowUnusedKeywordArguments: true
+  IgnoreNotImplementedMethods: true
+
 Metrics/AbcSize:
   Enabled: false
 
 Metrics/BlockLength:
   Enabled: false
 
-Metrics/TooManyInstanceVariables:
+Metrics/ClassLength:
   Enabled: false
+
+Metrics/CyclomaticComplexity:
+  Max: 15
 
 Metrics/MethodLength:
   Enabled: false
@@ -25,7 +35,31 @@ Metrics/ModuleLength:
   Enabled: false
 
 Metrics/ParameterLists:
+  Max: 10
+
+Metrics/PerceivedComplexity:
+  Enabled: false
+
+Style/Documentation:
   Enabled: false
 
 Style/MultilineTernaryOperator:
   Enabled: false
+
+Style/OptionalBooleanParameter:
+  Enabled: false
+
+Layout/LineLength:
+  Max: 140
+
+Lint/ConstantDefinitionInBlock:
+  Exclude:
+    - 'spec/**/*'
+
+Performance/CollectionLiteralInLoop:
+  Exclude:
+    - 'spec/**/*'
+
+Naming/PredicateMethod:
+  Exclude:
+    - 'lib/aws_ruby_database_driver_wrapper/errors/error_handler.rb'

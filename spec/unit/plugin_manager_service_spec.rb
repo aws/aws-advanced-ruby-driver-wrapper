@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_advanced_ruby_wrapper/services/plugin_manager_service'
-require 'aws_advanced_ruby_wrapper/services/service_container'
-require 'aws_advanced_ruby_wrapper/plugins/default_plugin'
-require 'aws_advanced_ruby_wrapper/plugins/failover_plugin'
-require 'aws_advanced_ruby_wrapper/host/host_info'
-require 'aws_advanced_ruby_wrapper/errors'
-require 'aws_advanced_ruby_wrapper/utils/connection_config'
+require 'aws_ruby_database_driver_wrapper/services/plugin_manager_service'
+require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_ruby_database_driver_wrapper/plugins/default_plugin'
+require 'aws_ruby_database_driver_wrapper/plugins/failover_plugin'
+require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_ruby_database_driver_wrapper/utils/connection_config'
 
 # Test plugin helpers that track calls in an array to verify plugin pipeline ordering.
 module TestPlugins
@@ -35,14 +35,14 @@ module TestPlugins
       @subscribed_methods = Set['*']
     end
 
-    def connect(host_info, props, is_initial_connection, pipeline_callable)
+    def connect(_host_info, _props, _is_initial_connection, pipeline_callable)
       @calls << "#{self.class.name.split('::').last}:before connect"
       result = @connection || pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after connect"
       result
     end
 
-    def execute(target_obj, target_method_name, pipeline_callable, *args, **options, &block)
+    def execute(_target_obj, _target_method_name, pipeline_callable, *_args, **_options)
       @calls << "#{self.class.name.split('::').last}:before execute"
       result = pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after execute"
@@ -76,30 +76,30 @@ module TestPlugins
       @throw_before_call = throw_before_call
     end
 
-    def connect(host_info, props, is_initial_connection, pipeline_callable)
+    def connect(_host_info, _props, _is_initial_connection, pipeline_callable)
       @calls << "#{self.class.name.split('::').last}:before connect"
-      raise AwsAdvancedRubyWrapper::Errors::AwsError, 'test error' if @throw_before_call
+      raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
 
       pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after connect"
-      raise AwsAdvancedRubyWrapper::Errors::AwsError, 'test error'
+      raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error'
     end
 
-    def execute(target_obj, target_method_name, pipeline_callable, *args, **options, &block)
+    def execute(_target_obj, _target_method_name, pipeline_callable, *_args, **_options)
       @calls << "#{self.class.name.split('::').last}:before execute"
-      raise AwsAdvancedRubyWrapper::Errors::AwsError, 'test error' if @throw_before_call
+      raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
 
       pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after execute"
-      raise AwsAdvancedRubyWrapper::Errors::AwsError, 'test error'
+      raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error'
     end
   end
 end
 
-RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManagerService do
   # Helper to build a PluginService with directly injected plugins (bypassing factory loading).
   def build_manager_with_plugins(plugins)
-    manager = AwsAdvancedRubyWrapper::Services::PluginManagerService.allocate
+    manager = AwsRubyDatabaseDriverWrapper::Services::PluginManagerService.allocate
     manager.instance_variable_set(:@plugins, plugins)
     manager.instance_variable_set(:@pipeline_cache, {})
     manager
@@ -112,26 +112,26 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
         plugins = [
           TestPlugins::TestPluginOne.new(calls),
           TestPlugins::TestPluginTwo.new(calls),
-          TestPlugins::TestPluginThree.new(calls),
+          TestPlugins::TestPluginThree.new(calls)
         ]
         manager = build_manager_with_plugins(plugins)
 
         target_obj = Object.new
-        result = manager.execute(nil, nil, target_obj, 'test_call_a', -> {
+        result = manager.execute(nil, nil, target_obj, 'test_call_a', lambda {
           calls << 'target_call'
           'result_value'
         })
 
         expect(result).to eq('result_value')
         expect(calls).to eq([
-          'TestPluginOne:before execute',
-          'TestPluginTwo:before execute',
-          'TestPluginThree:before execute',
-          'target_call',
-          'TestPluginThree:after execute',
-          'TestPluginTwo:after execute',
-          'TestPluginOne:after execute'
-        ])
+                              'TestPluginOne:before execute',
+                              'TestPluginTwo:before execute',
+                              'TestPluginThree:before execute',
+                              'target_call',
+                              'TestPluginThree:after execute',
+                              'TestPluginTwo:after execute',
+                              'TestPluginOne:after execute'
+                            ])
       end
     end
 
@@ -145,19 +145,19 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        result = manager.execute(nil, nil, Object.new, 'test_call_b', -> {
+        result = manager.execute(nil, nil, Object.new, 'test_call_b', lambda {
           calls << 'target_call'
           'result_value'
         })
 
         expect(result).to eq('result_value')
         expect(calls).to eq([
-          'TestPluginOne:before execute',
-          'TestPluginTwo:before execute',
-          'target_call',
-          'TestPluginTwo:after execute',
-          'TestPluginOne:after execute'
-        ])
+                              'TestPluginOne:before execute',
+                              'TestPluginTwo:before execute',
+                              'target_call',
+                              'TestPluginTwo:after execute',
+                              'TestPluginOne:after execute'
+                            ])
       end
     end
 
@@ -171,17 +171,17 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        result = manager.execute(nil, nil, Object.new, 'test_call_c', -> {
+        result = manager.execute(nil, nil, Object.new, 'test_call_c', lambda {
           calls << 'target_call'
           'result_value'
         })
 
         expect(result).to eq('result_value')
         expect(calls).to eq([
-          'TestPluginOne:before execute',
-          'target_call',
-          'TestPluginOne:after execute'
-        ])
+                              'TestPluginOne:before execute',
+                              'target_call',
+                              'TestPluginOne:after execute'
+                            ])
       end
     end
   end
@@ -197,16 +197,16 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
       ]
       manager = build_manager_with_plugins(plugins)
 
-      host_info = AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'localhost')
+      host_info = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'localhost')
       result = manager.connect(host_info, nil, true)
 
       expect(result).to eq(mock_conn)
       expect(calls).to eq([
-        'TestPluginOne:before connect',
-        'TestPluginThree:before connect',
-        'TestPluginThree:after connect',
-        'TestPluginOne:after connect'
-      ])
+                            'TestPluginOne:before connect',
+                            'TestPluginThree:before connect',
+                            'TestPluginThree:after connect',
+                            'TestPluginOne:after connect'
+                          ])
     end
 
     it 'skips the specified plugin when plugin_to_skip is provided' do
@@ -220,14 +220,14 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
       ]
       manager = build_manager_with_plugins(plugins)
 
-      host_info = AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'localhost')
+      host_info = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'localhost')
       result = manager.connect(host_info, nil, true, plugin_to_skip: plugin_one)
 
       expect(result).to eq(mock_conn)
       expect(calls).to eq([
-        'TestPluginThree:before connect',
-        'TestPluginThree:after connect'
-      ])
+                            'TestPluginThree:before connect',
+                            'TestPluginThree:after connect'
+                          ])
     end
   end
 
@@ -243,13 +243,13 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        host_info = AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'localhost')
-        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsAdvancedRubyWrapper::Errors::AwsError)
+        host_info = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'localhost')
+        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
 
         expect(calls).to eq([
-          'TestPluginOne:before connect',
-          'TestPluginRaisesError:before connect'
-        ])
+                              'TestPluginOne:before connect',
+                              'TestPluginRaisesError:before connect'
+                            ])
       end
     end
 
@@ -264,16 +264,16 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        host_info = AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'localhost')
-        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsAdvancedRubyWrapper::Errors::AwsError)
+        host_info = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'localhost')
+        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
 
         expect(calls).to eq([
-          'TestPluginOne:before connect',
-          'TestPluginRaisesError:before connect',
-          'TestPluginThree:before connect',
-          'TestPluginThree:after connect',
-          'TestPluginRaisesError:after connect'
-        ])
+                              'TestPluginOne:before connect',
+                              'TestPluginRaisesError:before connect',
+                              'TestPluginThree:before connect',
+                              'TestPluginThree:after connect',
+                              'TestPluginRaisesError:after connect'
+                            ])
       end
     end
   end
@@ -318,7 +318,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
   end
 
   def service_container_with_wrapper_props(wrapper_props = {})
-    container = AwsAdvancedRubyWrapper::Services::ServiceContainer.new
+    container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new
     connection_service = double('ConnectionService', wrapper_props: wrapper_props)
     container.connection_service = connection_service
     container
@@ -330,7 +330,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
       manager = described_class.new(container)
 
       expect(manager.num_plugins).to eq(1)
-      expect(manager.plugin_in_use?(AwsAdvancedRubyWrapper::Plugins::DefaultPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)).to be true
     end
 
     it 'loads default plugins (failover + default) when no plugins option specified' do
@@ -338,19 +338,19 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::PluginManagerService do
       manager = described_class.new(container)
 
       expect(manager.num_plugins).to eq(2)
-      expect(manager.plugin_in_use?(AwsAdvancedRubyWrapper::Plugins::FailoverPlugin)).to be true
-      expect(manager.plugin_in_use?(AwsAdvancedRubyWrapper::Plugins::DefaultPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)).to be true
     end
 
     it 'raises an error when an invalid plugin code is passed' do
       container = service_container_with_wrapper_props(plugins: 'nonexistent_plugin')
       expect { described_class.new(container) }
-        .to raise_error(AwsAdvancedRubyWrapper::Errors::AwsError, 'Invalid plugin: nonexistent_plugin')
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'Invalid plugin: nonexistent_plugin')
     end
 
     it 'does not sort the plugin list when auto_sort_plugins is false' do
-      stub_plugin_a = Class.new(AwsAdvancedRubyWrapper::Plugins::DefaultPlugin)
-      stub_plugin_b = Class.new(AwsAdvancedRubyWrapper::Plugins::DefaultPlugin)
+      stub_plugin_a = Class.new(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)
+      stub_plugin_b = Class.new(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)
 
       described_class.register_plugin('plugin_a', stub_plugin_a, weight: 900)
       described_class.register_plugin('plugin_b', stub_plugin_b, weight: 100)

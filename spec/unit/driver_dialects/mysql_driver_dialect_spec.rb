@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'aws_advanced_ruby_wrapper/driver_dialects/mysql_driver_dialect'
-require 'aws_advanced_ruby_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_ruby_database_driver_wrapper/host/host_info'
 
-RSpec.describe AwsAdvancedRubyWrapper::DriverDialects::MysqlDriverDialect do
+RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('Mysql2::Client') }
-  let(:host_info) { AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'db.example.com', port: 3306) }
+  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 3306) }
   let(:config) { { database: 'testdb', username: 'user' } }
 
   describe '#connect' do
@@ -76,7 +76,7 @@ RSpec.describe AwsAdvancedRubyWrapper::DriverDialects::MysqlDriverDialect do
     end
 
     it 'omits port when not specified' do
-      no_port = AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'db.example.com')
+      no_port = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com')
       result = dialect.prepare_connect_config(no_port, config)
       expect(result).not_to have_key(:port)
     end
@@ -95,11 +95,11 @@ RSpec.describe AwsAdvancedRubyWrapper::DriverDialects::MysqlDriverDialect do
     end
 
     it 'includes CONNECTION_QUERY' do
-      expect(dialect.network_bound_methods).to include(AwsAdvancedRubyWrapper::RubyMethod::CONNECTION_QUERY)
+      expect(dialect.network_bound_methods).to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_QUERY)
     end
 
     it 'excludes CONNECTION_ESCAPE' do
-      expect(dialect.network_bound_methods).not_to include(AwsAdvancedRubyWrapper::RubyMethod::CONNECTION_ESCAPE)
+      expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE)
     end
   end
 end

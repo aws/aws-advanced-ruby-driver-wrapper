@@ -39,7 +39,7 @@ RSpec.describe 'Basic wrapper workflows' do
 
     include MysqlTestHelper
 
-    # Note: MySQL has a prepared statement object (Mysql2::Statement), but PG does not.
+    # NOTE: MySQL has a prepared statement object (Mysql2::Statement), but PG does not.
     it 'wraps prepared statement objects' do
       conn = MysqlTestHelper.wrapper_connect
       stmt = conn.prepare('SELECT ? + ? AS total')
@@ -52,8 +52,7 @@ RSpec.describe 'Basic wrapper workflows' do
     it 'wraps streaming result objects' do
       conn = MysqlTestHelper.wrapper_connect
       result = conn.query('SELECT 1 AS val UNION SELECT 2 UNION SELECT 3', stream: true)
-      rows = []
-      result.each { |row| rows << row['val'].to_i }
+      rows = result.map { |row| row['val'].to_i }
       expect(rows).to eq([1, 2, 3])
     ensure
       conn.close

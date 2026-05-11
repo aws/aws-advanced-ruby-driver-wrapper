@@ -1,13 +1,13 @@
-# AWS Advanced Ruby Wrapper
+# AWS Ruby Database Driver Wrapper
 
-AWS Advanced Ruby Wrapper for AWS MySQL and PostgreSQL databases, providing fast failover, topology caching, and enhanced monitoring.
+AWS Ruby Database Driver Wrapper for AWS MySQL and PostgreSQL databases, providing fast failover, topology caching, and enhanced monitoring.
 
 ## Installation
 
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'aws-advanced-ruby-wrapper'
+gem 'aws-ruby-database-driver-wrapper'
 ```
 
 For MySQL users, also install `gem 'mysql2'`<br>

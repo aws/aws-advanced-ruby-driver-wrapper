@@ -15,9 +15,9 @@
 # limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_advanced_ruby_wrapper/utils/storage/sliding_expiration_cache'
+require 'aws_ruby_database_driver_wrapper/utils/storage/sliding_expiration_cache'
 
-RSpec.describe AwsAdvancedRubyWrapper::Utils::Storage::SlidingExpirationCache do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::SlidingExpirationCache do
   subject(:cache) { described_class.new(ttl: 1) }
 
   describe '#get' do
@@ -166,7 +166,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::Storage::SlidingExpirationCache do
 
   describe 'thread safety' do
     it 'handles concurrent compute_if_absent without errors' do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |i|
         Thread.new do
           50.times do |j|
             key = :"key_#{j % 10}"
@@ -182,14 +182,14 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::Storage::SlidingExpirationCache do
     end
 
     it 'handles concurrent mixed operations without errors' do
-      threads = 10.times.map do |i|
+      threads = Array.new(10) do |_i|
         Thread.new do
           50.times do |j|
             key = :"key_#{j % 10}"
             cache.compute_if_absent(key) { j }
             cache.get(key)
             cache.extend_expiration(key)
-            cache.remove_if(key) { |v| v.even? }
+            cache.remove_if(key, &:even?)
             cache.entries
           end
         end

@@ -15,20 +15,20 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_advanced_ruby_wrapper/mysql'
-require 'aws_advanced_ruby_wrapper/services/plugin_manager_service'
-require 'aws_advanced_ruby_wrapper/services/service_container'
-require 'aws_advanced_ruby_wrapper/plugins/default_plugin'
-require 'aws_advanced_ruby_wrapper/errors'
-require 'aws_advanced_ruby_wrapper/utils/connection_config'
+require 'aws_ruby_database_driver_wrapper/mysql'
+require 'aws_ruby_database_driver_wrapper/services/plugin_manager_service'
+require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_ruby_database_driver_wrapper/plugins/default_plugin'
+require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_ruby_database_driver_wrapper/utils/connection_config'
 
-RSpec.describe AwsAdvancedRubyWrapper::Mysql2WrapperResult do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
   def build_service_container_with_plugins(plugins, current_connection = nil)
-    plugin_service = AwsAdvancedRubyWrapper::Services::PluginManagerService.allocate
+    plugin_service = AwsRubyDatabaseDriverWrapper::Services::PluginManagerService.allocate
     plugin_service.instance_variable_set(:@pipeline_cache, {})
     plugin_service.instance_variable_set(:@plugins, plugins)
     connection_service = double('ConnectionService', current_connection: current_connection)
-    container = AwsAdvancedRubyWrapper::Services::ServiceContainer.new
+    container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new
     container.plugin_manager_service = plugin_service
     container.connection_service = connection_service
     container
@@ -44,7 +44,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Mysql2WrapperResult do
       @subscribed_methods = Set['*']
     end
 
-    def execute(target_obj, target_method_name, pipeline_callable, *args, **options, &block)
+    def execute(_target_obj, target_method_name, pipeline_callable, *args, **options, &block)
       @calls << "before:#{target_method_name}"
       result = pipeline_callable.call(*args, **options, &block)
       @calls << "after:#{target_method_name}"
@@ -71,9 +71,9 @@ RSpec.describe AwsAdvancedRubyWrapper::Mysql2WrapperResult do
       wrapper_result = described_class.new(mock_result, service_container, mock_connection)
 
       rows = []
-      expect {
+      expect do
         wrapper_result.each { |row| rows << row }
-      }.to raise_error(Mysql2::Error, /Lost connection/)
+      end.to raise_error(Mysql2::Error, /Lost connection/)
 
       # The first row was yielded before the error
       expect(rows).to eq([{ 'id' => 1 }])
@@ -93,8 +93,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Mysql2WrapperResult do
 
       wrapper_result = described_class.new(mock_result, service_container, mock_connection)
 
-      rows = []
-      wrapper_result.each { |row| rows << row }
+      rows = wrapper_result.map { |row| row }
 
       expect(rows).to eq([{ 'id' => 1 }, { 'id' => 2 }])
       expect(plugin.calls).to eq(['before:result.each', 'after:result.each'])

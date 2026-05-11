@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'aws_advanced_ruby_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_advanced_ruby_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_ruby_database_driver_wrapper/host/host_info'
 
-RSpec.describe AwsAdvancedRubyWrapper::DriverDialects::PgDriverDialect do
+RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('PG::Connection') }
-  let(:host_info) { AwsAdvancedRubyWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
   let(:config) { { database: 'testdb', user: 'pguser' } }
 
   describe '#connect' do
@@ -103,11 +103,11 @@ RSpec.describe AwsAdvancedRubyWrapper::DriverDialects::PgDriverDialect do
     end
 
     it 'includes CONNECTION_EXEC' do
-      expect(dialect.network_bound_methods).to include(AwsAdvancedRubyWrapper::RubyMethod::CONNECTION_EXEC)
+      expect(dialect.network_bound_methods).to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_EXEC)
     end
 
     it 'excludes CONNECTION_ESCAPE' do
-      expect(dialect.network_bound_methods).not_to include(AwsAdvancedRubyWrapper::RubyMethod::CONNECTION_ESCAPE)
+      expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE)
     end
   end
 end

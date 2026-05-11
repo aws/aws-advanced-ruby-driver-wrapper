@@ -28,7 +28,6 @@ group :development do
   gem 'rdoc'
   gem 'rubocop'
   gem 'rubocop-performance'
-  gem 'rubocop-rspec'
   gem 'yard'
 end
 

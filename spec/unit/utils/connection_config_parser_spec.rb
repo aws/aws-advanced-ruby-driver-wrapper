@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_advanced_ruby_wrapper/utils/connection_config_parser'
+require 'aws_ruby_database_driver_wrapper/utils/connection_config_parser'
 
-RSpec.describe AwsAdvancedRubyWrapper::Utils::ConnectionConfigParser do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
   let(:parser) { described_class }
 
   describe 'URI parsing' do
@@ -101,9 +101,8 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::ConnectionConfigParser do
 
     it 'keyword overrides win over URI query params' do
       config = parser.parse(:postgresql,
-        'postgresql://host/db?plugins=iam',
-        plugins: 'failover'
-      )
+                            'postgresql://host/db?plugins=iam',
+                            plugins: 'failover')
       expect(config.wrapper_props[:plugins]).to eq('failover')
     end
   end
@@ -161,11 +160,10 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::ConnectionConfigParser do
 
     it 'does not leak wrapper properties into driver_config' do
       config = parser.parse(:postgresql,
-        host: 'myhost',
-        plugins: 'failover',
-        cluster_id: 'no-leak',
-        failover_timeout_sec: 60
-      )
+                            host: 'myhost',
+                            plugins: 'failover',
+                            cluster_id: 'no-leak',
+                            failover_timeout_sec: 60)
       expect(config.driver_props).not_to have_key(:plugins)
       expect(config.driver_props).not_to have_key(:cluster_id)
       expect(config.driver_props).not_to have_key(:failover_timeout_sec)

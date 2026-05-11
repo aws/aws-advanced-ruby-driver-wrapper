@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require 'aws_advanced_ruby_wrapper/errors/pg_error_handler'
-require 'aws_advanced_ruby_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_ruby_database_driver_wrapper/errors/pg_error_handler'
+require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
 
-RSpec.describe AwsAdvancedRubyWrapper::Errors::PgErrorHandler do
-  let(:driver_dialect) { AwsAdvancedRubyWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
+  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
   describe '#network_error_by_sql_state?' do
@@ -140,13 +140,11 @@ RSpec.describe AwsAdvancedRubyWrapper::Errors::PgErrorHandler do
 
   def build_error_with_cause(cause)
     begin
-      begin
-        raise cause
-      rescue StandardError
-        raise StandardError, 'wrapper error'
-      end
-    rescue StandardError => e
-      return e
+      raise cause
+    rescue StandardError
+      raise StandardError, 'wrapper error'
     end
+  rescue StandardError => e
+    e
   end
 end

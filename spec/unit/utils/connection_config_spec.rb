@@ -15,11 +15,11 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_advanced_ruby_wrapper/utils/connection_config'
-require 'aws_advanced_ruby_wrapper/services/connection_service'
-require 'aws_advanced_ruby_wrapper/property_definition'
+require 'aws_ruby_database_driver_wrapper/utils/connection_config'
+require 'aws_ruby_database_driver_wrapper/services/connection_service'
+require 'aws_ruby_database_driver_wrapper/property_definition'
 
-RSpec.describe AwsAdvancedRubyWrapper::Utils::ConnectionConfig do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig do
   describe '#initialize' do
     it 'sets defaults for all attributes' do
       config = described_class.new
@@ -68,9 +68,9 @@ RSpec.describe AwsAdvancedRubyWrapper::Utils::ConnectionConfig do
   end
 end
 
-RSpec.describe AwsAdvancedRubyWrapper::Services::ConnectionService do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
   def build_service(driver_props: {}, wrapper_props: {}, driver_name: nil, initial_host_info: nil)
-    config = AwsAdvancedRubyWrapper::Utils::ConnectionConfig.new(
+    config = AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig.new(
       driver_props: driver_props,
       wrapper_props: wrapper_props,
       driver_name: driver_name,

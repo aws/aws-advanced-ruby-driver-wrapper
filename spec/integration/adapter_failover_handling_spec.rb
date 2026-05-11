@@ -45,7 +45,7 @@ RSpec.shared_examples 'ActiveRecord adapter failover handling' do |driver_helper
         expect(ActiveRecord::Base.connection_pool.connections.count(&:in_use?)).to eq(1)
         conn.execute('SIMULATE FAILOVER_SUCCESS')
       end
-    end.to raise_error(AwsAdvancedRubyWrapper::Errors::FailoverSuccessError)
+    end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
 
     # NOTE: the broken connection is lazily removed, so it won't be removed until we try to grab a connection from
     # the pool again.

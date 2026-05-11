@@ -15,20 +15,20 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_advanced_ruby_wrapper/services/host_service'
-require 'aws_advanced_ruby_wrapper/host/host_info'
-require 'aws_advanced_ruby_wrapper/host/host_role'
-require 'aws_advanced_ruby_wrapper/host/random_host_selector'
-require 'aws_advanced_ruby_wrapper/errors'
+require 'aws_ruby_database_driver_wrapper/services/host_service'
+require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper/host/host_role'
+require 'aws_ruby_database_driver_wrapper/host/random_host_selector'
+require 'aws_ruby_database_driver_wrapper/errors'
 
-RSpec.describe AwsAdvancedRubyWrapper::Services::HostService do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
   let(:service) { described_class.new }
 
   let(:reader) do
-    AwsAdvancedRubyWrapper::Host::HostInfo.new(
+    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
       host: 'reader-host',
       port: 5432,
-      role: AwsAdvancedRubyWrapper::Host::HostRole::READER
+      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER
     )
   end
 
@@ -37,7 +37,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::HostService do
   describe '#select_host' do
     context 'with a default strategy' do
       it 'delegates to the registered selector' do
-        result = service.select_host(hosts, AwsAdvancedRubyWrapper::Host::HostRole::READER, 'random')
+        result = service.select_host(hosts, AwsRubyDatabaseDriverWrapper::Host::HostRole::READER, 'random')
         expect(result).to eq(reader)
       end
     end
@@ -45,7 +45,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::HostService do
     context 'with an unknown strategy' do
       it 'raises an error' do
         expect { service.select_host(hosts, nil, 'nonexistent') }
-          .to raise_error(AwsAdvancedRubyWrapper::Errors::AwsError, /Unsupported host selection strategy/)
+          .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Unsupported host selection strategy/)
       end
     end
   end
@@ -65,7 +65,7 @@ RSpec.describe AwsAdvancedRubyWrapper::Services::HostService do
       custom_selector = instance_double('CustomSelector')
 
       expect { service.register_host_selector('random', custom_selector) }
-        .to raise_error(AwsAdvancedRubyWrapper::Errors::AwsError, /Cannot override default host selection strategy/)
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Cannot override default host selection strategy/)
     end
   end
 end
