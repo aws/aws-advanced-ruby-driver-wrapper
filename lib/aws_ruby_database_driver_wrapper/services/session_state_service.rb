@@ -17,27 +17,18 @@
 module AwsRubyDatabaseDriverWrapper
   module Services
     class SessionStateService
-      # @return [Boolean]
-      def in_transaction?
-        raise NotImplementedError
+      attr_accessor :in_transaction, :autocommit
+      alias in_transaction? in_transaction
+      alias autocommit? autocommit
+
+      def initialize
+        @in_transaction = false
+        @autocommit = true
       end
 
-      # @param value [Boolean]
-      def in_transaction=(value)
-        raise NotImplementedError
-      end
-
-      def autocommit?
-        raise NotImplementedError
-      end
-
-      def autocommit=(value)
-        raise NotImplementedError
-      end
-
-      # Reset all tracked session state.
       def reset
-        raise NotImplementedError
+        @in_transaction = false
+        @autocommit = true
       end
 
       # Begin tracking session state changes for a connection switch.
