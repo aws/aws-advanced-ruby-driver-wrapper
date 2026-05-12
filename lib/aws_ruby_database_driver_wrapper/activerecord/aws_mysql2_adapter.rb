@@ -81,8 +81,10 @@ module ActiveRecord
   end
 end
 
-ActiveRecord::ConnectionAdapters.register(
-  'aws_mysql2',
-  'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
-  'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
-)
+if ActiveRecord::ConnectionAdapters.respond_to?(:register)
+  ActiveRecord::ConnectionAdapters.register(
+    'aws_mysql2',
+    'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
+    'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
+  )
+end

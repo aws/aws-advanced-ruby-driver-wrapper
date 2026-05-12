@@ -102,8 +102,10 @@ module ActiveRecord
   end
 end
 
-ActiveRecord::ConnectionAdapters.register(
-  'aws_postgresql',
-  'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
-  'aws_ruby_database_driver_wrapper/activerecord/aws_postgresql_adapter'
-)
+if ActiveRecord::ConnectionAdapters.respond_to?(:register)
+  ActiveRecord::ConnectionAdapters.register(
+    'aws_postgresql',
+    'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
+    'aws_ruby_database_driver_wrapper/activerecord/aws_postgresql_adapter'
+  )
+end

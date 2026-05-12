@@ -1,0 +1,21 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+gemspec path: '..'
+
+gem 'activerecord', '~> 7.0.0'
+gem 'mysql2', '>= 0.5'
+gem 'pg', '>= 1.1'
+
+group :development do
+  gem 'bundler'
+  gem 'rubocop'
+  gem 'rubocop-performance'
+end
+
+group :test do
+  gem 'dotenv'
+  gem 'rspec'
+  gem 'simplecov', require: false
+  gem 'simplecov-cobertura', require: false
+end
