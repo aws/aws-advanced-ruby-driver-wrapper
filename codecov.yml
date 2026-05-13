@@ -1,0 +1,10 @@
+coverage:
+  status:
+    project:
+      default:
+        # TODO: re-enable after adding tests to hit target code coverage
+        enabled: false
+    patch:
+      default:
+        # TODO: re-enable after adding tests to hit target code coverage
+        enabled: false

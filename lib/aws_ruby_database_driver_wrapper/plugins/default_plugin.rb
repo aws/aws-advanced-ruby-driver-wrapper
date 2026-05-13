@@ -1,0 +1,55 @@
+# frozen_string_literal: true
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  You may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+require 'set'
+require_relative '../errors'
+require_relative '../host/host_info'
+
+module AwsRubyDatabaseDriverWrapper
+  module Plugins
+    class DefaultPlugin
+      SUBSCRIBED_METHODS = Set['*'].freeze
+
+      def initialize(service_container, **options)
+        @service_container = service_container
+        @options = options
+      end
+
+      def subscribed_methods
+        SUBSCRIBED_METHODS
+      end
+
+      def connect(host_info, props, is_initial_connection, _)
+        dialect = @service_container.dialect_service.driver_dialect
+        conn = dialect.connect(host_info, props)
+
+        connection_service = @service_container.connection_service
+        if is_initial_connection && connection_service.pg? && connection_service.multi_host_url?
+          connection_service.initial_host_info = Host::HostInfo.new(
+            host: conn.host,
+            port: conn.port.to_i
+          )
+        end
+
+        conn
+      end
+
+      def execute(_target_obj, _target_method_name, target_callable, *args, **options, &block)
+        target_callable.call(*args, **options, &block)
+      end
+    end
+  end
+end
