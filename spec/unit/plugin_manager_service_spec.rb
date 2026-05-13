@@ -326,7 +326,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManagerService do
 
   describe 'plugin loading' do
     it 'loads only the default plugin when plugins option is empty' do
-      container = service_container_with_wrapper_props(plugins: '')
+      container = service_container_with_wrapper_props(wrapper_plugins: '')
       manager = described_class.new(container)
 
       expect(manager.num_plugins).to eq(1)
@@ -343,7 +343,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManagerService do
     end
 
     it 'raises an error when an invalid plugin code is passed' do
-      container = service_container_with_wrapper_props(plugins: 'nonexistent_plugin')
+      container = service_container_with_wrapper_props(wrapper_plugins: 'nonexistent_plugin')
       expect { described_class.new(container) }
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'Invalid plugin: nonexistent_plugin')
     end
@@ -355,7 +355,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManagerService do
       described_class.register_plugin('plugin_a', stub_plugin_a, weight: 900)
       described_class.register_plugin('plugin_b', stub_plugin_b, weight: 100)
 
-      container = service_container_with_wrapper_props(plugins: 'plugin_a,plugin_b', auto_sort_plugins: false)
+      container = service_container_with_wrapper_props(wrapper_plugins: 'plugin_a,plugin_b', auto_sort_plugins: false)
       manager = described_class.new(container)
       plugins = manager.instance_variable_get(:@plugins)
 

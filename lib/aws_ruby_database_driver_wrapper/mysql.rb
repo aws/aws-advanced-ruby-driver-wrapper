@@ -15,10 +15,7 @@
 #  limitations under the License.
 
 require_relative 'utils/connection_config_parser'
-require_relative 'services/connection_service'
-require_relative 'services/dialect_service'
-require_relative 'services/plugin_manager_service'
-require_relative 'services/service_container'
+require_relative 'services/service_utility'
 require_relative 'ruby_method'
 require_relative 'errors'
 
@@ -32,10 +29,7 @@ module AwsRubyDatabaseDriverWrapper
 
     def initialize(**options)
       config = Utils::ConnectionConfigParser.parse(:mysql2, **options)
-      @service_container = Services::ServiceContainer.new
-      @service_container.connection_service = Services::ConnectionService.new(config)
-      @service_container.dialect_service = Services::DialectService.new(config.driver_name)
-      @service_container.plugin_manager_service = Services::PluginManagerService.new(@service_container)
+      @service_container = Services::ServiceUtility.create_standard_container(config)
       conn_service = @service_container.connection_service
       @connection =
         @service_container.plugin_manager_service.connect(conn_service.initial_host_info, conn_service.driver_props, true)

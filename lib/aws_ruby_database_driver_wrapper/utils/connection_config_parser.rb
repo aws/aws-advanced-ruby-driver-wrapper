@@ -95,7 +95,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       # Parses a flat keyword hash, e.g.
-      #   parse_hash(:postgresql, { host: "myhost", port: 5432, dbname: "mydb", plugins: "failover" })
+      #   parse_hash(:postgresql, { host: "myhost", port: 5432, dbname: "mydb", wrapper_plugins: "failover" })
       def parse_hash(driver_name, params)
         params = params.transform_keys(&:to_sym)
         wrapper_config, driver_config = split_props(params)

@@ -20,7 +20,7 @@ require 'aws_ruby_database_driver_wrapper/property_definition'
 RSpec.describe AwsRubyDatabaseDriverWrapper::PropertyDefinition do
   describe '.wrapper_property?' do
     it 'returns true for known wrapper properties' do
-      expect(described_class.wrapper_property?(:plugins)).to be true
+      expect(described_class.wrapper_property?(:wrapper_plugins)).to be true
       expect(described_class.wrapper_property?(:cluster_id)).to be true
       expect(described_class.wrapper_property?(:failover_timeout_sec)).to be true
     end
@@ -32,7 +32,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::PropertyDefinition do
     end
 
     it 'accepts string keys' do
-      expect(described_class.wrapper_property?('plugins')).to be true
+      expect(described_class.wrapper_property?('wrapper_plugins')).to be true
       expect(described_class.wrapper_property?('host')).to be false
     end
   end

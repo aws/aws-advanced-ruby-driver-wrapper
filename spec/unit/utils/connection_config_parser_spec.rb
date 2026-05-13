@@ -68,16 +68,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     end
 
     it 'extracts wrapper properties from query params into wrapper_config' do
-      config = parser.parse(:postgresql, 'postgresql://host/db?plugins=failover&cluster_id=test')
-      expect(config.wrapper_props[:plugins]).to eq('failover')
+      config = parser.parse(:postgresql, 'postgresql://host/db?wrapper_plugins=failover&cluster_id=test')
+      expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
       expect(config.wrapper_props[:cluster_id]).to eq('test')
     end
 
     it 'keeps non-wrapper query params in driver_config' do
-      config = parser.parse(:postgresql, 'postgresql://host/db?sslmode=require&plugins=failover')
+      config = parser.parse(:postgresql, 'postgresql://host/db?sslmode=require&wrapper_plugins=failover')
       expect(config.driver_props[:sslmode]).to eq('require')
-      expect(config.driver_props).not_to have_key(:plugins)
-      expect(config.wrapper_props[:plugins]).to eq('failover')
+      expect(config.driver_props).not_to have_key(:wrapper_plugins)
+      expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
     end
 
     it 'handles URI with no query params' do
@@ -101,9 +101,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
 
     it 'keyword overrides win over URI query params' do
       config = parser.parse(:postgresql,
-                            'postgresql://host/db?plugins=iam',
-                            plugins: 'failover')
-      expect(config.wrapper_props[:plugins]).to eq('failover')
+                            'postgresql://host/db?wrapper_plugins=iam',
+                            wrapper_plugins: 'failover')
+      expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
     end
   end
 
@@ -116,10 +116,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     end
 
     it 'splits wrapper properties from driver properties' do
-      config = parser.parse(:postgresql, host: 'myhost', plugins: 'failover', cluster_id: 'prod')
-      expect(config.wrapper_props[:plugins]).to eq('failover')
+      config = parser.parse(:postgresql, host: 'myhost', wrapper_plugins: 'failover', cluster_id: 'prod')
+      expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
       expect(config.wrapper_props[:cluster_id]).to eq('prod')
-      expect(config.driver_props).not_to have_key(:plugins)
+      expect(config.driver_props).not_to have_key(:wrapper_plugins)
       expect(config.driver_props).not_to have_key(:cluster_id)
       expect(config.driver_props[:host]).to eq('myhost')
     end
@@ -161,10 +161,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'does not leak wrapper properties into driver_config' do
       config = parser.parse(:postgresql,
                             host: 'myhost',
-                            plugins: 'failover',
+                            wrapper_plugins: 'failover',
                             cluster_id: 'no-leak',
                             failover_timeout_sec: 60)
-      expect(config.driver_props).not_to have_key(:plugins)
+      expect(config.driver_props).not_to have_key(:wrapper_plugins)
       expect(config.driver_props).not_to have_key(:cluster_id)
       expect(config.driver_props).not_to have_key(:failover_timeout_sec)
     end

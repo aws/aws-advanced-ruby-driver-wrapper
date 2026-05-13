@@ -90,7 +90,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def load_plugins(service_container)
         wrapper_props = service_container.connection_service.wrapper_props
-        plugin_codes = wrapper_props[:plugins] || DEFAULT_PLUGINS
+        plugin_codes = wrapper_props[:wrapper_plugins] || DEFAULT_PLUGINS
         plugin_classes = plugin_codes.empty? ? [] : get_plugin_classes(plugin_codes.split(','), wrapper_props)
 
         plugins = plugin_classes.map do |plugin_class|

@@ -20,7 +20,7 @@ module AwsRubyDatabaseDriverWrapper
   module PropertyDefinition
     # -- General --
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1')
-    PLUGINS = WrapperProperty.new(:plugins, 'Comma-separated list of plugin codes', default_value: 'failover')
+    PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover')
     AUTO_SORT_PLUGIN_ORDER = WrapperProperty.new(:auto_sort_plugin_order, 'Auto-sort plugin execution order', default_value: true)
 
     # -- Failover --
