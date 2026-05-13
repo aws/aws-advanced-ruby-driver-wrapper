@@ -19,8 +19,8 @@ source 'https://rubygems.org'
 gemspec
 
 gem 'activerecord', '>= 6.1'
-gem 'mysql2', '>= 0.5'
-gem 'pg', '>= 1.1'
+gem 'mysql2', '>= 0.5.7'
+gem 'pg', '>= 1.6.3'
 
 group :development do
   gem 'bundler'
