@@ -72,7 +72,7 @@ jobs:
         run: bundle exec rspec spec/unit
       - name: Upload coverage reports
         if: matrix.ruby-version == '3.3'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/coverage.xml
           flags: unittests
