@@ -94,7 +94,24 @@ module AwsRubyDatabaseDriverWrapper
         return nil unless sql.is_a?(String) && !sql.strip.empty?
 
         stmt = sql.split(';', 2).first
-        stmt.gsub(%r{/\*.*?\*/}, ' ').squeeze(' ').strip.upcase
+        strip_block_comments(stmt).squeeze(' ').strip.upcase
+      end
+
+      def strip_block_comments(str)
+        result = +''
+        i = 0
+        len = str.length
+        while i < len
+          if i + 1 < len && str[i] == '/' && str[i + 1] == '*'
+            i += 2
+            i += 1 while i + 1 < len && !(str[i] == '*' && str[i + 1] == '/')
+            i += 2
+          else
+            result << str[i]
+            i += 1
+          end
+        end
+        result
       end
 
       def starts_transaction?(stmt)

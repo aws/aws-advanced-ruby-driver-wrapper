@@ -206,15 +206,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
         end
       end
     end
-
-    context 'when host_service is nil' do
-      let(:host_service) { nil }
-
-      it 'does not raise when marking availability' do
-        conn = plugin.connect(host_info, driver_props, true, nil)
-        expect(conn).to eq(mock_connection)
-      end
-    end
   end
 
   describe '#execute' do

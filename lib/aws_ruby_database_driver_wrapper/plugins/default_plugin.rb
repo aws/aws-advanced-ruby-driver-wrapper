@@ -41,7 +41,7 @@ module AwsRubyDatabaseDriverWrapper
         dialect = @service_container.dialect_service.driver_dialect
         conn = attempt_connect(dialect, host_info, props)
 
-        @service_container.host_service&.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+        @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
 
         if is_initial_connection
           begin

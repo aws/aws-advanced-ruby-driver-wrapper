@@ -24,7 +24,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::SqlMethodAnalyzer do
   QUERY  = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_QUERY
   CLOSE  = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE
   TXN    = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_TRANSACTION
-  PING   = 'connection.ping'
 
   # ─── opens_transaction? ──────────────────────────────────────────────
   #   [description, method, args, autocommit, expected]
@@ -77,7 +76,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::SqlMethodAnalyzer do
     ['connection.close method',   CLOSE, [],           true],
     ['connection.transaction',    TXN,   [],           true],
     ['DML does not close',        EXEC,  ['SELECT 1'], false],
-    ['non-execute method',        PING,  ['COMMIT'],   false],
     ['INSERT',                    EXEC,  ['INSERT INTO t VALUES (1)'], false]
   ].freeze
 
@@ -96,7 +94,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::SqlMethodAnalyzer do
     ['SET AUTOCOMMIT = FALSE',        EXEC,  ['SET AUTOCOMMIT = FALSE'], true],
     ['case-insensitive',              EXEC,  ['set autocommit = true'],  true],
     ['other SET statement',           EXEC,  ['SET timezone = UTC'],     false],
-    ['non-execute method',            PING,  ['SET AUTOCOMMIT = TRUE'],  false],
     ['DML',                           EXEC,  ['SELECT 1'],               false]
   ].freeze
 

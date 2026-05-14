@@ -22,8 +22,7 @@ module AwsRubyDatabaseDriverWrapper
       alias autocommit? autocommit
 
       def initialize
-        @in_transaction = false
-        @autocommit = true
+        reset
       end
 
       def reset
