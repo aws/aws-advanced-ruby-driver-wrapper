@@ -31,11 +31,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig do
 
     it 'accepts keyword arguments' do
       config = described_class.new(
-        wrapper_props: { plugins: 'failover' },
+        wrapper_props: { wrapper_plugins: 'failover' },
         driver_props: { host: 'myhost' },
         driver_name: :postgresql
       )
-      expect(config.wrapper_props).to eq({ plugins: 'failover' })
+      expect(config.wrapper_props).to eq({ wrapper_plugins: 'failover' })
       expect(config.driver_props).to eq({ host: 'myhost' })
       expect(config.driver_name).to eq(:postgresql)
     end
@@ -62,8 +62,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig do
 
     it 'allows plugins to modify wrapper_config' do
       config = described_class.new(wrapper_props: {})
-      config.wrapper_props[:plugins] = 'failover'
-      expect(config.wrapper_props[:plugins]).to eq('failover')
+      config.wrapper_props[:wrapper_plugins] = 'failover'
+      expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
     end
   end
 end
