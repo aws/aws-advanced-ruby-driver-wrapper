@@ -16,7 +16,7 @@
 
 require_relative '../spec_helper'
 require 'aws_ruby_database_driver_wrapper/mysql'
-require 'aws_ruby_database_driver_wrapper/services/plugin_manager_service'
+require 'aws_ruby_database_driver_wrapper/services/plugin_service'
 require 'aws_ruby_database_driver_wrapper/services/service_container'
 require 'aws_ruby_database_driver_wrapper/plugins/default_plugin'
 require 'aws_ruby_database_driver_wrapper/errors'
@@ -24,12 +24,12 @@ require 'aws_ruby_database_driver_wrapper/utils/connection_config'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
   def build_service_container_with_plugins(plugins, current_connection = nil)
-    plugin_service = AwsRubyDatabaseDriverWrapper::Services::PluginManagerService.allocate
+    plugin_service = AwsRubyDatabaseDriverWrapper::Services::PluginService.allocate
     plugin_service.instance_variable_set(:@pipeline_cache, {})
     plugin_service.instance_variable_set(:@plugins, plugins)
     connection_service = double('ConnectionService', current_connection: current_connection)
     container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new
-    container.plugin_manager_service = plugin_service
+    container.plugin_service = plugin_service
     container.connection_service = connection_service
     container
   end

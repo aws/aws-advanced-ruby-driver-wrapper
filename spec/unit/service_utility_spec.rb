@@ -36,8 +36,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
       expect(container.connection_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::ConnectionService)
       expect(container.dialect_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::DialectService)
       expect(container.host_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::HostService)
-      expect(container.session_state_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::SessionStateService)
-      expect(container.plugin_manager_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::PluginManagerService)
+      expect(container.plugin_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::PluginService)
     end
 
     it 'passes config to ConnectionService' do
@@ -64,8 +63,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
       expect(container.host_service).to equal(parent.host_service)
     end
 
-    it 'does not set plugin_manager_service' do
-      expect(container.plugin_manager_service).to be_nil
+    it 'does not set plugin_service' do
+      expect(container.plugin_service).to be_nil
     end
 
     it 'does not set connection_service' do

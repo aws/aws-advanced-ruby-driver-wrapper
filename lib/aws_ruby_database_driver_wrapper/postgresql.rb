@@ -37,20 +37,20 @@ module AwsRubyDatabaseDriverWrapper
       @service_container = Services::ServiceUtility.create_standard_container(config)
       conn_service = @service_container.connection_service
       @connection =
-        @service_container.plugin_manager_service.connect(conn_service.initial_host_info, conn_service.driver_props, true)
+        @service_container.plugin_service.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
 
     def exec(sql, *params)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_EXEC,
         ->(*args) { @connection.exec(*args) }, sql, *params
       )
     end
 
     def exec_params(sql, params, result_format = 0, type_map = nil)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_EXEC_PARAMS,
         ->(*args) { @connection.exec_params(*args) },
         sql, params, result_format, type_map
@@ -58,7 +58,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def prepare(stmt_name, sql, param_types = nil)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_PREPARE,
         ->(*args) { @connection.prepare(*args) },
         stmt_name, sql, param_types
@@ -66,7 +66,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_EXEC_PREPARED,
         ->(*args) { @connection.exec_prepared(*args) },
         stmt_name, params, result_format, type_map
@@ -74,7 +74,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def transaction(&block)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_TRANSACTION,
         ->(&b) { @connection.transaction(&b) },
         &block
@@ -82,7 +82,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def async_exec(sql, *params)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_ASYNC_EXEC,
         ->(*args) { @connection.async_exec(*args) },
         sql, *params
@@ -95,7 +95,7 @@ module AwsRubyDatabaseDriverWrapper
 
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless @connection.respond_to?(method_name)
 
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, "connection.#{method_name}",
         ->(*a, **opts, &b) { @connection.send(method_name, *a, **opts, &b) },
         *args, **options, &block

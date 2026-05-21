@@ -32,13 +32,13 @@ module AwsRubyDatabaseDriverWrapper
       @service_container = Services::ServiceUtility.create_standard_container(config)
       conn_service = @service_container.connection_service
       @connection =
-        @service_container.plugin_manager_service.connect(conn_service.initial_host_info, conn_service.driver_props, true)
+        @service_container.plugin_service.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
     def query(sql, options = {})
-      result = @service_container.plugin_manager_service.execute(
+      result = @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_QUERY,
         ->(*args) { @connection.query(*args) }, sql, options
       )
@@ -50,7 +50,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def prepare(sql)
-      mysql_stmt = @service_container.plugin_manager_service.execute(
+      mysql_stmt = @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_PREPARE,
         ->(*args) { @connection.prepare(*args) }, sql
       )
@@ -58,28 +58,28 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def escape(string)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_ESCAPE,
         ->(*args) { @connection.escape(*args) }, string
       )
     end
 
     def ping
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_PING,
         -> { @connection.ping }
       )
     end
 
     def close
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_CLOSE,
         -> { @connection.close }
       )
     end
 
     def query_async(sql, options = {})
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_QUERY_ASYNC,
         ->(*args) { @connection.query_async(*args) },
         sql, options
@@ -92,7 +92,7 @@ module AwsRubyDatabaseDriverWrapper
 
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless @connection.respond_to?(method_name)
 
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @connection, "connection.#{method_name}",
         ->(*a, **opts, &b) { @connection.send(method_name, *a, **opts, &b) },
         *args, **options, &block
@@ -118,7 +118,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def execute(*params, **options)
-      result = @service_container.plugin_manager_service.execute(
+      result = @service_container.plugin_service.execute(
         current_conn, @connection, @mysql_stmt, RubyMethod::STATEMENT_EXECUTE,
         ->(*params, **options) { @mysql_stmt.execute(*params, **options) },
         *params, **options
@@ -129,7 +129,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def close
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         current_conn, @connection, @mysql_stmt, RubyMethod::STATEMENT_CLOSE, -> { @mysql_stmt.close }
       )
     end
@@ -176,7 +176,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def each(&block)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_service.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH,
         ->(&blk) { @result.each(&blk) },
         &block

@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/services/plugin_manager_service'
+require 'aws_ruby_database_driver_wrapper/services/plugin_service'
 require 'aws_ruby_database_driver_wrapper/services/service_container'
 require 'aws_ruby_database_driver_wrapper/plugins/default_plugin'
 require 'aws_ruby_database_driver_wrapper/plugins/failover_plugin'
@@ -96,10 +96,10 @@ module TestPlugins
   end
 end
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManagerService do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginService do
   # Helper to build a PluginService with directly injected plugins (bypassing factory loading).
   def build_manager_with_plugins(plugins)
-    manager = AwsRubyDatabaseDriverWrapper::Services::PluginManagerService.allocate
+    manager = AwsRubyDatabaseDriverWrapper::Services::PluginService.allocate
     manager.instance_variable_set(:@plugins, plugins)
     manager.instance_variable_set(:@pipeline_cache, {})
     manager
