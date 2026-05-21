@@ -42,11 +42,9 @@ module AwsRubyDatabaseDriverWrapper
         current_conn, @connection, @connection, RubyMethod::CONNECTION_QUERY,
         ->(*args) { @connection.query(*args) }, sql, options
       )
-      # When the :stream option is set to true, result.each makes a network call for each iteration, so we need to wrap
-      # the result. Otherwise, the result object does not make any network calls.
-      return Mysql2WrapperResult.new(result, @service_container, @connection) if options[:stream]
+      return result if result.nil?
 
-      result
+      Mysql2WrapperResult.new(result, @service_container, @connection)
     end
 
     def prepare(sql)
@@ -79,11 +77,14 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def query_async(sql, options = {})
-      @service_container.plugin_manager_service.execute(
+      result = @service_container.plugin_manager_service.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_QUERY_ASYNC,
         ->(*args) { @connection.query_async(*args) },
         sql, options
       )
+      return result if result.nil?
+
+      Mysql2WrapperResult.new(result, @service_container, @connection)
     end
 
     # Catch methods not explicitly defined
@@ -92,11 +93,14 @@ module AwsRubyDatabaseDriverWrapper
 
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless @connection.respond_to?(method_name)
 
-      @service_container.plugin_manager_service.execute(
+      result = @service_container.plugin_manager_service.execute(
         current_conn, @connection, @connection, "connection.#{method_name}",
         ->(*a, **opts, &b) { @connection.send(method_name, *a, **opts, &b) },
         *args, **options, &block
       )
+      return result if result.nil? || !result.is_a?(Mysql2::Result)
+
+      Mysql2WrapperResult.new(result, @service_container, @connection)
     end
 
     def respond_to_missing?(method, include_private = false)
@@ -123,9 +127,9 @@ module AwsRubyDatabaseDriverWrapper
         ->(*params, **options) { @mysql_stmt.execute(*params, **options) },
         *params, **options
       )
-      return Mysql2WrapperResult.new(result, @service_container, @connection) if options[:stream]
+      return result if result.nil?
 
-      result
+      Mysql2WrapperResult.new(result, @service_container, @connection)
     end
 
     def close
@@ -180,6 +184,20 @@ module AwsRubyDatabaseDriverWrapper
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH,
         ->(&blk) { @result.each(&blk) },
         &block
+      )
+    end
+
+    def to_a
+      @service_container.plugin_manager_service.execute(
+        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TO_A,
+        -> { @result.to_a }
+      )
+    end
+
+    def [](index)
+      @service_container.plugin_manager_service.execute(
+        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_BRACKET,
+        ->(*args) { @result[*args] }, index
       )
     end
 
