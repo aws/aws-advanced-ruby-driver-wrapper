@@ -31,6 +31,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::SlidingExpirationCa
       sleep(0.1)
       expect(short_cache.get(:a)).to be_nil
     end
+
+    it 'extends expiration on access' do
+      short_cache = described_class.new(ttl: 0.15)
+      short_cache.compute_if_absent(:a) { 'value' }
+      sleep(0.1)
+      short_cache.get(:a)
+      sleep(0.1)
+      # 0.2s total, past original 0.15s TTL, but get renewed it
+      expect(short_cache.get(:a)).to eq('value')
+    end
   end
 
   describe '#compute_if_absent' do

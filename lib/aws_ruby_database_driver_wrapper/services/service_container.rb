@@ -22,6 +22,7 @@ module AwsRubyDatabaseDriverWrapper
       :host_service,
       :plugin_manager_service,
       :session_state_service,
+      :storage_service,
       keyword_init: true
     )
   end
