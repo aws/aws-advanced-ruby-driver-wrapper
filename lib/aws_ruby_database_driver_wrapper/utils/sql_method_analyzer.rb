@@ -44,7 +44,7 @@ module AwsRubyDatabaseDriverWrapper
         return false unless sql
 
         return true if starts_transaction?(sql)
-        return true if !autocommit && dml?(sql)
+        return true if !autocommit && opens_transaction_scope?(sql)
 
         false
       end
@@ -94,7 +94,7 @@ module AwsRubyDatabaseDriverWrapper
         return nil unless sql.is_a?(String) && !sql.strip.empty?
 
         stmt = sql.split(';', 2).first
-        strip_block_comments(stmt).squeeze(' ').strip.upcase
+        strip_block_comments(stmt).squeeze(' ').strip.upcase(:ascii)
       end
 
       def strip_block_comments(str)
@@ -122,7 +122,7 @@ module AwsRubyDatabaseDriverWrapper
         stmt.start_with?('COMMIT', 'ROLLBACK', 'END', 'ABORT')
       end
 
-      def dml?(stmt)
+      def opens_transaction_scope?(stmt)
         !starts_transaction?(stmt) && !ends_transaction?(stmt) &&
           !stmt.start_with?('SET ') && !stmt.start_with?('USE ') && !stmt.start_with?('SHOW ')
       end

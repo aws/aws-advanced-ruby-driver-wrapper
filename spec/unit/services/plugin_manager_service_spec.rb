@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../spec_helper'
+require_relative '../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/services/plugin_manager_service'
 require 'aws_ruby_database_driver_wrapper/services/service_container'
 require 'aws_ruby_database_driver_wrapper/plugins/default_plugin'

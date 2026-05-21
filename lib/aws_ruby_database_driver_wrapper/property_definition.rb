@@ -23,13 +23,6 @@ module AwsRubyDatabaseDriverWrapper
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover')
     AUTO_SORT_PLUGIN_ORDER = WrapperProperty.new(:auto_sort_plugin_order, 'Auto-sort plugin execution order', default_value: true)
 
-    # -- Blue Green --
-    ENABLE_GREEN_NODE_REPLACEMENT = WrapperProperty.new(
-      :enable_green_node_replacement,
-      'Enable green node DNS correction on connect failure for blue/green deployments',
-      default_value: false
-    )
-
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300)
     FAILOVER_CLUSTER_TOPOLOGY_REFRESH_RATE_SEC = WrapperProperty.new(

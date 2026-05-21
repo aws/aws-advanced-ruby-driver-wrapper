@@ -131,81 +131,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
         expect(host_service).not_to have_received(:set_availability)
       end
     end
-
-    context 'green node replacement' do
-      let(:green_host) { 'test-instance-green-abc123.xyz789.us-east-1.rds.amazonaws.com' }
-      let(:green_host_info) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: green_host, port: 5432)
-      end
-      let(:green_driver_props) { driver_props.merge(host: green_host) }
-
-      context 'when enabled and green DNS does not resolve' do
-        let(:wrapper_props) { { plugins: '', enable_green_node_replacement: true } }
-
-        before do
-          allow(Resolv).to receive(:getaddress).with(green_host).and_raise(Resolv::ResolvError)
-          allow(driver_dialect).to receive(:connect) do |hi, _props|
-            raise SocketError, 'getaddrinfo: Name or service not known' if hi.host == green_host
-
-            mock_connection
-          end
-        end
-
-        it 'falls back to the non-green host' do
-          conn = plugin.connect(green_host_info, green_driver_props, true, nil)
-          expect(conn).to eq(mock_connection)
-        end
-
-        it 'retries with the green prefix stripped from the host' do
-          plugin.connect(green_host_info, green_driver_props, true, nil)
-          expect(driver_dialect).to have_received(:connect).with(
-            having_attributes(host: 'test-instance.xyz789.us-east-1.rds.amazonaws.com'),
-            green_driver_props
-          )
-        end
-      end
-
-      context 'when enabled but green DNS resolves (host exists)' do
-        let(:wrapper_props) { { plugins: '', enable_green_node_replacement: true } }
-
-        before do
-          allow(driver_dialect).to receive(:connect).and_raise(SocketError, 'getaddrinfo: Name or service not known')
-          allow(Resolv).to receive(:getaddress).with(green_host).and_return('10.0.0.1')
-        end
-
-        it 're-raises the error since the host exists in DNS' do
-          expect { plugin.connect(green_host_info, green_driver_props, true, nil) }
-            .to raise_error(SocketError)
-        end
-      end
-
-      context 'when disabled (default)' do
-        let(:wrapper_props) { { plugins: '' } }
-
-        before do
-          allow(driver_dialect).to receive(:connect).and_raise(SocketError, 'getaddrinfo: Name or service not known')
-        end
-
-        it 'propagates the SocketError without fallback' do
-          expect { plugin.connect(green_host_info, green_driver_props, true, nil) }
-            .to raise_error(SocketError)
-        end
-      end
-
-      context 'when host is not a green instance' do
-        let(:wrapper_props) { { plugins: '', enable_green_node_replacement: true } }
-
-        before do
-          allow(driver_dialect).to receive(:connect).and_raise(SocketError, 'getaddrinfo: Name or service not known')
-        end
-
-        it 'does not attempt green node replacement for non-green hosts' do
-          expect { plugin.connect(host_info, driver_props, true, nil) }
-            .to raise_error(SocketError)
-          expect(driver_dialect).to have_received(:connect).once
-        end
-      end
-    end
   end
 
   describe '#execute' do
@@ -230,39 +155,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
       let(:session_state_service) do
         double('SessionStateService',
                autocommit?: true,
-               'in_transaction=': nil,
-               'autocommit=': nil)
-      end
-
-      it 'marks in_transaction on BEGIN' do
-        plugin.execute(nil, 'connection.exec', ->(*_) {}, 'BEGIN')
-        expect(session_state_service).to have_received(:in_transaction=).with(true)
-      end
-
-      it 'clears in_transaction on COMMIT' do
-        plugin.execute(nil, 'connection.exec', ->(*_) {}, 'COMMIT')
-        expect(session_state_service).to have_received(:in_transaction=).with(false)
-      end
-
-      it 'clears in_transaction on ROLLBACK' do
-        plugin.execute(nil, 'connection.exec', ->(*_) {}, 'ROLLBACK')
-        expect(session_state_service).to have_received(:in_transaction=).with(false)
-      end
-
-      it 'tracks SET AUTOCOMMIT = TRUE' do
-        plugin.execute(nil, 'connection.exec', ->(*_) {}, 'SET AUTOCOMMIT = TRUE')
-        expect(session_state_service).to have_received(:autocommit=).with(true)
-      end
-
-      it 'tracks SET AUTOCOMMIT = FALSE' do
-        plugin.execute(nil, 'connection.exec', ->(*_) {}, 'SET AUTOCOMMIT = FALSE')
-        expect(session_state_service).to have_received(:autocommit=).with(false)
-      end
-
-      it 'does not track non-SQL methods' do
-        plugin.execute(nil, 'connection.ping', -> { true })
-        expect(session_state_service).not_to have_received(:in_transaction=)
-        expect(session_state_service).not_to have_received(:autocommit=)
+               update_transaction_state: nil)
       end
     end
 

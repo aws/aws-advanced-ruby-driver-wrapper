@@ -14,6 +14,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative '../utils/sql_method_analyzer'
+
 module AwsRubyDatabaseDriverWrapper
   module Services
     class SessionStateService
@@ -28,6 +30,21 @@ module AwsRubyDatabaseDriverWrapper
       def reset
         @in_transaction = false
         @autocommit = true
+      end
+
+      def update_transaction_state(method_name, args, autocommit_before)
+        if Utils::SqlMethodAnalyzer.opens_transaction?(method_name, args, autocommit: autocommit?)
+          self.in_transaction = true
+        elsif Utils::SqlMethodAnalyzer.closes_transaction?(method_name, args) ||
+              (!autocommit_before && Utils::SqlMethodAnalyzer.sets_autocommit?(method_name, args) &&
+               Utils::SqlMethodAnalyzer.autocommit_value(args) == true)
+          self.in_transaction = false
+        end
+
+        return unless Utils::SqlMethodAnalyzer.sets_autocommit?(method_name, args)
+
+        val = Utils::SqlMethodAnalyzer.autocommit_value(args)
+        self.autocommit = val unless val.nil?
       end
 
       # Begin tracking session state changes for a connection switch.
