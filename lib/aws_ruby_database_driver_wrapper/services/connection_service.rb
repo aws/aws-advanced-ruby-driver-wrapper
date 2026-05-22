@@ -77,7 +77,7 @@ module AwsRubyDatabaseDriverWrapper
         end
       end
 
-      # @return [Symbol] the driver name (:postgresql, :mysql2)
+      # @return [Symbol] the driver name, e.g. :postgresql or :mysql2
       def driver_name
         @config.driver_name
       end
