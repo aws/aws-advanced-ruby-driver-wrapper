@@ -67,7 +67,7 @@ module AwsRubyDatabaseDriverWrapper
       def close_connection(connection)
         connection.close
       rescue PG::Error => e
-        LOGGER.error("Failed to close PostgreSQL connection: #{e.message}")
+        LOGGER.error(format(LogMessages::FAILED_TO_CLOSE_PG_CONNECTION, e.message))
       end
 
       def sql_state(exception)

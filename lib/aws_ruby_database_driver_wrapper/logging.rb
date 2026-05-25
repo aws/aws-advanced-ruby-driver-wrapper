@@ -14,17 +14,12 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'logger'
+
 module AwsRubyDatabaseDriverWrapper
-  module Services
-    ServiceContainer = Struct.new(
-      :connection_service,
-      :dialect_service,
-      :host_service,
-      :plugin_manager,
-      :session_state_service,
-      :storage_service,
-      :monitor_service,
-      keyword_init: true
-    )
+  # Shared logger instance for the wrapper. Include this module in any class
+  # that needs logging access via the LOGGER constant.
+  module Logging
+    LOGGER = Logger.new($stderr, progname: 'AwsRubyDatabaseDriverWrapper')
   end
 end

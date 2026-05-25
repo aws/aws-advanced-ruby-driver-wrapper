@@ -53,7 +53,7 @@ module AwsRubyDatabaseDriverWrapper
       def close_connection(connection)
         connection.close
       rescue StandardError => e
-        LOGGER.error("Failed to close MySQL connection: #{e.message}")
+        LOGGER.error(format(LogMessages::FAILED_TO_CLOSE_MYSQL_CONNECTION, e.message))
       end
 
       def sql_state(exception)

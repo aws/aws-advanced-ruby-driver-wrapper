@@ -14,55 +14,29 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
-require_relative '../ruby_method'
-require_relative '../logging'
-require_relative '../log_messages'
-
 module AwsRubyDatabaseDriverWrapper
-  module DriverDialects
-    module DriverDialect
-      include Logging
-
-      COMMON_NETWORK_BOUND_METHODS = Set[
-        RubyMethod::CONNECT,
-        RubyMethod::CONNECTION_CLOSE,
-        RubyMethod::CONNECTION_PING,
-        RubyMethod::CONNECTION_RESET,
-        RubyMethod::CONNECTION_PREPARE,
-        RubyMethod::STATEMENT_EXECUTE,
-        RubyMethod::STATEMENT_CLOSE
-      ].freeze
-
-      def connect(host_info, config)
+  module Monitoring
+    # Defines the contract for all monitors managed by MonitorService.
+    module Monitor
+      def start
         raise NotImplementedError
       end
 
-      def execute(connection, sql)
+      def monitor
         raise NotImplementedError
       end
 
-      def ping(connection)
+      def stop
         raise NotImplementedError
       end
 
-      def closed?(connection)
+      def close; end
+
+      def state
         raise NotImplementedError
       end
 
-      def close_connection(connection)
-        raise NotImplementedError
-      end
-
-      def sql_state(_exception)
-        nil
-      end
-
-      def network_bound_methods
-        COMMON_NETWORK_BOUND_METHODS
-      end
-
-      def prepare_connect_config(host_info, config)
+      def last_activity_nanos
         raise NotImplementedError
       end
     end

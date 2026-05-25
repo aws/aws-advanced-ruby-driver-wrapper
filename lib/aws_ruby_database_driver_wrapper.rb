@@ -16,11 +16,16 @@
 
 require_relative 'aws_ruby_database_driver_wrapper/version'
 require_relative 'aws_ruby_database_driver_wrapper/property_definition'
+require_relative 'aws_ruby_database_driver_wrapper/logging'
+require_relative 'aws_ruby_database_driver_wrapper/log_messages'
 require_relative 'aws_ruby_database_driver_wrapper/utils/rds_utils'
 require_relative 'aws_ruby_database_driver_wrapper/utils/connection_config'
 require_relative 'aws_ruby_database_driver_wrapper/utils/connection_config_parser'
-require_relative 'aws_ruby_database_driver_wrapper/services/monitor_service'
+require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor_state'
+require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor'
+require_relative 'aws_ruby_database_driver_wrapper/monitoring/abstract_monitor'
 require_relative 'aws_ruby_database_driver_wrapper/services/shutdown_service'
+require_relative 'aws_ruby_database_driver_wrapper/services/monitor_service'
 
 if defined?(ActiveRecord)
   if defined?(PG)
