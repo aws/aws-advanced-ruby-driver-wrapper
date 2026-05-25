@@ -38,6 +38,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # Retrieves the value at the given key. Returns nil if absent or expired.
+        # Extends the expiration if the entry exists and is not expired.
         # @param key [Object] the cache key.
         # @return [Object, nil] the cached value, or nil.
         def get(key)
@@ -45,6 +46,7 @@ module AwsRubyDatabaseDriverWrapper
             entry = @cache[key]
             return nil if entry.nil? || entry.expired?
 
+            entry.extend_expiration(@ttl)
             entry.value
           end
         end
