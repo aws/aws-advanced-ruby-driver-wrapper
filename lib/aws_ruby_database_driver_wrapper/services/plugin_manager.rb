@@ -21,7 +21,7 @@ require_relative '../plugins/failover_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
-    class PluginService
+    class PluginManager
       WEIGHT_RELATIVE_TO_PRIOR_PLUGIN = -1
       DEFAULT_PLUGINS = 'failover'
       private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :DEFAULT_PLUGINS

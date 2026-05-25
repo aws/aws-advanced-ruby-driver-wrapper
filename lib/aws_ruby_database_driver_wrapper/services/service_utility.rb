@@ -18,7 +18,7 @@ require_relative 'service_container'
 require_relative 'connection_service'
 require_relative 'dialect_service'
 require_relative 'host_service'
-require_relative 'plugin_service'
+require_relative 'plugin_manager'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -28,7 +28,7 @@ module AwsRubyDatabaseDriverWrapper
         container.connection_service = ConnectionService.new(container, config)
         container.dialect_service = DialectService.new(config.driver_name)
         container.host_service = HostService.new(container)
-        container.plugin_service = PluginService.new(container)
+        container.plugin_manager = PluginManager.new(container)
         container
       end
 

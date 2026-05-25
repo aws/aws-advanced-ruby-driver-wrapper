@@ -20,7 +20,7 @@ module AwsRubyDatabaseDriverWrapper
       :connection_service,
       :dialect_service,
       :host_service,
-      :plugin_service,
+      :plugin_manager,
       :session_state_service,
       :storage_service,
       keyword_init: true

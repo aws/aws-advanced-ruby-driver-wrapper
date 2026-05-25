@@ -16,7 +16,6 @@
 
 require 'active_record/connection_adapters/mysql2_adapter'
 require_relative '../mysql'
-require_relative '../services/plugin_service'
 require_relative '../errors'
 require_relative '../utils/ar_constants'
 
