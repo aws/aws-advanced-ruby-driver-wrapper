@@ -14,30 +14,37 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative '../utils/sql_method_analyzer'
+
 module AwsRubyDatabaseDriverWrapper
   module Services
     class SessionStateService
-      # @return [Boolean]
-      def in_transaction?
-        raise NotImplementedError
+      attr_accessor :in_transaction, :autocommit
+      alias in_transaction? in_transaction
+      alias autocommit? autocommit
+
+      def initialize
+        reset
       end
 
-      # @param value [Boolean]
-      def in_transaction=(value)
-        raise NotImplementedError
-      end
-
-      def autocommit?
-        raise NotImplementedError
-      end
-
-      def autocommit=(value)
-        raise NotImplementedError
-      end
-
-      # Reset all tracked session state.
       def reset
-        raise NotImplementedError
+        @in_transaction = false
+        @autocommit = true
+      end
+
+      def update_transaction_state(method_name, args, autocommit_before)
+        if Utils::SqlMethodAnalyzer.opens_transaction?(method_name, args, autocommit: autocommit?)
+          self.in_transaction = true
+        elsif Utils::SqlMethodAnalyzer.closes_transaction?(method_name, args) ||
+              (!autocommit_before && Utils::SqlMethodAnalyzer.sets_autocommit?(method_name, args) &&
+               Utils::SqlMethodAnalyzer.autocommit_value(args) == true)
+          self.in_transaction = false
+        end
+
+        return unless Utils::SqlMethodAnalyzer.sets_autocommit?(method_name, args)
+
+        val = Utils::SqlMethodAnalyzer.autocommit_value(args)
+        self.autocommit = val unless val.nil?
       end
 
       # Begin tracking session state changes for a connection switch.

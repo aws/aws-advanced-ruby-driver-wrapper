@@ -17,6 +17,7 @@
 require 'set'
 require_relative '../errors'
 require_relative '../host/host_info'
+require_relative '../host/host_availability'
 
 module AwsRubyDatabaseDriverWrapper
   module Plugins
@@ -32,23 +33,40 @@ module AwsRubyDatabaseDriverWrapper
         SUBSCRIBED_METHODS
       end
 
-      def connect(host_info, props, is_initial_connection, _)
-        dialect = @service_container.dialect_service.driver_dialect
-        conn = dialect.connect(host_info, props)
+      def connect(host_info, props, is_initial_connection, _pipeline_callable)
+        driver_dialect = @service_container.dialect_service.driver_dialect
+        conn = driver_dialect.connect(host_info, props)
 
-        connection_service = @service_container.connection_service
-        if is_initial_connection && connection_service.pg? && connection_service.multi_host_url?
-          connection_service.initial_host_info = Host::HostInfo.new(
-            host: conn.host,
-            port: conn.port.to_i
-          )
+        @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+
+        if is_initial_connection
+          begin
+            @service_container.dialect_service.update_dialect(conn)
+          rescue NotImplementedError
+            # TODO: remove when update_dialect is implemented
+          end
+
+          connection_service = @service_container.connection_service
+          if connection_service.pg? && connection_service.multi_host_url?
+            connection_service.initial_host_info = Host::HostInfo.new(
+              host: conn.host,
+              port: conn.port.to_i
+            )
+          end
         end
 
         conn
       end
 
-      def execute(_target_obj, _target_method_name, target_callable, *args, **options, &block)
-        target_callable.call(*args, **options, &block)
+      def execute(_target_obj, target_method_name, target_callable, *args, **options, &block)
+        session = @service_container.session_state_service
+        autocommit_before = session&.autocommit?
+
+        result = target_callable.call(*args, **options, &block)
+
+        session&.update_transaction_state(target_method_name, args, autocommit_before)
+
+        result
       end
     end
   end
