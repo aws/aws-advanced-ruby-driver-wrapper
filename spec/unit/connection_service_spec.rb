@@ -41,20 +41,27 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
     instance_double('HostService', all_hosts: [writer_host, reader_host], hosts: [writer_host, reader_host])
   end
 
+  let(:session_state_service) do
+    instance_double('SessionStateService', reset: nil)
+  end
+
   let(:service_container) do
     instance_double('ServiceContainer', host_service: host_service, session_state_service: session_state_service)
   end
 
   let(:config) do
-    instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' })
+    instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: nil)
   end
 
   let(:service) { described_class.new(service_container, config) }
 
   describe '#current_host_info' do
     context 'when initial_host_info is set' do
+      let(:config) do
+        instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: writer_host)
+      end
+
       it 'returns the initial host info' do
-        service.initial_host_info = writer_host
         expect(service.current_host_info).to eq(writer_host)
       end
     end
@@ -141,7 +148,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
   describe '#multi_host_url?' do
     context 'when the host contains a comma' do
       let(:config) do
-        instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'host1,host2' })
+        instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'host1,host2' }, initial_host_info: nil)
       end
 
       it 'returns true' do
@@ -165,7 +172,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
 
     context 'when driver is mysql2' do
       let(:config) do
-        instance_double('ConnectionConfig', driver_name: :mysql2, wrapper_props: {}, driver_props: { host: 'writer-host' })
+        instance_double('ConnectionConfig', driver_name: :mysql2, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: nil)
       end
 
       it 'returns false' do

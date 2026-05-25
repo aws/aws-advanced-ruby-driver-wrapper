@@ -92,7 +92,7 @@ module AwsRubyDatabaseDriverWrapper
         return if host.nil?
 
         host.availability = availability
-        @availability_cache.put(url, availability)
+        @availability_cache.put(host_info.url, availability)
       end
 
       # Refresh the host list from the host list provider.
@@ -132,7 +132,7 @@ module AwsRubyDatabaseDriverWrapper
 
         return nil if hosts.nil?
 
-        hosts.find { |host_info| host_info.id == id || host_info.host == host_info.host}
+        hosts.find { |host_info| host_info.id == id }
       end
 
       private

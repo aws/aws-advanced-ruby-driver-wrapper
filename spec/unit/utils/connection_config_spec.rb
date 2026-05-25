@@ -67,39 +67,3 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig do
     end
   end
 end
-
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
-  def build_service(driver_props: {}, wrapper_props: {}, driver_name: nil, initial_host_info: nil)
-    config = AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig.new(
-      driver_props: driver_props,
-      wrapper_props: wrapper_props,
-      driver_name: driver_name,
-      initial_host_info: initial_host_info
-    )
-    described_class.new(config)
-  end
-
-  describe '#multi_host_url?' do
-    it 'returns true when host contains comma' do
-      service = build_service(driver_props: { host: 'host1,host2' })
-      expect(service.multi_host_url?).to be true
-    end
-
-    it 'returns false for single host' do
-      service = build_service(driver_props: { host: 'myhost' })
-      expect(service.multi_host_url?).to be false
-    end
-  end
-
-  describe '#pg?' do
-    it 'returns true for postgresql driver' do
-      service = build_service(driver_name: :postgresql)
-      expect(service.pg?).to be true
-    end
-
-    it 'returns false for mysql2 driver' do
-      service = build_service(driver_name: :mysql2)
-      expect(service.pg?).to be false
-    end
-  end
-end

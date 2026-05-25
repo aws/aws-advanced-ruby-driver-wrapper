@@ -48,7 +48,7 @@ module AwsRubyDatabaseDriverWrapper
 
           connection_service = @service_container.connection_service
           if connection_service.pg? && connection_service.multi_host_url?
-            connection_service.initial_host_info = Host::HostInfo.new(
+            connection_service.config.initial_host_info = Host::HostInfo.new(
               host: conn.host,
               port: conn.port.to_i
             )

@@ -42,7 +42,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
 
     it 'passes config to ConnectionService' do
       expect(container.connection_service.driver_name).to eq(:postgresql)
-      expect(container.connection_service.initial_host_info.host).to eq('myhost')
+      expect(container.connection_service.config.initial_host_info.host).to eq('myhost')
     end
 
     it 'resolves the correct driver dialect' do

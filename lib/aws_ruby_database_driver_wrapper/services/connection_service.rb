@@ -20,8 +20,7 @@ require_relative '../utils/host_list_utils'
 module AwsRubyDatabaseDriverWrapper
   module Services
     class ConnectionService
-      attr_accessor :initial_host_info
-      attr_reader :current_connection
+      attr_reader :current_connection, :config
 
       # @param config [Utils::ConnectionConfig] the parsed connection configuration
       def initialize(service_container, config)
