@@ -102,7 +102,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def get_result # rubocop:disable Naming/AccessorMethodName
-      result = @service_container.plugin_manager_service.execute(
+      result = @service_container.plugin_manager.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_GET_RESULT,
         -> { @connection.get_result }
       )
@@ -112,7 +112,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def get_last_result # rubocop:disable Naming/AccessorMethodName
-      result = @service_container.plugin_manager_service.execute(
+      result = @service_container.plugin_manager.execute(
         current_conn, @connection, @connection, RubyMethod::CONNECTION_GET_LAST_RESULT,
         -> { @connection.get_last_result }
       )
@@ -158,7 +158,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def each(&block)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH,
         ->(&blk) { @result.each(&blk) },
         &block
@@ -166,7 +166,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def each_row(&block)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH_ROW,
         ->(&blk) { @result.each_row(&blk) },
         &block
@@ -174,42 +174,42 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def to_a
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TO_A,
         -> { @result.to_a }
       )
     end
 
     def [](index)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_BRACKET,
         ->(*args) { @result[*args] }, index
       )
     end
 
     def values
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_VALUES,
         -> { @result.values }
       )
     end
 
     def column_values(index)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_COLUMN_VALUES,
         ->(*args) { @result.column_values(*args) }, index
       )
     end
 
     def field_values(field_name)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_FIELD_VALUES,
         ->(*args) { @result.field_values(*args) }, field_name
       )
     end
 
     def tuple(index)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TUPLE,
         ->(*args) { @result.tuple(*args) }, index
       )

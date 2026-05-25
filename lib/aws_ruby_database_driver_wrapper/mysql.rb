@@ -188,14 +188,14 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def to_a
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TO_A,
         -> { @result.to_a }
       )
     end
 
     def [](index)
-      @service_container.plugin_manager_service.execute(
+      @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_BRACKET,
         ->(*args) { @result[*args] }, index
       )
