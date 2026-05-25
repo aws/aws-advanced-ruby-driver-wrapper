@@ -61,5 +61,12 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- Result methods --
     RESULT_EACH                    = 'result.each'
+    RESULT_EACH_ROW                = 'result.each_row'
+    RESULT_TO_A                    = 'result.to_a'
+    RESULT_BRACKET                 = 'result.[]'
+    RESULT_VALUES                  = 'result.values'
+    RESULT_COLUMN_VALUES           = 'result.column_values'
+    RESULT_FIELD_VALUES            = 'result.field_values'
+    RESULT_TUPLE                   = 'result.tuple'
   end
 end
