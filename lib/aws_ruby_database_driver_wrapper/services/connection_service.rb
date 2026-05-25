@@ -27,7 +27,6 @@ module AwsRubyDatabaseDriverWrapper
       def initialize(service_container, config)
         @service_container = service_container
         @config = config
-        @initial_host_info = nil
         @current_connection = nil
         @current_host_info = nil
         @connection_switch_lock = Monitor.new
@@ -37,7 +36,7 @@ module AwsRubyDatabaseDriverWrapper
       def current_host_info
         return @current_host_info if @current_host_info
 
-        @current_host_info = @initial_host_info
+        @current_host_info = @config.initial_host_info
         return @current_host_info if @current_host_info
 
         host_service = @service_container.host_service
