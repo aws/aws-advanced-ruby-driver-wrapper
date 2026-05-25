@@ -36,6 +36,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
       expect(container.connection_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::ConnectionService)
       expect(container.dialect_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::DialectService)
       expect(container.host_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::HostService)
+      expect(container.session_state_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::SessionStateService)
       expect(container.plugin_manager).to be_a(AwsRubyDatabaseDriverWrapper::Services::PluginManager)
     end
 
