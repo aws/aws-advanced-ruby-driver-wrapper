@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../spec_helper'
+require_relative '../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/services/host_service'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 require 'aws_ruby_database_driver_wrapper/host/host_role'
