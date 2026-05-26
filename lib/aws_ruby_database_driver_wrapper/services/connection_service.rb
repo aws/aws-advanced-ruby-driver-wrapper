@@ -44,14 +44,14 @@ module AwsRubyDatabaseDriverWrapper
 
         @current_host_info = Utils::HostListUtils.writer(hosts)
         allowed_hosts = host_service.hosts
-        unless @current_host_info.nil? || Utils::HostListUtils.contains_url?(allowed_hosts, @current_host_info.url)
+        if @current_host_info && !Utils::HostListUtils.contains_url?(allowed_hosts, @current_host_info.url)
           raise Errors::AwsError,
                 'Current host is not in the list of allowed hosts: ' \
                 "current_host=#{@current_host_info.url}, " \
                 "allowed_hosts=#{Utils::HostListUtils.to_host_urls_s(allowed_hosts)}"
         end
 
-        @current_host_info = hosts[0] if @current_host_info.nil? && !hosts.empty?
+        @current_host_info = hosts[0] if @current_host_info.nil? && hosts.any?
 
         if @current_host_info.nil?
           raise Errors::AwsError,

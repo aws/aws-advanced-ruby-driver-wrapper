@@ -50,7 +50,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Host::HostInfo]
       def select_host(hosts, role, strategy, props = nil)
         selector = @strategies[strategy]
-        raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" unless selector
+        raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" if selector.nil?
 
         selector.select_host(hosts, role, props)
       end
@@ -60,27 +60,9 @@ module AwsRubyDatabaseDriverWrapper
 
       # @return [Array<Host::HostInfo>] hosts filtered by allowed/blocked rules
       def hosts
-        hosts = @all_hosts
-        host_permissions = @service_container.storage_service.get(:host_permissions, @initial_host_info.url)
-        allowed_host_ids = host_permissions.allowed_host_ids
-        blocked_host_ids = host_permissions.blocked_host_ids
-        required_role = host_permissions.required_role
-
-        unless allowed_host_ids&.empty?
-          hosts = hosts.select do |host|
-            allowed_host_ids.include?(host.id) &&
-              (required_role.nil? || required_role == host.role)
-          end
-        end
-
-        unless blocked_host_ids&.empty?
-          hosts = hosts.select do |host|
-            !blocked_host_ids.include?(host.id) &&
-              (required_role.nil? || required_role == host.role)
-          end
-        end
-
-        hosts
+        # Note: there will be no allowed/blocked rules until the custom endpoint plugin is implemented, so this method
+        # just returns all hosts for now.
+        @all_hosts
       end
 
       # Updates the availability of a host in the internal host list.
