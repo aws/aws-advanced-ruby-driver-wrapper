@@ -41,7 +41,7 @@ module AwsRubyDatabaseDriverWrapper
 
         if is_initial_connection
           begin
-            @service_container.dialect_service.update_dialect(conn)
+            @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
           rescue NotImplementedError
             # TODO: remove when update_dialect is implemented
           end

@@ -78,7 +78,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
       it 'calls update_dialect on initial connection' do
         plugin.connect(host_info, driver_props, true, nil)
-        expect(dialect_service).to have_received(:update_dialect).with(mock_connection)
+        expect(dialect_service).to have_received(:update_dialect).with(connection_service, mock_connection)
       end
 
       it 'does not call update_dialect on non-initial connection' do
