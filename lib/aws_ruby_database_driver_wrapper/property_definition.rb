@@ -22,6 +22,7 @@ module AwsRubyDatabaseDriverWrapper
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1')
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover')
     AUTO_SORT_PLUGIN_ORDER = WrapperProperty.new(:auto_sort_plugin_order, 'Auto-sort plugin execution order', default_value: true)
+    DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.')
 
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300)
