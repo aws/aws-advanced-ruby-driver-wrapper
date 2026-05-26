@@ -1,0 +1,84 @@
+# frozen_string_literal: true
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  You may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+require_relative 'topology_utils'
+
+module AwsRubyDatabaseDriverWrapper
+  module Utils
+    # A mixin providing shared utility methods for retrieving and processing single-cluster topology information.
+    # Classes that include this module must implement:
+    #   - #build_hosts(conn, results, initial_host_info, instance_template) => Array<HostInfo> or nil
+    module SingleClusterTopologyUtils
+      include TopologyUtils
+
+      # Query the database for information for each instance in the database topology.
+      #
+      # @param conn [Object] the connection to use to query the database.
+      # @param initial_host_info [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the HostInfo used to initially connect.
+      # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template HostInfo to use when
+      #   constructing new HostInfo objects from the data returned by the topology query.
+      # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] a list of HostInfo objects representing
+      #   the results of the topology query, or nil if the query returned unexpected results.
+      def query_topology(conn, initial_host_info, instance_template)
+        begin
+          results = @dialect.execute(conn, @dialect.topology_query)
+          # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
+          if results.fields.size == 0
+            logger.debug("The topology query returned a result with 0 columns. " \
+                           "This may occur if the topology query is executed when the server is failing over.")
+            return nil
+          end
+
+          verify_writer(build_hosts(conn, results, initial_host_info, instance_template))
+        end
+      end
+
+      private
+
+      # Verifies the writer in the host list. If multiple writers exist, the one with the most recent
+      # last_update_time is used as the current writer.
+      #
+      # @param all_hosts [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] the list of all hosts.
+      # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] the verified host list, or nil if no writer found.
+      def verify_writer(all_hosts)
+        return nil if all_hosts.nil?
+
+        hosts = []
+        writers = []
+
+        all_hosts.each do |host|
+          if host.role == Host::HostRole::WRITER
+            writers << host
+          else
+            hosts << host
+          end
+        end
+
+        return nil if writers.empty?
+
+        if writers.size == 1
+          hosts << writers.first
+        else
+          # Assume the latest updated writer instance is the current writer.
+          sorted_writers = writers.sort_by { |w| w.last_update_time || Time.at(0) }.reverse
+          hosts << sorted_writers.first
+        end
+
+        hosts
+      end
+    end
+  end
+end
