@@ -15,15 +15,19 @@
 #  limitations under the License.
 
 module AwsRubyDatabaseDriverWrapper
-  module Services
-    ServiceContainer = Struct.new(
-      :connection_service,
-      :dialect_service,
-      :host_service,
-      :plugin_manager,
-      :session_state_service,
-      :storage_service,
-      keyword_init: true
-    )
+  module Utils
+    module HostListUtils
+      def self.writer(hosts)
+        hosts&.find { |host_info| host_info.role == HostRole::WRITER }
+      end
+
+      def self.contains_url?(hosts, url)
+        hosts&.any? { |host_info| host_info.url == url } || false
+      end
+
+      def self.to_host_urls_s(hosts)
+        hosts&.map(&:url)&.join(',') || ''
+      end
+    end
   end
 end

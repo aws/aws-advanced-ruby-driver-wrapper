@@ -14,42 +14,64 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'monitor'
+require_relative '../utils/host_list_utils'
+
 module AwsRubyDatabaseDriverWrapper
   module Services
     class ConnectionService
-      # @param config [Utils::ConnectionConfig] the parsed connection configuration
-      def initialize(config)
-        @config = config
-      end
+      attr_reader :current_connection, :config
 
-      # @return [Object, nil] the current active connection
-      def current_connection
-        raise NotImplementedError
+      # @param config [Utils::ConnectionConfig] the parsed connection configuration
+      def initialize(service_container, config)
+        @service_container = service_container
+        @config = config
+        @current_connection = nil
+        @current_host_info = nil
+        @connection_switch_lock = Monitor.new
       end
 
       # @return [Host::HostInfo, nil] host info for the current connection
       def current_host_info
-        raise NotImplementedError
+        return @current_host_info if @current_host_info
+
+        @current_host_info = @config.initial_host_info
+        return @current_host_info if @current_host_info
+
+        host_service = @service_container.host_service
+        hosts = host_service.all_hosts
+        raise Errors::AwsError, 'Attempted to access the current host list, but the host list is empty' if host_service.all_hosts.empty?
+
+        @current_host_info = Utils::HostListUtils.writer(hosts)
+        allowed_hosts = host_service.hosts
+        if @current_host_info && !Utils::HostListUtils.contains_url?(allowed_hosts, @current_host_info.url)
+          raise Errors::AwsError,
+                'Current host is not in the list of allowed hosts: ' \
+                "current_host=#{@current_host_info.url}, " \
+                "allowed_hosts=#{Utils::HostListUtils.to_host_urls_s(allowed_hosts)}"
+        end
+
+        @current_host_info = hosts[0] if @current_host_info.nil? && hosts.any?
+
+        if @current_host_info.nil?
+          raise Errors::AwsError,
+                'Unable to identify a current host from the available host list'
+        end
+
+        @current_host_info
       end
 
       # @param connection [Object] the new connection
       # @param host_info [Host::HostInfo] host info for the new connection
-      # @return [Set<Symbol>] set of node change options describing what changed
-      def set_current_connection(connection, host_info)
-        raise NotImplementedError
+      def update_current_connection(connection, host_info)
+        @connection_switch_lock.synchronize do
+          @current_connection = connection
+          @current_host_info = host_info
+          @service_container.session_state_service.reset
+        end
       end
 
-      # @return [Host::HostInfo, nil] host info for the initial connection
-      def initial_host_info
-        @config.initial_host_info
-      end
-
-      # @param host_info [Host::HostInfo]
-      def initial_host_info=(host_info)
-        @config.initial_host_info = host_info
-      end
-
-      # @return [Symbol] the driver name (e.g. :postgresql, :mysql2)
+      # @return [Symbol] the driver name, e.g. :postgresql or :mysql2
       def driver_name
         @config.driver_name
       end
