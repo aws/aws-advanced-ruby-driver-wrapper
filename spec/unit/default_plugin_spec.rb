@@ -37,7 +37,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
                     pg?: false,
                     multi_host_url?: false,
-                    initial_host_info: nil,
                     wrapper_props: wrapper_props)
   end
   let(:session_state_service) { nil }
@@ -79,7 +78,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
       it 'calls update_dialect on initial connection' do
         plugin.connect(host_info, driver_props, true, nil)
-        expect(dialect_service).to have_received(:update_dialect).with(mock_connection)
+        expect(dialect_service).to have_received(:update_dialect).with(connection_service, mock_connection)
       end
 
       it 'does not call update_dialect on non-initial connection' do
@@ -89,18 +88,24 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     end
 
     context 'multi-host PG initial connection' do
+      let(:mock_config) do
+        instance_double(AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig, initial_host_info: nil)
+      end
       let(:connection_service) do
         instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
                         pg?: true,
                         multi_host_url?: true,
-                        initial_host_info: nil,
-                        'initial_host_info=': nil,
+                        config: mock_config,
                         wrapper_props: wrapper_props)
+      end
+
+      before do
+        allow(mock_config).to receive(:initial_host_info=)
       end
 
       it 'updates initial_host_info from the resolved connection' do
         plugin.connect(host_info, driver_props, true, nil)
-        expect(connection_service).to have_received(:initial_host_info=) do |new_info|
+        expect(mock_config).to have_received(:initial_host_info=) do |new_info|
           expect(new_info.host).to eq('test-instance.us-east-1.rds.example.com')
           expect(new_info.port).to eq(5432)
         end
@@ -108,7 +113,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
       it 'does not update initial_host_info on non-initial connection' do
         plugin.connect(host_info, driver_props, false, nil)
-        expect(connection_service).not_to have_received(:initial_host_info=)
+        expect(mock_config).not_to have_received(:initial_host_info=)
       end
     end
 

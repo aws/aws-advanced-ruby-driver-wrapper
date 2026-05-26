@@ -23,8 +23,14 @@ module AwsRubyDatabaseDriverWrapper
         Host::RandomHostSelector::STRATEGY_NAME => Host::RandomHostSelector.new
       }.freeze
 
-      def initialize
+      attr_accessor :host_list_provider
+
+      def initialize(service_container)
+        @service_container = service_container
         @strategies = DEFAULT_HOST_SELECTORS.dup
+        @all_hosts = []
+        @availability_cache = Utils::Storage::ExpirationCache.new
+        @host_list_provider = nil
       end
 
       # Register a non-default host selector with the HostService (e.g. fastest_response).
@@ -44,49 +50,53 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Host::HostInfo]
       def select_host(hosts, role, strategy, props = nil)
         selector = @strategies[strategy]
-        raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" unless selector
+        raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" if selector.nil?
 
         selector.select_host(hosts, role, props)
       end
 
-      # @return [Array<Host::HostInfo>] all hosts in the topology
-      def all_hosts
-        raise NotImplementedError
-      end
+      # @return [Array<Host::HostInfo>] all hosts in the topology, including blocked/unavailable
+      attr_reader :all_hosts
 
       # @return [Array<Host::HostInfo>] hosts filtered by allowed/blocked rules
       def hosts
-        raise NotImplementedError
+        # NOTE: there will be no allowed/blocked rules until the custom endpoint plugin is implemented, so this method
+        # just returns all hosts for now.
+        @all_hosts
       end
 
-      # @param host_info [Host::HostInfo]
-      # @param availability [Symbol] host availability status
+      # Updates the availability of a host in the internal host list.
+      #
+      # @param host_info [HostInfo] the host whose availability has been determined
+      # @param availability [Symbol] the new availability status, e.g. :available or :unavailable
       def set_availability(host_info, availability)
-        raise NotImplementedError
+        host = @all_hosts.find { |h| h.id == host_info.id || h.host.casecmp?(host_info.host) }
+        return if host.nil?
+
+        host.availability = availability
+        @availability_cache.put(host_info.url, availability)
       end
 
       # Refresh the host list from the host list provider.
       def refresh_host_list
-        raise NotImplementedError
+        updated_hosts = @host_list_provider&.refresh
+        return if updated_hosts.nil? || updated_hosts == @all_hosts
+
+        apply_cached_availability(updated_hosts)
+        @all_hosts = updated_hosts
       end
 
       # Force a refresh of the host list, bypassing any caching.
       #
-      # @param should_verify_writer [Boolean]
+      # @param verify_writer [Boolean]
       # @param timeout_ms [Integer]
       # @return [Boolean] whether the refresh was successful
-      def force_refresh_host_list(should_verify_writer: false, timeout_ms: 5000)
-        raise NotImplementedError
-      end
+      def force_refresh_host_list(verify_writer: false, timeout_ms: 5000)
+        updated_hosts = @host_list_provider&.force_refresh(verify_writer, timeout_ms)
+        return if updated_hosts.nil? || updated_hosts == @all_hosts
 
-      # @return [Object] the current host list provider
-      def host_list_provider
-        raise NotImplementedError
-      end
-
-      # @param provider [Object]
-      def host_list_provider=(provider)
-        raise NotImplementedError
+        apply_cached_availability(updated_hosts)
+        @all_hosts = updated_hosts
       end
 
       # Identify which host in the topology a given connection belongs to.
@@ -94,21 +104,26 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection [Object]
       # @return [Host::HostInfo, nil]
       def identify_host(connection)
-        raise NotImplementedError
+        id = @service_container.dialect_service.db_dialect.query_host_id(connection)
+        return nil if id.nil?
+
+        hosts = @host_list_provider&.refresh
+        hosts = @host_list_provider&.force_refresh if hosts.nil?
+
+        return nil if hosts.nil?
+
+        hosts.find { |host_info| host_info.id == id }
       end
 
-      # Populate host aliases for the given connection.
-      #
-      # @param connection [Object, nil]
-      # @param host_info [Host::HostInfo, nil]
-      def fill_aliases(connection: nil, host_info: nil)
-        raise NotImplementedError
-      end
+      private
 
-      # @param connection [Object]
-      # @return [Symbol] the host role (:writer or :reader)
-      def query_host_role(connection)
-        raise NotImplementedError
+      def apply_cached_availability(hosts)
+        hosts.each do |host|
+          availability = @availability_cache.get(host.url)
+          next if availability.nil?
+
+          host.availability = availability
+        end
       end
     end
   end

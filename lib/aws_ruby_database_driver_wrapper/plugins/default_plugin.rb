@@ -41,14 +41,14 @@ module AwsRubyDatabaseDriverWrapper
 
         if is_initial_connection
           begin
-            @service_container.dialect_service.update_dialect(conn)
+            @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
           rescue NotImplementedError
             # TODO: remove when update_dialect is implemented
           end
 
           connection_service = @service_container.connection_service
           if connection_service.pg? && connection_service.multi_host_url?
-            connection_service.initial_host_info = Host::HostInfo.new(
+            connection_service.config.initial_host_info = Host::HostInfo.new(
               host: conn.host,
               port: conn.port.to_i
             )

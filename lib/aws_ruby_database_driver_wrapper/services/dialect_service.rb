@@ -84,18 +84,18 @@ module AwsRubyDatabaseDriverWrapper
         @can_update
       end
 
-      # Resolves the initial database dialect from the connection config.
+      # Resolves the initial database dialect from the initial connection info.
       # Uses RdsUtils to classify the host (Aurora cluster, RDS instance, etc.)
       # and selects the appropriate dialect.
       #
-      # @param connection_config [ConnectionConfig] the connection configuration
+      # @param connection_service [ConnectionService] the connection service
       # @return [Object] the resolved database dialect
-      def get_dialect(connection_config)
+      def get_dialect(connection_service)
         @can_update = false
         @db_dialect = nil
 
-        user_dialect_setting = PropertyDefinition::DIALECT.get(connection_config.wrapper_props)&.to_s
-        host = connection_config.initial_host_info&.host
+        user_dialect_setting = PropertyDefinition::DIALECT.get(connection_service.wrapper_props)&.to_s
+        host = connection_service.initial_host_info&.host
 
         dialect_code = if user_dialect_setting.nil? || user_dialect_setting.empty?
                          self.class.known_endpoint_dialects.get(host) unless host.nil?
@@ -129,14 +129,14 @@ module AwsRubyDatabaseDriverWrapper
       # Refines the dialect after a connection is established by querying the server
       # (e.g. checking for Aurora-specific functions/tables).
       #
-      # @param connection_config [ConnectionConfig] the connection configuration
+      # @param connection_service [ConnectionService] the connection service
       # @param connection [Object] the live database connection
       # @return [Object] the updated database dialect
-      def update_dialect(connection_config, connection)
+      def update_dialect(connection_service, connection)
         return @db_dialect unless @can_update
 
-        host = connection_config.initial_host_info&.host
-        host_url = connection_config.initial_host_info&.url
+        host = connection_service.initial_host_info&.host
+        host_url = connection_service.initial_host_info&.url
 
         candidates = @db_dialect.dialect_update_candidates
         candidates&.each do |candidate_code|
