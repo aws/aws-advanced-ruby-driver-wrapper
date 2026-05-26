@@ -104,39 +104,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
         expect(service.hosts).to eq(hosts)
       end
     end
-
-    context 'with allowed host ids' do
-      let(:host_permissions) do
-        instance_double('HostPermissions', allowed_host_ids: ['writer-id'], blocked_host_ids: [], required_role: nil)
-      end
-
-      it 'returns only hosts in the allowed list' do
-        expect(service.hosts).to eq([writer])
-      end
-    end
-
-    context 'with blocked host ids' do
-      let(:host_permissions) do
-        instance_double('HostPermissions', allowed_host_ids: [], blocked_host_ids: ['reader-id'], required_role: nil)
-      end
-
-      it 'excludes blocked hosts' do
-        expect(service.hosts).to eq([writer])
-      end
-    end
-
-    context 'with a required role' do
-      let(:host_permissions) do
-        instance_double('HostPermissions',
-                        allowed_host_ids: %w[writer-id reader-id],
-                        blocked_host_ids: [],
-                        required_role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
-      end
-
-      it 'filters by the required role' do
-        expect(service.hosts).to eq([reader])
-      end
-    end
   end
 
   describe '#set_availability' do

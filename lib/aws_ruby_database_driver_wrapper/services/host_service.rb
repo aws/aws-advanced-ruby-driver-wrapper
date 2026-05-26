@@ -60,7 +60,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # @return [Array<Host::HostInfo>] hosts filtered by allowed/blocked rules
       def hosts
-        # Note: there will be no allowed/blocked rules until the custom endpoint plugin is implemented, so this method
+        # NOTE: there will be no allowed/blocked rules until the custom endpoint plugin is implemented, so this method
         # just returns all hosts for now.
         @all_hosts
       end
