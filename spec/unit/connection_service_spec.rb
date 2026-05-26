@@ -50,7 +50,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
   end
 
   let(:config) do
-    instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: nil)
+    instance_double('ConnectionConfig',
+                    driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: nil)
   end
 
   let(:service) { described_class.new(service_container, config) }
@@ -58,7 +59,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
   describe '#current_host_info' do
     context 'when initial_host_info is set' do
       let(:config) do
-        instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: writer_host)
+        instance_double('ConnectionConfig',
+                        driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: writer_host)
       end
 
       it 'returns the initial host info' do
@@ -148,7 +150,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
   describe '#multi_host_url?' do
     context 'when the host contains a comma' do
       let(:config) do
-        instance_double('ConnectionConfig', driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'host1,host2' }, initial_host_info: nil)
+        instance_double('ConnectionConfig',
+                        driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'host1,host2' }, initial_host_info: nil)
       end
 
       it 'returns true' do
@@ -172,7 +175,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
 
     context 'when driver is mysql2' do
       let(:config) do
-        instance_double('ConnectionConfig', driver_name: :mysql2, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: nil)
+        instance_double('ConnectionConfig',
+                        driver_name: :mysql2, wrapper_props: {}, driver_props: { host: 'writer-host' }, initial_host_info: nil)
       end
 
       it 'returns false' do

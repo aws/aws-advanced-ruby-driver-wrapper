@@ -128,7 +128,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     context 'with a required role' do
       let(:host_permissions) do
         instance_double('HostPermissions',
-                        allowed_host_ids: ['writer-id', 'reader-id'],
+                        allowed_host_ids: %w[writer-id reader-id],
                         blocked_host_ids: [],
                         required_role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
       end

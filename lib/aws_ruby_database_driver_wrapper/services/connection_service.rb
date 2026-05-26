@@ -40,26 +40,23 @@ module AwsRubyDatabaseDriverWrapper
 
         host_service = @service_container.host_service
         hosts = host_service.all_hosts
-        if host_service.all_hosts.empty?
-          raise Errors::AwsError, "Attempted to access the current host list, but the host list is empty"
-        end
+        raise Errors::AwsError,
+              'Attempted to access the current host list, but the host list is empty' if host_service.all_hosts.empty?
 
         @current_host_info = Utils::HostListUtils.writer(hosts)
         allowed_hosts = host_service.hosts
-        unless @current_host_info.nil? || Utils::HostListUtils::contains_url?(allowed_hosts, @current_host_info.url)
+        unless @current_host_info.nil? || Utils::HostListUtils.contains_url?(allowed_hosts, @current_host_info.url)
           raise Errors::AwsError,
-                "Current host is not in the list of allowed hosts: " \
+                'Current host is not in the list of allowed hosts: ' \
                 "current_host=#{@current_host_info.url}, " \
                 "allowed_hosts=#{Utils::HostListUtils.to_host_urls_s(allowed_hosts)}"
         end
 
-        if @current_host_info.nil? && !hosts.empty?
-          @current_host_info = hosts[0]
-        end
+        @current_host_info = hosts[0] if @current_host_info.nil? && !hosts.empty?
 
         if @current_host_info.nil?
           raise Errors::AwsError,
-                "Unable to identify a current host from the available host list"
+                'Unable to identify a current host from the available host list'
         end
 
         @current_host_info

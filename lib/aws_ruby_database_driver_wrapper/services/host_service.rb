@@ -88,7 +88,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param host_info [HostInfo] the host whose availability has been determined
       # @param availability [Symbol] the new availability status, e.g. :available or :unavailable
       def set_availability(host_info, availability)
-        host = @all_hosts.find { |h | h.id == host_info.id || h.host.casecmp?(host_info.host) }
+        host = @all_hosts.find { |h| h.id == host_info.id || h.host.casecmp?(host_info.host) }
         return if host.nil?
 
         host.availability = availability
@@ -126,9 +126,7 @@ module AwsRubyDatabaseDriverWrapper
         return nil if id.nil?
 
         hosts = @host_list_provider&.refresh
-        if hosts.nil?
-          hosts = @host_list_provider&.force_refresh
-        end
+        hosts = @host_list_provider&.force_refresh if hosts.nil?
 
         return nil if hosts.nil?
 
@@ -138,11 +136,12 @@ module AwsRubyDatabaseDriverWrapper
       private
 
       def apply_cached_availability(hosts)
-        hosts.each { |host|
+        hosts.each do |host|
           availability = @availability_cache.get(host.url)
           next if availability.nil?
+
           host.availability = availability
-        }
+        end
       end
     end
   end

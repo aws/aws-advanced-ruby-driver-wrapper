@@ -26,7 +26,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def self.to_host_urls_s(hosts)
-        hosts&.map { |host_info| host_info.url }&.join(',') || ''
+        hosts&.map(&:url)&.join(',') || ''
       end
     end
   end
