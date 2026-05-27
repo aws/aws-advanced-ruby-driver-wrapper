@@ -18,6 +18,7 @@ require 'logger'
 require_relative '../host/host_info'
 require_relative '../host/host_role'
 require_relative '../host/host_availability'
+require_relative '../logging'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils

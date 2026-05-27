@@ -44,7 +44,9 @@ module AwsRubyDatabaseDriverWrapper
       # @return [HostRole] :writer or :reader
       def query_host_role(driver_dialect, connection, reader_check_query)
         result = driver_dialect.execute(connection, reader_check_query)
-        result[0][0] == 't' ? HostRole::READER : HostRole::WRITER
+        row = result.first
+        value = row.is_a?(Hash) ? row.values.first : row
+        %w[t 1].include?(value.to_s) ? Host::HostRole::READER : Host::HostRole::WRITER
       end
 
       # Checks that all given queries return non-empty results.

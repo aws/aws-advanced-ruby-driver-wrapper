@@ -33,7 +33,7 @@ module AwsRubyDatabaseDriverWrapper
       ]).freeze
 
       def connect(host_info, config)
-        Mysql2::Client.new(**prepare_connect_config(host_info, config))
+        ::Mysql2::Client.new(**prepare_connect_config(host_info, config))
       end
 
       def execute(connection, sql)
