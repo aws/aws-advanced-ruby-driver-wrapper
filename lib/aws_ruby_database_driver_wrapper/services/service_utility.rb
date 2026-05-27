@@ -20,6 +20,7 @@ require_relative 'dialect_service'
 require_relative 'host_service'
 require_relative 'plugin_manager'
 require_relative 'session_state_service'
+require_relative 'monitor_service'
 require_relative '../utils/storage/storage_service'
 
 module AwsRubyDatabaseDriverWrapper
@@ -32,6 +33,7 @@ module AwsRubyDatabaseDriverWrapper
         container.host_service = HostService.new(container)
         container.session_state_service = SessionStateService.new
         container.storage_service = Utils::Storage::StorageService.shared_instance
+        container.monitor_service = MonitorService.instance
         container.plugin_manager = PluginManager.new(container)
         container
       end

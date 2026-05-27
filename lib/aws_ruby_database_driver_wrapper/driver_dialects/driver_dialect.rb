@@ -14,14 +14,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'logger'
 require 'set'
 require_relative '../ruby_method'
+require_relative '../logging'
+require_relative '../log_messages'
 
 module AwsRubyDatabaseDriverWrapper
   module DriverDialects
     module DriverDialect
-      LOGGER = Logger.new($stderr, progname: 'AwsRubyDatabaseDriverWrapper')
+      include Logging
 
       COMMON_NETWORK_BOUND_METHODS = Set[
         RubyMethod::CONNECT,

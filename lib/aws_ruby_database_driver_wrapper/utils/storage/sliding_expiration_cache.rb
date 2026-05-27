@@ -22,7 +22,7 @@ module AwsRubyDatabaseDriverWrapper
       # A thread-safe cache with sliding TTL expiration. Accessing an existing entry
       # via {#compute_if_absent} renews its expiration, and {#extend_expiration} allows
       # manual renewal. Provides conditional removal via {#remove_if} and
-      # {#remove_expired_if} for entries that require careful lifecycle management.
+      # {#remove_if_expired} for entries that require careful lifecycle management.
       # Disposal of removed items should be handled by the caller.
       #
       # For simple data that does not need expiration renewal or controlled removal,
@@ -105,15 +105,13 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
-        # Removes the value at the given key only if it is expired and the predicate returns true.
+        # Removes the value at the given key only if it is expired.
         # @param key [Object] the cache key.
-        # @yield [value] block that returns true if the expired value should be removed.
         # @return [Object, nil] the removed value, or nil.
-        def remove_expired_if(key)
+        def remove_if_expired(key)
           @lock.synchronize do
             entry = @cache[key]
-            return nil if entry.nil?
-            return nil unless entry.expired? && yield(entry.value)
+            return nil if entry.nil? || !entry.expired?
 
             @cache.delete(key)
             entry.value
