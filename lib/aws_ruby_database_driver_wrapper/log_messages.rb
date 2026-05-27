@@ -18,7 +18,7 @@ module AwsRubyDatabaseDriverWrapper
   # Centralized log messages for the wrapper. Mirrors the pattern from
   # aws-advanced-jdbc-wrapper's messages.properties.
   module LogMessages
-    # AbstractMonitor
+    # Monitor
     MONITOR_STARTED = 'Started monitoring thread: %s'
     MONITOR_STOPPED = 'Stopped monitoring thread: %s'
     MONITOR_EXCEPTION = 'Exception in monitoring thread %s: %s'

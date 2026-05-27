@@ -15,12 +15,13 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/monitoring/abstract_monitor'
+require 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require 'aws_ruby_database_driver_wrapper/services/monitor_service'
+require 'aws_ruby_database_driver_wrapper'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::MonitorService do
   let(:test_monitor_class) do
-    Class.new(AwsRubyDatabaseDriverWrapper::Monitoring::AbstractMonitor) do
+    Class.new(AwsRubyDatabaseDriverWrapper::Monitoring::Monitor) do
       def monitor
         sleep(0.01) until stopped?
       end

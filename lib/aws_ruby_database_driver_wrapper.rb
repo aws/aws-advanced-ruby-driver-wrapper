@@ -23,7 +23,6 @@ require_relative 'aws_ruby_database_driver_wrapper/utils/connection_config'
 require_relative 'aws_ruby_database_driver_wrapper/utils/connection_config_parser'
 require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor_state'
 require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor'
-require_relative 'aws_ruby_database_driver_wrapper/monitoring/abstract_monitor'
 require_relative 'aws_ruby_database_driver_wrapper/services/shutdown_service'
 require_relative 'aws_ruby_database_driver_wrapper/services/monitor_service'
 

@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/monitoring/abstract_monitor'
+require 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::AbstractMonitor do
+RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::Monitor do
   let(:monitor_class) do
     Class.new(described_class) do
       attr_accessor :iterations
@@ -101,10 +101,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::AbstractMonitor do
   describe '#last_activity_nanos' do
     it 'updates during run' do
       @monitor = monitor_class.new(termination_timeout_sec: 2)
-      initial = @monitor.last_activity_nanos
+      initial = @monitor.last_activity_sec
       @monitor.start
       sleep(0.05)
-      expect(@monitor.last_activity_nanos).to be > initial
+      expect(@monitor.last_activity_sec).to be > initial
     end
   end
 end

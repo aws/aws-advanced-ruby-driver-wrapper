@@ -38,7 +38,7 @@ module AwsRubyDatabaseDriverWrapper
         @lock = Mutex.new
         @running = true
         @cleanup_thread = start_cleanup_thread
-        AwsRubyDatabaseDriverWrapper.shutdown_service.register(self) if AwsRubyDatabaseDriverWrapper.respond_to?(:shutdown_service)
+        AwsRubyDatabaseDriverWrapper.shutdown_service.register(self)
       end
 
       # Registers a monitor type. No-op if already registered.
@@ -155,7 +155,7 @@ module AwsRubyDatabaseDriverWrapper
           end
 
           # Remove expired monitors that can be disposed
-          removed = container.cache.remove_expired_if(key)
+          removed = container.cache.remove_if_expired(key)
           if removed
             LOGGER.debug(format(LogMessages::MONITOR_SERVICE_REMOVED_EXPIRED, key))
             removed.stop
