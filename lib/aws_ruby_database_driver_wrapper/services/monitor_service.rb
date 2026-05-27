@@ -28,7 +28,7 @@ module AwsRubyDatabaseDriverWrapper
       include Singleton
       include Logging
 
-      CLEANUP_INTERVAL_SEC = 60
+      CLEANUP_INTERVAL_SEC = 60.0
 
       # Internal container grouping a cache for a monitor type.
       CacheContainer = Struct.new(:cache, keyword_init: true)

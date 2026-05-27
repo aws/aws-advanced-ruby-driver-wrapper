@@ -27,7 +27,7 @@ module AwsRubyDatabaseDriverWrapper
 
       attr_reader :state, :last_activity_sec
 
-      def initialize(termination_timeout_sec: 30)
+      def initialize(termination_timeout_sec: 30.0)
         @termination_timeout_sec = termination_timeout_sec
         @state = nil
         @stop_flag = false
@@ -56,6 +56,7 @@ module AwsRubyDatabaseDriverWrapper
           thread.join(@termination_timeout_sec)
           thread.kill if thread.alive?
         end
+        @thread = nil
 
         @state = MonitorState::STOPPED
         close
