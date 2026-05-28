@@ -25,6 +25,8 @@ module AwsRubyDatabaseDriverWrapper
       include TopologyUtils
 
       def initialize(dialect:)
+        raise ArgumentError, 'dialect cannot be nil' if dialect.nil?
+
         @dialect = dialect
       end
 

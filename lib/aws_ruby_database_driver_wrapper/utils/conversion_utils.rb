@@ -20,7 +20,7 @@ module AwsRubyDatabaseDriverWrapper
     module ConversionUtils
       def to_boolean(value)
         case value
-        when true, 1, '1', 'true'
+        when true, 1, '1', 'true', 't', 'TRUE', 'T'
           true
         else
           false

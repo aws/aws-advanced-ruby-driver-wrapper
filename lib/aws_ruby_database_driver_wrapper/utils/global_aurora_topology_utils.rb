@@ -32,7 +32,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param instance_templates_by_region [Hash<String, AwsRubyDatabaseDriverWrapper::Host::HostInfo>]
       #   a map of AWS region to instance template HostInfo for constructing hosts.
       # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] a list of HostInfo objects or nil.
-      def query_topology(conn, initial_host_info, instance_templates_by_region)
+      def query_global_topology(conn, initial_host_info, instance_templates_by_region)
         results = @dialect.execute(conn, @dialect.topology_query)
 
         if results.fields.empty?

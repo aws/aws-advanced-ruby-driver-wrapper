@@ -27,8 +27,6 @@ module AwsRubyDatabaseDriverWrapper
     module TopologyUtils
       include Logging
 
-      DEFAULT_QUERY_TIMEOUT_MS = 1000
-
       attr_reader :dialect
 
       # Builds a HostInfo from the given topology information.
@@ -79,7 +77,7 @@ module AwsRubyDatabaseDriverWrapper
           return nil
         end
 
-        verify_writer(build_global_hosts(conn, results, initial_host_info, instance_template))
+        verify_writer(build_hosts(conn, results, initial_host_info, instance_template))
       end
 
       private

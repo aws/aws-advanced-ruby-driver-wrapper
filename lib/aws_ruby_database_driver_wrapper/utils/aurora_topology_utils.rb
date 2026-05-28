@@ -26,6 +26,8 @@ module AwsRubyDatabaseDriverWrapper
       include ConversionUtils
 
       def initialize(dialect:)
+        raise ArgumentError, 'dialect cannot be nil' if dialect.nil?
+
         @dialect = dialect
       end
 
@@ -49,7 +51,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param initial_host_info [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the initial host info.
       # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template for building hosts.
       # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] the parsed hosts or nil on failure.
-      def build_global_hosts(_conn, results, initial_host_info, instance_template)
+      def build_hosts(_conn, results, initial_host_info, instance_template)
         hosts_map = {}
 
         results.each do |row|

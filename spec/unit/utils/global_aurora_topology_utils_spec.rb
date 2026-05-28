@@ -72,7 +72,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
 
-        hosts = subject.query_topology(conn, initial_host_info, instance_templates_by_region)
+        hosts = subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)
 
         expect(hosts).not_to be_nil
         expect(hosts.size).to eq(2)
@@ -98,7 +98,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
 
-        hosts = subject.query_topology(conn, initial_host_info, instance_templates_by_region)
+        hosts = subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)
 
         expect(hosts).not_to be_nil
         # weight = node_lag.round * 100 = 3 * 100 = 300
@@ -111,7 +111,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         results = make_result_set([], [])
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
 
-        expect(subject.query_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
+        expect(subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
       end
     end
 
@@ -125,7 +125,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
 
-        expect(subject.query_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
+        expect(subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
       end
     end
 
@@ -139,7 +139,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
 
-        expect(subject.query_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
+        expect(subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
       end
     end
 
@@ -155,7 +155,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
 
-        hosts = subject.query_topology(conn, initial_host_info, instance_templates_by_region)
+        hosts = subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)
 
         expect(hosts).not_to be_nil
         writers = hosts.select { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
