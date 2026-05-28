@@ -42,7 +42,7 @@ module AwsRubyDatabaseDriverWrapper
           return nil
         end
 
-        verify_writer(build_hosts(results, initial_host_info, instance_templates_by_region))
+        verify_writer(build_global_hosts(results, initial_host_info, instance_templates_by_region))
       rescue StandardError => e
         raise "Invalid topology query: #{e.message}"
       end
@@ -102,7 +102,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param instance_templates_by_region [Hash<String, AwsRubyDatabaseDriverWrapper::Host::HostInfo>]
       #   map of region to instance template.
       # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] the parsed hosts or nil on failure.
-      def build_hosts(results, initial_host_info, instance_templates_by_region)
+      def build_global_hosts(results, initial_host_info, instance_templates_by_region)
         hosts_map = {}
 
         results.each do |row|

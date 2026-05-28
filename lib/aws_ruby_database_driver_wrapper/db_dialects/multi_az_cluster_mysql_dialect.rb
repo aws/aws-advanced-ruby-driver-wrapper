@@ -30,7 +30,7 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       TOPOLOGY_QUERY = <<~SQL
-        SELECT id, endpoint, port FROM mysql.rds_topology
+        SELECT endpoint, port FROM mysql.rds_topology
       SQL
 
       INSTANCE_ID_QUERY = <<~SQL

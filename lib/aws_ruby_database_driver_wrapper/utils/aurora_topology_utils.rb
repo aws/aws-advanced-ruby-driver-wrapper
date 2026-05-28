@@ -14,14 +14,16 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative 'single_cluster_topology_utils'
+require_relative 'topology_utils'
+require_relative 'conversion_utils'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils
     # Topology utilities specific to Aurora database clusters.
     # Processes topology query results that return instance ID, writer flag, CPU utilization, and instance lag columns.
     class AuroraTopologyUtils
-      include SingleClusterTopologyUtils
+      include TopologyUtils
+      include ConversionUtils
 
       def initialize(dialect:)
         @dialect = dialect
@@ -47,7 +49,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param initial_host_info [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the initial host info.
       # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template for building hosts.
       # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] the parsed hosts or nil on failure.
-      def build_hosts(_conn, results, initial_host_info, instance_template)
+      def build_global_hosts(_conn, results, initial_host_info, instance_template)
         hosts_map = {}
 
         results.each do |row|
@@ -89,34 +91,6 @@ module AwsRubyDatabaseDriverWrapper
         weight = (instance_lag.round * 100) + cpu_utilization.round
 
         build_host(host_id, is_writer, weight, last_update_time, initial_host_info, instance_template)
-      end
-
-      def to_boolean(value)
-        case value
-        when true, 1, '1', 'true'
-          true
-        else
-          false
-        end
-      end
-
-      def to_float(value)
-        Float(value || 0)
-      rescue ArgumentError, TypeError
-        0.0
-      end
-
-      def to_time(value)
-        case value
-        when Time
-          value
-        when String
-          Time.parse(value)
-        else
-          Time.now
-        end
-      rescue ArgumentError
-        Time.now
       end
     end
   end

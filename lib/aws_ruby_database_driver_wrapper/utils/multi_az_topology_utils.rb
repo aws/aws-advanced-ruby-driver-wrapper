@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative 'single_cluster_topology_utils'
+require_relative 'topology_utils'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils
@@ -22,7 +22,7 @@ module AwsRubyDatabaseDriverWrapper
     # In Multi-AZ clusters, the writer is identified via a separate query rather than
     # from a column in the topology results.
     class MultiAzTopologyUtils
-      include SingleClusterTopologyUtils
+      include TopologyUtils
 
       def initialize(dialect:)
         @dialect = dialect
