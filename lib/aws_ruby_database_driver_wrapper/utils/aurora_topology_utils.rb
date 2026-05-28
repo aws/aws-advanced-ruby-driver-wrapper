@@ -79,11 +79,11 @@ module AwsRubyDatabaseDriverWrapper
       # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template for building hosts.
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       def build_host_from_row(row, initial_host_info, instance_template)
-        host_id = row_value(row, "host_id")
-        is_writer = to_boolean(row_value(row, "is_writer"))
-        cpu_utilization = to_float(row_value(row, "cpu_utilization"))
-        instance_lag = to_float(row_value(row, "instance_lag"))
-        last_update_time = to_time(row_value(row, "last_update_time"))
+        host_id = row_value(row, 'host_id')
+        is_writer = to_boolean(row_value(row, 'is_writer'))
+        cpu_utilization = to_float(row_value(row, 'cpu_utilization'))
+        instance_lag = to_float(row_value(row, 'instance_lag'))
+        last_update_time = to_time(row_value(row, 'last_update_time'))
 
         # Calculate weight based on instance lag and CPU utilization.
         weight = (instance_lag.round * 100) + cpu_utilization.round
@@ -93,7 +93,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def to_boolean(value)
         case value
-        when true, 1, "1", "true"
+        when true, 1, '1', 'true'
           true
         else
           false

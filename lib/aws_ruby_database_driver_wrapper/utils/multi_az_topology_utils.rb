@@ -82,7 +82,7 @@ module AwsRubyDatabaseDriverWrapper
 
         if results && !results.empty?
           row = results.first
-          writer_id_column = @dialect.respond_to?(:writer_id_column_name) ? @dialect.writer_id_column_name : "writer_id"
+          writer_id_column = @dialect.respond_to?(:writer_id_column_name) ? @dialect.writer_id_column_name : 'writer_id'
           writer_id = row_value(row, writer_id_column)
           return writer_id unless writer_id.nil? || writer_id.to_s.empty?
         end
@@ -103,9 +103,9 @@ module AwsRubyDatabaseDriverWrapper
       # @param writer_id [String, nil] the writer instance ID.
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       def build_host_from_row(row, initial_host_info, instance_template, writer_id)
-        endpoint = row_value(row, "endpoint")
+        endpoint = row_value(row, 'endpoint')
         # Extract instance ID from the endpoint (everything before the first dot).
-        host_id = endpoint&.split(".")&.first
+        host_id = endpoint&.split('.')&.first
         build_host(host_id, host_id == writer_id, 0, Time.now, initial_host_info, instance_template)
       end
     end

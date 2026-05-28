@@ -36,8 +36,8 @@ module AwsRubyDatabaseDriverWrapper
       # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template used to construct the new HostInfo.
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] a HostInfo representing the given information.
       def build_host(instance_id, is_writer, weight, last_update_time, initial_host_info, instance_template)
-        instance_id = "?" if instance_id.nil?
-        endpoint = instance_template.host.gsub("?", instance_id)
+        instance_id = '?' if instance_id.nil?
+        endpoint = instance_template.host.gsub('?', instance_id)
         port = resolve_port(instance_template, initial_host_info)
         role = is_writer ? Host::HostRole::WRITER : Host::HostRole::READER
 

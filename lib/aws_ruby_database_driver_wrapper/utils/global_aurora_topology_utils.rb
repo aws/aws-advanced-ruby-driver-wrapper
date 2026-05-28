@@ -25,10 +25,6 @@ module AwsRubyDatabaseDriverWrapper
     # Global Aurora clusters span multiple AWS regions, so topology queries return a region column
     # and instance templates are keyed by region.
     class GlobalAuroraTopologyUtils < AuroraTopologyUtils
-      def initialize(dialect:)
-        @dialect = dialect
-      end
-
       # Query the database for topology information across global Aurora cluster regions.
       #
       # @param conn [Object] the connection to use to query the database.
@@ -37,20 +33,18 @@ module AwsRubyDatabaseDriverWrapper
       #   a map of AWS region to instance template HostInfo for constructing hosts.
       # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] a list of HostInfo objects or nil.
       def query_topology(conn, initial_host_info, instance_templates_by_region)
-        begin
-          results = @dialect.execute(conn, @dialect.topology_query)
+        results = @dialect.execute(conn, @dialect.topology_query)
 
-          if results.fields.size == 0
-            # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
-            logger.debug("The topology query returned a result with 0 columns. " \
-                         "This may occur if the topology query is executed when the server is failing over.")
-            return nil
-          end
-
-          verify_writer(build_hosts(results, initial_host_info, instance_templates_by_region))
-        rescue StandardError => e
-          raise "Invalid topology query: #{e.message}"
+        if results.fields.empty?
+          # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
+          logger.debug('The topology query returned a result with 0 columns. ' \
+                       'This may occur if the topology query is executed when the server is failing over.')
+          return nil
         end
+
+        verify_writer(build_hosts(results, initial_host_info, instance_templates_by_region))
+      rescue StandardError => e
+        raise "Invalid topology query: #{e.message}"
       end
 
       # Retrieves the AWS region for a given instance ID.
@@ -91,7 +85,7 @@ module AwsRubyDatabaseDriverWrapper
           url_type = RdsUtils.identify_rds_type(host_pattern)
           # assign HostRole of READER if using the reader cluster URL, otherwise assume a HostRole of WRITER
           role = url_type == RdsUrlType::RDS_READER_CLUSTER ? Host::HostRole::READER : Host::HostRole::WRITER
-          templates[region] = Host::HostInfo.new(id: "?", host: host_pattern, port: port, role: role)
+          templates[region] = Host::HostInfo.new(id: '?', host: host_pattern, port: port, role: role)
         end
 
         logger.debug("Detected global database patterns: #{templates}")
@@ -133,17 +127,15 @@ module AwsRubyDatabaseDriverWrapper
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       # @raise [AwsError] if no template is found for the row's region.
       def build_host_from_row(row, initial_host_info, instance_templates_by_region)
-        host_id = row_value(row, "host_id")
-        is_writer = to_boolean(row_value(row, "is_writer"))
-        lag = to_float(row_value(row, "node_lag"))
-        aws_region = row_value(row, "aws_region").to_s
+        host_id = row_value(row, 'host_id')
+        is_writer = to_boolean(row_value(row, 'is_writer'))
+        lag = to_float(row_value(row, 'node_lag'))
+        aws_region = row_value(row, 'aws_region').to_s
 
         weight = (lag.round * 100)
 
         instance_template = instance_templates_by_region[aws_region]
-        if instance_template.nil?
-          raise Errors::AwsError, "Cannot find instance template for region '#{aws_region}'"
-        end
+        raise Errors::AwsError, "Cannot find instance template for region '#{aws_region}'" if instance_template.nil?
 
         build_host(host_id, is_writer, weight, Time.now, initial_host_info, instance_template)
       end
@@ -156,8 +148,8 @@ module AwsRubyDatabaseDriverWrapper
       # @param entry [String] a single instance template entry.
       # @return [Array(String, String, Integer)] region, host_pattern, and port.
       def extract_region_host_and_port(entry)
-        if entry.start_with?("[")
-          closing = entry.index("]")
+        if entry.start_with?('[')
+          closing = entry.index(']')
           raise ArgumentError, "Invalid instance template format: '#{entry}'" if closing.nil?
 
           region = entry[1...closing]
@@ -174,7 +166,7 @@ module AwsRubyDatabaseDriverWrapper
       def parse_host_and_port(value)
         # Split from the right to handle host patterns that might not contain a colon.
         # Only treat the last segment as a port if it's purely numeric.
-        last_colon = value.rindex(":")
+        last_colon = value.rindex(':')
         if last_colon && value[(last_colon + 1)..].match?(/\A\d+\z/)
           host_pattern = value[0...last_colon]
           port = value[(last_colon + 1)..].to_i
@@ -182,21 +174,6 @@ module AwsRubyDatabaseDriverWrapper
         else
           [value, Host::HostInfo::NO_PORT]
         end
-      end
-
-      def to_boolean(value)
-        case value
-        when true, 1, "1", "true"
-          true
-        else
-          false
-        end
-      end
-
-      def to_float(value)
-        Float(value || 0)
-      rescue ArgumentError, TypeError
-        0.0
       end
     end
   end

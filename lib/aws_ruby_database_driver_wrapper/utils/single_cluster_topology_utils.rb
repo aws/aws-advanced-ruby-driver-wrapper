@@ -33,17 +33,15 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Array<AwsRubyDatabaseDriverWrapper::Host::HostInfo>, nil] a list of HostInfo objects representing
       #   the results of the topology query, or nil if the query returned unexpected results.
       def query_topology(conn, initial_host_info, instance_template)
-        begin
-          results = @dialect.execute(conn, @dialect.topology_query)
-          # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
-          if results.fields.size == 0
-            logger.debug("The topology query returned a result with 0 columns. " \
-                           "This may occur if the topology query is executed when the server is failing over.")
-            return nil
-          end
-
-          verify_writer(build_hosts(conn, results, initial_host_info, instance_template))
+        results = @dialect.execute(conn, @dialect.topology_query)
+        # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
+        if results.fields.empty?
+          logger.debug('The topology query returned a result with 0 columns. ' \
+                       'This may occur if the topology query is executed when the server is failing over.')
+          return nil
         end
+
+        verify_writer(build_hosts(conn, results, initial_host_info, instance_template))
       end
 
       private
