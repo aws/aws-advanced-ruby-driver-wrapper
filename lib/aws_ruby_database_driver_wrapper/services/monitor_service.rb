@@ -17,7 +17,6 @@
 require 'singleton'
 require_relative '../monitoring/monitor_state'
 require_relative '../logging'
-require_relative '../log_messages'
 require_relative '../utils/storage/sliding_expiration_cache'
 
 module AwsRubyDatabaseDriverWrapper
@@ -149,7 +148,7 @@ module AwsRubyDatabaseDriverWrapper
           # Stop and remove errored monitors
           removed = container.cache.remove_if(key) { |m| m.state == Monitoring::MonitorState::ERROR }
           if removed
-            LOGGER.debug(format(LogMessages::MONITOR_SERVICE_REMOVED_ERROR, key))
+            logger.debug("Removed monitor in error state: #{key}")
             removed.stop
             next
           end
@@ -157,7 +156,7 @@ module AwsRubyDatabaseDriverWrapper
           # Remove expired monitors that can be disposed
           removed = container.cache.remove_if_expired(key)
           if removed
-            LOGGER.debug(format(LogMessages::MONITOR_SERVICE_REMOVED_EXPIRED, key))
+            logger.debug("Removed expired monitor: #{key}")
             removed.stop
           end
         end
