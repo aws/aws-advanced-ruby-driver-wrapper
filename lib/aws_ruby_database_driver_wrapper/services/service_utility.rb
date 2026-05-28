@@ -19,27 +19,60 @@ require_relative 'connection_service'
 require_relative 'dialect_service'
 require_relative 'host_service'
 require_relative 'plugin_manager'
-require_relative 'session_state_service'
 require_relative 'monitor_service'
+require_relative 'session_state_service'
 require_relative '../utils/storage/storage_service'
+require_relative '../utils/events/batching_event_publisher'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
+    # Manages shared singleton services with correct dependency order.
+    module CoreServices
+      def self.event_publisher
+        @event_publisher ||= Utils::Events::BatchingEventPublisher.new
+      end
+
+      def self.storage_service
+        @storage_service ||= Utils::Storage::StorageService.new(event_publisher: event_publisher)
+      end
+
+      def self.monitor_service
+        @monitor_service ||= begin
+          svc = MonitorService.new(event_publisher: event_publisher)
+          AwsRubyDatabaseDriverWrapper.shutdown_service.register(svc) if AwsRubyDatabaseDriverWrapper.respond_to?(:shutdown_service)
+          svc
+        end
+      end
+
+      # Resets all shared instances. For testing only.
+      # @api private
+      def self.reset!
+        @monitor_service&.shutdown(grace_period: 2)
+        @storage_service&.shutdown
+        @event_publisher&.release_resources
+        @event_publisher = nil
+        @storage_service = nil
+        @monitor_service = nil
+      end
+    end
+
     module ServiceUtility
       def self.create_standard_container(config)
         container = ServiceContainer.new
+        container.event_publisher = CoreServices.event_publisher
         container.connection_service = ConnectionService.new(container, config)
         container.dialect_service = DialectService.new(config.driver_name)
         container.host_service = HostService.new(container)
         container.session_state_service = SessionStateService.new
-        container.storage_service = Utils::Storage::StorageService.shared_instance
-        container.monitor_service = MonitorService.instance
+        container.storage_service = CoreServices.storage_service
+        container.monitor_service = CoreServices.monitor_service
         container.plugin_manager = PluginManager.new(container)
         container
       end
 
       def self.create_monitor_container(parent_container)
         container = ServiceContainer.new
+        container.event_publisher = parent_container.event_publisher
         container.dialect_service = parent_container.dialect_service
         container.host_service = parent_container.host_service
         container

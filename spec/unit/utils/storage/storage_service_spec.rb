@@ -16,12 +16,18 @@
 
 require_relative '../../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/utils/storage/storage_service'
+require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService do
-  # Use a large cleanup interval so the thread doesn't interfere with most tests.
-  subject(:service) { described_class.new(cleanup_interval: 9999) }
+  let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 9999) }
 
-  after { service.shutdown }
+  # Use a large cleanup interval so the thread doesn't interfere with most tests.
+  subject(:service) { described_class.new(event_publisher: event_publisher, cleanup_interval: 9999) }
+
+  after do
+    service.shutdown
+    event_publisher.release_resources
+  end
 
   describe '#register' do
     it 'registers a cache' do
@@ -51,7 +57,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService do
     end
 
     it 'returns nil for an expired item' do
-      short_service = described_class.new(cleanup_interval: 9999)
+      short_service = described_class.new(event_publisher: event_publisher, cleanup_interval: 9999)
       short_service.register(:short, ttl: 0.05)
       short_service.set(:short, :a, 'value')
       sleep(0.1)
@@ -127,7 +133,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService do
 
   describe 'cleanup thread' do
     it 'removes expired items after interval' do
-      svc = described_class.new(cleanup_interval: 0.05)
+      svc = described_class.new(event_publisher: event_publisher, cleanup_interval: 0.05)
       svc.register(:data, ttl: 0.05)
       svc.set(:data, :a, 'value')
       sleep(0.2)
@@ -137,7 +143,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService do
     end
 
     it 'does not remove non-expired items' do
-      svc = described_class.new(cleanup_interval: 0.05)
+      svc = described_class.new(event_publisher: event_publisher, cleanup_interval: 0.05)
       svc.register(:data, ttl: 60)
       svc.set(:data, :a, 'value')
       sleep(0.15)
@@ -149,29 +155,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService do
 
   describe '#shutdown' do
     it 'stops the cleanup thread' do
-      svc = described_class.new(cleanup_interval: 0.05)
+      svc = described_class.new(event_publisher: event_publisher, cleanup_interval: 0.05)
       svc.shutdown
       thread = svc.instance_variable_get(:@cleanup_thread)
       expect(thread.alive?).to be false
-    end
-  end
-
-  describe '.shared_instance' do
-    after { described_class.reset! }
-
-    it 'returns the same instance on repeated calls' do
-      a = described_class.shared_instance
-      b = described_class.shared_instance
-      expect(a).to equal(b)
-    end
-  end
-
-  describe '.reset!' do
-    it 'clears the shared instance' do
-      a = described_class.shared_instance
-      described_class.reset!
-      b = described_class.shared_instance
-      expect(a).not_to equal(b)
     end
   end
 end
