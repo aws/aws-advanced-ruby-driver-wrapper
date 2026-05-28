@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-require 'logger'
 require_relative 'expiration_cache'
+require_relative '../../logging'
+require_relative '../events/data_access_event'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils
@@ -23,33 +24,15 @@ module AwsRubyDatabaseDriverWrapper
       # A centralized, shared cache registry with per-type TTL and background cleanup.
       # Each named cache partition stores items independently with its own expiration policy.
       class StorageService
-        LOGGER = Logger.new($stderr, progname: 'AwsRubyDatabaseDriverWrapper')
+        include Logging
+
         DEFAULT_CLEANUP_INTERVAL = 300 # 5 minutes in seconds
 
-        @lock = Mutex.new
-        @shared_instance = nil
-
-        # Returns the shared instance, creating it if needed.
+        # @param event_publisher [#publish] the event publisher for data access events.
         # @param cleanup_interval [Numeric] seconds between cleanup runs.
-        # @return [StorageService]
-        def self.shared_instance(cleanup_interval: DEFAULT_CLEANUP_INTERVAL)
-          @lock.synchronize do
-            @shared_instance ||= new(cleanup_interval: cleanup_interval)
-          end
-        end
-
-        # Resets the shared instance. For testing only.
-        # @api private
-        def self.reset!
-          @lock.synchronize do
-            @shared_instance&.shutdown
-            @shared_instance = nil
-          end
-        end
-
-        # @param cleanup_interval [Numeric] seconds between cleanup runs.
-        def initialize(cleanup_interval: DEFAULT_CLEANUP_INTERVAL)
+        def initialize(event_publisher:, cleanup_interval: DEFAULT_CLEANUP_INTERVAL)
           @caches = {}
+          @event_publisher = event_publisher
           @lock = Mutex.new
           @running = true
           @cleanup_thread = start_cleanup_thread(cleanup_interval)
@@ -78,9 +61,15 @@ module AwsRubyDatabaseDriverWrapper
         # Retrieves an item. Returns nil if absent or expired.
         # @param name [Symbol] registered cache name.
         # @param key [Object] item key.
+        # @param register_access [Boolean] whether to publish a DataAccessEvent.
         # @return [Object, nil]
-        def get(name, key)
-          fetch_cache!(name).get(key)
+        def get(name, key, register_access: true)
+          value = fetch_cache!(name).get(key)
+          return nil unless value
+
+          @event_publisher.publish(Events::DataAccessEvent.new(data_type: name, key: key)) if register_access && @event_publisher
+
+          value
         end
 
         # Returns true if a non-expired item exists at the given name + key.
@@ -154,7 +143,7 @@ module AwsRubyDatabaseDriverWrapper
 
             cache.remove_expired_entries
           rescue StandardError => e
-            LOGGER.debug("StorageService cleanup failed for #{name}: #{e.message}")
+            logger.debug("StorageService cleanup failed for #{name}: #{e.message}")
           end
         end
       end

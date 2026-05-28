@@ -17,7 +17,6 @@
 require 'set'
 require_relative '../ruby_method'
 require_relative '../logging'
-require_relative '../log_messages'
 
 module AwsRubyDatabaseDriverWrapper
   module DriverDialects
