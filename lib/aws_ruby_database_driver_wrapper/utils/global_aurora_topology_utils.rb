@@ -15,17 +15,16 @@
 #  limitations under the License.
 
 require_relative '../host/host_role'
+require_relative 'rds_url_type'
 require_relative 'rds_utils'
-require_relative 'topology_utils'
+require_relative 'aurora_topology_utils'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils
     # Topology utilities specific to Global Aurora database clusters.
     # Global Aurora clusters span multiple AWS regions, so topology queries return a region column
     # and instance templates are keyed by region.
-    class GlobalAuroraTopologyUtils
-      include AuroraTopologyUtils
-
+    class GlobalAuroraTopologyUtils < AuroraTopologyUtils
       def initialize(dialect:)
         @dialect = dialect
       end
@@ -51,6 +50,7 @@ module AwsRubyDatabaseDriverWrapper
           verify_writer(build_hosts(results, initial_host_info, instance_templates_by_region))
         rescue StandardError => e
           raise "Invalid topology query: #{e.message}"
+        end
       end
 
       # Retrieves the AWS region for a given instance ID.
@@ -83,16 +83,14 @@ module AwsRubyDatabaseDriverWrapper
 
         instance_templates_string.split(',').each do |entry|
           entry = entry.strip
-          region, remainder = extract_region(entry)
+          region, host_pattern, port = extract_region_host_and_port(entry)
           raise Errors::AwsError, "Unable to parse region from '#{entry}'" if region.nil? || region.empty?
-
-          host_pattern, port = parse_host_and_port(remainder)
           raise Errors::AwsError, "Unable to parse host from '#{entry}'" if host_pattern.nil? || host_pattern.empty?
 
           host_validator.call(host_pattern)
-          url_type = RdsUtils::identify_rds_type(host_pattern)
+          url_type = RdsUtils.identify_rds_type(host_pattern)
           # assign HostRole of READER if using the reader cluster URL, otherwise assume a HostRole of WRITER
-          role = url_type == RdsUrlType::RDS_READER_CLUSTER ? HostRole::READER : HostRole::WRITER
+          role = url_type == RdsUrlType::RDS_READER_CLUSTER ? Host::HostRole::READER : Host::HostRole::WRITER
           templates[region] = Host::HostInfo.new(id: "?", host: host_pattern, port: port, role: role)
         end
 
@@ -135,7 +133,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       # @raise [AwsError] if no template is found for the row's region.
       def build_host_from_row(row, initial_host_info, instance_templates_by_region)
-        host_name = row_value(row, "host_id")
+        host_id = row_value(row, "host_id")
         is_writer = to_boolean(row_value(row, "is_writer"))
         lag = to_float(row_value(row, "node_lag"))
         aws_region = row_value(row, "aws_region").to_s
@@ -147,24 +145,29 @@ module AwsRubyDatabaseDriverWrapper
           raise Errors::AwsError, "Cannot find instance template for region '#{aws_region}'"
         end
 
-        build_host(host_name, host_name, is_writer, weight, Time.now, initial_host_info, instance_template)
+        build_host(host_id, is_writer, weight, Time.now, initial_host_info, instance_template)
       end
 
-      # Extracts a region from an instance template string. The region may be prefixed in square brackets or parsed from
-      # the host, for example:
-      # - "[us-west-1]?.custom-host"
-      # - "?.xyz.us-west-1.rds.amazonaws.com
+      # Extracts the region, host pattern, and port from an instance template string.
+      # The region may be prefixed in square brackets or inferred from the host pattern, for example:
+      # - "[us-west-1]?.custom-host:5432"
+      # - "?.xyz.us-west-1.rds.amazonaws.com:5432"
       #
-      # Returns [region, remainder] where region may be nil if it is not prefixed and could not be parsed from the host.
-      def extract_region(instance_template)
-        return [RdsUtils::rds_region(instance_template), instance_template] unless instance_template.start_with?("[")
+      # @param entry [String] a single instance template entry.
+      # @return [Array(String, String, Integer)] region, host_pattern, and port.
+      def extract_region_host_and_port(entry)
+        if entry.start_with?("[")
+          closing = entry.index("]")
+          raise ArgumentError, "Invalid instance template format: '#{entry}'" if closing.nil?
 
-        closing = instance_template.index("]")
-        raise ArgumentError, "Invalid instance template format: '#{instance_template}'" if closing.nil?
+          region = entry[1...closing]
+          host_pattern, port = parse_host_and_port(entry[(closing + 1)..])
+        else
+          host_pattern, port = parse_host_and_port(entry)
+          region = RdsUtils.rds_region(host_pattern)
+        end
 
-        region = instance_template[1...closing]
-        remainder = instance_template[(closing + 1)..]
-        [region, remainder]
+        [region, host_pattern, port]
       end
 
       # Parses "host_pattern" or "host_pattern:port" and returns [host_pattern, port].
