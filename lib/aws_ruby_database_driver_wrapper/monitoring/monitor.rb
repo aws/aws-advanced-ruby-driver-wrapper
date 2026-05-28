@@ -16,7 +16,6 @@
 
 require_relative 'monitor_state'
 require_relative '../logging'
-require_relative '../log_messages'
 
 module AwsRubyDatabaseDriverWrapper
   module Monitoring
@@ -44,7 +43,7 @@ module AwsRubyDatabaseDriverWrapper
           @state = MonitorState::RUNNING
           @thread = Thread.new { run }
           @thread.name = "monitor-#{monitor_thread_suffix}"
-          LOGGER.debug(format(LogMessages::MONITOR_STARTED, @thread.name))
+          logger.debug("Started monitoring thread: #{@thread.name}")
         end
       end
 
@@ -60,7 +59,7 @@ module AwsRubyDatabaseDriverWrapper
 
         @state = MonitorState::STOPPED
         close
-        LOGGER.debug(format(LogMessages::MONITOR_STOPPED, "monitor-#{monitor_thread_suffix}"))
+        logger.debug("Stopped monitoring thread: monitor-#{monitor_thread_suffix}")
       end
 
       def stopped?
@@ -74,7 +73,7 @@ module AwsRubyDatabaseDriverWrapper
       def run
         monitor
       rescue StandardError => e
-        LOGGER.error(format(LogMessages::MONITOR_EXCEPTION, "monitor-#{monitor_thread_suffix}", e.message))
+        logger.error("Exception in monitoring thread monitor-#{monitor_thread_suffix}: #{e.message}")
         @state = MonitorState::ERROR
       ensure
         @lock.synchronize { @state = MonitorState::STOPPED if @state == MonitorState::RUNNING }

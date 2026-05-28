@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-require 'logger'
 require_relative 'expiration_cache'
+require_relative '../../logging'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils
@@ -23,7 +23,8 @@ module AwsRubyDatabaseDriverWrapper
       # A centralized, shared cache registry with per-type TTL and background cleanup.
       # Each named cache partition stores items independently with its own expiration policy.
       class StorageService
-        LOGGER = Logger.new($stderr, progname: 'AwsRubyDatabaseDriverWrapper')
+        include Logging
+
         DEFAULT_CLEANUP_INTERVAL = 300 # 5 minutes in seconds
 
         @lock = Mutex.new
@@ -154,7 +155,7 @@ module AwsRubyDatabaseDriverWrapper
 
             cache.remove_expired_entries
           rescue StandardError => e
-            LOGGER.debug("StorageService cleanup failed for #{name}: #{e.message}")
+            logger.debug("StorageService cleanup failed for #{name}: #{e.message}")
           end
         end
       end

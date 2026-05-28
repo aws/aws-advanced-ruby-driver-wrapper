@@ -17,9 +17,41 @@
 require 'logger'
 
 module AwsRubyDatabaseDriverWrapper
-  # Shared logger instance for the wrapper. Include this module in any class
-  # that needs logging access via the LOGGER constant.
+  class << self
+    # Returns the logger used by the wrapper. Defaults to a Logger writing to $stderr.
+    # Users can replace this with any object that responds to the standard Logger methods
+    # (debug, info, warn, error, fatal).
+    #
+    # @example Setting a custom logger
+    #   AwsRubyDatabaseDriverWrapper.logger = Logger.new('wrapper.log')
+    #
+    # @example Using Rails logger
+    #   AwsRubyDatabaseDriverWrapper.logger = Rails.logger
+    #
+    # @return [Logger]
+    attr_writer :logger
+
+    def logger
+      @logger ||= default_logger
+    end
+
+    private
+
+    def default_logger
+      logger = Logger.new($stderr)
+      logger.progname = 'AwsRubyDatabaseDriverWrapper'
+      logger.level = Logger::INFO
+      logger
+    end
+  end
+
+  # Include this module in any class that needs logging.
+  # Provides a private `logger` method that delegates to the module-level logger.
   module Logging
-    LOGGER = Logger.new($stderr, progname: 'AwsRubyDatabaseDriverWrapper')
+    private
+
+    def logger
+      AwsRubyDatabaseDriverWrapper.logger
+    end
   end
 end
