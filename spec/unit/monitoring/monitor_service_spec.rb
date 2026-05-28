@@ -18,6 +18,7 @@ require_relative '../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require 'aws_ruby_database_driver_wrapper/services/monitor_service'
 require 'aws_ruby_database_driver_wrapper'
+require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::MonitorService do
   let(:test_monitor_class) do
@@ -29,14 +30,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::MonitorService do
   end
 
   let(:service_container) { double('service_container') }
+  let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 0.1) }
 
-  # Create a fresh instance for each test (bypass Singleton)
   let(:monitor_service) do
-    described_class.send(:new)
+    described_class.new(event_publisher: event_publisher)
   end
 
   after do
     monitor_service.shutdown(grace_period: 2)
+    event_publisher.release_resources
   end
 
   describe '#register_type' do

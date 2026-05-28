@@ -14,41 +14,47 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'singleton'
+require 'set'
 require_relative '../monitoring/monitor_state'
 require_relative '../logging'
 require_relative '../utils/storage/sliding_expiration_cache'
+require_relative '../utils/events/data_access_event'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
     # Manages monitor lifecycle: registration, deduplication, expiration, and cleanup.
     # Monitors are grouped by type (symbol) and keyed within each type.
+    # Subscribes to DataAccessEvent to extend monitor TTLs.
     class MonitorService
-      include Singleton
       include Logging
 
       CLEANUP_INTERVAL_SEC = 60.0
 
       # Internal container grouping a cache for a monitor type.
-      CacheContainer = Struct.new(:cache, keyword_init: true)
+      CacheContainer = Struct.new(:cache, :produced_data_type, keyword_init: true)
 
-      def initialize
+      # @param event_publisher [#subscribe] the event publisher to subscribe to.
+      def initialize(event_publisher:)
         @caches = {}
         @lock = Mutex.new
         @running = true
         @cleanup_thread = start_cleanup_thread
-        AwsRubyDatabaseDriverWrapper.shutdown_service.register(self)
+        event_publisher.subscribe(
+          self,
+          Set[Utils::Events::DataAccessEvent]
+        )
       end
 
       # Registers a monitor type. No-op if already registered.
       # @param monitor_type [Symbol] identifier for the monitor type.
       # @param expiration_timeout_sec [Numeric] how long an unused monitor lives before expiring.
-      def register_type(monitor_type, expiration_timeout_sec:)
+      # @param produced_data_type [Symbol, nil] the data type this monitor produces (for DataAccessEvent linking).
+      def register_type(monitor_type, expiration_timeout_sec:, produced_data_type: nil)
         @lock.synchronize do
           return if @caches.key?(monitor_type)
 
           cache = Utils::Storage::SlidingExpirationCache.new(ttl: expiration_timeout_sec)
-          @caches[monitor_type] = CacheContainer.new(cache: cache)
+          @caches[monitor_type] = CacheContainer.new(cache: cache, produced_data_type: produced_data_type)
         end
       end
 
@@ -118,7 +124,23 @@ module AwsRubyDatabaseDriverWrapper
         stop_and_remove_all
       end
 
+      # Processes events from the event publisher.
+      # @param event [Event] the event to process.
+      def process_event(event)
+        return unless event == Utils::Events::DataAccessEvent
+
+        handle_data_access_event(event)
+      end
+
       private
+
+      def handle_data_access_event(event)
+        @lock.synchronize { @caches.values }.each do |container|
+          next unless container.produced_data_type == event.data_type
+
+          container.cache.extend_expiration(event.key)
+        end
+      end
 
       def start_cleanup_thread
         thread = Thread.new do
