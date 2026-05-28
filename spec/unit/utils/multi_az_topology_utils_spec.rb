@@ -109,10 +109,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
     end
 
     context 'when connected to a writer' do
-      it 'uses get_host_id to determine the writer' do
+      it 'uses instance_id to determine the writer' do
         # When connected to writer, writer_id_query returns empty
         allow(dialect).to receive(:execute).with(conn, writer_id_query).and_return([])
-        allow(dialect).to receive(:get_host_id).with(conn).and_return('current-writer')
+        allow(dialect).to receive(:instance_id).with(conn).and_return('current-writer')
 
         results = make_result_set(
           %w[endpoint],
@@ -144,7 +144,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
     context 'when there are no writers' do
       it 'returns nil' do
         allow(dialect).to receive(:execute).with(conn, writer_id_query).and_return([])
-        allow(dialect).to receive(:get_host_id).with(conn).and_return('unknown-host')
+        allow(dialect).to receive(:instance_id).with(conn).and_return('unknown-host')
 
         results = make_result_set(
           %w[endpoint],

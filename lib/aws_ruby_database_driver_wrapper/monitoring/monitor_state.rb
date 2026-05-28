@@ -15,16 +15,11 @@
 #  limitations under the License.
 
 module AwsRubyDatabaseDriverWrapper
-  module Services
-    ServiceContainer = Struct.new(
-      :connection_service,
-      :dialect_service,
-      :host_service,
-      :plugin_manager,
-      :session_state_service,
-      :storage_service,
-      :monitor_service,
-      keyword_init: true
-    )
+  module Monitoring
+    module MonitorState
+      RUNNING = :running
+      STOPPED = :stopped
+      ERROR = :error
+    end
   end
 end

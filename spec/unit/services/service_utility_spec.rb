@@ -17,6 +17,7 @@
 require 'rspec'
 require 'aws_ruby_database_driver_wrapper/services/service_utility'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
   let(:config) do
@@ -37,12 +38,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
       expect(container.dialect_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::DialectService)
       expect(container.host_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::HostService)
       expect(container.session_state_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::SessionStateService)
-      expect(container.plugin_manager_service).to be_a(AwsRubyDatabaseDriverWrapper::Services::PluginManagerService)
+      expect(container.plugin_manager).to be_a(AwsRubyDatabaseDriverWrapper::Services::PluginManager)
     end
 
     it 'passes config to ConnectionService' do
       expect(container.connection_service.driver_name).to eq(:postgresql)
-      expect(container.connection_service.initial_host_info.host).to eq('myhost')
+      expect(container.connection_service.config.initial_host_info.host).to eq('myhost')
     end
 
     it 'resolves the correct driver dialect' do
@@ -64,8 +65,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
       expect(container.host_service).to equal(parent.host_service)
     end
 
-    it 'does not set plugin_manager_service' do
-      expect(container.plugin_manager_service).to be_nil
+    it 'does not set plugin_manager' do
+      expect(container.plugin_manager).to be_nil
     end
 
     it 'does not set connection_service' do

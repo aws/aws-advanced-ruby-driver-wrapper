@@ -123,32 +123,24 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::SlidingExpirationCa
     end
   end
 
-  describe '#remove_expired_if' do
-    it 'removes when expired and predicate is true' do
+  describe '#remove_if_expired' do
+    it 'removes when expired' do
       short_cache = described_class.new(ttl: 0.05)
       short_cache.compute_if_absent(:a) { 'value' }
       sleep(0.1)
-      result = short_cache.remove_expired_if(:a) { |v| v == 'value' }
+      result = short_cache.remove_if_expired(:a)
       expect(result).to eq('value')
     end
 
     it 'does not remove when not expired' do
       cache.compute_if_absent(:a) { 'value' }
-      result = cache.remove_expired_if(:a) { true }
+      result = cache.remove_if_expired(:a)
       expect(result).to be_nil
       expect(cache.get(:a)).to eq('value')
     end
 
-    it 'does not remove when expired but predicate is false' do
-      short_cache = described_class.new(ttl: 0.05)
-      short_cache.compute_if_absent(:a) { 'value' }
-      sleep(0.1)
-      result = short_cache.remove_expired_if(:a) { false }
-      expect(result).to be_nil
-    end
-
     it 'returns nil for a missing key' do
-      result = cache.remove_expired_if(:missing) { true }
+      result = cache.remove_if_expired(:missing)
       expect(result).to be_nil
     end
   end

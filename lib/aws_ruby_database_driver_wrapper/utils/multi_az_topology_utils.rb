@@ -89,9 +89,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # The writer ID is only returned when connected to a reader.
         # If the query does not return a value, we are connected to the writer.
-        return @dialect.get_host_id(conn) if @dialect.respond_to?(:get_host_id)
-
-        nil
+        @dialect.instance_id(conn)
       rescue StandardError
         nil
       end
