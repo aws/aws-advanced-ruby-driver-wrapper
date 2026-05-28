@@ -29,6 +29,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
     )
   end
 
+  after { AwsRubyDatabaseDriverWrapper::Services::CoreServices.reset! }
+
   describe '.create_standard_container' do
     subject(:container) { described_class.create_standard_container(config) }
 

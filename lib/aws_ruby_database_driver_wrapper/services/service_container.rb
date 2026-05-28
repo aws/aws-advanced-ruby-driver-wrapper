@@ -19,6 +19,7 @@ module AwsRubyDatabaseDriverWrapper
     ServiceContainer = Struct.new(
       :connection_service,
       :dialect_service,
+      :event_publisher,
       :host_service,
       :plugin_manager,
       :session_state_service,
