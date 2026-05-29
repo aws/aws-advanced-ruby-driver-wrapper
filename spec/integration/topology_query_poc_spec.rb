@@ -27,9 +27,11 @@ RSpec.shared_examples 'Direct driver Aurora topology querying' do |driver_helper
   it 'can process topology queries' do
     conn = driver_helper.native_connect
     # This should be replaced with actual db dialect detection in implementation.
+    db_dialects = AwsRubyDatabaseDriverWrapper::DbDialects
+    driver_dialects = AwsRubyDatabaseDriverWrapper::DriverDialects
     db_dialect = conn.instance_of?(Mysql2::Client) ?
-                   AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect.new :
-                   AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect.new
+                   db_dialects::AuroraMysqlDialect.new(driver_dialects::MysqlDriverDialect.new) :
+                   db_dialects::AuroraPgDialect.new(driver_dialects::PgDriverDialect.new)
     result = db_dialect.execute(conn, db_dialect.class::TOPOLOGY_QUERY)
     hosts = result.map do |row|
       Host::HostInfo.new(

@@ -76,6 +76,11 @@ module AwsRubyDatabaseDriverWrapper
         @config.driver_name
       end
 
+      # @return [HostInfo] the HostInfo for the initial connection string
+      def initial_host_info
+        @config.initial_host_info
+      end
+
       # @return [Hash] wrapper-specific properties
       def wrapper_props
         @config.wrapper_props

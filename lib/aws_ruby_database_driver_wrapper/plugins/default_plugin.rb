@@ -38,15 +38,12 @@ module AwsRubyDatabaseDriverWrapper
         conn = driver_dialect.connect(host_info, props)
 
         @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+        @service_container.connection_service.update_current_connection(conn, host_info)
 
         if is_initial_connection
-          begin
-            @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
-          rescue NotImplementedError
-            # TODO: remove when update_dialect is implemented
-          end
-
+          @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
           connection_service = @service_container.connection_service
+
           if connection_service.pg? && connection_service.multi_host_url?
             connection_service.config.initial_host_info = Host::HostInfo.new(
               host: conn.host,
