@@ -30,11 +30,12 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       TOPOLOGY_QUERY = <<~SQL
-        SELECT endpoint, port FROM mysql.rds_topology
+        SELECT id AS instance_id, endpoint AS endpoint FROM mysql.rds_topology
       SQL
 
-      INSTANCE_ID_QUERY = <<~SQL
-        SELECT SUBSTRING_INDEX(endpoint, '.', 1) AS instance_name
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT id AS instance_id,
+        SUBSTRING_INDEX(endpoint, '.', 1) AS instance_name
         FROM mysql.rds_topology
         WHERE id = @@server_id
       SQL
@@ -69,8 +70,8 @@ module AwsRubyDatabaseDriverWrapper
         TOPOLOGY_QUERY
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, INSTANCE_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
       def writer_id_query

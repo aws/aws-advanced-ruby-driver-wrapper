@@ -127,9 +127,9 @@ module AwsRubyDatabaseDriverWrapper
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       # @raise [AwsError] if no template is found for the row's region.
       def build_host_from_row(row, initial_host_info, instance_templates_by_region)
-        host_id = row_value(row, 'host_id')
+        instance_id = row_value(row, 'instance_id')
         is_writer = to_boolean(row_value(row, 'is_writer'))
-        lag = to_float(row_value(row, 'node_lag'))
+        lag = to_float(row_value(row, 'instance_lag'))
         aws_region = row_value(row, 'aws_region').to_s
 
         weight = (lag.round * 100)
@@ -137,7 +137,7 @@ module AwsRubyDatabaseDriverWrapper
         instance_template = instance_templates_by_region[aws_region]
         raise Errors::AwsError, "Cannot find instance template for region '#{aws_region}'" if instance_template.nil?
 
-        build_host(host_id, is_writer, weight, Time.now, initial_host_info, instance_template)
+        build_host(instance_id, instance_id, is_writer, weight, Time.now, initial_host_info, instance_template)
       end
 
       # Extracts the region, host pattern, and port from an instance template string.

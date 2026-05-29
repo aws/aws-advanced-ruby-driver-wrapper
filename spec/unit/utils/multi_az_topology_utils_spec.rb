@@ -80,15 +80,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
       it 'returns hosts with the correct writer identified' do
         # writer_id_query returns the writer ID when connected to a reader
         allow(dialect).to receive(:execute).with(conn, writer_id_query).and_return(
-          [{ 'writer_id' => 'writer-instance' }]
+          [{ 'writer_id' => '123456789' }]
         )
         allow(dialect).to receive(:writer_id_column_name).and_return('writer_id')
 
         results = make_result_set(
           %w[endpoint],
           [
-            { 'endpoint' => 'writer-instance.xyz.us-east-1.rds.amazonaws.com' },
-            { 'endpoint' => 'reader-instance.xyz.us-east-1.rds.amazonaws.com' }
+            { 'instance_id' => '123456789', 'endpoint' => 'writer-instance.xyz.us-east-1.rds.amazonaws.com' },
+            { 'instance_id' => '987654321', 'endpoint' => 'reader-instance.xyz.us-east-1.rds.amazonaws.com' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -102,9 +102,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
         reader = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::READER }
 
         expect(writer).not_to be_nil
-        expect(writer.id).to eq('writer-instance')
+        expect(writer.id).to eq('123456789')
         expect(reader).not_to be_nil
-        expect(reader.id).to eq('reader-instance')
+        expect(reader.id).to eq('987654321')
       end
     end
 
@@ -112,13 +112,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
       it 'uses instance_id to determine the writer' do
         # When connected to writer, writer_id_query returns empty
         allow(dialect).to receive(:execute).with(conn, writer_id_query).and_return([])
-        allow(dialect).to receive(:instance_id).with(conn).and_return('current-writer')
+        allow(dialect).to receive(:instance_identity).with(conn).and_return(%w[123456789 current-writer])
 
         results = make_result_set(
           %w[endpoint],
           [
-            { 'endpoint' => 'current-writer.xyz.us-east-1.rds.amazonaws.com' },
-            { 'endpoint' => 'reader-1.xyz.us-east-1.rds.amazonaws.com' }
+            { 'instance_id' => '123456789', 'endpoint' => 'current-writer.xyz.us-east-1.rds.amazonaws.com' },
+            { 'instance_id' => '987654321', 'endpoint' => 'reader-1.xyz.us-east-1.rds.amazonaws.com' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -128,7 +128,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
         expect(hosts).not_to be_nil
         writer = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
         expect(writer).not_to be_nil
-        expect(writer.id).to eq('current-writer')
+        expect(writer.id).to eq('123456789')
       end
     end
 
@@ -144,7 +144,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
     context 'when there are no writers' do
       it 'returns nil' do
         allow(dialect).to receive(:execute).with(conn, writer_id_query).and_return([])
-        allow(dialect).to receive(:instance_id).with(conn).and_return('unknown-host')
+        allow(dialect).to receive(:instance_identity).with(conn).and_return('unknown-id', 'unknown-host')
 
         results = make_result_set(
           %w[endpoint],
@@ -166,7 +166,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
         results = make_result_set(
           %w[endpoint],
           [
-            { 'endpoint' => 'instance-1.xyz.us-east-1.rds.amazonaws.com' }
+            { 'instance_id' => '123456789', 'endpoint' => 'instance-1.xyz.us-east-1.rds.amazonaws.com' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -179,14 +179,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
     context 'when endpoint is used to extract instance ID' do
       it 'extracts the instance ID from the endpoint (text before first dot)' do
         allow(dialect).to receive(:execute).with(conn, writer_id_query).and_return(
-          [{ 'writer_id' => 'my-writer' }]
+          [{ 'writer_id' => '123456789' }]
         )
         allow(dialect).to receive(:writer_id_column_name).and_return('writer_id')
 
         results = make_result_set(
-          %w[endpoint],
+          %w[id endpoint],
           [
-            { 'endpoint' => 'my-writer.some.long.hostname.com' }
+            { 'instance_id' => '123456789', 'endpoint' => 'my-writer.some.long.hostname.com' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -194,7 +194,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::MultiAzTopologyUtils do
         hosts = subject.query_topology(conn, initial_host_info, instance_template)
 
         expect(hosts).not_to be_nil
-        expect(hosts.first.id).to eq('my-writer')
+        expect(hosts.first.id).to eq('123456789')
       end
     end
   end

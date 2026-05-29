@@ -64,10 +64,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
     context 'when the query returns valid multi-region results' do
       it 'returns hosts from multiple regions with correct templates applied' do
         results = make_result_set(
-          %w[host_id is_writer node_lag aws_region],
+          %w[instance_id is_writer instance_lag aws_region],
           [
-            { 'host_id' => 'writer-instance', 'is_writer' => true, 'node_lag' => 0.0, 'aws_region' => 'us-east-1' },
-            { 'host_id' => 'reader-instance', 'is_writer' => false, 'node_lag' => 1.5, 'aws_region' => 'eu-west-1' }
+            { 'instance_id' => 'writer-instance', 'is_writer' => true, 'instance_lag' => 0.0, 'aws_region' => 'us-east-1' },
+            { 'instance_id' => 'reader-instance', 'is_writer' => false, 'instance_lag' => 1.5, 'aws_region' => 'eu-west-1' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -89,11 +89,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         expect(reader.host).to eq('reader-instance.xyz.eu-west-1.rds.amazonaws.com')
       end
 
-      it 'calculates weight from node_lag' do
+      it 'calculates weight from instance_lag' do
         results = make_result_set(
-          %w[host_id is_writer node_lag aws_region],
+          %w[instance_id is_writer instance_lag aws_region],
           [
-            { 'host_id' => 'instance-1', 'is_writer' => true, 'node_lag' => 3.0, 'aws_region' => 'us-east-1' }
+            { 'instance_id' => 'instance-1', 'is_writer' => true, 'instance_lag' => 3.0, 'aws_region' => 'us-east-1' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -101,7 +101,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         hosts = subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)
 
         expect(hosts).not_to be_nil
-        # weight = node_lag.round * 100 = 3 * 100 = 300
+        # weight = instance_lag.round * 100 = 3 * 100 = 300
         expect(hosts.first.weight).to eq(300)
       end
     end
@@ -118,9 +118,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
     context 'when there are no writers' do
       it 'returns nil' do
         results = make_result_set(
-          %w[host_id is_writer node_lag aws_region],
+          %w[instance_id is_writer instance_lag aws_region],
           [
-            { 'host_id' => 'reader-1', 'is_writer' => false, 'node_lag' => 1.0, 'aws_region' => 'us-east-1' }
+            { 'instance_id' => 'reader-1', 'is_writer' => false, 'instance_lag' => 1.0, 'aws_region' => 'us-east-1' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -132,9 +132,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
     context 'when a row has an unknown region' do
       it 'returns nil' do
         results = make_result_set(
-          %w[host_id is_writer node_lag aws_region],
+          %w[instance_id is_writer instance_lag aws_region],
           [
-            { 'host_id' => 'instance-1', 'is_writer' => true, 'node_lag' => 0.0, 'aws_region' => 'ap-southeast-1' }
+            { 'instance_id' => 'instance-1', 'is_writer' => true, 'instance_lag' => 0.0, 'aws_region' => 'ap-southeast-1' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)
@@ -146,11 +146,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
     context 'when multiple writers exist' do
       it 'selects only one writer' do
         results = make_result_set(
-          %w[host_id is_writer node_lag aws_region],
+          %w[instance_id is_writer instance_lag aws_region],
           [
-            { 'host_id' => 'writer-1', 'is_writer' => true, 'node_lag' => 0.0, 'aws_region' => 'us-east-1' },
-            { 'host_id' => 'writer-2', 'is_writer' => true, 'node_lag' => 0.0, 'aws_region' => 'eu-west-1' },
-            { 'host_id' => 'reader-1', 'is_writer' => false, 'node_lag' => 2.0, 'aws_region' => 'us-east-1' }
+            { 'instance_id' => 'writer-1', 'is_writer' => true, 'instance_lag' => 0.0, 'aws_region' => 'us-east-1' },
+            { 'instance_id' => 'writer-2', 'is_writer' => true, 'instance_lag' => 0.0, 'aws_region' => 'eu-west-1' },
+            { 'instance_id' => 'reader-1', 'is_writer' => false, 'instance_lag' => 2.0, 'aws_region' => 'us-east-1' }
           ]
         )
         allow(dialect).to receive(:execute).with(conn, topology_query).and_return(results)

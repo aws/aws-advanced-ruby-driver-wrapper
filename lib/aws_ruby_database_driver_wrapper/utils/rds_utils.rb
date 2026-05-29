@@ -321,7 +321,7 @@ module AwsRubyDatabaseDriverWrapper
         groups['dns'] ? groups['instance'] : nil
       end
 
-      def rds_instance_id(host)
+      def rds_instance_name(host)
         prepared = prepared_host(host)
         return nil if blank?(prepared)
 

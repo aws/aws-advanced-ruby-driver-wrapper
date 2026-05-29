@@ -19,17 +19,19 @@ require_relative '../../host/host_role'
 module AwsRubyDatabaseDriverWrapper
   module DbDialects
     module DialectUtils
-      # Returns the hostname for the given connection.
+      # Returns the instance identity for the given connection.
       #
       # @param driver_dialect [Object] the driver dialect used to execute queries
       # @param connection [Object] the connection to analyze
-      # @param host_id_query [String] the SQL query to retrieve the host ID
-      # @return [String, nil] host_name or nil
-      def query_instance_id(driver_dialect, connection, host_id_query)
+      # @param host_id_query [String] the SQL query to retrieve the instance identity
+      # @return [Array(String, String), nil] the instance_id and instance_name, or nil if they cannot be determined
+      def query_instance_identity(driver_dialect, connection, host_id_query)
         result = driver_dialect.execute(connection, host_id_query)
         return nil if result.nil? || result.empty?
 
-        result.first.values[0]
+        row = result.first
+        values = row.values
+        [values[0], values[1]]
       rescue StandardError
         nil
       end

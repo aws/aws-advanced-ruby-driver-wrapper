@@ -31,16 +31,17 @@ module AwsRubyDatabaseDriverWrapper
 
       # Builds a HostInfo from the given topology information.
       #
-      # @param instance_id [String, nil] the database instance identifier.
+      # @param instance_id [String, nil] the database instance identifier, e.g. "mydb-instance-1" (Aurora) or "123456789" (Multi-AZ).
+      # @param instance_name [String, nil] the database instance name, e.g. "mydb-instance-1" (Aurora and Multi-AZ).
       # @param is_writer [Boolean] true if this is a writer instance.
       # @param weight [Integer] the instance weight for load balancing.
       # @param last_update_time [Time] the timestamp of the last update to this instance's information.
       # @param initial_host_info [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the original host info used for connecting.
       # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template used to construct the new HostInfo.
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] a HostInfo representing the given information.
-      def build_host(instance_id, is_writer, weight, last_update_time, initial_host_info, instance_template)
-        instance_id = '?' if instance_id.nil?
-        endpoint = instance_template.host.gsub('?', instance_id)
+      def build_host(instance_id, instance_name, is_writer, weight, last_update_time, initial_host_info, instance_template)
+        instance_name = '?' if instance_name.nil?
+        endpoint = instance_template.host.gsub('?', instance_name)
         port = resolve_port(instance_template, initial_host_info)
         role = is_writer ? Host::HostRole::WRITER : Host::HostRole::READER
 

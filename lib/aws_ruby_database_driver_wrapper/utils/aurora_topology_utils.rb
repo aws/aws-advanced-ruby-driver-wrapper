@@ -83,7 +83,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param instance_template [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the template for building hosts.
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       def build_host_from_row(row, initial_host_info, instance_template)
-        host_id = row_value(row, 'host_id')
+        instance_id = row_value(row, 'instance_id')
         is_writer = to_boolean(row_value(row, 'is_writer'))
         cpu_utilization = to_float(row_value(row, 'cpu_utilization'))
         instance_lag = to_float(row_value(row, 'instance_lag'))
@@ -92,7 +92,7 @@ module AwsRubyDatabaseDriverWrapper
         # Calculate weight based on instance lag and CPU utilization.
         weight = (instance_lag.round * 100) + cpu_utilization.round
 
-        build_host(host_id, is_writer, weight, last_update_time, initial_host_info, instance_template)
+        build_host(instance_id, instance_id, is_writer, weight, last_update_time, initial_host_info, instance_template)
       end
     end
   end

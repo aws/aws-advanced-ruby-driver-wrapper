@@ -98,11 +98,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
     context 'when the query returns valid results' do
       it 'returns a list of hosts with one writer and one reader' do
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { 'host_id' => 'writer-instance', 'is_writer' => true, 'cpu_utilization' => 25.0,
+            { 'instance_id' => 'writer-instance', 'is_writer' => true, 'cpu_utilization' => 25.0,
               'instance_lag' => 0.0, 'last_update_time' => now },
-            { 'host_id' => 'reader-instance', 'is_writer' => false, 'cpu_utilization' => 10.0,
+            { 'instance_id' => 'reader-instance', 'is_writer' => false, 'cpu_utilization' => 10.0,
               'instance_lag' => 1.0, 'last_update_time' => now }
           ]
         )
@@ -124,9 +124,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
 
       it 'calculates weight from instance_lag and cpu_utilization' do
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { 'host_id' => 'instance-1', 'is_writer' => true, 'cpu_utilization' => 30.0,
+            { 'instance_id' => 'instance-1', 'is_writer' => true, 'cpu_utilization' => 30.0,
               'instance_lag' => 2.0, 'last_update_time' => now }
           ]
         )
@@ -144,11 +144,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
         newer_time = Time.now
 
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { 'host_id' => 'instance-1', 'is_writer' => true, 'cpu_utilization' => 50.0,
+            { 'instance_id' => 'instance-1', 'is_writer' => true, 'cpu_utilization' => 50.0,
               'instance_lag' => 0.0, 'last_update_time' => older_time },
-            { 'host_id' => 'instance-1', 'is_writer' => true, 'cpu_utilization' => 10.0,
+            { 'instance_id' => 'instance-1', 'is_writer' => true, 'cpu_utilization' => 10.0,
               'instance_lag' => 0.0, 'last_update_time' => newer_time }
           ]
         )
@@ -178,13 +178,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
         newer_time = Time.now
 
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { 'host_id' => 'old-writer', 'is_writer' => true, 'cpu_utilization' => 10.0,
+            { 'instance_id' => 'old-writer', 'is_writer' => true, 'cpu_utilization' => 10.0,
               'instance_lag' => 0.0, 'last_update_time' => older_time },
-            { 'host_id' => 'new-writer', 'is_writer' => true, 'cpu_utilization' => 20.0,
+            { 'instance_id' => 'new-writer', 'is_writer' => true, 'cpu_utilization' => 20.0,
               'instance_lag' => 0.0, 'last_update_time' => newer_time },
-            { 'host_id' => 'reader-1', 'is_writer' => false, 'cpu_utilization' => 5.0,
+            { 'instance_id' => 'reader-1', 'is_writer' => false, 'cpu_utilization' => 5.0,
               'instance_lag' => 1.0, 'last_update_time' => newer_time }
           ]
         )
@@ -201,9 +201,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
     context 'when there are no writers' do
       it 'returns nil' do
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { 'host_id' => 'reader-1', 'is_writer' => false, 'cpu_utilization' => 5.0,
+            { 'instance_id' => 'reader-1', 'is_writer' => false, 'cpu_utilization' => 5.0,
               'instance_lag' => 1.0, 'last_update_time' => now }
           ]
         )
@@ -213,12 +213,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
       end
     end
 
-    context 'when host_id is nil' do
-      it 'uses ? as the instance id' do
+    context 'when instance_id is nil' do
+      it 'uses ? as a placeholder in the URL' do
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { 'host_id' => nil, 'is_writer' => true, 'cpu_utilization' => 10.0,
+            { 'instance_id' => nil, 'is_writer' => true, 'cpu_utilization' => 10.0,
               'instance_lag' => 0.0, 'last_update_time' => now }
           ]
         )
@@ -227,16 +227,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
         hosts = subject.query_topology(conn, initial_host_info, instance_template)
 
         expect(hosts).not_to be_nil
-        expect(hosts.first.id).to eq('?')
+        expect(hosts.first.host).to eq('?.xyz.us-east-1.rds.amazonaws.com')
       end
     end
 
     context 'when row values use symbol keys' do
       it 'handles symbol keys correctly' do
         results = make_result_set(
-          %w[host_id is_writer cpu_utilization instance_lag last_update_time],
+          %w[instance_id is_writer cpu_utilization instance_lag last_update_time],
           [
-            { host_id: 'instance-1', is_writer: true, cpu_utilization: 15.0,
+            { instance_id: 'instance-1', is_writer: true, cpu_utilization: 15.0,
               instance_lag: 0.0, last_update_time: now }
           ]
         )

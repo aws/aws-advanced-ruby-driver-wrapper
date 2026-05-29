@@ -91,7 +91,8 @@ module AwsRubyDatabaseDriverWrapper
 
         # The writer ID is only returned when connected to a reader.
         # If the query does not return a value, we are connected to the writer.
-        @dialect.instance_id(conn)
+        instance_id, = @dialect.instance_identity(conn)
+        instance_id
       rescue StandardError
         nil
       end
@@ -105,10 +106,11 @@ module AwsRubyDatabaseDriverWrapper
       # @param writer_id [String, nil] the writer instance ID.
       # @return [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the constructed host info.
       def build_host_from_row(row, initial_host_info, instance_template, writer_id)
+        instance_id = row_value(row, 'instance_id')
         endpoint = row_value(row, 'endpoint')
-        # Extract instance ID from the endpoint (everything before the first dot).
-        host_id = endpoint&.split('.')&.first
-        build_host(host_id, host_id == writer_id, 0, Time.now, initial_host_info, instance_template)
+        # Extract instance name from the endpoint (everything before the first dot).
+        instance_name = endpoint&.split('.')&.first
+        build_host(instance_id, instance_name, instance_id == writer_id, 0, Time.now, initial_host_info, instance_template)
       end
     end
   end
