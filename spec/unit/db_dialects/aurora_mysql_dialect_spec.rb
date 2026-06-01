@@ -55,12 +55,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect do
     end
   end
 
-  describe '#host_id_query' do
-    it 'returns the INSTANCE_ID_QUERY constant' do
-      expect(dialect.topology_query).to eq(described_class::TOPOLOGY_QUERY)
-    end
-  end
-
   describe '#writer_id_query' do
     it 'returns the WRITER_ID_QUERY constant' do
       expect(dialect.writer_id_query).to eq(described_class::WRITER_ID_QUERY)
@@ -97,21 +91,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect do
     end
   end
 
-  describe '#instance_id' do
+  describe '#instance_identity' do
     it 'returns the aurora server id' do
-      result = [{ 'instance_name' => 'aurora-instance-1' }]
-      allow(connection).to receive(:query).with(described_class::INSTANCE_ID_QUERY).and_return(result)
-      expect(dialect.instance_id(connection)).to eq('aurora-instance-1')
+      result = [{ 'instance_id' => 'aurora-instance-1', 'instance_name' => 'aurora-instance-1' }]
+      allow(connection).to receive(:query).with(described_class::INSTANCE_IDENTITY_QUERY).and_return(result)
+      instance_id, instance_name = dialect.instance_identity(connection)
+      expect(instance_id).to eq('aurora-instance-1')
+      expect(instance_name).to eq('aurora-instance-1')
     end
 
     it 'returns nil when result is empty' do
-      allow(connection).to receive(:query).with(described_class::INSTANCE_ID_QUERY).and_return([])
-      expect(dialect.instance_id(connection)).to be_nil
+      allow(connection).to receive(:query).with(described_class::INSTANCE_IDENTITY_QUERY).and_return([])
+      expect(dialect.instance_identity(connection)).to be_nil
     end
 
     it 'returns nil on error' do
       allow(connection).to receive(:query).and_raise(StandardError)
-      expect(dialect.instance_id(connection)).to be_nil
+      expect(dialect.instance_identity(connection)).to be_nil
     end
   end
 end
