@@ -20,12 +20,19 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
   include driver_helper
 
-  # Whether the current adapter under test is MySQL.
-  # Used to mark tests pending for known MySQL wrapper bugs.
-  let(:mysql_adapter?) { driver_helper.adapter_config[:adapter] =~ /mysql/i }
-
   before(:all) do
+    ActiveRecord::Base.connection_handler.clear_all_connections!
     ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+
+    # Reset quoted_table_name cache on all test models since it's adapter-specific.
+    # In AR 7.2, quoted_table_name is cached using adapter_class.quote_table_name,
+    # so we must clear the ivar when switching adapters.
+    [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
+     ArAdvDoctor, ArAdvPatient, ArAdvAppointment, ArAdvForum, ArAdvTopic,
+     ArAdvOrder, ArAdvLibrary, ArAdvBook, ArAdvProduct, ArAdvCategory, ArAdvItem].each do |klass|
+      klass.instance_variable_set(:@quoted_table_name, nil)
+    end
+
     ActiveRecord::Schema.define do
       suppress_messages do
         # --- Polymorphic associations ---
@@ -159,6 +166,18 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
   end
 
   before do
+    # Verify correct adapter is active; reconnect if switched by another context.
+    expected_adapter = driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
+    if ActiveRecord::Base.connection.adapter_name != expected_adapter
+      ActiveRecord::Base.connection_handler.clear_all_connections!
+      ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+      # Reset cached quoted_table_name which is adapter-specific
+      [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
+       ArAdvDoctor, ArAdvPatient, ArAdvAppointment, ArAdvForum, ArAdvTopic,
+       ArAdvOrder, ArAdvLibrary, ArAdvBook, ArAdvProduct, ArAdvCategory, ArAdvItem].each do |klass|
+        klass.instance_variable_set(:@quoted_table_name, nil)
+      end
+    end
     ArAdvReaction.delete_all
     ArAdvArticle.delete_all
     ArAdvVideo.delete_all
@@ -419,14 +438,9 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
   end
 
   # --- 7. Bulk Operations (insert_all, upsert_all) ---
-  # NOTE: These tests surface real wrapper bugs. When they fail, it indicates the adapter
-  # does not yet fully support ActiveRecord's bulk insert API. The MySQL adapter generates
-  # SQL with double-quoted table names instead of backticks, and the PG adapter's exec_params
-  # does not handle the bulk insert SQL correctly. These are marked pending until fixed.
 
   describe 'Bulk operations' do
     it 'supports insert_all' do
-      skip 'Known wrapper bug: MySQL adapter uses double-quoted table names in bulk SQL' if mysql_adapter?
       records = [
         { sku: 'SKU-001', name: 'Widget', price: 9.99, stock: 100,
           created_at: Time.now, updated_at: Time.now },
@@ -440,22 +454,15 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
 
     it 'supports insert_all! (raises on conflict)' do
-      skip 'Known wrapper bug: MySQL adapter uses double-quoted table names in bulk SQL' if mysql_adapter?
       ArAdvProduct.create!(sku: 'SKU-DUP', name: 'Existing', price: 1.00, stock: 1)
       records = [
         { sku: 'SKU-DUP', name: 'Duplicate', price: 2.00, stock: 2,
           created_at: Time.now, updated_at: Time.now }
       ]
-      # Should raise ActiveRecord::RecordNotUnique, but the wrapper may raise the native
-      # driver exception (PG::UniqueViolation or Mysql2::Error) if translate_exception
-      # doesn't handle it. Either way, an exception must be raised on conflict.
-      expect { ArAdvProduct.insert_all!(records) }.to raise_error { |error|
-        expect(error.class.name).to match(/UniqueViolation|RecordNotUnique|Mysql2::Error/)
-      }
+      expect { ArAdvProduct.insert_all!(records) }.to raise_error(ActiveRecord::RecordNotUnique)
     end
 
     it 'supports insert_all with skip on conflict' do
-      skip 'Known wrapper bug: MySQL adapter uses double-quoted table names in bulk SQL' if mysql_adapter?
       ArAdvProduct.create!(sku: 'SKU-SKIP', name: 'Original', price: 5.00, stock: 10)
       records = [
         { sku: 'SKU-SKIP', name: 'Skipped', price: 6.00, stock: 20,
@@ -469,15 +476,19 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
 
     it 'supports upsert_all' do
-      skip 'Known wrapper bug: MySQL does not support :unique_by and uses wrong quoting' if mysql_adapter?
-      ArAdvProduct.create!(sku: 'SKU-UPS', name: 'Before', price: 10.00, stock: 5)
+      existing = ArAdvProduct.create!(sku: 'SKU-UPS', name: 'Before', price: 10.00, stock: 5)
       records = [
         { sku: 'SKU-UPS', name: 'After', price: 12.00, stock: 15,
           created_at: Time.now, updated_at: Time.now },
         { sku: 'SKU-FRESH', name: 'Fresh', price: 8.00, stock: 25,
           created_at: Time.now, updated_at: Time.now }
       ]
-      ArAdvProduct.upsert_all(records, unique_by: :sku)
+      # PG requires :unique_by to identify the conflict target; MySQL uses primary key by default
+      if ActiveRecord::Base.connection.supports_insert_conflict_target?
+        ArAdvProduct.upsert_all(records, unique_by: :sku)
+      else
+        ArAdvProduct.upsert_all(records)
+      end
 
       expect(ArAdvProduct.count).to eq(2)
       updated = ArAdvProduct.find_by(sku: 'SKU-UPS')

@@ -62,8 +62,7 @@ module ActiveRecord
 
       def translate_exception(exception, message:, sql:, binds:)
         unless exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
-          super
-          return exception
+          return super
         end
 
         if exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
