@@ -26,9 +26,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterMysqlDial
     it 'returns true when topology table exists, has data, and report_host is not empty' do
       topology_table_result = [{ 'tmp' => 1 }]
       topology_result = [
-        { 'id' => 443_677_495, 'endpoint' => 'cluster-instance-1.xxxxxxxx.us-east-2.rds.amazonaws.com', 'port' => 3306 },
-        { 'id' => 744_033_784, 'endpoint' => 'cluster-instance-3.xxxxxxxx.us-east-2.rds.amazonaws.com', 'port' => 3306 },
-        { 'id' => 2_062_424_775, 'endpoint' => 'cluster-instance-2.xxxxxxxx.us-east-2.rds.amazonaws.com', 'port' => 3306 }
+        { 'instance_id' => 443_677_495, 'endpoint' => 'cluster-instance-1.xxxxxxxx.us-east-2.rds.amazonaws.com', 'port' => 3306 },
+        { 'instance_id' => 744_033_784, 'endpoint' => 'cluster-instance-3.xxxxxxxx.us-east-2.rds.amazonaws.com', 'port' => 3306 },
+        { 'instance_id' => 2_062_424_775, 'endpoint' => 'cluster-instance-2.xxxxxxxx.us-east-2.rds.amazonaws.com', 'port' => 3306 }
       ]
       report_host_result = [{ 'Variable_name' => 'report_host', 'Value' => '10.20.0.148' }]
 
@@ -53,7 +53,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterMysqlDial
     it 'returns false when report_host is empty' do
       topology_table_result = [{ 'tmp' => 1 }]
       topology_result = [
-        { 'id' => 443_677_495, 'endpoint' => 'cluster-instance-1.example.com', 'port' => 3306 }
+        { 'instance_id' => 443_677_495, 'endpoint' => 'cluster-instance-1.example.com', 'port' => 3306 }
       ]
       report_host_result = [{ 'Variable_name' => 'report_host', 'Value' => '' }]
 
@@ -66,7 +66,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterMysqlDial
     it 'returns false when report_host is nil' do
       topology_table_result = [{ 'tmp' => 1 }]
       topology_result = [
-        { 'id' => 443_677_495, 'endpoint' => 'cluster-instance-1.example.com', 'port' => 3306 }
+        { 'instance_id' => 443_677_495, 'endpoint' => 'cluster-instance-1.example.com', 'port' => 3306 }
       ]
       report_host_result = [{ 'Variable_name' => 'report_host', 'Value' => nil }]
 
@@ -112,21 +112,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterMysqlDial
     end
   end
 
-  describe '#instance_id' do
-    it 'returns the instance name from query result' do
-      result = [{ "SUBSTRING_INDEX(endpoint, '.', 1)" => 'multi-az-cluster-instance-1' }]
-      allow(connection).to receive(:query).with(described_class::INSTANCE_ID_QUERY).and_return(result)
-      expect(dialect.instance_id(connection)).to eq('multi-az-cluster-instance-1')
+  describe '#instance_identity' do
+    it 'returns the instance identity from query result' do
+      result = [{ 'instance_id' => '123456789', 'instance_name' => 'multi-az-cluster-instance-1' }]
+      allow(connection).to receive(:query).with(described_class::INSTANCE_IDENTITY_QUERY).and_return(result)
+      instance_id, instance_name = dialect.instance_identity(connection)
+      expect(instance_id).to eq('123456789')
+      expect(instance_name).to eq('multi-az-cluster-instance-1')
     end
 
     it 'returns nil when result is empty' do
-      allow(connection).to receive(:query).with(described_class::INSTANCE_ID_QUERY).and_return([])
-      expect(dialect.instance_id(connection)).to be_nil
+      allow(connection).to receive(:query).with(described_class::INSTANCE_IDENTITY_QUERY).and_return([])
+      expect(dialect.instance_identity(connection)).to be_nil
     end
 
     it 'returns nil on error' do
       allow(connection).to receive(:query).and_raise(StandardError)
-      expect(dialect.instance_id(connection)).to be_nil
+      expect(dialect.instance_identity(connection)).to be_nil
     end
   end
 end

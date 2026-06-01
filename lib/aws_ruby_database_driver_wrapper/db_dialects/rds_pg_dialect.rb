@@ -31,8 +31,9 @@ module AwsRubyDatabaseDriverWrapper
         SELECT 'rds_tools.show_topology'::regproc
       SQL
 
-      INSTANCE_ID_QUERY = <<~SQL
-        SELECT SUBSTRING(endpoint FROM 0 FOR POSITION('.' IN endpoint)) AS instance_name
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT id AS instance_id,
+        SUBSTRING(endpoint FROM 0 FOR POSITION('.' IN endpoint)) AS instance_name
         FROM rds_tools.show_topology()
         WHERE id OPERATOR(pg_catalog.=) rds_tools.dbi_resource_id()
       SQL
@@ -73,8 +74,8 @@ module AwsRubyDatabaseDriverWrapper
         check_existence_queries(@driver_dialect, connection, TOPOLOGY_TABLE_EXISTS_QUERY)
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, INSTANCE_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
       def blue_green_status_query

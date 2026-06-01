@@ -26,14 +26,8 @@ module AwsRubyDatabaseDriverWrapper
         SHOW VARIABLES LIKE 'version_comment'
       SQL
 
-      HOST_ID_EXPRESSION = "CONCAT(@@hostname, ':', @@port)"
-
-      HOST_ALIAS_QUERY = <<~SQL
-        SELECT #{HOST_ID_EXPRESSION} AS host_alias
-      SQL
-
-      HOST_ID_QUERY = <<~SQL
-        SELECT @@hostname AS instance_name
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT @@hostname AS instance_id, CONCAT(@@hostname, ':', @@port) AS instance_name
       SQL
 
       READER_CHECK_QUERY = <<~SQL
@@ -80,12 +74,8 @@ module AwsRubyDatabaseDriverWrapper
         query_host_role(@driver_dialect, connection, READER_CHECK_QUERY)
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, HOST_ID_QUERY)
-      end
-
-      def host_alias_query
-        HOST_ALIAS_QUERY
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
     end
   end
