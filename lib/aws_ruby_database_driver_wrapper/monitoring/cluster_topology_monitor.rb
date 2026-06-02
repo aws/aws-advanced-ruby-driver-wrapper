@@ -177,7 +177,7 @@ module AwsRubyDatabaseDriverWrapper
         @latest_topology = nil
         host_writer_connection_cleanup
 
-        hosts = stored_hosts || open_any_connection_and_update_topology
+        hosts = open_any_connection_and_update_topology || stored_hosts
         close_host_workers
         @host_threads_stop = false
 
