@@ -16,7 +16,6 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-# rubocop:disable Metrics/BlockLength
 RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
   include driver_helper
 
@@ -26,7 +25,7 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
 
     # Reset quoted_table_name cache on all test models since it's adapter-specific.
     # In AR 7.2, quoted_table_name is cached using adapter_class.quote_table_name,
-    # so we must clear the ivar when switching adapters.
+    # so we must clear the instance variable when switching adapters.
     [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
      ArAdvDoctor, ArAdvPatient, ArAdvAppointment, ArAdvForum, ArAdvTopic,
      ArAdvOrder, ArAdvLibrary, ArAdvBook, ArAdvProduct, ArAdvCategory, ArAdvItem].each do |klass|
@@ -195,8 +194,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     ArAdvCategory.delete_all
   end
 
-  # --- 1. Schema Migrations (change_column, rename_column, rename_table) ---
-
   describe 'Advanced schema migrations' do
     after do
       ActiveRecord::Schema.define do
@@ -248,8 +245,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
   end
 
-  # --- 2. Polymorphic Associations ---
-
   describe 'Polymorphic associations' do
     it 'creates reactions on different reactable types' do
       article = ArAdvArticle.create!(title: 'Great Article', body: 'Content')
@@ -281,8 +276,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
       expect(reactions.first.reactable.title).to eq('Eager')
     end
   end
-
-  # --- 3. Single Table Inheritance (STI) ---
 
   describe 'Single Table Inheritance' do
     it 'creates subclass records with correct type' do
@@ -317,8 +310,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
   end
 
-  # --- 4. Counter Cache ---
-
   describe 'Counter cache' do
     it 'increments counter on create' do
       forum = ArAdvForum.create!(name: 'Ruby Forum')
@@ -351,8 +342,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
       expect(forum.reload.ar_adv_topics_count).to eq(2)
     end
   end
-
-  # --- 5. has_many :through ---
 
   describe 'has_many :through' do
     it 'creates associations through join model' do
@@ -399,8 +388,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
   end
 
-  # --- 6. Preloading Strategies ---
-
   describe 'Preloading strategies' do
     before do
       3.times do |i|
@@ -436,8 +423,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
       expect(total_items).to eq(6)
     end
   end
-
-  # --- 7. Bulk Operations (insert_all, upsert_all) ---
 
   describe 'Bulk operations' do
     it 'supports insert_all' do
@@ -476,7 +461,7 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
 
     it 'supports upsert_all' do
-      existing = ArAdvProduct.create!(sku: 'SKU-UPS', name: 'Before', price: 10.00, stock: 5)
+      ArAdvProduct.create!(sku: 'SKU-UPS', name: 'Before', price: 10.00, stock: 5)
       records = [
         { sku: 'SKU-UPS', name: 'After', price: 12.00, stock: 15,
           created_at: Time.now, updated_at: Time.now },
@@ -496,8 +481,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
       expect(updated.stock).to eq(15)
     end
   end
-
-  # --- 8. Enum ---
 
   describe 'Enum' do
     it 'creates records with enum values' do
@@ -538,8 +521,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
   end
 
-  # --- 9. Touch ---
-
   describe 'Touch' do
     it 'updates updated_at on the record' do
       library = ArAdvLibrary.create!(name: 'City Library')
@@ -570,8 +551,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
       expect(library.reload.updated_at).to be > original_time
     end
   end
-
-  # --- 10. Concurrent Transactions / Connection Pool Threading ---
 
   describe 'Concurrent connection pool usage' do
     it 'handles multiple threads using the connection pool' do
@@ -619,9 +598,7 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
     end
   end
 end
-# rubocop:enable Metrics/BlockLength
 
-# --- Model Definitions (test-only) ---
 
 class ArAdvArticle < ActiveRecord::Base
   self.table_name = 'ar_adv_articles'
@@ -705,7 +682,6 @@ class ArAdvItem < ActiveRecord::Base
   belongs_to :ar_adv_category
 end
 
-# --- Run for both adapters ---
 
 RSpec.describe 'ActiveRecord advanced compatibility' do
   include_context 'adapter context'

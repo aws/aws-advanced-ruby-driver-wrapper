@@ -16,7 +16,6 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-# rubocop:disable Metrics/BlockLength
 RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helper|
   include driver_helper
 
@@ -92,10 +91,12 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
   end
 
   before do
+    # Verify correct adapter is active; reconnect if switched by another context.
     expected_adapter = driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
     if ActiveRecord::Base.connection.adapter_name != expected_adapter
       ActiveRecord::Base.connection_handler.clear_all_connections!
       ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+      # Reset cached quoted_table_name which is adapter-specific
       [ArLowSetting, ArLowSecretNote, ArLowJsonDoc, ArLowUuidRecord,
        ArLowPrepStmtTest, ArLowMigrationLock].each do |klass|
         klass.instance_variable_set(:@quoted_table_name, nil)
@@ -108,8 +109,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     ArLowPrepStmtTest.delete_all
     ArLowMigrationLock.delete_all
   end
-
-  # --- 1. ActiveRecord::Store (advanced) ---
 
   describe 'ActiveRecord::Store advanced' do
     it 'supports multiple store columns' do
@@ -148,8 +147,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     end
   end
 
-  # --- 2. Encrypted Attributes (Rails 7+) ---
-
   describe 'Encrypted attributes' do
     it 'encrypts and decrypts content transparently' do
       note = ArLowSecretNote.create!(title: 'Secret', content: 'Top secret message')
@@ -178,8 +175,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
       expect(note.reload.content).to be_nil
     end
   end
-
-  # --- 3. JSON Columns ---
 
   describe 'JSON columns' do
     it 'stores and retrieves JSON objects' do
@@ -220,8 +215,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     end
   end
 
-  # --- 4. UUID-like Primary Keys ---
-
   describe 'String/UUID primary keys' do
     it 'creates records with string primary key' do
       record = ArLowUuidRecord.create!(id: SecureRandom.uuid, label: 'First')
@@ -254,8 +247,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
       expect(ArLowUuidRecord.find_by(id: id)).to be_nil
     end
   end
-
-  # --- 5. Prepared Statements ---
 
   describe 'Prepared statements' do
     it 'executes parameterized queries via find' do
@@ -295,8 +286,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     end
   end
 
-  # --- 6. Advisory Locks ---
-
   describe 'Advisory locks' do
     it 'supports get_advisory_lock and release_advisory_lock' do
       conn = ActiveRecord::Base.connection
@@ -330,8 +319,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     end
   end
 
-  # --- 7. Explain (query plan) ---
-
   describe 'Explain' do
     before do
       5.times { |i| ArLowPrepStmtTest.create!(code: "EXP#{i}", value: i * 100) }
@@ -349,8 +336,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
       expect(output.to_s).not_to be_empty
     end
   end
-
-  # --- 8. Connection metadata and introspection ---
 
   describe 'Connection metadata' do
     it 'reports adapter name' do
@@ -390,8 +375,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
       expect(ActiveRecord::Base.connection.table_exists?(:nonexistent_table)).to be false
     end
   end
-
-  # --- 9. Edge cases and error handling ---
 
   describe 'Error handling and edge cases' do
     it 'raises StatementInvalid for bad SQL' do
@@ -439,8 +422,6 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     end
   end
 
-  # --- 10. Attribute API and custom types ---
-
   describe 'Attribute API' do
     it 'supports attribute query methods' do
       record = ArLowPrepStmtTest.create!(code: 'ATTR', value: 0)
@@ -481,11 +462,8 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
     end
   end
 end
-# rubocop:enable Metrics/BlockLength
 
-# --- Model Definitions (test-only) ---
 
-# Configure ActiveRecord Encryption for test purposes
 ActiveRecord::Encryption.configure(
   primary_key: 'test-primary-key-that-is-32-bytes!',
   deterministic_key: 'test-deterministic-key-32-bytes!',
@@ -540,7 +518,6 @@ class ArLowMigrationLock < ActiveRecord::Base
   self.table_name = 'ar_low_migration_locks'
 end
 
-# --- Run for both adapters ---
 
 RSpec.describe 'ActiveRecord low priority compatibility' do
   include_context 'adapter context'

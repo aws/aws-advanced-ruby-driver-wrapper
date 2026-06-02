@@ -16,7 +16,6 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-# rubocop:disable Metrics/BlockLength
 RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
   include driver_helper
 
@@ -82,8 +81,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     ArTestAuthor.delete_all
   end
 
-  # --- CRUD Operations ---
-
   describe 'CRUD operations' do
     it 'creates a record' do
       author = ArTestAuthor.create!(name: 'Alice', email: 'alice@example.com', age: 30)
@@ -138,8 +135,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
       expect(author).to be_persisted
     end
   end
-
-  # --- Querying ---
 
   describe 'Querying' do
     before do
@@ -271,8 +266,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Associations ---
-
   describe 'Associations' do
     it 'supports belongs_to / has_many' do
       author = ArTestAuthor.create!(name: 'Alice', email: 'alice@example.com')
@@ -346,8 +339,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Validations ---
-
   describe 'Validations' do
     it 'rejects invalid records' do
       author = ArTestAuthor.new(name: nil)
@@ -382,8 +373,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Callbacks ---
-
   describe 'Callbacks' do
     it 'triggers before_save callback' do
       author = ArTestAuthor.create!(name: '  spacey  ', email: 'spacey@example.com')
@@ -401,13 +390,11 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Scopes ---
-
   describe 'Scopes' do
     before do
       author = ArTestAuthor.create!(name: 'Author', email: 'a@example.com')
-      # Use update_column to bypass the after_create callback that sets status to 'pending'
       draft = ArTestPost.create!(title: 'Draft', body: 'x', ar_test_author: author)
+      # Use update_column to bypass the after_create callback that sets status to 'pending'
       draft.update_column(:status, 'draft')
       published = ArTestPost.create!(title: 'Published', body: 'x', ar_test_author: author)
       published.update_column(:status, 'published')
@@ -436,8 +423,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
       expect(results.count).to eq(1)
     end
   end
-
-  # --- Transactions ---
 
   describe 'Transactions' do
     it 'commits on success' do
@@ -479,8 +464,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
       expect(ArTestAuthor.find_by(name: 'Inner')).to be_nil
     end
   end
-
-  # --- Migrations / Schema ---
 
   describe 'Schema manipulation' do
     after do
@@ -534,8 +517,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Locking ---
-
   describe 'Locking' do
     it 'supports optimistic locking' do
       author = ArTestAuthor.create!(name: 'Optimistic', email: 'opt@example.com')
@@ -559,8 +540,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Serialization ---
-
   describe 'Serialization' do
     it 'supports to_json' do
       author = ArTestAuthor.create!(name: 'Json', email: 'json@example.com', age: 28)
@@ -576,8 +555,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Enum-like behavior ---
-
   describe 'Enum-like status field' do
     it 'supports querying by status' do
       author = ArTestAuthor.create!(name: 'A', email: 'a@example.com')
@@ -589,8 +566,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
       expect(ArTestPost.where(status: 'published').count).to eq(1)
     end
   end
-
-  # --- Raw SQL ---
 
   describe 'Raw SQL execution' do
     it 'supports execute for raw SQL' do
@@ -613,8 +588,6 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Connection Pool ---
-
   describe 'Connection pool' do
     it 'supports connection pool with_connection' do
       ActiveRecord::Base.connection_pool.with_connection do |conn|
@@ -631,21 +604,19 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 
-  # --- Dirty Tracking ---
-
   describe 'Dirty tracking (attribute changes)' do
     it 'tracks changes before save' do
       author = ArTestAuthor.create!(name: 'Original', email: 'orig@example.com')
       author.name = 'Modified'
       expect(author).to be_changed
       expect(author.name_changed?).to be true
-      expect(author.changes['name']).to eq(['Original', 'Modified'])
+      expect(author.changes['name']).to eq(%w[Original Modified])
     end
 
     it 'tracks previous changes after save' do
       author = ArTestAuthor.create!(name: 'Before', email: 'before@example.com')
       author.update!(name: 'After')
-      expect(author.previous_changes['name']).to eq(['Before', 'After'])
+      expect(author.previous_changes['name']).to eq(%w[Before After])
     end
 
     it 'supports reload to discard changes' do
@@ -657,10 +628,7 @@ RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
     end
   end
 end
-# rubocop:enable Metrics/BlockLength
 
-# --- Model Definitions (test-only) ---
-# These are lightweight model classes used only for this test suite.
 
 class ArTestAuthor < ActiveRecord::Base
   self.table_name = 'ar_test_authors'
@@ -724,7 +692,6 @@ class ArTestPostsTag < ActiveRecord::Base
   self.table_name = 'ar_test_posts_tags'
 end
 
-# --- Run for both adapters ---
 
 RSpec.describe 'ActiveRecord compatibility' do
   include_context 'adapter context'

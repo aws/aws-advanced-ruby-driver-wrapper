@@ -16,7 +16,6 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-# rubocop:disable Metrics/BlockLength
 RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_helper|
   include driver_helper
 
@@ -97,10 +96,12 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
   end
 
   before do
+    # Verify correct adapter is active; reconnect if switched by another context.
     expected_adapter = driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
     if ActiveRecord::Base.connection.adapter_name != expected_adapter
       ActiveRecord::Base.connection_handler.clear_all_connections!
       ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+      # Reset cached quoted_table_name which is adapter-specific
       [ArMedAccount, ArMedTransaction, ArMedProfile, ArMedEvent, ArMedWidget].each do |klass|
         klass.instance_variable_set(:@quoted_table_name, nil)
       end
@@ -111,8 +112,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     ArMedEvent.delete_all
     ArMedWidget.delete_all
   end
-
-  # --- 11. Type Casting and Serialization ---
 
   describe 'Type casting and serialization' do
     it 'handles date columns correctly' do
@@ -161,8 +160,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 12. ActiveRecord::Relation Caching ---
-
   describe 'Relation caching and reload' do
     before do
       @account = ArMedAccount.create!(name: 'RelTest', balance: 100.00)
@@ -203,8 +200,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
       expect(array.first).to be_a(ArMedTransaction)
     end
   end
-
-  # --- 13. Calculation Queries ---
 
   describe 'Calculation queries' do
     before do
@@ -254,8 +249,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 14. Subqueries ---
-
   describe 'Subqueries' do
     before do
       @rich = ArMedAccount.create!(name: 'Rich', balance: 10_000)
@@ -295,8 +288,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 15. OR Queries ---
-
   describe 'OR queries' do
     before do
       ArMedAccount.create!(name: 'Alice', balance: 500, verified: true)
@@ -322,8 +313,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 16. Strict Loading ---
-
   describe 'Strict loading' do
     before do
       account = ArMedAccount.create!(name: 'StrictTest', balance: 1000)
@@ -348,8 +337,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
       expect { account.ar_med_profile }.to raise_error(ActiveRecord::StrictLoadingViolationError)
     end
   end
-
-  # --- 17. find_in_batches ---
 
   describe 'find_in_batches' do
     before do
@@ -390,8 +377,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 18. Database Views ---
-
   describe 'Database views' do
     before do
       account = ArMedAccount.create!(name: 'ViewTest', balance: 1000, verified: true)
@@ -420,8 +405,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
       expect(results.count).to eq(2)
     end
   end
-
-  # --- 19. ActiveRecord::Store ---
 
   describe 'ActiveRecord::Store' do
     it 'reads and writes store accessors' do
@@ -452,8 +435,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 20. Explain (query plan) ---
-
   describe 'Explain' do
     before do
       ArMedAccount.create!(name: 'ExplainTest', balance: 500)
@@ -466,8 +447,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
       expect(explanation.to_s.length).to be > 0
     end
   end
-
-  # --- 21. Misc: Pluck with expression, ids, pick ---
 
   describe 'Advanced query methods' do
     before do
@@ -508,8 +487,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 22. Complex joins and includes ---
-
   describe 'Complex joins and includes' do
     before do
       @a1 = ArMedAccount.create!(name: 'Joiner', balance: 1000, verified: true)
@@ -544,8 +521,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 
-  # --- 23. Scoping and unscoped ---
-
   describe 'Scoping' do
     before do
       @a1 = ArMedAccount.create!(name: 'Active1', balance: 100, verified: true)
@@ -577,9 +552,7 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
     end
   end
 end
-# rubocop:enable Metrics/BlockLength
 
-# --- Model Definitions (test-only) ---
 
 class ArMedAccount < ActiveRecord::Base
   self.table_name = 'ar_med_accounts'
@@ -630,7 +603,6 @@ class ArMedCompletedTransaction < ActiveRecord::Base
   self.table_name = 'ar_med_completed_transactions_view'
 end
 
-# --- Run for both adapters ---
 
 RSpec.describe 'ActiveRecord medium priority compatibility' do
   include_context 'adapter context'
