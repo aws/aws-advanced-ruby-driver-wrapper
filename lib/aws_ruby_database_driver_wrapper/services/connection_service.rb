@@ -27,7 +27,7 @@ module AwsRubyDatabaseDriverWrapper
         @service_container = service_container
         @config = config
         @current_connection = nil
-        @current_host_info = nil
+        @current_host_info = config.initial_host_info
         @connection_switch_lock = Monitor.new
       end
 

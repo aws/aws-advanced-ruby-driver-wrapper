@@ -27,32 +27,25 @@ require_relative '../utils/events/batching_event_publisher'
 module AwsRubyDatabaseDriverWrapper
   module Services
     # Manages shared singleton services with correct dependency order.
+    # Initialized eagerly at require-time to avoid thread-safety races.
     module CoreServices
-      def self.event_publisher
-        @event_publisher ||= Utils::Events::BatchingEventPublisher.new
-      end
+      @event_publisher = Utils::Events::BatchingEventPublisher.new
+      @storage_service = Utils::Storage::StorageService.new(event_publisher: @event_publisher)
+      @monitor_service = MonitorService.new(event_publisher: @event_publisher)
 
-      def self.storage_service
-        @storage_service ||= Utils::Storage::StorageService.new(event_publisher: event_publisher)
-      end
-
-      def self.monitor_service
-        @monitor_service ||= begin
-          svc = MonitorService.new(event_publisher: event_publisher)
-          AwsRubyDatabaseDriverWrapper.shutdown_service.register(svc) if AwsRubyDatabaseDriverWrapper.respond_to?(:shutdown_service)
-          svc
-        end
+      class << self
+        attr_reader :event_publisher, :storage_service, :monitor_service
       end
 
       # Resets all shared instances. For testing only.
       # @api private
       def self.reset!
-        @monitor_service&.shutdown(grace_period: 2)
-        @storage_service&.shutdown
-        @event_publisher&.release_resources
-        @event_publisher = nil
-        @storage_service = nil
-        @monitor_service = nil
+        @monitor_service.shutdown(grace_period: 2)
+        @storage_service.shutdown
+        @event_publisher.release_resources
+        @event_publisher = Utils::Events::BatchingEventPublisher.new
+        @storage_service = Utils::Storage::StorageService.new(event_publisher: @event_publisher)
+        @monitor_service = MonitorService.new(event_publisher: @event_publisher)
       end
     end
 
@@ -61,12 +54,14 @@ module AwsRubyDatabaseDriverWrapper
         container = ServiceContainer.new
         container.event_publisher = CoreServices.event_publisher
         container.connection_service = ConnectionService.new(container, config)
-        container.dialect_service = DialectService.new(container.connection_service, config.driver_name)
+        container.dialect_service = DialectService.new(config.driver_name)
+        container.dialect_service.get_dialect(container.connection_service)
         container.host_service = HostService.new(container)
         container.session_state_service = SessionStateService.new
         container.storage_service = CoreServices.storage_service
         container.monitor_service = CoreServices.monitor_service
         container.plugin_manager = PluginManager.new(container)
+        container.dialect_service.setup_initial_provider(container)
         container
       end
 

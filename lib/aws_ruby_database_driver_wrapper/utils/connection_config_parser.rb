@@ -25,6 +25,8 @@ require_relative '../host/host_role'
 module AwsRubyDatabaseDriverWrapper
   module Utils
     module ConnectionConfigParser
+      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|(\S+))/.freeze
+
       module_function
 
       # Main entry point. The driver_name is provided by the wrapper class
@@ -88,7 +90,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # Parses libpq key=value conninfo strings, e.g. "host=localhost port=5432 dbname=mydb"
       def parse_conninfo(driver_name, conninfo, **overrides)
-        params = conninfo.scan(/(\w+)=(?:'([^']*)'|(\S+))/).each_with_object({}) do |(k, v1, v2), h|
+        params = conninfo.scan(CONNINFO_PATTERN).each_with_object({}) do |(k, v1, v2), h|
           h[k.to_sym] = v1 || v2
         end
         params.merge!(overrides)

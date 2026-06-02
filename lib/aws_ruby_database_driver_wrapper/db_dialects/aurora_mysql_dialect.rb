@@ -90,11 +90,13 @@ module AwsRubyDatabaseDriverWrapper
         BG_STATUS_QUERY
       end
 
-      # @param _service_container [Services::ServiceContainer]
+      # @param service_container [Services::ServiceContainer]
       # @return [Host::RdsHostListProvider] the host list provider
-      def create_host_list_provider(_service_container)
-        # TODO: return RdsHostListProvider
-        nil
+      def create_host_list_provider(service_container)
+        require_relative '../utils/aurora_topology_utils'
+        require_relative '../host/rds_host_list_provider'
+        topology_utils = Utils::AuroraTopologyUtils.new(dialect: self)
+        Host::RdsHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
       end
     end
   end
