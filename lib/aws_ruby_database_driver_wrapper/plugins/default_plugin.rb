@@ -38,6 +38,7 @@ module AwsRubyDatabaseDriverWrapper
         conn = driver_dialect.connect(host_info, props)
 
         @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+        @service_container.connection_service.update_current_connection(conn, host_info)
 
         if is_initial_connection
           @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
@@ -58,8 +59,9 @@ module AwsRubyDatabaseDriverWrapper
         conn
       end
 
-      def internal_connect(host_info, props, _, is_initial_connection, pipeline_callable)
-        connect(host_info, props, is_initial_connection, pipeline_callable)
+      def internal_connect(host_info, props, _, _is_initial_connection, _pipeline_callable)
+        driver_dialect = @service_container.dialect_service.driver_dialect
+        driver_dialect.connect(host_info, props)
       end
 
       def execute(_target_obj, target_method_name, target_callable, *args, **options, &block)

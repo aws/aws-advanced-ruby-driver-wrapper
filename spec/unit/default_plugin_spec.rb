@@ -39,7 +39,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
                     pg?: false,
                     multi_host_url?: false,
-                    wrapper_props: wrapper_props)
+                    wrapper_props: wrapper_props,
+                    update_current_connection: nil)
   end
   let(:session_state_service) { nil }
   let(:service_container) do
@@ -109,7 +110,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
                         pg?: true,
                         multi_host_url?: true,
                         config: mock_config,
-                        wrapper_props: wrapper_props)
+                        wrapper_props: wrapper_props,
+                        update_current_connection: nil)
       end
 
       before do
