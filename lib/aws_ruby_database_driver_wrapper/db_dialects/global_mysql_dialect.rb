@@ -73,6 +73,13 @@ module AwsRubyDatabaseDriverWrapper
       def region_by_instance_id_query
         REGION_BY_INSTANCE_ID_QUERY
       end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::GlobalAuroraHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return GlobalAuroraHostListProvider
+        nil
+      end
     end
   end
 end

@@ -38,6 +38,14 @@ module AwsRubyDatabaseDriverWrapper
                        .to_h { |prop| [prop.name, prop] }
                        .freeze
 
+    # Known prefixes for internal connection overrides. Each prefix maps to a key
+    # used in ConnectionConfig#prefixed_props. Plugins define their own prefix here.
+    TOPOLOGY_MONITORING_PREFIX = 'topology-monitoring-'
+
+    KNOWN_PREFIXES = %w[
+      TOPOLOGY_MONITORING_PREFIX
+    ].freeze
+
     def self.wrapper_property?(key)
       KNOWN_PROPERTIES.key?(key.to_sym)
     end

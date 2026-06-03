@@ -62,6 +62,17 @@ module AwsRubyDatabaseDriverWrapper
         )
       end
 
+      def force_connect(host_info, props, is_initial_connection, plugin_to_skip: nil)
+        execute_with_subscribed_plugins(
+          'force_connect',
+          lambda do |plugin, next_plugin_callable|
+            plugin.force_connect(host_info, props, is_initial_connection, next_plugin_callable)
+          end,
+          -> {},
+          plugin_to_skip: plugin_to_skip
+        )
+      end
+
       def execute(current_conn, target_conn, target_obj, target_method_name, target_callable, *args, **kwargs, &block)
         if !target_method_name.end_with?('close') && !target_conn.nil? && target_conn != current_conn
           raise Errors::AwsError, "Method invoked against old connection: #{target_conn}"

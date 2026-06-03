@@ -81,6 +81,13 @@ module AwsRubyDatabaseDriverWrapper
       def writer_id_column_name
         WRITER_ID_QUERY_COLUMN_NAME
       end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::RdsHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return RdsHostListProvider
+        nil
+      end
     end
   end
 end

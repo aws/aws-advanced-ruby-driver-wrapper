@@ -320,7 +320,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
   def service_container_with_wrapper_props(wrapper_props = {})
     container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new
     connection_service = double('ConnectionService', wrapper_props: wrapper_props)
+    driver_dialect = double('DriverDialect', network_bound_methods: Set['connect'])
+    dialect_service = double('DialectService', driver_dialect: driver_dialect)
     container.connection_service = connection_service
+    container.dialect_service = dialect_service
     container
   end
 

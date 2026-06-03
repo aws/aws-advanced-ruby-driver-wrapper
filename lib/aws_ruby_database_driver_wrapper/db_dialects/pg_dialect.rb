@@ -73,6 +73,13 @@ module AwsRubyDatabaseDriverWrapper
       def instance_identity(connection)
         query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::ConnectionStringHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return ConnectionStringHostListProvider
+        nil
+      end
     end
   end
 end

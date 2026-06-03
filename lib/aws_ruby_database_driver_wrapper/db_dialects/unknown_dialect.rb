@@ -58,6 +58,13 @@ module AwsRubyDatabaseDriverWrapper
       def execute(connection, sql)
         raise NotImplementedError, 'Unable to execute query, connected to unknown DB type.'
       end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::ConnectionStringHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return ConnectionStringHostListProvider
+        nil
+      end
     end
   end
 end
