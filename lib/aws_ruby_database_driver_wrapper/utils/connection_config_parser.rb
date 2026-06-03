@@ -72,7 +72,7 @@ module AwsRubyDatabaseDriverWrapper
         all_props = query_params.each_with_object({}) { |(k, v), h| h[k.to_sym] = v }
         overrides.transform_keys(&:to_sym).each { |k, v| all_props[k] = v }
 
-        wrapper_config, extra_driver = split_props(all_props)
+        wrapper_config, extra_driver, prefixed_config = split_props(all_props)
         driver_config.merge!(extra_driver)
 
         initial_host_info = first_host_from_string(host_section, parsed_uri.port)
@@ -80,6 +80,7 @@ module AwsRubyDatabaseDriverWrapper
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
+          prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
           driver_name: driver_name
         )
@@ -98,12 +99,13 @@ module AwsRubyDatabaseDriverWrapper
       #   parse_hash(:postgresql, { host: "myhost", port: 5432, dbname: "mydb", wrapper_plugins: "failover" })
       def parse_hash(driver_name, params)
         params = params.transform_keys(&:to_sym)
-        wrapper_config, driver_config = split_props(params)
+        wrapper_config, driver_config, prefixed_config = split_props(params)
         initial_host_info = first_host_from_hash(driver_config[:host] || driver_config[:hostname], driver_config[:port])
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
+          prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
           driver_name: driver_name
         )
@@ -116,31 +118,39 @@ module AwsRubyDatabaseDriverWrapper
         positional = keys.zip(args).compact.to_h
         all_props = positional.merge(kwargs.transform_keys(&:to_sym))
 
-        wrapper_config, driver_config = split_props(all_props)
+        wrapper_config, driver_config, prefixed_config = split_props(all_props)
         initial_host_info = first_host_from_hash(driver_config[:host], driver_config[:port])
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
+          prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
           driver_name: driver_name
         )
       end
 
-      # Splits a flat hash into wrapper_config and driver_config using the property registry.
+      # Splits a flat hash into wrapper_config, driver_config, and prefixed_config.
+      # Keys matching a known prefix are stripped and grouped by prefix in prefixed_config.
+      # Known wrapper properties go to wrapper_config. Everything else goes to driver_config.
       def split_props(props)
         wrapper_config = {}
         driver_config = {}
+        prefixed_config = {}
 
         props.each do |key, value|
-          if PropertyDefinition.wrapper_property?(key)
+          key_s = key.to_s
+          prefix = PropertyDefinition::KNOWN_PREFIXES.find { |p| key_s.start_with?(p) }
+          if prefix
+            (prefixed_config[prefix] ||= {})[key_s.delete_prefix(prefix).to_sym] = value
+          elsif PropertyDefinition.wrapper_property?(key)
             wrapper_config[key.to_sym] = value
           else
             driver_config[key.to_sym] = value
           end
         end
 
-        [wrapper_config, driver_config]
+        [wrapper_config, driver_config, prefixed_config]
       end
 
       # Extracts only the first host and its port as a HostInfo.
