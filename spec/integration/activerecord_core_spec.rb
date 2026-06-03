@@ -16,7 +16,7 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-RSpec.shared_examples 'ActiveRecord compatibility' do |driver_helper|
+RSpec.shared_examples 'ActiveRecord core' do |driver_helper|
   include driver_helper
 
   before(:all) do
@@ -693,14 +693,14 @@ class ArTestPostsTag < ActiveRecord::Base
 end
 
 
-RSpec.describe 'ActiveRecord compatibility' do
+RSpec.describe 'ActiveRecord core' do
   include_context 'adapter context'
 
   context 'PostgreSQL' do
-    include_examples 'ActiveRecord compatibility', PgTestHelper
+    include_examples 'ActiveRecord core', PgTestHelper
   end
 
   context 'MySQL' do
-    include_examples 'ActiveRecord compatibility', MysqlTestHelper
+    include_examples 'ActiveRecord core', MysqlTestHelper
   end
 end

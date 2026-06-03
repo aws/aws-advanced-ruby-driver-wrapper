@@ -16,7 +16,7 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
+RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper|
   include driver_helper
 
   ADVANCED_MODELS = [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
@@ -658,14 +658,14 @@ class ArAdvItem < ActiveRecord::Base
 end
 
 
-RSpec.describe 'ActiveRecord advanced compatibility' do
+RSpec.describe 'ActiveRecord associations and features' do
   include_context 'adapter context'
 
   context 'PostgreSQL' do
-    include_examples 'ActiveRecord advanced compatibility', PgTestHelper
+    include_examples 'ActiveRecord associations and features', PgTestHelper
   end
 
   context 'MySQL' do
-    include_examples 'ActiveRecord advanced compatibility', MysqlTestHelper
+    include_examples 'ActiveRecord associations and features', MysqlTestHelper
   end
 end

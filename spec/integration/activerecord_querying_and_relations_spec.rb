@@ -16,7 +16,7 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_helper|
+RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
   include driver_helper
 
   MEDIUM_MODELS = [ArMedAccount, ArMedTransaction, ArMedProfile, ArMedEvent, ArMedWidget].freeze
@@ -581,14 +581,14 @@ class ArMedCompletedTransaction < ActiveRecord::Base
 end
 
 
-RSpec.describe 'ActiveRecord medium priority compatibility' do
+RSpec.describe 'ActiveRecord querying and relations' do
   include_context 'adapter context'
 
   context 'PostgreSQL' do
-    include_examples 'ActiveRecord medium priority compatibility', PgTestHelper
+    include_examples 'ActiveRecord querying and relations', PgTestHelper
   end
 
   context 'MySQL' do
-    include_examples 'ActiveRecord medium priority compatibility', MysqlTestHelper
+    include_examples 'ActiveRecord querying and relations', MysqlTestHelper
   end
 end

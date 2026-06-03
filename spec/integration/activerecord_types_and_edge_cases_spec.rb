@@ -16,7 +16,7 @@
 
 require_relative '../support/shared_contexts/adapter_context'
 
-RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helper|
+RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   include driver_helper
 
   LOW_MODELS = [ArLowSetting, ArLowSecretNote, ArLowJsonDoc, ArLowUuidRecord,
@@ -505,14 +505,14 @@ class ArLowMigrationLock < ActiveRecord::Base
 end
 
 
-RSpec.describe 'ActiveRecord low priority compatibility' do
+RSpec.describe 'ActiveRecord types and edge cases' do
   include_context 'adapter context'
 
   context 'PostgreSQL' do
-    include_examples 'ActiveRecord low priority compatibility', PgTestHelper
+    include_examples 'ActiveRecord types and edge cases', PgTestHelper
   end
 
   context 'MySQL' do
-    include_examples 'ActiveRecord low priority compatibility', MysqlTestHelper
+    include_examples 'ActiveRecord types and edge cases', MysqlTestHelper
   end
 end
