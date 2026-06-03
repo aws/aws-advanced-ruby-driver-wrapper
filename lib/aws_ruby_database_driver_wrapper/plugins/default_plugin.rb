@@ -40,11 +40,7 @@ module AwsRubyDatabaseDriverWrapper
         @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
 
         if is_initial_connection
-          begin
-            @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
-          rescue NotImplementedError
-            # TODO: remove when update_dialect is implemented
-          end
+          @service_container.dialect_service.update_dialect(@service_container.connection_service, conn)
 
           connection_service = @service_container.connection_service
           if connection_service.pg? && connection_service.multi_host_url?
@@ -53,9 +49,17 @@ module AwsRubyDatabaseDriverWrapper
               port: conn.port.to_i
             )
           end
+
+          provider = @service_container.dialect_service.db_dialect.create_host_list_provider(@service_container)
+          # TODO: remove if provider guard when all host list providers implemented
+          @service_container.host_service.host_list_provider = provider if provider
         end
 
         conn
+      end
+
+      def internal_connect(host_info, props, is_initial_connection, pipeline_callable)
+        connect(host_info, props, is_initial_connection, pipeline_callable)
       end
 
       def execute(_target_obj, target_method_name, target_callable, *args, **options, &block)

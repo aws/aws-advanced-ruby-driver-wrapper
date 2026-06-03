@@ -89,6 +89,13 @@ module AwsRubyDatabaseDriverWrapper
       def blue_green_status_query
         BG_STATUS_QUERY
       end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::RdsHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return RdsHostListProvider
+        nil
+      end
     end
   end
 end
