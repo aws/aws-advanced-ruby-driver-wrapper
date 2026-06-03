@@ -19,16 +19,16 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   include driver_helper
 
-  LOW_MODELS = [ArLowSetting, ArLowSecretNote, ArLowJsonDoc, ArLowUuidRecord,
-                ArLowPrepStmtTest, ArLowMigrationLock].freeze
+  EDGE_MODELS = [ArEdgeSetting, ArEdgeSecretNote, ArEdgeJsonDoc, ArEdgeUuidRecord,
+                ArEdgePrepStmtTest, ArEdgeMigrationLock].freeze
 
   before(:all) do
-    ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, LOW_MODELS)
+    ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, EDGE_MODELS)
 
     ActiveRecord::Schema.define do
       suppress_messages do
         # --- ActiveRecord::Store with advanced usage ---
-        create_table :ar_low_settings, force: true do |t|
+        create_table :ar_edge_settings, force: true do |t|
           t.string :name, null: false
           t.text :preferences
           t.text :metadata
@@ -36,35 +36,35 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
         end
 
         # --- Encrypted attributes (Rails 7+) ---
-        create_table :ar_low_secret_notes, force: true do |t|
+        create_table :ar_edge_secret_notes, force: true do |t|
           t.string :title, null: false
           t.text :content
           t.timestamps
         end
 
         # --- JSON columns ---
-        create_table :ar_low_json_docs, force: true do |t|
+        create_table :ar_edge_json_docs, force: true do |t|
           t.string :name, null: false
           t.json :payload
           t.timestamps
         end
 
         # --- UUID-like primary keys (string PK) ---
-        create_table :ar_low_uuid_records, id: false, force: true do |t|
+        create_table :ar_edge_uuid_records, id: false, force: true do |t|
           t.string :id, primary_key: true, null: false, limit: 36
           t.string :label, null: false
           t.timestamps
         end
 
         # --- Prepared statements ---
-        create_table :ar_low_prep_stmt_tests, force: true do |t|
+        create_table :ar_edge_prep_stmt_tests, force: true do |t|
           t.string :code, null: false
           t.integer :value, default: 0
           t.timestamps
         end
 
         # --- Advisory locks (used by migrations) ---
-        create_table :ar_low_migration_locks, force: true do |t|
+        create_table :ar_edge_migration_locks, force: true do |t|
           t.string :version, null: false
           t.timestamps
         end
@@ -75,30 +75,30 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   after(:all) do
     ActiveRecord::Schema.define do
       suppress_messages do
-        drop_table :ar_low_settings, if_exists: true
-        drop_table :ar_low_secret_notes, if_exists: true
-        drop_table :ar_low_json_docs, if_exists: true
-        drop_table :ar_low_uuid_records, if_exists: true
-        drop_table :ar_low_prep_stmt_tests, if_exists: true
-        drop_table :ar_low_migration_locks, if_exists: true
+        drop_table :ar_edge_settings, if_exists: true
+        drop_table :ar_edge_secret_notes, if_exists: true
+        drop_table :ar_edge_json_docs, if_exists: true
+        drop_table :ar_edge_uuid_records, if_exists: true
+        drop_table :ar_edge_prep_stmt_tests, if_exists: true
+        drop_table :ar_edge_migration_locks, if_exists: true
       end
     end
     ActiveRecord::Base.connection_handler.clear_active_connections!
   end
 
   before do
-    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, LOW_MODELS)
-    ArLowSetting.delete_all
-    ArLowSecretNote.delete_all
-    ArLowJsonDoc.delete_all
-    ArLowUuidRecord.delete_all
-    ArLowPrepStmtTest.delete_all
-    ArLowMigrationLock.delete_all
+    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, EDGE_MODELS)
+    ArEdgeSetting.delete_all
+    ArEdgeSecretNote.delete_all
+    ArEdgeJsonDoc.delete_all
+    ArEdgeUuidRecord.delete_all
+    ArEdgePrepStmtTest.delete_all
+    ArEdgeMigrationLock.delete_all
   end
 
   describe 'ActiveRecord::Store advanced' do
     it 'supports multiple store columns' do
-      setting = ArLowSetting.create!(name: 'Multi', theme: 'dark', language: 'en', version: '2.0')
+      setting = ArEdgeSetting.create!(name: 'Multi', theme: 'dark', language: 'en', version: '2.0')
       setting.reload
       expect(setting.theme).to eq('dark')
       expect(setting.language).to eq('en')
@@ -106,28 +106,28 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'supports store_accessor with prefix' do
-      setting = ArLowSetting.create!(name: 'Prefixed', theme: 'light')
+      setting = ArEdgeSetting.create!(name: 'Prefixed', theme: 'light')
       expect(setting.theme).to eq('light')
       setting.update!(theme: 'dark')
       expect(setting.reload.theme).to eq('dark')
     end
 
     it 'persists complex nested values in store' do
-      setting = ArLowSetting.create!(name: 'Nested', theme: 'system', language: 'en')
+      setting = ArEdgeSetting.create!(name: 'Nested', theme: 'system', language: 'en')
       setting.reload
       # Verify store accessors persist correctly
       expect(setting.theme).to eq('system')
       expect(setting.language).to eq('en')
       # Verify the raw column is serialized JSON containing the store data
       raw = ActiveRecord::Base.connection.select_value(
-        "SELECT preferences FROM ar_low_settings WHERE id = #{setting.id}"
+        "SELECT preferences FROM ar_edge_settings WHERE id = #{setting.id}"
       )
       parsed = JSON.parse(raw)
       expect(parsed).to include('theme' => 'system', 'language' => 'en')
     end
 
     it 'tracks changes on store accessors' do
-      setting = ArLowSetting.create!(name: 'Dirty', theme: 'light')
+      setting = ArEdgeSetting.create!(name: 'Dirty', theme: 'light')
       setting.theme = 'dark'
       expect(setting.theme_changed?).to be true
     end
@@ -135,65 +135,65 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
   describe 'Encrypted attributes' do
     it 'encrypts and decrypts content transparently' do
-      note = ArLowSecretNote.create!(title: 'Secret', content: 'Top secret message')
+      note = ArEdgeSecretNote.create!(title: 'Secret', content: 'Top secret message')
       note.reload
       expect(note.content).to eq('Top secret message')
     end
 
     it 'stores encrypted value in database (not plaintext)' do
-      note = ArLowSecretNote.create!(title: 'Hidden', content: 'Sensitive data')
+      note = ArEdgeSecretNote.create!(title: 'Hidden', content: 'Sensitive data')
       # Read the raw column value from DB
       raw = ActiveRecord::Base.connection.select_value(
-        "SELECT content FROM ar_low_secret_notes WHERE id = #{note.id}"
+        "SELECT content FROM ar_edge_secret_notes WHERE id = #{note.id}"
       )
       expect(raw).not_to eq('Sensitive data')
       expect(raw).to be_present
     end
 
     it 'supports updating encrypted fields' do
-      note = ArLowSecretNote.create!(title: 'Updatable', content: 'Original')
+      note = ArEdgeSecretNote.create!(title: 'Updatable', content: 'Original')
       note.update!(content: 'Modified')
       expect(note.reload.content).to eq('Modified')
     end
 
     it 'supports nil encrypted values' do
-      note = ArLowSecretNote.create!(title: 'NoContent')
+      note = ArEdgeSecretNote.create!(title: 'NoContent')
       expect(note.reload.content).to be_nil
     end
   end
 
   describe 'JSON columns' do
     it 'stores and retrieves JSON objects' do
-      doc = ArLowJsonDoc.create!(name: 'Config', payload: { 'key' => 'value', 'count' => 42 })
+      doc = ArEdgeJsonDoc.create!(name: 'Config', payload: { 'key' => 'value', 'count' => 42 })
       doc.reload
       expect(doc.payload).to eq({ 'key' => 'value', 'count' => 42 })
     end
 
     it 'stores JSON arrays' do
-      doc = ArLowJsonDoc.create!(name: 'List', payload: [1, 2, 3, 'four'])
+      doc = ArEdgeJsonDoc.create!(name: 'List', payload: [1, 2, 3, 'four'])
       expect(doc.reload.payload).to eq([1, 2, 3, 'four'])
     end
 
     it 'stores nested JSON' do
       nested = { 'users' => [{ 'name' => 'Alice', 'age' => 30 }, { 'name' => 'Bob', 'age' => 25 }] }
-      doc = ArLowJsonDoc.create!(name: 'Nested', payload: nested)
+      doc = ArEdgeJsonDoc.create!(name: 'Nested', payload: nested)
       expect(doc.reload.payload).to eq(nested)
     end
 
     it 'stores null JSON' do
-      doc = ArLowJsonDoc.create!(name: 'Empty', payload: nil)
+      doc = ArEdgeJsonDoc.create!(name: 'Empty', payload: nil)
       expect(doc.reload.payload).to be_nil
     end
 
     it 'updates JSON values' do
-      doc = ArLowJsonDoc.create!(name: 'Mutable', payload: { 'x' => 1 })
+      doc = ArEdgeJsonDoc.create!(name: 'Mutable', payload: { 'x' => 1 })
       doc.update!(payload: { 'x' => 2, 'y' => 3 })
       expect(doc.reload.payload).to eq({ 'x' => 2, 'y' => 3 })
     end
 
     it 'supports JSON with boolean and null values' do
       data = { 'active' => true, 'deleted' => false, 'meta' => nil }
-      doc = ArLowJsonDoc.create!(name: 'Booleans', payload: data)
+      doc = ArEdgeJsonDoc.create!(name: 'Booleans', payload: data)
       result = doc.reload.payload
       expect(result['active']).to be true
       expect(result['deleted']).to be false
@@ -203,70 +203,70 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
   describe 'String/UUID primary keys' do
     it 'creates records with string primary key' do
-      record = ArLowUuidRecord.create!(id: SecureRandom.uuid, label: 'First')
+      record = ArEdgeUuidRecord.create!(id: SecureRandom.uuid, label: 'First')
       expect(record.id).to be_a(String)
       expect(record.id.length).to eq(36)
     end
 
     it 'finds records by string primary key' do
       id = SecureRandom.uuid
-      ArLowUuidRecord.create!(id: id, label: 'Findable')
-      found = ArLowUuidRecord.find(id)
+      ArEdgeUuidRecord.create!(id: id, label: 'Findable')
+      found = ArEdgeUuidRecord.find(id)
       expect(found.label).to eq('Findable')
     end
 
     it 'supports associations with string foreign keys' do
       id = SecureRandom.uuid
-      ArLowUuidRecord.create!(id: id, label: 'Associated')
-      found = ArLowUuidRecord.where(id: id)
+      ArEdgeUuidRecord.create!(id: id, label: 'Associated')
+      found = ArEdgeUuidRecord.where(id: id)
       expect(found.count).to eq(1)
     end
 
     it 'raises RecordNotFound for missing UUID' do
-      expect { ArLowUuidRecord.find('nonexistent-uuid') }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { ArEdgeUuidRecord.find('nonexistent-uuid') }.to raise_error(ActiveRecord::RecordNotFound)
     end
 
     it 'supports destroy with string PK' do
       id = SecureRandom.uuid
-      ArLowUuidRecord.create!(id: id, label: 'Destroyable')
-      ArLowUuidRecord.find(id).destroy!
-      expect(ArLowUuidRecord.find_by(id: id)).to be_nil
+      ArEdgeUuidRecord.create!(id: id, label: 'Destroyable')
+      ArEdgeUuidRecord.find(id).destroy!
+      expect(ArEdgeUuidRecord.find_by(id: id)).to be_nil
     end
   end
 
   describe 'Prepared statements' do
     it 'executes parameterized queries via find' do
-      ArLowPrepStmtTest.create!(code: 'AAA', value: 10)
-      ArLowPrepStmtTest.create!(code: 'BBB', value: 20)
+      ArEdgePrepStmtTest.create!(code: 'AAA', value: 10)
+      ArEdgePrepStmtTest.create!(code: 'BBB', value: 20)
 
       # find triggers a prepared statement internally
-      record = ArLowPrepStmtTest.find_by(code: 'AAA')
+      record = ArEdgePrepStmtTest.find_by(code: 'AAA')
       expect(record.value).to eq(10)
     end
 
     it 'handles repeated parameterized queries' do
-      5.times { |i| ArLowPrepStmtTest.create!(code: "CODE#{i}", value: i * 10) }
+      5.times { |i| ArEdgePrepStmtTest.create!(code: "CODE#{i}", value: i * 10) }
 
       # Each call should reuse the prepared statement
-      results = (0..4).map { |i| ArLowPrepStmtTest.find_by(code: "CODE#{i}") }
+      results = (0..4).map { |i| ArEdgePrepStmtTest.find_by(code: "CODE#{i}") }
       expect(results.map(&:value)).to eq([0, 10, 20, 30, 40])
     end
 
     it 'supports bind parameters in where clauses' do
-      ArLowPrepStmtTest.create!(code: 'X', value: 100)
-      ArLowPrepStmtTest.create!(code: 'Y', value: 200)
-      ArLowPrepStmtTest.create!(code: 'Z', value: 300)
+      ArEdgePrepStmtTest.create!(code: 'X', value: 100)
+      ArEdgePrepStmtTest.create!(code: 'Y', value: 200)
+      ArEdgePrepStmtTest.create!(code: 'Z', value: 300)
 
-      results = ArLowPrepStmtTest.where('value > ?', 150)
+      results = ArEdgePrepStmtTest.where('value > ?', 150)
       expect(results.pluck(:code).sort).to eq(%w[Y Z])
     end
 
     it 'handles queries with multiple bind params' do
-      ArLowPrepStmtTest.create!(code: 'MULTI', value: 50)
-      ArLowPrepStmtTest.create!(code: 'MULTI', value: 150)
-      ArLowPrepStmtTest.create!(code: 'OTHER', value: 100)
+      ArEdgePrepStmtTest.create!(code: 'MULTI', value: 50)
+      ArEdgePrepStmtTest.create!(code: 'MULTI', value: 150)
+      ArEdgePrepStmtTest.create!(code: 'OTHER', value: 100)
 
-      results = ArLowPrepStmtTest.where('code = ? AND value > ?', 'MULTI', 75)
+      results = ArEdgePrepStmtTest.where('code = ? AND value > ?', 'MULTI', 75)
       expect(results.count).to eq(1)
       expect(results.first.value).to eq(150)
     end
@@ -307,18 +307,18 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
   describe 'Explain' do
     before do
-      5.times { |i| ArLowPrepStmtTest.create!(code: "EXP#{i}", value: i * 100) }
+      5.times { |i| ArEdgePrepStmtTest.create!(code: "EXP#{i}", value: i * 100) }
     end
 
     it 'returns explain output for simple query' do
-      output = ArLowPrepStmtTest.where('value > ?', 200).explain
+      output = ArEdgePrepStmtTest.where('value > ?', 200).explain
       expect(output.to_s).to be_a(String)
       expect(output.to_s.length).to be > 10
     end
 
     it 'returns explain for join query' do
       # Just ensure it doesn't raise — output format varies by adapter
-      output = ArLowPrepStmtTest.where(code: 'EXP1').explain
+      output = ArEdgePrepStmtTest.where(code: 'EXP1').explain
       expect(output.to_s).not_to be_empty
     end
   end
@@ -338,18 +338,18 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
     it 'lists tables' do
       tables = ActiveRecord::Base.connection.tables
-      expect(tables).to include('ar_low_settings')
-      expect(tables).to include('ar_low_json_docs')
+      expect(tables).to include('ar_edge_settings')
+      expect(tables).to include('ar_edge_json_docs')
     end
 
     it 'lists columns for a table' do
-      columns = ActiveRecord::Base.connection.columns(:ar_low_settings)
+      columns = ActiveRecord::Base.connection.columns(:ar_edge_settings)
       names = columns.map(&:name)
       expect(names).to include('name', 'preferences', 'metadata')
     end
 
     it 'reports column types' do
-      columns = ActiveRecord::Base.connection.columns(:ar_low_prep_stmt_tests)
+      columns = ActiveRecord::Base.connection.columns(:ar_edge_prep_stmt_tests)
       code_col = columns.find { |c| c.name == 'code' }
       value_col = columns.find { |c| c.name == 'value' }
       expect(code_col.sql_type).to match(/varchar|character varying/i)
@@ -357,7 +357,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'checks table existence' do
-      expect(ActiveRecord::Base.connection.table_exists?(:ar_low_settings)).to be true
+      expect(ActiveRecord::Base.connection.table_exists?(:ar_edge_settings)).to be true
       expect(ActiveRecord::Base.connection.table_exists?(:nonexistent_table)).to be false
     end
   end
@@ -370,13 +370,13 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'handles empty result sets gracefully' do
-      expect(ArLowPrepStmtTest.where(code: 'NONEXISTENT').to_a).to eq([])
-      expect(ArLowPrepStmtTest.where(code: 'NONEXISTENT').count).to eq(0)
+      expect(ArEdgePrepStmtTest.where(code: 'NONEXISTENT').to_a).to eq([])
+      expect(ArEdgePrepStmtTest.where(code: 'NONEXISTENT').count).to eq(0)
     end
 
     it 'handles very long string values' do
       long_string = 'x' * 255
-      record = ArLowPrepStmtTest.create!(code: long_string, value: 1)
+      record = ArEdgePrepStmtTest.create!(code: long_string, value: 1)
       expect(record.reload.code).to eq(long_string)
     end
 
@@ -384,22 +384,22 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
       special = "it's a \"test\" with \\ backslash & ampersand < > ' \" NULL \x00"
       # Remove null byte which some DBs don't support in strings
       safe_special = special.delete("\x00")
-      record = ArLowSetting.create!(name: safe_special)
+      record = ArEdgeSetting.create!(name: safe_special)
       expect(record.reload.name).to eq(safe_special)
     end
 
     it 'handles unicode strings' do
       unicode = '日本語テスト 🚀 émoji café'
-      record = ArLowSetting.create!(name: unicode)
+      record = ArEdgeSetting.create!(name: unicode)
       expect(record.reload.name).to eq(unicode)
     end
 
     it 'handles concurrent reads safely' do
-      ArLowPrepStmtTest.create!(code: 'CONCURRENT', value: 42)
+      ArEdgePrepStmtTest.create!(code: 'CONCURRENT', value: 42)
       threads = 10.times.map do
         Thread.new do
           ActiveRecord::Base.connection_pool.with_connection do
-            ArLowPrepStmtTest.find_by(code: 'CONCURRENT')&.value
+            ArEdgePrepStmtTest.find_by(code: 'CONCURRENT')&.value
           end
         end
       end
@@ -410,7 +410,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
   describe 'Attribute API' do
     it 'supports attribute query methods' do
-      record = ArLowPrepStmtTest.create!(code: 'ATTR', value: 0)
+      record = ArEdgePrepStmtTest.create!(code: 'ATTR', value: 0)
       # attribute? returns false for 0/nil/blank
       expect(record.value?).to be false
       record.update!(value: 1)
@@ -418,7 +418,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'supports read_attribute and write_attribute' do
-      record = ArLowPrepStmtTest.create!(code: 'RW', value: 10)
+      record = ArEdgePrepStmtTest.create!(code: 'RW', value: 10)
       expect(record.read_attribute(:value)).to eq(10)
 
       record.write_attribute(:value, 20)
@@ -427,7 +427,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'supports attributes hash' do
-      record = ArLowPrepStmtTest.create!(code: 'HASH', value: 99)
+      record = ArEdgePrepStmtTest.create!(code: 'HASH', value: 99)
       attrs = record.attributes
       expect(attrs).to be_a(Hash)
       expect(attrs['code']).to eq('HASH')
@@ -435,7 +435,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'supports assign_attributes' do
-      record = ArLowPrepStmtTest.create!(code: 'ASSIGN', value: 1)
+      record = ArEdgePrepStmtTest.create!(code: 'ASSIGN', value: 1)
       record.assign_attributes(code: 'CHANGED', value: 2)
       expect(record).to be_changed
       record.save!
@@ -443,7 +443,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
 
     it 'supports attribute_names' do
-      names = ArLowPrepStmtTest.attribute_names
+      names = ArEdgePrepStmtTest.attribute_names
       expect(names).to include('id', 'code', 'value')
     end
   end
@@ -456,8 +456,8 @@ ActiveRecord::Encryption.configure(
   key_derivation_salt: 'test-key-derivation-salt-value!!'
 )
 
-class ArLowSetting < ActiveRecord::Base
-  self.table_name = 'ar_low_settings'
+class ArEdgeSetting < ActiveRecord::Base
+  self.table_name = 'ar_edge_settings'
 
   store :preferences, accessors: %i[theme language], coder: JSON
   store :metadata, accessors: %i[version], coder: JSON
@@ -465,22 +465,22 @@ class ArLowSetting < ActiveRecord::Base
   validates :name, presence: true
 end
 
-class ArLowSecretNote < ActiveRecord::Base
-  self.table_name = 'ar_low_secret_notes'
+class ArEdgeSecretNote < ActiveRecord::Base
+  self.table_name = 'ar_edge_secret_notes'
 
   encrypts :content
 
   validates :title, presence: true
 end
 
-class ArLowJsonDoc < ActiveRecord::Base
-  self.table_name = 'ar_low_json_docs'
+class ArEdgeJsonDoc < ActiveRecord::Base
+  self.table_name = 'ar_edge_json_docs'
 
   validates :name, presence: true
 end
 
-class ArLowUuidRecord < ActiveRecord::Base
-  self.table_name = 'ar_low_uuid_records'
+class ArEdgeUuidRecord < ActiveRecord::Base
+  self.table_name = 'ar_edge_uuid_records'
   self.primary_key = 'id'
 
   before_create :set_uuid, unless: :id?
@@ -494,14 +494,14 @@ class ArLowUuidRecord < ActiveRecord::Base
   end
 end
 
-class ArLowPrepStmtTest < ActiveRecord::Base
-  self.table_name = 'ar_low_prep_stmt_tests'
+class ArEdgePrepStmtTest < ActiveRecord::Base
+  self.table_name = 'ar_edge_prep_stmt_tests'
 
   validates :code, presence: true
 end
 
-class ArLowMigrationLock < ActiveRecord::Base
-  self.table_name = 'ar_low_migration_locks'
+class ArEdgeMigrationLock < ActiveRecord::Base
+  self.table_name = 'ar_edge_migration_locks'
 end
 
 
