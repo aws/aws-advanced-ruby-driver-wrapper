@@ -19,22 +19,15 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
   include driver_helper
 
-  before(:all) do
-    ActiveRecord::Base.connection_handler.clear_all_connections!
-    ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+  ADVANCED_MODELS = [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
+                     ArAdvDoctor, ArAdvPatient, ArAdvAppointment, ArAdvForum, ArAdvTopic,
+                     ArAdvOrder, ArAdvLibrary, ArAdvBook, ArAdvProduct, ArAdvCategory, ArAdvItem].freeze
 
-    # Reset quoted_table_name cache on all test models since it's adapter-specific.
-    # In AR 7.2, quoted_table_name is cached using adapter_class.quote_table_name,
-    # so we must clear the instance variable when switching adapters.
-    [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
-     ArAdvDoctor, ArAdvPatient, ArAdvAppointment, ArAdvForum, ArAdvTopic,
-     ArAdvOrder, ArAdvLibrary, ArAdvBook, ArAdvProduct, ArAdvCategory, ArAdvItem].each do |klass|
-      klass.instance_variable_set(:@quoted_table_name, nil)
-    end
+  before(:all) do
+    ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, ADVANCED_MODELS)
 
     ActiveRecord::Schema.define do
       suppress_messages do
-        # --- Polymorphic associations ---
         create_table :ar_adv_articles, force: true do |t|
           t.string :title, null: false
           t.text :body
@@ -53,7 +46,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
           t.timestamps
         end
 
-        # --- STI (Single Table Inheritance) ---
         create_table :ar_adv_vehicles, force: true do |t|
           t.string :type, null: false
           t.string :name, null: false
@@ -62,7 +54,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
           t.timestamps
         end
 
-        # --- has_many :through ---
         create_table :ar_adv_doctors, force: true do |t|
           t.string :name, null: false
           t.timestamps
@@ -81,7 +72,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
           t.timestamps
         end
 
-        # --- Counter cache ---
         create_table :ar_adv_forums, force: true do |t|
           t.string :name, null: false
           t.integer :ar_adv_topics_count, default: 0
@@ -94,7 +84,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
           t.timestamps
         end
 
-        # --- Enum ---
         create_table :ar_adv_orders, force: true do |t|
           t.integer :status, default: 0, null: false
           t.decimal :total, precision: 10, scale: 2
@@ -102,7 +91,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
           t.timestamps
         end
 
-        # --- Touch ---
         create_table :ar_adv_libraries, force: true do |t|
           t.string :name, null: false
           t.timestamps
@@ -114,7 +102,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
           t.timestamps
         end
 
-        # --- Bulk operations (upsert/insert_all) ---
         create_table :ar_adv_products, force: true do |t|
           t.string :sku, null: false
           t.string :name, null: false
@@ -125,7 +112,6 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
 
         add_index :ar_adv_products, :sku, unique: true
 
-        # --- Preloading strategies ---
         create_table :ar_adv_categories, force: true do |t|
           t.string :name, null: false
           t.timestamps
@@ -165,18 +151,7 @@ RSpec.shared_examples 'ActiveRecord advanced compatibility' do |driver_helper|
   end
 
   before do
-    # Verify correct adapter is active; reconnect if switched by another context.
-    expected_adapter = driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
-    if ActiveRecord::Base.connection.adapter_name != expected_adapter
-      ActiveRecord::Base.connection_handler.clear_all_connections!
-      ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
-      # Reset cached quoted_table_name which is adapter-specific
-      [ArAdvArticle, ArAdvVideo, ArAdvReaction, ArAdvVehicle, ArAdvCar, ArAdvTruck,
-       ArAdvDoctor, ArAdvPatient, ArAdvAppointment, ArAdvForum, ArAdvTopic,
-       ArAdvOrder, ArAdvLibrary, ArAdvBook, ArAdvProduct, ArAdvCategory, ArAdvItem].each do |klass|
-        klass.instance_variable_set(:@quoted_table_name, nil)
-      end
-    end
+    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, ADVANCED_MODELS)
     ArAdvReaction.delete_all
     ArAdvArticle.delete_all
     ArAdvVideo.delete_all

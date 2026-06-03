@@ -19,15 +19,11 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helper|
   include driver_helper
 
-  before(:all) do
-    ActiveRecord::Base.connection_handler.clear_all_connections!
-    ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+  LOW_MODELS = [ArLowSetting, ArLowSecretNote, ArLowJsonDoc, ArLowUuidRecord,
+                ArLowPrepStmtTest, ArLowMigrationLock].freeze
 
-    # Reset quoted_table_name cache (adapter-specific quoting)
-    [ArLowSetting, ArLowSecretNote, ArLowJsonDoc, ArLowUuidRecord,
-     ArLowPrepStmtTest, ArLowMigrationLock].each do |klass|
-      klass.instance_variable_set(:@quoted_table_name, nil)
-    end
+  before(:all) do
+    ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, LOW_MODELS)
 
     ActiveRecord::Schema.define do
       suppress_messages do
@@ -91,17 +87,7 @@ RSpec.shared_examples 'ActiveRecord low priority compatibility' do |driver_helpe
   end
 
   before do
-    # Verify correct adapter is active; reconnect if switched by another context.
-    expected_adapter = driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
-    if ActiveRecord::Base.connection.adapter_name != expected_adapter
-      ActiveRecord::Base.connection_handler.clear_all_connections!
-      ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
-      # Reset cached quoted_table_name which is adapter-specific
-      [ArLowSetting, ArLowSecretNote, ArLowJsonDoc, ArLowUuidRecord,
-       ArLowPrepStmtTest, ArLowMigrationLock].each do |klass|
-        klass.instance_variable_set(:@quoted_table_name, nil)
-      end
-    end
+    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, LOW_MODELS)
     ArLowSetting.delete_all
     ArLowSecretNote.delete_all
     ArLowJsonDoc.delete_all

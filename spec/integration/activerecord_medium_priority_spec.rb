@@ -19,23 +19,13 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_helper|
   include driver_helper
 
-  # List of all model classes defined in this spec for cache resets
-  MEDIUM_MODELS = nil # defined after class declarations
+  MEDIUM_MODELS = [ArMedAccount, ArMedTransaction, ArMedProfile, ArMedEvent, ArMedWidget].freeze
 
   before(:all) do
-    ActiveRecord::Base.connection_handler.clear_all_connections!
-    ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
-
-    # Reset quoted_table_name cache (adapter-specific quoting)
-    ArMedAccount.instance_variable_set(:@quoted_table_name, nil)
-    ArMedTransaction.instance_variable_set(:@quoted_table_name, nil)
-    ArMedProfile.instance_variable_set(:@quoted_table_name, nil)
-    ArMedEvent.instance_variable_set(:@quoted_table_name, nil)
-    ArMedWidget.instance_variable_set(:@quoted_table_name, nil)
+    ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, MEDIUM_MODELS)
 
     ActiveRecord::Schema.define do
       suppress_messages do
-        # --- Type casting and serialization ---
         create_table :ar_med_accounts, force: true do |t|
           t.string :name, null: false
           t.text :settings
@@ -46,7 +36,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
           t.timestamps
         end
 
-        # --- Relation caching, subqueries, or queries ---
         create_table :ar_med_transactions, force: true do |t|
           t.references :ar_med_account, foreign_key: true, null: false
           t.decimal :amount, precision: 10, scale: 2, null: false
@@ -56,7 +45,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
           t.timestamps
         end
 
-        # --- Strict loading / N+1 ---
         create_table :ar_med_profiles, force: true do |t|
           t.references :ar_med_account, foreign_key: true, null: false
           t.string :bio
@@ -64,7 +52,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
           t.timestamps
         end
 
-        # --- find_in_batches / batch processing ---
         create_table :ar_med_events, force: true do |t|
           t.string :name, null: false
           t.string :event_type
@@ -72,7 +59,6 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
           t.timestamps
         end
 
-        # --- ActiveRecord::Store ---
         create_table :ar_med_widgets, force: true do |t|
           t.string :name, null: false
           t.text :config
@@ -96,16 +82,7 @@ RSpec.shared_examples 'ActiveRecord medium priority compatibility' do |driver_he
   end
 
   before do
-    # Verify correct adapter is active; reconnect if switched by another context.
-    expected_adapter = driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
-    if ActiveRecord::Base.connection.adapter_name != expected_adapter
-      ActiveRecord::Base.connection_handler.clear_all_connections!
-      ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
-      # Reset cached quoted_table_name which is adapter-specific
-      [ArMedAccount, ArMedTransaction, ArMedProfile, ArMedEvent, ArMedWidget].each do |klass|
-        klass.instance_variable_set(:@quoted_table_name, nil)
-      end
-    end
+    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, MEDIUM_MODELS)
     ArMedProfile.delete_all
     ArMedTransaction.delete_all
     ArMedAccount.delete_all
