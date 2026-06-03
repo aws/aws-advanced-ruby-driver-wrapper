@@ -62,11 +62,11 @@ module AwsRubyDatabaseDriverWrapper
         )
       end
 
-      def force_connect(host_info, props, is_initial_connection, plugin_to_skip: nil)
+      def internal_connect(host_info, props, is_initial_connection, plugin_to_skip: nil)
         execute_with_subscribed_plugins(
-          'force_connect',
+          'internal_connect',
           lambda do |plugin, next_plugin_callable|
-            plugin.force_connect(host_info, props, is_initial_connection, next_plugin_callable)
+            plugin.internal_connect(host_info, props, is_initial_connection, next_plugin_callable)
           end,
           -> {},
           plugin_to_skip: plugin_to_skip

@@ -58,7 +58,7 @@ module AwsRubyDatabaseDriverWrapper
         conn
       end
 
-      def force_connect(host_info, props, is_initial_connection, pipeline_callable)
+      def internal_connect(host_info, props, is_initial_connection, pipeline_callable)
         connect(host_info, props, is_initial_connection, pipeline_callable)
       end
 
