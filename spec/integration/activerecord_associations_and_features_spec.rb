@@ -21,7 +21,7 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
 
   ASSOC_MODELS = [ArAssocArticle, ArAssocVideo, ArAssocReaction, ArAssocVehicle, ArAssocCar, ArAssocTruck,
                      ArAssocDoctor, ArAssocPatient, ArAssocAppointment, ArAssocForum, ArAssocTopic,
-                     ArAssocOrder, ArAssocLibrary, ArAssocBook, ArAssocProduct, ArAssocCategory, ArAssocItem].freeze
+                     ArAssocOrder, ArAssocLibrary, ArAssocBook, ArAssocProduct, ArAssocCategory, ArAssocItem].freeze unless defined?(ASSOC_MODELS)
 
   before(:all) do
     ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, ASSOC_MODELS)

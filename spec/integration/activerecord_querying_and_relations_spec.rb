@@ -19,7 +19,7 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
   include driver_helper
 
-  QUERY_MODELS = [ArQueryAccount, ArQueryTransaction, ArQueryProfile, ArQueryEvent, ArQueryWidget].freeze
+  QUERY_MODELS = [ArQueryAccount, ArQueryTransaction, ArQueryProfile, ArQueryEvent, ArQueryWidget].freeze unless defined?(QUERY_MODELS)
 
   before(:all) do
     ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, QUERY_MODELS)

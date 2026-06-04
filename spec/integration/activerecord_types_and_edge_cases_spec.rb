@@ -20,7 +20,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   include driver_helper
 
   EDGE_MODELS = [ArEdgeSetting, ArEdgeSecretNote, ArEdgeJsonDoc, ArEdgeUuidRecord,
-                ArEdgePrepStmtTest, ArEdgeMigrationLock].freeze
+                ArEdgePrepStmtTest, ArEdgeMigrationLock].freeze unless defined?(EDGE_MODELS)
 
   before(:all) do
     ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, EDGE_MODELS)
