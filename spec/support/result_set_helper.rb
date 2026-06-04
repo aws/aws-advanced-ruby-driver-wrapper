@@ -14,24 +14,30 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../property_definition'
+# A simple result set wrapper that mimics database query results with fields and enumerable rows.
+# Used in topology utils specs to avoid stubbing methods on plain arrays.
+module ResultSetHelper
+  ResultSet = Struct.new(:fields, :rows) do
+    include Enumerable
 
-module AwsRubyDatabaseDriverWrapper
-  module Utils
-    class ConnectionConfig
-      attr_accessor :wrapper_props, :driver_props, :prefixed_props, :initial_host_info, :driver_name
-
-      def initialize(wrapper_props: {}, driver_props: {}, prefixed_props: {}, initial_host_info: nil, driver_name: nil)
-        @wrapper_props = wrapper_props
-        @driver_props = driver_props
-        @prefixed_props = prefixed_props
-        @initial_host_info = initial_host_info
-        @driver_name = driver_name
-      end
-
-      def cluster_id
-        PropertyDefinition::CLUSTER_ID.get(wrapper_props)
-      end
+    def each(&block)
+      rows.each(&block)
     end
+
+    def first
+      rows.first
+    end
+
+    def empty?
+      rows.empty?
+    end
+
+    def size
+      rows.size
+    end
+  end
+
+  def make_result_set(fields, rows)
+    ResultSet.new(fields, rows)
   end
 end

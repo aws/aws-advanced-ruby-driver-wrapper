@@ -28,10 +28,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
   let(:mock_connection) { double('Connection', host: 'test-instance.us-east-1.rds.example.com', port: '5432') }
   let(:driver_dialect) { double('DriverDialect') }
   let(:host_service) { instance_double(AwsRubyDatabaseDriverWrapper::Services::HostService, set_availability: nil) }
+  let(:db_dialect) { double('DbDialect', create_host_list_provider: nil) }
   let(:dialect_service) do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::DialectService,
                     driver_dialect: driver_dialect,
-                    update_dialect: nil)
+                    update_dialect: nil,
+                    db_dialect: db_dialect)
   end
   let(:connection_service) do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
@@ -84,6 +86,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
       it 'does not call update_dialect on non-initial connection' do
         plugin.connect(host_info, driver_props, false, nil)
         expect(dialect_service).not_to have_received(:update_dialect)
+      end
+
+      it 'assigns host_list_provider when dialect returns one' do
+        mock_provider = double('RdsHostListProvider')
+        allow(db_dialect).to receive(:create_host_list_provider).and_return(mock_provider)
+        allow(host_service).to receive(:host_list_provider=)
+
+        plugin.connect(host_info, driver_props, true, nil)
+
+        expect(db_dialect).to have_received(:create_host_list_provider).with(service_container)
+        expect(host_service).to have_received(:host_list_provider=).with(mock_provider)
       end
     end
 

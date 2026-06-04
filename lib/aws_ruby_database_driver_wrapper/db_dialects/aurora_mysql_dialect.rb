@@ -25,14 +25,18 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       TOPOLOGY_QUERY = <<~SQL
-        SELECT SERVER_ID, CASE WHEN SESSION_ID = 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END,
-        CPU, REPLICA_LAG_IN_MILLISECONDS, LAST_UPDATE_TIMESTAMP
+        SELECT SERVER_ID AS instance_id,
+        CASE WHEN SESSION_ID = 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END AS is_writer,
+        CPU AS cpu_utilization,
+        REPLICA_LAG_IN_MILLISECONDS AS instance_lag,
+        LAST_UPDATE_TIMESTAMP AS last_update_time
         FROM information_schema.replica_host_status
         WHERE time_to_sec(timediff(now(), LAST_UPDATE_TIMESTAMP)) <= 300 OR SESSION_ID = 'MASTER_SESSION_ID'
       SQL
 
-      INSTANCE_ID_QUERY = <<~SQL
-        SELECT @@aurora_server_id AS instance_name
+      # We need to extract ID and instance name. For Aurora they are equivalent, but for multi-az clusters they are not.
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT @@aurora_server_id, @@aurora_server_id
       SQL
 
       WRITER_ID_QUERY = <<~SQL
@@ -66,8 +70,8 @@ module AwsRubyDatabaseDriverWrapper
         DIALECT_UPDATE_CANDIDATES
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, INSTANCE_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
       def topology_query
@@ -84,6 +88,13 @@ module AwsRubyDatabaseDriverWrapper
 
       def blue_green_status_query
         BG_STATUS_QUERY
+      end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::RdsHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return RdsHostListProvider
+        nil
       end
     end
   end

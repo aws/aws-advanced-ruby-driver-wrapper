@@ -19,17 +19,13 @@ require 'set'
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     class FailoverPlugin
-      # TODO: should be connect plus all network bound methods
-      SUBSCRIBED_METHODS = Set['*'].freeze
-
       def initialize(service_container, **options)
         @service_container = service_container
         @options = options
+        @subscribed_methods = Set['connect'] | service_container.dialect_service.driver_dialect.network_bound_methods
       end
 
-      def subscribed_methods
-        SUBSCRIBED_METHODS
-      end
+      attr_reader :subscribed_methods
 
       def connect(_host_info, _props, _is_initial_connection, pipeline_callable)
         @conn = pipeline_callable.call

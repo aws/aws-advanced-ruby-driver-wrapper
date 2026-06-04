@@ -30,11 +30,12 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       TOPOLOGY_QUERY = <<~SQL
-        SELECT id, endpoint, port FROM mysql.rds_topology
+        SELECT id AS instance_id, endpoint AS endpoint FROM mysql.rds_topology
       SQL
 
-      INSTANCE_ID_QUERY = <<~SQL
-        SELECT SUBSTRING_INDEX(endpoint, '.', 1) AS instance_name
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT id AS instance_id,
+        SUBSTRING_INDEX(endpoint, '.', 1) AS instance_name
         FROM mysql.rds_topology
         WHERE id = @@server_id
       SQL
@@ -69,8 +70,8 @@ module AwsRubyDatabaseDriverWrapper
         TOPOLOGY_QUERY
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, INSTANCE_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
       def writer_id_query
@@ -79,6 +80,13 @@ module AwsRubyDatabaseDriverWrapper
 
       def writer_id_column_name
         WRITER_ID_QUERY_COLUMN_NAME
+      end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::RdsHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return RdsHostListProvider
+        nil
       end
     end
   end

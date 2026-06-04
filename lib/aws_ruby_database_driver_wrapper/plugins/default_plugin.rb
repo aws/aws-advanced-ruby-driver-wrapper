@@ -50,9 +50,17 @@ module AwsRubyDatabaseDriverWrapper
               port: conn.port.to_i
             )
           end
+
+          provider = @service_container.dialect_service.db_dialect.create_host_list_provider(@service_container)
+          # TODO: remove if provider guard when all host list providers implemented
+          @service_container.host_service.host_list_provider = provider if provider
         end
 
         conn
+      end
+
+      def internal_connect(host_info, props, is_initial_connection, pipeline_callable)
+        connect(host_info, props, is_initial_connection, pipeline_callable)
       end
 
       def execute(_target_obj, target_method_name, target_callable, *args, **options, &block)

@@ -14,23 +14,36 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../property_definition'
-
 module AwsRubyDatabaseDriverWrapper
   module Utils
-    class ConnectionConfig
-      attr_accessor :wrapper_props, :driver_props, :prefixed_props, :initial_host_info, :driver_name
-
-      def initialize(wrapper_props: {}, driver_props: {}, prefixed_props: {}, initial_host_info: nil, driver_name: nil)
-        @wrapper_props = wrapper_props
-        @driver_props = driver_props
-        @prefixed_props = prefixed_props
-        @initial_host_info = initial_host_info
-        @driver_name = driver_name
+    # Utility methods for converting values from database query results into Ruby types.
+    module ConversionUtils
+      def to_boolean(value)
+        case value
+        when true, 1, '1', 'true', 't', 'TRUE', 'T'
+          true
+        else
+          false
+        end
       end
 
-      def cluster_id
-        PropertyDefinition::CLUSTER_ID.get(wrapper_props)
+      def to_float(value)
+        Float(value || 0)
+      rescue ArgumentError, TypeError
+        0.0
+      end
+
+      def to_time(value)
+        case value
+        when Time
+          value
+        when String
+          Time.parse(value)
+        else
+          Time.now
+        end
+      rescue ArgumentError
+        Time.now
       end
     end
   end

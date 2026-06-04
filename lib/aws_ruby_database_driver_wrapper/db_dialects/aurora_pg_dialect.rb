@@ -31,15 +31,18 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       TOPOLOGY_QUERY = <<~SQL
-        SELECT SERVER_ID, CASE WHEN SESSION_ID OPERATOR(pg_catalog.=) 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END,
-        CPU, COALESCE(REPLICA_LAG_IN_MSEC, 0), LAST_UPDATE_TIMESTAMP
+        SELECT SERVER_ID AS instance_id,
+        CASE WHEN SESSION_ID OPERATOR(pg_catalog.=) 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END AS is_writer,
+        CPU AS cpu_utilization,
+        COALESCE(REPLICA_LAG_IN_MSEC, 0) AS instance_lag,
+        LAST_UPDATE_TIMESTAMP AS last_update_time
         FROM pg_catalog.aurora_replica_status()
         WHERE EXTRACT(EPOCH FROM(pg_catalog.NOW() OPERATOR(pg_catalog.-) LAST_UPDATE_TIMESTAMP)) OPERATOR(pg_catalog.<=) 300
         OR SESSION_ID OPERATOR(pg_catalog.=) 'MASTER_SESSION_ID'
         OR LAST_UPDATE_TIMESTAMP IS NULL
       SQL
 
-      INSTANCE_ID_QUERY = <<~SQL
+      INSTANCE_IDENTITY_QUERY = <<~SQL
         SELECT pg_catalog.aurora_db_instance_identifier() AS instance_name
       SQL
 
@@ -99,12 +102,19 @@ module AwsRubyDatabaseDriverWrapper
         false
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, INSTANCE_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
       def blue_green_status_query
         BG_STATUS_QUERY
+      end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::RdsHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return RdsHostListProvider
+        nil
       end
     end
   end

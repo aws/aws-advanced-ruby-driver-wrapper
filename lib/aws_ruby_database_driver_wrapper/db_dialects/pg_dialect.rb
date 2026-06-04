@@ -26,14 +26,9 @@ module AwsRubyDatabaseDriverWrapper
         SELECT 1 FROM pg_catalog.pg_proc LIMIT 1
       SQL
 
-      HOST_ID_EXPRESSION = "pg_catalog.CONCAT(pg_catalog.inet_server_addr(), ':', pg_catalog.inet_server_port())"
-
-      HOST_ALIAS_QUERY = <<~SQL
-        SELECT #{HOST_ID_EXPRESSION} AS host_alias
-      SQL
-
-      HOST_ID_QUERY = <<~SQL
-        SELECT pg_catalog.inet_server_addr() AS instance_name
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT pg_catalog.inet_server_addr() AS instance_id,
+        pg_catalog.CONCAT(pg_catalog.inet_server_addr(), ':', pg_catalog.inet_server_port()) AS instance_name
       SQL
 
       READER_CHECK_QUERY = <<~SQL
@@ -75,12 +70,15 @@ module AwsRubyDatabaseDriverWrapper
         query_host_role(@driver_dialect, connection, READER_CHECK_QUERY)
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, HOST_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
-      def host_alias_query
-        HOST_ALIAS_QUERY
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::ConnectionStringHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return ConnectionStringHostListProvider
+        nil
       end
     end
   end

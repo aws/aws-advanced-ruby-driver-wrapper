@@ -76,21 +76,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterPgDialect
     end
   end
 
-  describe '#instance_id' do
+  describe '#instance_identity' do
     it 'returns the instance name from query result' do
-      result = [{ 'instance_name' => 'multi-az-pg-cluster-instance-1' }]
-      allow(connection).to receive(:exec).with(described_class::INSTANCE_ID_QUERY).and_return(result)
-      expect(dialect.instance_id(connection)).to eq('multi-az-pg-cluster-instance-1')
+      result = [{ 'instance_id' => '123456789', 'instance_name' => 'instance-1' }]
+      allow(connection).to receive(:exec).with(described_class::INSTANCE_IDENTITY_QUERY).and_return(result)
+      instance_id, instance_name = dialect.instance_identity(connection)
+      expect(instance_id).to eq('123456789')
+      expect(instance_name).to eq('instance-1')
     end
 
     it 'returns nil when result is empty' do
-      allow(connection).to receive(:exec).with(described_class::INSTANCE_ID_QUERY).and_return([])
-      expect(dialect.instance_id(connection)).to be_nil
+      allow(connection).to receive(:exec).with(described_class::INSTANCE_IDENTITY_QUERY).and_return([])
+      expect(dialect.instance_identity(connection)).to be_nil
     end
 
     it 'returns nil on error' do
       allow(connection).to receive(:exec).and_raise(StandardError)
-      expect(dialect.instance_id(connection)).to be_nil
+      expect(dialect.instance_identity(connection)).to be_nil
     end
   end
 end

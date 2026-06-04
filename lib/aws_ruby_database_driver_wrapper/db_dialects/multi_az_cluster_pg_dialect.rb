@@ -25,11 +25,12 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       TOPOLOGY_QUERY = <<~SQL
-        SELECT id, endpoint, port FROM rds_tools.show_topology('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')
+        SELECT id AS instance_id, endpoint AS endpoint FROM rds_tools.show_topology('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')
       SQL
 
-      INSTANCE_ID_QUERY = <<~SQL
-        SELECT SUBSTRING(endpoint FROM 0 FOR POSITION('.' IN endpoint)) AS instance_name
+      INSTANCE_IDENTITY_QUERY = <<~SQL
+        SELECT id AS instance_id,
+        SUBSTRING(endpoint FROM 0 FOR POSITION('.' IN endpoint)) AS instance_name
         FROM rds_tools.show_topology()
         WHERE id OPERATOR(pg_catalog.=) rds_tools.dbi_resource_id()
       SQL
@@ -60,8 +61,8 @@ module AwsRubyDatabaseDriverWrapper
         TOPOLOGY_QUERY
       end
 
-      def instance_id(connection)
-        query_instance_id(@driver_dialect, connection, INSTANCE_ID_QUERY)
+      def instance_identity(connection)
+        query_instance_identity(@driver_dialect, connection, INSTANCE_IDENTITY_QUERY)
       end
 
       def writer_id_query
@@ -70,6 +71,13 @@ module AwsRubyDatabaseDriverWrapper
 
       def writer_id_column_name
         WRITER_ID_QUERY_COLUMN_NAME
+      end
+
+      # @param _service_container [Services::ServiceContainer]
+      # @return [Host::RdsHostListProvider] the host list provider
+      def create_host_list_provider(_service_container)
+        # TODO: return RdsHostListProvider
+        nil
       end
     end
   end
