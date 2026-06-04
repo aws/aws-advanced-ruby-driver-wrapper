@@ -27,21 +27,24 @@ module AwsRubyDatabaseDriverWrapper
       # @param instance_template [Host::HostInfo] default template (used for initial connection)
       # @param instance_templates_by_region [Hash{String => Host::HostInfo}] region -> instance template
       # @param topology_utils [Utils::GlobalAuroraTopologyUtils]
-      # @param connect_func [Proc] ->(host_info) { connection }
+      # @param monitoring_driver_props [Hash]
+      # @param monitoring_wrapper_props [Hash]
       def initialize(
         service_container:,
         cluster_id:,
         instance_template:,
         instance_templates_by_region:,
         topology_utils:,
-        connect_func:
+        monitoring_driver_props:,
+        monitoring_wrapper_props: {}
       )
         super(
           service_container: service_container,
           cluster_id: cluster_id,
           instance_template: instance_template,
           topology_utils: topology_utils,
-          connect_func: connect_func
+          monitoring_driver_props: monitoring_driver_props,
+          monitoring_wrapper_props: monitoring_wrapper_props
         )
         @instance_templates_by_region = instance_templates_by_region
       end

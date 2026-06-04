@@ -54,7 +54,7 @@ module AwsRubyDatabaseDriverWrapper
     # used in ConnectionConfig#prefixed_props. Plugins define their own prefix here.
     TOPOLOGY_MONITORING_PREFIX = 'topology-monitoring-'
 
-    KNOWN_PREFIXES = %w[
+    KNOWN_PREFIXES = [
       TOPOLOGY_MONITORING_PREFIX
     ].freeze
 

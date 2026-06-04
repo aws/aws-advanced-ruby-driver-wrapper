@@ -59,7 +59,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
   let(:global_topology) { [writer_host, reader_east, reader_west] }
 
   let(:mock_connection) { instance_double('Connection', close: nil) }
-  let(:connect_func) { ->(_host_info) { mock_connection } }
 
   let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60) }
   let(:storage_service) { AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
@@ -74,13 +73,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
                       cluster_topology_max_node_threads: 16
                     }, initial_host_info: initial_host_info)
   end
-  let(:connection_service) { instance_double('ConnectionService', config: connection_config) }
+  let(:connection_service) do
+    instance_double('ConnectionService', config: connection_config, wrapper_props: connection_config.wrapper_props,
+                                         initial_host_info: initial_host_info)
+  end
+  let(:plugin_manager) { instance_double('PluginManager') }
   let(:service_container) do
     AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
       event_publisher: event_publisher,
       storage_service: storage_service,
       dialect_service: dialect_service,
-      connection_service: connection_service
+      connection_service: connection_service,
+      plugin_manager: plugin_manager
     )
   end
 
@@ -93,7 +97,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
       instance_template: us_east_template,
       instance_templates_by_region: instance_templates_by_region,
       topology_utils: topology_utils,
-      connect_func: connect_func
+      monitoring_driver_props: { host: 'localhost', port: 5432 },
+      monitoring_wrapper_props: {}
     )
   end
 
@@ -101,6 +106,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
     storage_service.register(:topology, ttl: 300)
     allow(topology_utils).to receive(:query_global_topology) { [writer_host, reader_east, reader_west] }
     allow(db_dialect).to receive(:host_role).and_return(AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER)
+    allow(plugin_manager).to receive(:internal_connect).and_return(mock_connection)
   end
 
   after do
