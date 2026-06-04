@@ -60,14 +60,15 @@ module AwsRubyDatabaseDriverWrapper
         DialectCodes::UNKNOWN => DbDialects::UnknownDialect
       }.freeze
 
-      # @connection_service [ConnectionService]
+      # @param connection_service [ConnectionService]
       # @param driver_name [Symbol] :mysql2 or :postgresql
       def initialize(connection_service, driver_name)
+        @connection_service = connection_service
         @dialect_cache = {}
         @can_update = false
         @driver_dialect = DriverDialects::DriverDialectManager.get_dialect(driver_name)
         @error_handler = DriverDialects::DriverDialectManager.get_error_handler(driver_name)
-        @db_dialect = get_dialect(connection_service)
+        @db_dialect = get_dialect
       end
 
       # Lazily instantiates and caches a dialect by code.
@@ -89,14 +90,13 @@ module AwsRubyDatabaseDriverWrapper
       # Refines the dialect after a connection is established by querying the server
       # (e.g. checking for Aurora-specific functions/tables).
       #
-      # @param connection_service [ConnectionService] the connection service
       # @param connection [Object] the live database connection
       # @return [Object] the updated database dialect
-      def update_dialect(connection_service, connection)
+      def update_dialect(connection)
         return @db_dialect unless @can_update
 
-        host = connection_service.initial_host_info&.host
-        host_url = connection_service.initial_host_info&.url
+        host = @connection_service.initial_host_info&.host
+        host_url = @connection_service.initial_host_info&.url
 
         candidates = @db_dialect.dialect_update_candidates
         candidates&.each do |candidate_code|
@@ -149,14 +149,13 @@ module AwsRubyDatabaseDriverWrapper
       # Uses RdsUtils to classify the host (Aurora cluster, RDS instance, etc.)
       # and selects the appropriate dialect.
       #
-      # @param connection_service [ConnectionService] the connection service
       # @return [Object] the resolved database dialect
-      def get_dialect(connection_service)
+      def get_dialect
         @can_update = false
         @db_dialect = nil
 
-        user_dialect_setting = PropertyDefinition::DIALECT.get(connection_service.wrapper_props)&.to_s
-        host = connection_service.initial_host_info&.host
+        user_dialect_setting = PropertyDefinition::DIALECT.get(@connection_service.wrapper_props)&.to_s
+        host = @connection_service.initial_host_info&.host
 
         dialect_code = if user_dialect_setting.nil? || user_dialect_setting.empty?
                          self.class.known_endpoint_dialects.get(host) unless host.nil?

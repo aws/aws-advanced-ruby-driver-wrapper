@@ -209,7 +209,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
         global_service = described_class.new(global_conn_service, :postgresql)
         original_dialect = global_service.db_dialect
 
-        result = global_service.update_dialect(global_conn_service, connection)
+        result = global_service.update_dialect(connection)
         expect(result).to eq(original_dialect)
       end
 
@@ -233,14 +233,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
           .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::REGION_COUNT_QUERY)
           .and_return(region_count_result)
 
-        result = service.update_dialect(conn_service, connection)
+        result = service.update_dialect(connection)
         expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect)
       end
 
       it 'caches the dialect after update' do
         allow(connection).to receive(:exec).and_raise(StandardError)
 
-        service.update_dialect(conn_service, connection)
+        service.update_dialect(connection)
         expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_PG)
       end
 
@@ -264,7 +264,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
           .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::REGION_COUNT_QUERY)
           .and_return(region_count_result)
 
-        service.update_dialect(conn_service, connection)
+        service.update_dialect(connection)
 
         host_url = conn_service.initial_host_info.url
         expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_PG)
@@ -274,14 +274,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
       it 'sets can_update to false after update completes without match' do
         allow(connection).to receive(:exec).and_raise(StandardError)
 
-        service.update_dialect(conn_service, connection)
+        service.update_dialect(connection)
         expect(service.can_update?).to be false
       end
 
       it 'keeps current dialect when no candidate matches but dialect is not UNKNOWN' do
         allow(connection).to receive(:exec).and_raise(StandardError)
 
-        result = service.update_dialect(conn_service, connection)
+        result = service.update_dialect(connection)
         expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
       end
     end
@@ -308,21 +308,21 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
           .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect::REGION_COUNT_QUERY)
           .and_return(region_count_result)
 
-        result = service.update_dialect(conn_service, connection)
+        result = service.update_dialect(connection)
         expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect)
       end
 
       it 'keeps AuroraMysqlDialect when no candidate matches' do
         allow(connection).to receive(:query).and_raise(StandardError)
 
-        result = service.update_dialect(conn_service, connection)
+        result = service.update_dialect(connection)
         expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect)
       end
 
       it 'caches dialect for host after no candidate matches' do
         allow(connection).to receive(:query).and_raise(StandardError)
 
-        service.update_dialect(conn_service, connection)
+        service.update_dialect(connection)
         expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_MYSQL)
       end
     end
