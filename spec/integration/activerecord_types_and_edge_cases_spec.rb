@@ -19,8 +19,10 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   include driver_helper
 
-  EDGE_MODELS = [ArEdgeSetting, ArEdgeSecretNote, ArEdgeJsonDoc, ArEdgeUuidRecord,
-                ArEdgePrepStmtTest, ArEdgeMigrationLock].freeze unless defined?(EDGE_MODELS)
+  unless defined?(EDGE_MODELS)
+    EDGE_MODELS = [ArEdgeSetting, ArEdgeSecretNote, ArEdgeJsonDoc, ArEdgeUuidRecord,
+                   ArEdgePrepStmtTest, ArEdgeMigrationLock].freeze
+  end
 
   before(:all) do
     ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, EDGE_MODELS)
@@ -363,9 +365,9 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
   describe 'Error handling and edge cases' do
     it 'raises StatementInvalid for bad SQL' do
-      expect {
+      expect do
         ActiveRecord::Base.connection.execute('SELECT * FROM nonexistent_table_xyz')
-      }.to raise_error(ActiveRecord::StatementInvalid)
+      end.to raise_error(ActiveRecord::StatementInvalid)
     end
 
     it 'handles empty result sets gracefully' do
@@ -395,7 +397,7 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
 
     it 'handles concurrent reads safely' do
       ArEdgePrepStmtTest.create!(code: 'CONCURRENT', value: 42)
-      threads = 10.times.map do
+      threads = Array.new(10) do
         Thread.new do
           ActiveRecord::Base.connection_pool.with_connection do
             ArEdgePrepStmtTest.find_by(code: 'CONCURRENT')&.value
@@ -447,7 +449,6 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
     end
   end
 end
-
 
 ActiveRecord::Encryption.configure(
   primary_key: 'test-primary-key-that-is-32-bytes!',
@@ -502,7 +503,6 @@ end
 class ArEdgeMigrationLock < ActiveRecord::Base
   self.table_name = 'ar_edge_migration_locks'
 end
-
 
 RSpec.describe 'ActiveRecord types and edge cases' do
   include_context 'adapter context'

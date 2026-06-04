@@ -112,7 +112,7 @@ RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
     end
 
     it 'handles decimal precision' do
-      account = ArQueryAccount.create!(name: 'DecimalTest', balance: 12345.67)
+      account = ArQueryAccount.create!(name: 'DecimalTest', balance: 12_345.67)
       expect(account.reload.balance).to eq(BigDecimal('12345.67'))
     end
 
@@ -283,8 +283,8 @@ RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
 
     it 'supports or chained with other scopes' do
       results = ArQueryAccount.where(verified: true)
-                            .or(ArQueryAccount.where('balance > ?', 1000))
-                            .order(:name)
+                              .or(ArQueryAccount.where('balance > ?', 1000))
+                              .order(:name)
       expect(results.pluck(:name)).to eq(%w[Alice Bob])
     end
   end
@@ -316,7 +316,7 @@ RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
 
   describe 'find_in_batches' do
     before do
-      15.times { |i| ArQueryEvent.create!(name: "Event #{i}", event_type: 'click', occurred_at: Time.now - i * 3600) }
+      15.times { |i| ArQueryEvent.create!(name: "Event #{i}", event_type: 'click', occurred_at: Time.now - (i * 3600)) }
     end
 
     it 'processes records in batches' do
@@ -479,7 +479,7 @@ RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
 
     it 'supports joins with where on associated table' do
       results = ArQueryAccount.joins(:ar_query_transactions)
-                            .where(ar_query_transactions: { status: 'completed' })
+                              .where(ar_query_transactions: { status: 'completed' })
       expect(results.first.name).to eq('Joiner')
     end
 
@@ -529,7 +529,6 @@ RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
   end
 end
 
-
 class ArQueryAccount < ActiveRecord::Base
   self.table_name = 'ar_query_accounts'
 
@@ -578,7 +577,6 @@ end
 class ArQueryCompletedTransaction < ActiveRecord::Base
   self.table_name = 'ar_query_completed_transactions_view'
 end
-
 
 RSpec.describe 'ActiveRecord querying and relations' do
   include_context 'adapter context'

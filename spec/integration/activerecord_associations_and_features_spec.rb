@@ -19,9 +19,11 @@ require_relative '../support/shared_contexts/adapter_context'
 RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper|
   include driver_helper
 
-  ASSOC_MODELS = [ArAssocArticle, ArAssocVideo, ArAssocReaction, ArAssocVehicle, ArAssocCar, ArAssocTruck,
-                     ArAssocDoctor, ArAssocPatient, ArAssocAppointment, ArAssocForum, ArAssocTopic,
-                     ArAssocOrder, ArAssocLibrary, ArAssocBook, ArAssocProduct, ArAssocCategory, ArAssocItem].freeze unless defined?(ASSOC_MODELS)
+  unless defined?(ASSOC_MODELS)
+    ASSOC_MODELS = [ArAssocArticle, ArAssocVideo, ArAssocReaction, ArAssocVehicle, ArAssocCar, ArAssocTruck,
+                    ArAssocDoctor, ArAssocPatient, ArAssocAppointment, ArAssocForum, ArAssocTopic,
+                    ArAssocOrder, ArAssocLibrary, ArAssocBook, ArAssocProduct, ArAssocCategory, ArAssocItem].freeze
+  end
 
   before(:all) do
     ActiveRecordAdapterHelper.establish_fresh_connection(driver_helper, ASSOC_MODELS)
@@ -338,9 +340,9 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
       p1 = ArAssocPatient.create!(name: 'Patient A')
       p2 = ArAssocPatient.create!(name: 'Patient B')
       ArAssocAppointment.create!(ar_assoc_doctor: doctor, ar_assoc_patient: p1,
-                               scheduled_at: Time.now, notes: 'Visit')
+                                 scheduled_at: Time.now, notes: 'Visit')
       ArAssocAppointment.create!(ar_assoc_doctor: doctor, ar_assoc_patient: p2,
-                               scheduled_at: Time.now, notes: 'Follow-up')
+                                 scheduled_at: Time.now, notes: 'Follow-up')
 
       expect(doctor.ar_assoc_patients.count).to eq(2)
       expect(doctor.ar_assoc_patients.pluck(:name).sort).to eq(['Patient A', 'Patient B'])
@@ -352,9 +354,9 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
       future = Time.now + 86_400
       past = Time.now - 86_400
       ArAssocAppointment.create!(ar_assoc_doctor: doctor, ar_assoc_patient: patient,
-                               scheduled_at: future, notes: 'Future')
+                                 scheduled_at: future, notes: 'Future')
       ArAssocAppointment.create!(ar_assoc_doctor: doctor, ar_assoc_patient: patient,
-                               scheduled_at: past, notes: 'Past')
+                                 scheduled_at: past, notes: 'Past')
 
       upcoming = doctor.ar_assoc_appointments.where('scheduled_at > ?', Time.now)
       expect(upcoming.count).to eq(1)
@@ -384,8 +386,8 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
 
     it 'supports includes with where on association' do
       items = ArAssocItem.includes(:ar_assoc_category)
-                       .where(ar_assoc_categories: { name: 'Category 0' })
-                       .references(:ar_assoc_categories)
+                         .where(ar_assoc_categories: { name: 'Category 0' })
+                         .references(:ar_assoc_categories)
       expect(items.count).to eq(2)
       expect(items.first.ar_assoc_category.name).to eq('Category 0')
     end
@@ -485,7 +487,7 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
       ArAssocOrder.create!(customer_name: 'F1', total: 10.00, status: :pending)
       ArAssocOrder.create!(customer_name: 'F2', total: 20.00, status: :shipped)
 
-      results = ArAssocOrder.where(status: [:pending, :shipped])
+      results = ArAssocOrder.where(status: %i[pending shipped])
       expect(results.count).to eq(2)
     end
 
@@ -530,7 +532,7 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
     it 'handles multiple threads using the connection pool' do
       ArAssocCategory.create!(name: 'Thread Test')
 
-      threads = 5.times.map do |i|
+      threads = Array.new(5) do |i|
         Thread.new do
           ActiveRecord::Base.connection_pool.with_connection do
             ArAssocCategory.create!(name: "Thread-#{i}")
@@ -572,7 +574,6 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
     end
   end
 end
-
 
 class ArAssocArticle < ActiveRecord::Base
   self.table_name = 'ar_assoc_articles'
@@ -655,7 +656,6 @@ class ArAssocItem < ActiveRecord::Base
   self.table_name = 'ar_assoc_items'
   belongs_to :ar_assoc_category
 end
-
 
 RSpec.describe 'ActiveRecord associations and features' do
   include_context 'adapter context'

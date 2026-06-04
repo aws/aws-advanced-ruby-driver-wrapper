@@ -68,7 +68,7 @@ module AwsRubyDatabaseDriverWrapper
         @can_update = false
         @driver_dialect = DriverDialects::DriverDialectManager.get_dialect(driver_name)
         @error_handler = DriverDialects::DriverDialectManager.get_error_handler(driver_name)
-        @db_dialect = get_dialect
+        @db_dialect = init_dialect
       end
 
       # Lazily instantiates and caches a dialect by code.
@@ -150,7 +150,7 @@ module AwsRubyDatabaseDriverWrapper
       # and selects the appropriate dialect.
       #
       # @return [Object] the resolved database dialect
-      def get_dialect
+      def init_dialect
         @can_update = false
         @db_dialect = nil
 

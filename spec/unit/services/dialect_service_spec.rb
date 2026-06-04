@@ -153,10 +153,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
       end
 
       it 'raises an error for an invalid user-specified dialect code' do
-        expect {
+        expect do
           build_service(:postgresql, host: 'my-database.example.com',
                                      wrapper_props: { wrapper_dialect: 'nonexistent-dialect' })
-        }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Unknown dialect code/)
+        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Unknown dialect code/)
       end
     end
 

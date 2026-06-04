@@ -436,22 +436,22 @@ RSpec.shared_examples 'ActiveRecord core' do |driver_helper|
     end
 
     it 'rolls back on exception' do
-      expect {
+      expect do
         ArTestAuthor.transaction do
           ArTestAuthor.create!(name: 'Rollback', email: 'rb@example.com')
           raise ActiveRecord::Rollback
         end
-      }.not_to raise_error
+      end.not_to raise_error
       expect(ArTestAuthor.find_by(name: 'Rollback')).to be_nil
     end
 
     it 'rolls back on unhandled exception' do
-      expect {
+      expect do
         ArTestAuthor.transaction do
           ArTestAuthor.create!(name: 'Error', email: 'err@example.com')
           raise StandardError, 'boom'
         end
-      }.to raise_error(StandardError)
+      end.to raise_error(StandardError)
       expect(ArTestAuthor.find_by(name: 'Error')).to be_nil
     end
 
@@ -632,7 +632,6 @@ RSpec.shared_examples 'ActiveRecord core' do |driver_helper|
   end
 end
 
-
 class ArTestAuthor < ActiveRecord::Base
   self.table_name = 'ar_test_authors'
 
@@ -694,7 +693,6 @@ end
 class ArTestPostsTag < ActiveRecord::Base
   self.table_name = 'ar_test_posts_tags'
 end
-
 
 RSpec.describe 'ActiveRecord core' do
   include_context 'adapter context'
