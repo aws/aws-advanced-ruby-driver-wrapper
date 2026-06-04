@@ -20,7 +20,10 @@ RSpec.shared_examples 'ActiveRecord core' do |driver_helper|
   include driver_helper
 
   before(:all) do
-    ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
+    ActiveRecordAdapterHelper.establish_fresh_connection(
+      driver_helper,
+      [ArTestAuthor, ArTestPost, ArTestComment, ArTestTag, ArTestPostsTag]
+    )
     ActiveRecord::Schema.define do
       suppress_messages do
         create_table :ar_test_authors, force: true do |t|
