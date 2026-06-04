@@ -38,9 +38,9 @@ module AwsRubyDatabaseDriverWrapper
       'Cluster topology high refresh rate in milliseconds (used post-failover)',
       default_value: 100
     )
-    CLUSTER_TOPOLOGY_MAX_NODE_THREADS = WrapperProperty.new(
-      :cluster_topology_max_node_threads,
-      'Maximum number of parallel node monitoring threads during failover',
+    CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS = WrapperProperty.new(
+      :cluster_topology_max_instance_monitors,
+      'Maximum number of parallel instance monitors during topology updates',
       default_value: 16
     )
 

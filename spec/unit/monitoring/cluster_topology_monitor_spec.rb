@@ -59,7 +59,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
     instance_double('ConnectionConfig', wrapper_props: {
                       cluster_topology_refresh_rate_ms: 100,
                       cluster_topology_high_refresh_rate_ms: 50,
-                      cluster_topology_max_node_threads: 16
+                      cluster_topology_max_instance_monitors: 16
                     }, initial_host_info: instance_template)
   end
   let(:connection_service) do
@@ -165,7 +165,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       # Set up a verified writer connection so monitor is in regular mode
       monitor.instance_variable_get(:@monitoring_connection).set(mock_connection, close_old: false)
       monitor.instance_variable_set(:@verified_writer, true)
-      monitor.instance_variable_set(:@writer_host_info, writer_host)
+      monitor.instance_variable_set(:@writer_info, writer_host)
 
       monitor.start
       sleep(0.3) # Let a few cycles run
@@ -224,7 +224,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       monitor.start
       sleep(0.3)
 
-      submitted = monitor.instance_variable_get(:@submitted_hosts)
+      submitted = monitor.instance_variable_get(:@instance_monitors)
       expect(submitted.size).to be <= 16
     end
   end
@@ -262,7 +262,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       conn1 = instance_double('Connection', close: nil)
       conn2 = instance_double('Connection', close: nil)
       monitor.instance_variable_get(:@monitoring_connection).set(conn1, close_old: false)
-      monitor.instance_variable_get(:@host_writer_connection).set(conn2, close_old: false)
+      monitor.instance_variable_get(:@instance_monitors_writer_conn).set(conn2, close_old: false)
 
       monitor.close
 
@@ -274,7 +274,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
   describe 'stable reader topologies' do
     it 'accepts topology when all readers agree for the required duration' do
       # Simulate reader topologies being stored
-      monitor.instance_variable_set(:@reader_topologies, {
+      monitor.instance_variable_set(:@instance_monitor_topologies, {
                                       'reader-1' => topology,
                                       'reader-2' => topology
                                     })
@@ -289,7 +289,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       storage_service.set(:topology, cluster_id, topology)
 
       # First call starts the timer
-      monitor.send(:check_stable_reader_topologies)
+      monitor.send(:check_stable_instance_monitor_topologies)
       expect(monitor.instance_variable_get(:@stable_start_time)).to be > 0
 
       # Simulate time passing beyond the stable duration
@@ -298,17 +298,42 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
         Process.clock_gettime(Process::CLOCK_MONOTONIC) - described_class::STABLE_TOPOLOGIES_DURATION_SEC - 1
       )
 
-      monitor.send(:check_stable_reader_topologies)
+      monitor.send(:check_stable_instance_monitor_topologies)
 
       # Timer should be reset after accepting
       expect(monitor.instance_variable_get(:@stable_start_time)).to eq(0)
+    end
+
+    it 'accepts topology when cluster has more hosts than max_instance_monitors' do
+      # Simulate a cluster with 20 hosts but max_instance_monitors is 16 (default)
+      extra_hosts = (1..20).map do |i|
+        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+          host: "host-#{i}.cluster.us-east-1.rds.amazonaws.com", port: 5432,
+          role: i == 1 ? AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER : AwsRubyDatabaseDriverWrapper::Host::HostRole::READER,
+          id: "host-#{i}"
+        )
+      end
+      storage_service.set(:topology, cluster_id, extra_hosts)
+
+      # Only the first 16 have completed (matching max_instance_monitors)
+      completed = extra_hosts.first(16).to_h { |h| [h.id, true] }
+      monitor.instance_variable_set(:@completed_one_cycle, completed)
+
+      # All monitored readers report the same topology
+      reader_topos = extra_hosts.first(16).reject { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
+                                          .to_h { |h| [h.id, extra_hosts] }
+      monitor.instance_variable_set(:@instance_monitor_topologies, reader_topos)
+
+      # First call starts the timer
+      monitor.send(:check_stable_instance_monitor_topologies)
+      expect(monitor.instance_variable_get(:@stable_start_time)).to be > 0
     end
 
     it 'resets timer when topologies disagree' do
       topo_a = [writer_host, reader_host]
       topo_b = [writer_host] # Different
 
-      monitor.instance_variable_set(:@reader_topologies, {
+      monitor.instance_variable_set(:@instance_monitor_topologies, {
                                       'reader-1' => topo_a,
                                       'reader-2' => topo_b
                                     })
@@ -321,7 +346,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       monitor.instance_variable_set(:@stable_start_time, 12_345.0)
       storage_service.set(:topology, cluster_id, topology)
 
-      monitor.send(:check_stable_reader_topologies)
+      monitor.send(:check_stable_instance_monitor_topologies)
       expect(monitor.instance_variable_get(:@stable_start_time)).to eq(0)
     end
   end
@@ -338,7 +363,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
     it 'caps at MAX_BACKOFF_MS' do
       result = monitor.send(:calculate_backoff, 100)
-      expect(result).to be <= described_class::MAX_BACKOFF_MS
+      expect(result).to be <= described_class::MAX_BACKOFF_SEC
     end
   end
 end
