@@ -90,7 +90,11 @@ module ActiveRecord
           exception
         elsif exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError)
           @connection_broken = true
-          ActiveRecord::ConnectionFailed.new(message, sql: sql, binds: binds, connection_pool: @pool)
+          if defined?(ActiveRecord::ConnectionFailed)
+            ActiveRecord::ConnectionFailed.new(message, sql: sql, binds: binds, connection_pool: @pool)
+          else
+            ActiveRecord::ConnectionNotEstablished.new(message)
+          end
         else
           exception
         end
