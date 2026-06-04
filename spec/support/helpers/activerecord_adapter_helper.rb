@@ -29,17 +29,4 @@ module ActiveRecordAdapterHelper
     ActiveRecord::Base.establish_connection(driver_helper.adapter_config)
     reset_table_name_cache(model_classes)
   end
-
-  # Returns the expected adapter name for the given driver_helper config.
-  def self.expected_adapter_name(driver_helper)
-    driver_helper.adapter_config[:adapter].include?('mysql') ? 'AwsMySQL2' : 'AwsPostgreSQL'
-  end
-
-  # Ensures the correct adapter is active. Only reconnects if the adapter has been
-  # switched by another test context (avoids expensive reconnections when unnecessary).
-  def self.ensure_correct_adapter(driver_helper, model_classes)
-    return if ActiveRecord::Base.connection.adapter_name == expected_adapter_name(driver_helper)
-
-    establish_fresh_connection(driver_helper, model_classes)
-  end
 end

@@ -151,7 +151,6 @@ RSpec.shared_examples 'ActiveRecord associations and features' do |driver_helper
   end
 
   before do
-    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, ASSOC_MODELS)
     ArAssocReaction.delete_all
     ArAssocArticle.delete_all
     ArAssocVideo.delete_all

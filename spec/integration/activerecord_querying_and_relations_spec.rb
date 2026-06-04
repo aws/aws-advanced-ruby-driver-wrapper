@@ -82,7 +82,6 @@ RSpec.shared_examples 'ActiveRecord querying and relations' do |driver_helper|
   end
 
   before do
-    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, QUERY_MODELS)
     ArQueryProfile.delete_all
     ArQueryTransaction.delete_all
     ArQueryAccount.delete_all

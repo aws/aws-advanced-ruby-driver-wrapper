@@ -87,7 +87,6 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   end
 
   before do
-    ActiveRecordAdapterHelper.ensure_correct_adapter(driver_helper, EDGE_MODELS)
     ArEdgeSetting.delete_all
     ArEdgeSecretNote.delete_all
     ArEdgeJsonDoc.delete_all
