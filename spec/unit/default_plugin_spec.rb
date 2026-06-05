@@ -39,6 +39,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
                     pg?: false,
                     multi_host_url?: false,
+                    update_current_connection: nil,
                     wrapper_props: wrapper_props)
   end
   let(:session_state_service) { nil }
@@ -80,7 +81,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
       it 'calls update_dialect on initial connection' do
         plugin.connect(host_info, driver_props, true, nil)
-        expect(dialect_service).to have_received(:update_dialect).with(connection_service, mock_connection)
+        expect(dialect_service).to have_received(:update_dialect).with(mock_connection)
+      end
+
+      it 'calls update_current_connection with the new connection and host_info' do
+        plugin.connect(host_info, driver_props, true, nil)
+        expect(connection_service).to have_received(:update_current_connection).with(mock_connection, host_info)
+      end
+
+      it 'calls update_current_connection before update_dialect' do
+        call_order = []
+        allow(connection_service).to receive(:update_current_connection) { call_order << :update_current_connection }
+        allow(dialect_service).to receive(:update_dialect) { call_order << :update_dialect }
+
+        plugin.connect(host_info, driver_props, true, nil)
+
+        expect(call_order).to eq(%i[update_current_connection update_dialect])
       end
 
       it 'does not call update_dialect on non-initial connection' do
@@ -109,6 +125,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
                         pg?: true,
                         multi_host_url?: true,
                         config: mock_config,
+                        update_current_connection: nil,
                         wrapper_props: wrapper_props)
       end
 

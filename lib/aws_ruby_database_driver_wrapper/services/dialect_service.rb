@@ -60,12 +60,15 @@ module AwsRubyDatabaseDriverWrapper
         DialectCodes::UNKNOWN => DbDialects::UnknownDialect
       }.freeze
 
+      # @param connection_service [ConnectionService]
       # @param driver_name [Symbol] :mysql2 or :postgresql
-      def initialize(driver_name)
-        @driver_dialect = DriverDialects::DriverDialectManager.get_dialect(driver_name)
-        @error_handler = DriverDialects::DriverDialectManager.get_error_handler(driver_name)
+      def initialize(connection_service, driver_name)
+        @connection_service = connection_service
         @dialect_cache = {}
         @can_update = false
+        @driver_dialect = DriverDialects::DriverDialectManager.get_dialect(driver_name)
+        @error_handler = DriverDialects::DriverDialectManager.get_error_handler(driver_name)
+        @db_dialect = init_dialect
       end
 
       # Lazily instantiates and caches a dialect by code.
@@ -84,59 +87,16 @@ module AwsRubyDatabaseDriverWrapper
         @can_update
       end
 
-      # Resolves the initial database dialect from the initial connection info.
-      # Uses RdsUtils to classify the host (Aurora cluster, RDS instance, etc.)
-      # and selects the appropriate dialect.
-      #
-      # @param connection_service [ConnectionService] the connection service
-      # @return [Object] the resolved database dialect
-      def get_dialect(connection_service)
-        @can_update = false
-        @db_dialect = nil
-
-        user_dialect_setting = PropertyDefinition::DIALECT.get(connection_service.wrapper_props)&.to_s
-        host = connection_service.initial_host_info&.host
-
-        dialect_code = if user_dialect_setting.nil? || user_dialect_setting.empty?
-                         self.class.known_endpoint_dialects.get(host) unless host.nil?
-                       else
-                         user_dialect_setting
-                       end
-
-        if dialect_code
-          dialect = dialect_for_code(dialect_code)
-          raise Errors::AwsError, "Unknown dialect code: #{dialect_code}" unless dialect
-
-          @dialect_code = dialect_code
-          @db_dialect = dialect
-          return @db_dialect
-        end
-
-        rds_type = Utils::RdsUtils.identify_rds_type(host)
-
-        @dialect_code = if @driver_dialect == DriverDialects::DriverDialectManager::MYSQL_DIALECT
-                          resolve_mysql_dialect(rds_type)
-                        elsif @driver_dialect == DriverDialects::DriverDialectManager::PG_DIALECT
-                          resolve_pg_dialect(rds_type)
-                        else
-                          DialectCodes::UNKNOWN
-                        end
-
-        @db_dialect = dialect_for_code(@dialect_code)
-        @db_dialect
-      end
-
       # Refines the dialect after a connection is established by querying the server
       # (e.g. checking for Aurora-specific functions/tables).
       #
-      # @param connection_service [ConnectionService] the connection service
       # @param connection [Object] the live database connection
       # @return [Object] the updated database dialect
-      def update_dialect(connection_service, connection)
+      def update_dialect(connection)
         return @db_dialect unless @can_update
 
-        host = connection_service.initial_host_info&.host
-        host_url = connection_service.initial_host_info&.url
+        host = @connection_service.initial_host_info&.host
+        host_url = @connection_service.initial_host_info&.url
 
         candidates = @db_dialect.dialect_update_candidates
         candidates&.each do |candidate_code|
@@ -184,6 +144,47 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       private
+
+      # Resolves the initial database dialect from the initial connection info.
+      # Uses RdsUtils to classify the host (Aurora cluster, RDS instance, etc.)
+      # and selects the appropriate dialect.
+      #
+      # @return [Object] the resolved database dialect
+      def init_dialect
+        @can_update = false
+        @db_dialect = nil
+
+        user_dialect_setting = PropertyDefinition::DIALECT.get(@connection_service.wrapper_props)&.to_s
+        host = @connection_service.initial_host_info&.host
+
+        dialect_code = if user_dialect_setting.nil? || user_dialect_setting.empty?
+                         self.class.known_endpoint_dialects.get(host) unless host.nil?
+                       else
+                         user_dialect_setting
+                       end
+
+        if dialect_code
+          dialect = dialect_for_code(dialect_code)
+          raise Errors::AwsError, "Unknown dialect code: #{dialect_code}" unless dialect
+
+          @dialect_code = dialect_code
+          @db_dialect = dialect
+          return @db_dialect
+        end
+
+        rds_type = Utils::RdsUtils.identify_rds_type(host)
+
+        @dialect_code = if @driver_dialect == DriverDialects::DriverDialectManager::MYSQL_DIALECT
+                          resolve_mysql_dialect(rds_type)
+                        elsif @driver_dialect == DriverDialects::DriverDialectManager::PG_DIALECT
+                          resolve_pg_dialect(rds_type)
+                        else
+                          DialectCodes::UNKNOWN
+                        end
+
+        @db_dialect = dialect_for_code(@dialect_code)
+        @db_dialect
+      end
 
       def resolve_mysql_dialect(rds_type)
         if rds_type == Utils::RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER
