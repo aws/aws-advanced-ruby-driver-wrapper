@@ -24,7 +24,8 @@ module AwsRubyDatabaseDriverWrapper
     class PluginManager
       WEIGHT_RELATIVE_TO_PRIOR_PLUGIN = -1
       DEFAULT_PLUGINS = 'failover'
-      private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :DEFAULT_PLUGINS
+      NOOP_CALLABLE = -> {}.freeze
+      private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :DEFAULT_PLUGINS, :NOOP_CALLABLE
 
       @plugin_classes = {
         'failover' => Plugins::FailoverPlugin
@@ -57,18 +58,18 @@ module AwsRubyDatabaseDriverWrapper
           lambda do |plugin, next_plugin_callable|
             plugin.connect(host_info, props, is_initial_connection, next_plugin_callable)
           end,
-          -> {},
+          NOOP_CALLABLE,
           plugin_to_skip: plugin_to_skip
         )
       end
 
-      def internal_connect(host_info, props, is_initial_connection, plugin_to_skip: nil)
+      def internal_connect(host_info, props, wrapper_override_props, is_initial_connection, plugin_to_skip: nil)
         execute_with_subscribed_plugins(
           'internal_connect',
           lambda do |plugin, next_plugin_callable|
-            plugin.internal_connect(host_info, props, is_initial_connection, next_plugin_callable)
+            plugin.internal_connect(host_info, props, wrapper_override_props, is_initial_connection, next_plugin_callable)
           end,
-          -> {},
+          NOOP_CALLABLE,
           plugin_to_skip: plugin_to_skip
         )
       end

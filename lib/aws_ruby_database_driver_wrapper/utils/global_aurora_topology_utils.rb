@@ -118,7 +118,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # Builds a HostInfo from a single global Aurora topology query result row.
       #
-      # Expected columns: host_id, is_writer, node_lag, aws_region.
+      # Expected columns: host_id, is_writer, instance_lag, aws_region.
       #
       # @param row [Hash] a single row from the topology query result.
       # @param initial_host_info [AwsRubyDatabaseDriverWrapper::Host::HostInfo] the initial host info.

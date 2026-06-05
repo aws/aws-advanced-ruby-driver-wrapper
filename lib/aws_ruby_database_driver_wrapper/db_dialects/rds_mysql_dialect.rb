@@ -83,6 +83,13 @@ module AwsRubyDatabaseDriverWrapper
       def blue_green_status_query
         BG_STATUS_QUERY
       end
+
+      def create_host_list_provider(service_container)
+        require_relative '../utils/aurora_topology_utils'
+        require_relative '../host/rds_host_list_provider'
+        topology_utils = Utils::AuroraTopologyUtils.new(dialect: self)
+        Host::RdsHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
+      end
     end
   end
 end

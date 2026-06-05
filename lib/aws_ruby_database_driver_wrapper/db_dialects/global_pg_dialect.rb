@@ -29,8 +29,10 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       GLOBAL_TOPOLOGY_QUERY = <<~SQL
-        SELECT SERVER_ID, CASE WHEN SESSION_ID = 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END,
-        VISIBILITY_LAG_IN_MSEC, AWS_REGION
+        SELECT SERVER_ID AS instance_id,
+        CASE WHEN SESSION_ID = 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END AS is_writer,
+        VISIBILITY_LAG_IN_MSEC AS instance_lag,
+        AWS_REGION AS aws_region
         FROM aurora_global_db_instance_status()
       SQL
 
@@ -73,11 +75,13 @@ module AwsRubyDatabaseDriverWrapper
         REGION_BY_INSTANCE_ID_QUERY
       end
 
-      # @param _service_container [Services::ServiceContainer]
+      # @param service_container [Services::ServiceContainer]
       # @return [Host::GlobalAuroraHostListProvider] the host list provider
-      def create_host_list_provider(_service_container)
-        # TODO: return GlobalAuroraHostListProvider
-        nil
+      def create_host_list_provider(service_container)
+        require_relative '../utils/global_aurora_topology_utils'
+        require_relative '../host/global_aurora_host_list_provider'
+        topology_utils = Utils::GlobalAuroraTopologyUtils.new(dialect: self)
+        Host::GlobalAuroraHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
       end
     end
   end
