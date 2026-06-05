@@ -179,10 +179,10 @@ module AwsRubyDatabaseDriverWrapper
       @connection = connection
     end
 
-    def each(&block)
+    def each(*args, &block)
       @service_container.plugin_manager.execute(
         @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH,
-        ->(&blk) { @result.each(&blk) },
+        ->(&blk) { @result.each(*args, &blk) },
         &block
       )
     end

@@ -61,17 +61,18 @@ module ActiveRecord
       end
 
       def translate_exception(exception, message:, sql:, binds:)
-        unless exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
-          super
-          return exception
-        end
+        return super unless exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
 
         if exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
           @needs_reconfiguration = true
           exception
         elsif exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError)
           @connection_broken = true
-          ActiveRecord::ConnectionFailed.new(message, sql: sql, binds: binds, connection_pool: @pool)
+          if defined?(ActiveRecord::ConnectionFailed)
+            ActiveRecord::ConnectionFailed.new(message, sql: sql, binds: binds, connection_pool: @pool)
+          else
+            ActiveRecord::ConnectionNotEstablished.new(message)
+          end
         else
           exception
         end

@@ -99,5 +99,25 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
       expect(plugin.calls).to eq(['before:result.each', 'after:result.each'])
       expect(plugin.caught_error).to be_nil
     end
+
+    it 'forwards args to the underlying result each method' do
+      mock_result = double('Mysql2::Result')
+      allow(mock_result).to receive(:each) do |*args, &blk|
+        expect(args).to eq([{ as: :array }])
+        blk.call([1, 'Alice'])
+        blk.call([2, 'Bob'])
+      end
+
+      mock_connection = double('Mysql2::Client')
+      plugin = TrackingPlugin.new
+      service_container = build_service_container_with_plugins([plugin], mock_connection)
+
+      wrapper_result = described_class.new(mock_result, service_container, mock_connection)
+
+      rows = []
+      wrapper_result.each(as: :array) { |row| rows << row }
+
+      expect(rows).to eq([[1, 'Alice'], [2, 'Bob']])
+    end
   end
 end

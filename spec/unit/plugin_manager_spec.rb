@@ -97,7 +97,7 @@ module TestPlugins
 end
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
-  # Helper to build a PluginService with directly injected plugins (bypassing factory loading).
+  # Helper to build a PluginManager with directly injected plugins (bypassing factory loading).
   def build_manager_with_plugins(plugins)
     manager = AwsRubyDatabaseDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, plugins)
