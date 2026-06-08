@@ -52,7 +52,7 @@ module AwsRubyDatabaseDriverWrapper
 
         begin
           result = @driver_dialect.execute(connection, REPORT_HOST_EXISTS_QUERY)
-          return false if result.empty?
+          return false if result.none?
 
           row = result.first
           report_host = row.values[1]

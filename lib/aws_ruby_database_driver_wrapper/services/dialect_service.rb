@@ -98,12 +98,12 @@ module AwsRubyDatabaseDriverWrapper
       #
       # @param connection [Object] the live database connection
       # @return [Object] the updated database dialect
-      def update_dialect(connection_service, connection)
+      def update_dialect(connection)
         original_dialect_code = @dialect_code
 
         if @can_update
-          host = connection_service.initial_host_info&.host
-          host_url = connection_service.initial_host_info&.url
+          host = @connection_service.initial_host_info&.host
+          host_url = @connection_service.initial_host_info&.url
 
           candidates = @db_dialect.dialect_update_candidates
           candidates&.each do |candidate_code|

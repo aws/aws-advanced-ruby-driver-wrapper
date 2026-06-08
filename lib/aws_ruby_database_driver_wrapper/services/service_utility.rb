@@ -54,8 +54,7 @@ module AwsRubyDatabaseDriverWrapper
         container = ServiceContainer.new
         container.event_publisher = CoreServices.event_publisher
         container.connection_service = ConnectionService.new(container, config)
-        container.dialect_service = DialectService.new(config.driver_name)
-        container.dialect_service.get_dialect(container.connection_service)
+        container.dialect_service = DialectService.new(container.connection_service, config.driver_name)
         container.host_service = HostService.new(container)
         container.session_state_service = SessionStateService.new
         container.storage_service = CoreServices.storage_service
