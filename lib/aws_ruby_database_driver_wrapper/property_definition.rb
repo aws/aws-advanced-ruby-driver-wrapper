@@ -26,10 +26,22 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300)
-    FAILOVER_CLUSTER_TOPOLOGY_REFRESH_RATE_SEC = WrapperProperty.new(
-      :failover_cluster_topology_refresh_rate_sec,
-      'Topology refresh rate during failover in seconds',
-      default_value: 2
+
+    # -- Topology Monitoring --
+    CLUSTER_TOPOLOGY_REFRESH_RATE_MS = WrapperProperty.new(
+      :cluster_topology_refresh_rate_ms,
+      'Cluster topology refresh rate in milliseconds',
+      default_value: 5000
+    )
+    CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_MS = WrapperProperty.new(
+      :cluster_topology_high_refresh_rate_ms,
+      'Cluster topology high refresh rate in milliseconds (used post-failover)',
+      default_value: 100
+    )
+    CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS = WrapperProperty.new(
+      :cluster_topology_max_instance_monitors,
+      'Maximum number of parallel instance monitors during topology updates',
+      default_value: 16
     )
 
     # Built once at load time from constants — used by parser to split props
@@ -42,7 +54,7 @@ module AwsRubyDatabaseDriverWrapper
     # used in ConnectionConfig#prefixed_props. Plugins define their own prefix here.
     TOPOLOGY_MONITORING_PREFIX = 'topology-monitoring-'
 
-    KNOWN_PREFIXES = %w[
+    KNOWN_PREFIXES = [
       TOPOLOGY_MONITORING_PREFIX
     ].freeze
 

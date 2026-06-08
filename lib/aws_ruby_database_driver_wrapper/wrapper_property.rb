@@ -25,19 +25,21 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     # @return [String, Boolean, Integer, nil] the value from props, or the property's default
-    def get(props)
+    def get(props, override = nil)
+      return override.fetch(@name, @default_value) if override&.key?(@name)
+
       props.fetch(@name, @default_value)
     end
 
-    def get_bool(props)
-      val = get(props)
+    def get_bool(props, override = nil)
+      val = get(props, override)
       return val if val.is_a?(TrueClass) || val.is_a?(FalseClass)
 
       val.to_s.downcase == 'true'
     end
 
-    def get_int(props)
-      val = get(props)
+    def get_int(props, override = nil)
+      val = get(props, override)
       val.is_a?(Integer) ? val : val.to_i
     end
   end

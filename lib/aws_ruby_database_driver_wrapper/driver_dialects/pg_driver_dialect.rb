@@ -46,7 +46,7 @@ module AwsRubyDatabaseDriverWrapper
       ]).freeze
 
       def connect(host_info, config)
-        PG::Connection.new(**prepare_connect_config(host_info, config))
+        ::PG::Connection.new(**prepare_connect_config(host_info, config))
       end
 
       def execute(connection, sql)
@@ -56,7 +56,7 @@ module AwsRubyDatabaseDriverWrapper
       def ping(connection)
         connection.exec(PING_SQL)
         true
-      rescue PG::Error
+      rescue ::PG::Error
         false
       end
 
@@ -66,14 +66,14 @@ module AwsRubyDatabaseDriverWrapper
 
       def close_connection(connection)
         connection.close
-      rescue PG::Error => e
+      rescue ::PG::Error => e
         logger.error("Failed to close PostgreSQL connection: #{e.message}")
       end
 
       def sql_state(exception)
-        return nil unless exception.is_a?(PG::Error) && exception.result
+        return nil unless exception.is_a?(::PG::Error) && exception.result
 
-        exception.result.error_field(PG::PG_DIAG_SQLSTATE)
+        exception.result.error_field(::PG::PG_DIAG_SQLSTATE)
       end
 
       def network_bound_methods
