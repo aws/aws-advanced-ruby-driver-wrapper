@@ -27,6 +27,7 @@ module AwsRubyDatabaseDriverWrapper
     # Continuously monitors cluster topology, caches it in StorageService, and provides
     # fast writer re-discovery during failover via parallel host probing (panic mode).
     class ClusterTopologyMonitor < Monitor
+      TERMINATION_TIMEOUT_SEC = 30.0
       HIGH_REFRESH_DURATION_SEC = 30.0
       STABLE_TOPOLOGIES_DURATION_SEC = 15.0
       TOPOLOGY_CACHE_NAME = :topology
@@ -48,7 +49,7 @@ module AwsRubyDatabaseDriverWrapper
         monitoring_driver_props:,
         monitoring_wrapper_props: {}
       )
-        super(termination_timeout_sec: 30.0)
+        super(termination_timeout_sec: TERMINATION_TIMEOUT_SEC)
 
         @service_container = service_container
         @cluster_id = cluster_id
@@ -532,11 +533,10 @@ module AwsRubyDatabaseDriverWrapper
 
       def delay(use_high_rate:)
         use_high_rate = true if @high_refresh_end_time.positive? && monotonic_time < @high_refresh_end_time
-        use_high_rate = true if @update_requested
-
-        duration = use_high_rate ? @high_refresh_rate_sec : @refresh_rate_sec
 
         @topology_mutex.synchronize do
+          use_high_rate = true if @update_requested
+          duration = use_high_rate ? @high_refresh_rate_sec : @refresh_rate_sec
           @topology_cv.wait(@topology_mutex, duration) unless @update_requested || stopped?
         end
       end
