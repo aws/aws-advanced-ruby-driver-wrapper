@@ -18,6 +18,7 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     # Utility methods for converting values from database query results into Ruby types.
     module ConversionUtils
+      require 'time'
       def to_boolean(value)
         case value
         when true, 1, '1', 'true', 't', 'TRUE', 'T'
