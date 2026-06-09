@@ -77,7 +77,7 @@ module AwsRubyDatabaseDriverWrapper
         # @param key [Object] item key.
         # @return [Boolean]
         def exists?(name, key)
-          !get(name, key).nil?
+          !get(name, key, register_access: false).nil?
         end
 
         # Removes an item.

@@ -27,7 +27,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Array(String, String), nil] the instance_id and instance_name, or nil if they cannot be determined
       def query_instance_identity(driver_dialect, connection, host_id_query)
         result = driver_dialect.execute(connection, host_id_query)
-        return nil if result.nil? || result.empty?
+        return nil if result.nil? || result.none?
 
         row = result.first
         values = row.values
@@ -60,7 +60,7 @@ module AwsRubyDatabaseDriverWrapper
 
         queries.each do |existence_query|
           result = driver_dialect.execute(connection, existence_query)
-          return false if result.nil? || result.empty?
+          return false if result.nil? || result.none?
         end
         true
       rescue StandardError

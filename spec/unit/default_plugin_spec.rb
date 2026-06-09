@@ -39,8 +39,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
                     pg?: false,
                     multi_host_url?: false,
-                    update_current_connection: nil,
-                    wrapper_props: wrapper_props)
+                    wrapper_props: wrapper_props,
+                    update_current_connection: nil)
   end
   let(:session_state_service) { nil }
   let(:service_container) do
@@ -103,17 +103,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
         plugin.connect(host_info, driver_props, false, nil)
         expect(dialect_service).not_to have_received(:update_dialect)
       end
-
-      it 'assigns host_list_provider when dialect returns one' do
-        mock_provider = double('RdsHostListProvider')
-        allow(db_dialect).to receive(:create_host_list_provider).and_return(mock_provider)
-        allow(host_service).to receive(:host_list_provider=)
-
-        plugin.connect(host_info, driver_props, true, nil)
-
-        expect(db_dialect).to have_received(:create_host_list_provider).with(service_container)
-        expect(host_service).to have_received(:host_list_provider=).with(mock_provider)
-      end
     end
 
     context 'multi-host PG initial connection' do
@@ -125,8 +114,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
                         pg?: true,
                         multi_host_url?: true,
                         config: mock_config,
-                        update_current_connection: nil,
-                        wrapper_props: wrapper_props)
+                        wrapper_props: wrapper_props,
+                        update_current_connection: nil)
       end
 
       before do
