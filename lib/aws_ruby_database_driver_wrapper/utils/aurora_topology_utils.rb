@@ -37,7 +37,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Boolean] true if the connection is to a writer instance, false otherwise.
       def writer_instance?(conn)
         results = @dialect.execute(conn, @dialect.writer_id_query)
-        return false if results.nil? || results.empty?
+        return false if results.nil? || results.none?
 
         row = results.first
         !row.nil? && !row.values.first.nil? && !row.values.first.to_s.empty?

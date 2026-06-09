@@ -60,6 +60,7 @@ module AwsRubyDatabaseDriverWrapper
         container.storage_service = CoreServices.storage_service
         container.monitor_service = CoreServices.monitor_service
         container.plugin_manager = PluginManager.new(container)
+        container.dialect_service.setup_initial_provider(container)
         container
       end
 

@@ -32,7 +32,8 @@ module AwsRubyDatabaseDriverWrapper
 
       MONITORING_PROPERTY_PREFIX = 'topology-monitoring-'
       TOPOLOGY_CACHE_NAME = :topology
-      DEFAULT_TOPOLOGY_QUERY_TIMEOUT_MS = 5000
+      DEFAULT_TOPOLOGY_QUERY_TIMEOUT_SEC = 5.0
+      MONITOR_EXPIRATION_TIMEOUT_SEC = 900.0 # 15 minutes
 
       attr_reader :cluster_id, :instance_template, :rds_url_type
 
@@ -45,12 +46,12 @@ module AwsRubyDatabaseDriverWrapper
         props = @service_container.connection_service.wrapper_props
         @cluster_id = PropertyDefinition::CLUSTER_ID.get(props).to_s
         @instance_template = build_instance_template(props)
+        validate_host_pattern!(@instance_template.host)
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host_info.host)
 
         prefixed = @service_container.connection_service.prefixed_props[MONITORING_PROPERTY_PREFIX] || {}
         @monitoring_driver_props, @monitoring_wrapper_props = build_monitoring_props(prefixed)
 
-        validate_host_pattern!(@instance_template.host)
         register_monitor_type
         register_topology_cache
       end
@@ -61,7 +62,9 @@ module AwsRubyDatabaseDriverWrapper
         stored = stored_topology
         return stored unless stored.nil?
 
-        hosts = force_refresh(false, DEFAULT_TOPOLOGY_QUERY_TIMEOUT_MS)
+        return initial_host_list unless @service_container.dialect_service.dialect_confirmed?
+
+        hosts = force_refresh(false, DEFAULT_TOPOLOGY_QUERY_TIMEOUT_SEC)
         return hosts unless hosts.nil? || hosts.empty?
 
         stored_topology || initial_host_list
@@ -69,9 +72,11 @@ module AwsRubyDatabaseDriverWrapper
 
       # Forces monitor to fetch fresh topology.
       # @param verify_writer [Boolean]
-      # @param timeout_ms [Integer]
+      # @param timeout_sec [Float]
       # @return [Array<HostInfo>, nil]
-      def force_refresh(verify_writer, timeout_ms)
+      def force_refresh(verify_writer, timeout_sec)
+        return initial_host_list unless @service_container.dialect_service.dialect_confirmed?
+
         monitor = @service_container.monitor_service.run_if_absent(:cluster_topology, @cluster_id, @service_container) do |_sc|
           Monitoring::ClusterTopologyMonitor.new(
             service_container: @service_container,
@@ -82,7 +87,7 @@ module AwsRubyDatabaseDriverWrapper
             monitoring_wrapper_props: @monitoring_wrapper_props
           )
         end
-        monitor.force_refresh(verify_writer, timeout_ms)
+        monitor.force_refresh(verify_writer, timeout_sec)
       rescue Timeout::Error
         nil
       end
@@ -95,7 +100,7 @@ module AwsRubyDatabaseDriverWrapper
       private
 
       def stored_topology
-        @service_container.storage_service.get(TOPOLOGY_CACHE_NAME, @cluster_id, register_access: false)
+        @service_container.storage_service.get(TOPOLOGY_CACHE_NAME, @cluster_id, register_access: true)
       end
 
       def initial_host_list
@@ -149,7 +154,7 @@ module AwsRubyDatabaseDriverWrapper
       def register_monitor_type
         @service_container.monitor_service.register_type(
           :cluster_topology,
-          expiration_timeout_sec: 600,
+          expiration_timeout_sec: MONITOR_EXPIRATION_TIMEOUT_SEC,
           produced_data_type: TOPOLOGY_CACHE_NAME
         )
       end

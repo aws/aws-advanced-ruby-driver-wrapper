@@ -122,7 +122,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
         monitor.start
         sleep(0.05)
 
-        result = monitor.force_refresh(false, 2000)
+        result = monitor.force_refresh(false, 2.0)
         expect(result).not_to be_nil
         expect(result).to be_a(Array)
       end
@@ -136,7 +136,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
         # Now force_refresh with verify_writer — it nils the connection, re-enters panic,
         # finds the writer again, and writes a new topology object to the cache.
-        result = monitor.force_refresh(true, 2000)
+        result = monitor.force_refresh(true, 2.0)
         expect(result).not_to be_nil
       end
     end
@@ -147,11 +147,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
         allow(topology_utils).to receive(:query_topology).and_return(nil)
         storage_service.set(:topology, cluster_id, topology)
 
-        expect { monitor.force_refresh(false, 50) }.to raise_error(Timeout::Error)
+        expect { monitor.force_refresh(false, 0.05) }.to raise_error(Timeout::Error)
       end
     end
 
-    context 'when timeout_ms is 0' do
+    context 'when timeout_sec is 0' do
       it 'returns current hosts immediately' do
         storage_service.set(:topology, cluster_id, topology)
         result = monitor.force_refresh(false, 0)

@@ -31,7 +31,7 @@ module AwsRubyDatabaseDriverWrapper
         @instance_templates_by_region = build_instance_templates_by_region
       end
 
-      def force_refresh(verify_writer, timeout_ms)
+      def force_refresh(verify_writer, timeout_sec)
         monitor = @service_container.monitor_service.run_if_absent(:cluster_topology, @cluster_id, @service_container) do |_sc|
           Monitoring::GlobalClusterTopologyMonitor.new(
             service_container: @service_container,
@@ -43,7 +43,7 @@ module AwsRubyDatabaseDriverWrapper
             monitoring_wrapper_props: @monitoring_wrapper_props
           )
         end
-        monitor.force_refresh(verify_writer, timeout_ms)
+        monitor.force_refresh(verify_writer, timeout_sec)
       rescue Timeout::Error
         nil
       end

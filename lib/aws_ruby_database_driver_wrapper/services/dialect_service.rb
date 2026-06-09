@@ -69,6 +69,12 @@ module AwsRubyDatabaseDriverWrapper
         @driver_dialect = DriverDialects::DriverDialectManager.get_dialect(driver_name)
         @error_handler = DriverDialects::DriverDialectManager.get_error_handler(driver_name)
         @db_dialect = init_dialect
+        @dialect_confirmed = false
+      end
+
+      # @return [Boolean] whether the dialect has been confirmed via a live connection query
+      def dialect_confirmed?
+        @dialect_confirmed
       end
 
       # Lazily instantiates and caches a dialect by code.
@@ -93,36 +99,52 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection [Object] the live database connection
       # @return [Object] the updated database dialect
       def update_dialect(connection)
-        return @db_dialect unless @can_update
+        original_dialect_code = @dialect_code
 
-        host = @connection_service.initial_host_info&.host
-        host_url = @connection_service.initial_host_info&.url
+        if @can_update
+          host = @connection_service.initial_host_info&.host
+          host_url = @connection_service.initial_host_info&.url
 
-        candidates = @db_dialect.dialect_update_candidates
-        candidates&.each do |candidate_code|
-          candidate = dialect_for_code(candidate_code)
-          raise Errors::AwsError, "Unknown dialect code: #{candidate_code}" unless candidate
+          candidates = @db_dialect.dialect_update_candidates
+          candidates&.each do |candidate_code|
+            candidate = dialect_for_code(candidate_code)
+            raise Errors::AwsError, "Unknown dialect code: #{candidate_code}" unless candidate
 
-          next unless candidate.dialect?(connection)
+            next unless candidate.dialect?(connection)
 
-          @can_update = false
-          @dialect_code = candidate_code
-          @db_dialect = candidate
+            @can_update = false
+            @dialect_code = candidate_code
+            @db_dialect = candidate
 
-          self.class.known_endpoint_dialects.put(host, candidate_code) if host
-          self.class.known_endpoint_dialects.put(host_url, candidate_code) if host_url
+            self.class.known_endpoint_dialects.put(host, candidate_code) if host
+            self.class.known_endpoint_dialects.put(host_url, candidate_code) if host_url
 
-          return @db_dialect
+            break
+          end
+
+          if @can_update
+            # No candidate matched
+            raise Errors::AwsError, 'Unable to determine dialect' if @dialect_code == DialectCodes::UNKNOWN
+
+            @can_update = false
+            self.class.known_endpoint_dialects.put(host, @dialect_code) if host
+            self.class.known_endpoint_dialects.put(host_url, @dialect_code) if host_url
+          end
         end
 
-        raise Errors::AwsError, 'Unable to determine dialect' if @dialect_code == DialectCodes::UNKNOWN
-
-        @can_update = false
-
-        self.class.known_endpoint_dialects.put(host, @dialect_code) if host
-        self.class.known_endpoint_dialects.put(host_url, @dialect_code) if host_url
-
+        @dialect_confirmed = true
+        swap_host_list_provider if @dialect_code != original_dialect_code
         @db_dialect
+      end
+
+      # Creates the initial host list provider from the URL-guessed dialect.
+      # Called after the service container is fully assembled.
+      #
+      # @param service_container [ServiceContainer]
+      def setup_initial_provider(service_container)
+        @service_container = service_container
+        provider = @db_dialect.create_host_list_provider(service_container)
+        service_container.host_service.host_list_provider = provider if provider
       end
 
       # @param error [Exception]
@@ -219,6 +241,17 @@ module AwsRubyDatabaseDriverWrapper
           @can_update = true
           DialectCodes::PG
         end
+      end
+
+      def swap_host_list_provider
+        return unless @service_container
+
+        host_service = @service_container.host_service
+        old_provider = host_service.host_list_provider
+        old_provider&.stop_monitor
+
+        new_provider = @db_dialect.create_host_list_provider(@service_container)
+        host_service.host_list_provider = new_provider
       end
     end
   end

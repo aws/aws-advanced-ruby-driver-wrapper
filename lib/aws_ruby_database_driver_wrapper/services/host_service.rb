@@ -89,10 +89,10 @@ module AwsRubyDatabaseDriverWrapper
       # Force a refresh of the host list, bypassing any caching.
       #
       # @param verify_writer [Boolean]
-      # @param timeout_ms [Integer]
+      # @param timeout_sec [Float]
       # @return [Boolean] whether the refresh was successful
-      def force_refresh_host_list(verify_writer: false, timeout_ms: 5000)
-        updated_hosts = @host_list_provider&.force_refresh(verify_writer, timeout_ms)
+      def force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
+        updated_hosts = @host_list_provider&.force_refresh(verify_writer, timeout_sec)
         return if updated_hosts.nil? || updated_hosts == @all_hosts
 
         apply_cached_availability(updated_hosts)

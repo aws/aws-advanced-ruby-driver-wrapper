@@ -49,7 +49,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
   end
   let(:driver_dialect) { instance_double('DriverDialect', connect: nil) }
   let(:db_dialect) { instance_double('DbDialect') }
-  let(:dialect_service) { instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect) }
+  let(:dialect_service) do
+    instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_confirmed?: true)
+  end
   let(:event_publisher) do
     AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
   end
@@ -172,7 +174,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
 
     it 'returns nil on monitor timeout' do
       # Monitor will fail to find topology (mocked to return nil)
-      result = provider.force_refresh(false, 100)
+      result = provider.force_refresh(false, 0.1)
       expect(result).to be_nil
     end
   end
