@@ -87,16 +87,16 @@ module AwsRubyDatabaseDriverWrapper
 
       # Forces a topology refresh, ignoring any cached topology. Blocks until updated or raises on timeout.
       # @param verify_writer [Boolean] if true, enters panic mode to re-verify the writer.
-      # @param timeout_ms [Integer] max time to wait for the update.
+      # @param timeout_sec [Float] max time in seconds to wait for the update.
       # @return [Array<Host::HostInfo>] the updated topology.
-      # @raise [Timeout::Error] if the topology is not updated within timeout_ms.
-      def force_refresh(verify_writer, timeout_ms)
+      # @raise [Timeout::Error] if the topology is not updated within timeout_sec.
+      def force_refresh(verify_writer, timeout_sec)
         if verify_writer
           @monitoring_connection.set(nil)
           @verified_writer = false
         end
 
-        wait_for_topology_update(timeout_ms)
+        wait_for_topology_update(timeout_sec)
       end
 
       # Event subscriber callback.
@@ -459,7 +459,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # --- force_refresh support ---
 
-      def wait_for_topology_update(timeout_ms)
+      def wait_for_topology_update(timeout_sec)
         current_hosts = stored_hosts
 
         @topology_mutex.synchronize do
@@ -467,9 +467,9 @@ module AwsRubyDatabaseDriverWrapper
           @topology_cv.broadcast
         end
 
-        return current_hosts if timeout_ms.zero?
+        return current_hosts if timeout_sec.zero?
 
-        deadline = monotonic_time + (timeout_ms / 1000.0)
+        deadline = monotonic_time + timeout_sec
         @topology_mutex.synchronize do
           # We are checking reference equality instead of value equality. We will break out of the loop if there is a
           # new entry in the topology cache, even if current_hosts contains the same hosts as stored_hosts.
@@ -482,7 +482,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         latest = stored_hosts
-        raise Timeout::Error, "Topology not updated within #{timeout_ms}ms for cluster #{@cluster_id}" if latest.equal?(current_hosts)
+        raise Timeout::Error, "Topology not updated within #{timeout_sec}s for cluster #{@cluster_id}" if latest.equal?(current_hosts)
 
         latest
       end

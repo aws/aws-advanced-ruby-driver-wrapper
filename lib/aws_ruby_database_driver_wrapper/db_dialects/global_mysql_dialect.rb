@@ -74,11 +74,13 @@ module AwsRubyDatabaseDriverWrapper
         REGION_BY_INSTANCE_ID_QUERY
       end
 
-      # @param _service_container [Services::ServiceContainer]
+      # @param service_container [Services::ServiceContainer]
       # @return [Host::GlobalAuroraHostListProvider] the host list provider
-      def create_host_list_provider(_service_container)
-        # TODO: return GlobalAuroraHostListProvider
-        nil
+      def create_host_list_provider(service_container)
+        require_relative '../utils/global_aurora_topology_utils'
+        require_relative '../host/global_aurora_host_list_provider'
+        topology_utils = Utils::GlobalAuroraTopologyUtils.new(dialect: self)
+        Host::GlobalAuroraHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
       end
     end
   end

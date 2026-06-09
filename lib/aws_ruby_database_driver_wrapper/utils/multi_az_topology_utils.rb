@@ -38,7 +38,7 @@ module AwsRubyDatabaseDriverWrapper
       def writer_instance?(conn)
         results = @dialect.execute(conn, @dialect.writer_id_query)
         # When connected to a writer, the result is empty; otherwise it contains a single row.
-        results.nil? || results.empty?
+        results.nil? || results.none?
       end
 
       # Process Multi-AZ topology query results into a list of HostInfo objects.
@@ -82,7 +82,7 @@ module AwsRubyDatabaseDriverWrapper
       def query_writer_id(conn)
         results = @dialect.execute(conn, @dialect.writer_id_query)
 
-        if results && !results.empty?
+        if results&.any?
           row = results.first
           writer_id_column = @dialect.respond_to?(:writer_id_column_name) ? @dialect.writer_id_column_name : 'writer_id'
           writer_id = row_value(row, writer_id_column)

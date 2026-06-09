@@ -28,6 +28,16 @@ module AwsRubyDatabaseDriverWrapper
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300)
 
     # -- Topology Monitoring --
+    CLUSTER_INSTANCE_HOST_PATTERN = WrapperProperty.new(
+      :cluster_instance_host_pattern,
+      'Instance endpoint pattern with ? placeholder. Required for IP/custom domain connections.',
+      default_value: nil
+    )
+    GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS = WrapperProperty.new(
+      :global_cluster_instance_host_patterns,
+      'Comma-separated list of region-prefixed instance patterns for Global Aurora Databases.',
+      default_value: nil
+    )
     CLUSTER_TOPOLOGY_REFRESH_RATE_MS = WrapperProperty.new(
       :cluster_topology_refresh_rate_ms,
       'Cluster topology refresh rate in milliseconds',
