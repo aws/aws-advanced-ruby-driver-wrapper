@@ -40,20 +40,28 @@ module AwsRubyDatabaseDriverWrapper
                 'URI strings and positional arguments are not supported.'
         end
 
-        if args.length == 1 && args.first.is_a?(String)
-          str = args.first
-          if str.include?('://')
-            parse_uri(driver_name, str, **kwargs)
-          else
-            parse_conninfo(driver_name, str, **kwargs)
-          end
-        elsif args.length == 1 && args.first.is_a?(Hash)
-          parse_hash(driver_name, args.first.merge(kwargs))
-        elsif args.empty? && !kwargs.empty?
-          parse_hash(driver_name, kwargs)
-        else
-          parse_positional(driver_name, args, kwargs)
-        end
+        initial_args = args.dup
+        initial_options = kwargs.dup
+
+        config = if args.length == 1 && args.first.is_a?(String)
+                   str = args.first
+                   if str.include?('://')
+                     parse_uri(driver_name, str, **kwargs)
+                   else
+                     parse_conninfo(driver_name, str, **kwargs)
+                   end
+                 elsif args.length == 1 && args.first.is_a?(Hash)
+                   parse_hash(driver_name, args.first.merge(kwargs))
+                 elsif args.empty? && !kwargs.empty?
+                   parse_hash(driver_name, kwargs)
+                 else
+                   parse_positional(driver_name, args, kwargs)
+                 end
+
+        config.initial_args = initial_args
+        config.initial_options = initial_options
+        config.instance_variable_set(:@multi_host, config.initial_host_info&.host&.include?(',') || false)
+        config
       end
 
       # Parses a URI connection string, e.g.
@@ -71,7 +79,7 @@ module AwsRubyDatabaseDriverWrapper
         # eg {"sslmode" => "require"}
         query_params = query_string ? URI.decode_www_form(query_string).to_h : {}
         # eg {host: "host1,host2", user: "user", password: "pass", dbname: "mydb", sslmode: "require"}
-        driver_config = build_driver_config_from_uri(host_section, user, password, path, driver_name)
+        driver_config = uri_to_config(user, password, path, driver_name)
         # eg {sslmode: "require"}
         all_props = query_params.each_with_object({}) { |(k, v), h| h[k.to_sym] = v }
         overrides.transform_keys(&:to_sym).each { |k, v| all_props[k] = v }
@@ -80,7 +88,11 @@ module AwsRubyDatabaseDriverWrapper
         wrapper_config, extra_driver, prefixed_config = split_props(all_props)
         driver_config.merge!(extra_driver)
 
-        initial_host_info = host_from_string(host_section)
+        # Host and port are captured in initial_host_info for URIs, not in driver_props.
+        driver_config.delete(:host)
+        driver_config.delete(:port)
+
+        initial_host_info = string_to_host_info(host_section)
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -106,7 +118,7 @@ module AwsRubyDatabaseDriverWrapper
         params = params.transform_keys(&:to_sym)
         wrapper_config, driver_config, prefixed_config = split_props(params)
         driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
-        initial_host_info = host_from_hash(driver_config[:host] || driver_config[:hostname], driver_config[:port])
+        initial_host_info = hash_to_host_info(driver_config)
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -126,7 +138,7 @@ module AwsRubyDatabaseDriverWrapper
 
         wrapper_config, driver_config, prefixed_config = split_props(all_props)
         driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
-        initial_host_info = host_from_hash(driver_config[:host], driver_config[:port])
+        initial_host_info = hash_to_host_info(driver_config)
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -163,11 +175,11 @@ module AwsRubyDatabaseDriverWrapper
       # Forms a HostInfo object from a URI host section string.
       # Each host entry may or may not have a port; missing ports are represented as -1.
       # The resulting port is a comma-delimited string of per-host ports.
-      def host_from_string(host_string, _default_port = nil)
-        host_string = host_string&.strip
-        return nil if host_string.nil? || host_string.empty?
+      def string_to_host_info(host, _default_port = nil)
+        host_str = host&.strip
+        return nil if host_str.nil? || host_str.empty?
 
-        entries = host_string.split(',').map(&:strip)
+        entries = host_str.split(',').map(&:strip)
         hosts = []
         ports = []
         entries.each do |entry|
@@ -186,26 +198,14 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       # Forms a HostInfo object from hash-style input.
-      # If a single port is given with multiple hosts, the port is replicated for all hosts.
-      # The resulting port is always a comma-delimited string matching the host count.
-      def host_from_hash(host_value, port)
-        return nil unless host_value
+      # If a single port is given (even with multiple hosts), the port is kept as-is.
+      # The resulting port is always a string.
+      def hash_to_host_info(hash)
+        host_str = hash[:host]&.strip || hash[:hostname]&.strip
+        return nil unless host_str
 
-        host_str = host_value.to_s.strip
-        hosts = host_str.split(',').map(&:strip)
-        ports = port.to_s.split(',').map(&:strip)
-
-        if ports.empty? || (ports.length == 1 && ports.first.empty?)
-          port_str = ([Host::HostInfo::NO_PORT] * hosts.length).join(',')
-        elsif ports.length == 1
-          # Single port applies to all hosts
-          port_str = ([ports.first] * hosts.length).join(',')
-        else
-          # Per-host ports already specified
-          port_str = ports.join(',')
-        end
-
-        Host::HostInfo.new(host: hosts.join(','), port: port_str)
+        port_str = hash[:port]&.to_s&.strip
+        port_str.to_s.empty? ? Host::HostInfo.new(host: host_str) : Host::HostInfo.new(host: host_str, port: port_str)
       end
 
       def extract_host_section(authority_and_rest)
@@ -264,7 +264,7 @@ module AwsRubyDatabaseDriverWrapper
         else
           delim = without_userinfo[first_delim_idx]
           if delim == '/'
-            path_and_query = '/' + remainder
+            path_and_query = "/#{remainder}"
             if path_and_query.include?('?')
               path, query = path_and_query.split('?', 2)
               [path, query]
@@ -279,35 +279,8 @@ module AwsRubyDatabaseDriverWrapper
         end
       end
 
-      def build_driver_config_from_uri(host_section, user, password, path, protocol)
+      def uri_to_config(user, password, path, protocol)
         config = {}
-
-        entries = host_section.split(',').map(&:strip)
-        hosts = []
-        ports = []
-        entries.each do |entry|
-          if entry.include?(':')
-            h, p = entry.split(':', 2)
-            hosts << h
-            ports << p.to_i
-          else
-            hosts << entry
-            ports << nil
-          end
-        end
-
-        config[:host] = hosts.join(',')
-
-        # Only include port in driver_props when all hosts have explicit ports
-        actual_ports = ports.compact
-        if actual_ports.length == ports.length && actual_ports.any?
-          if hosts.length > 1
-            config[:port] = actual_ports.map(&:to_s).join(',')
-          else
-            config[:port] = actual_ports.first.to_s
-          end
-        end
-
         config[:user] = user if user
         config[:password] = password if password
 
