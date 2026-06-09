@@ -55,7 +55,7 @@ module AwsRubyDatabaseDriverWrapper
         raise Errors::AwsError, 'force_monitoring_refresh is not supported for ConnectionStringHostListProvider'
       end
 
-      # No-op — there is no monitor to stop for a static provider.
+      # No-op — there is no monitor to stop for this host list provider.
       def stop_monitor; end
 
       private

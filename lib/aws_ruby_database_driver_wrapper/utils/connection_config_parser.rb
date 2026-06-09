@@ -64,8 +64,7 @@ module AwsRubyDatabaseDriverWrapper
 
         host_section = extract_host_section(authority_and_rest)
 
-        # Pass URI with only first host so URI.parse can extract user/password/path/query.
-        parsed_uri = URI.parse(uri_string.sub(host_section, host_section.split(',').first.to_s))
+        parsed_uri = URI.parse(uri_string)
         user = parsed_uri.user ? URI.decode_www_form_component(parsed_uri.user) : nil
         password = parsed_uri.password ? URI.decode_www_form_component(parsed_uri.password) : nil
 
@@ -77,7 +76,7 @@ module AwsRubyDatabaseDriverWrapper
         wrapper_config, extra_driver, prefixed_config = split_props(all_props)
         driver_config.merge!(extra_driver)
 
-        initial_host_info = first_host_from_string(host_section, parsed_uri.port)
+        initial_host_info = host_from_string(host_section, parsed_uri.port)
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -102,7 +101,7 @@ module AwsRubyDatabaseDriverWrapper
       def parse_hash(driver_name, params)
         params = params.transform_keys(&:to_sym)
         wrapper_config, driver_config, prefixed_config = split_props(params)
-        initial_host_info = first_host_from_hash(driver_config[:host] || driver_config[:hostname], driver_config[:port])
+        initial_host_info = host_from_hash(driver_config[:host] || driver_config[:hostname], driver_config[:port])
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -121,7 +120,7 @@ module AwsRubyDatabaseDriverWrapper
         all_props = positional.merge(kwargs.transform_keys(&:to_sym))
 
         wrapper_config, driver_config, prefixed_config = split_props(all_props)
-        initial_host_info = first_host_from_hash(driver_config[:host], driver_config[:port])
+        initial_host_info = host_from_hash(driver_config[:host], driver_config[:port])
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -155,27 +154,24 @@ module AwsRubyDatabaseDriverWrapper
         [wrapper_config, driver_config, prefixed_config]
       end
 
-      # Extracts only the first host and its port as a HostInfo.
-      def first_host_from_string(host_string, default_port)
+      # Forms a HostInfo object from a connection string.
+      def host_from_string(host_string, default_port)
+        host_string = host_string&.strip
         return nil if host_string.nil? || host_string.empty?
 
-        first_entry = host_string.split(',', 2).first.strip
-        host, port = first_entry.include?(':') ? first_entry.split(':', 2) : [first_entry, nil]
+        host, port = host_string.include?(':') ? host_string.split(':', 2) : [host_string, nil]
         resolved_port = (port || default_port)&.to_i || Host::HostInfo::NO_PORT
         Host::HostInfo.new(host: host.strip, port: resolved_port)
       end
 
-      # Extracts only the first host and its port as a HostInfo from hash-style input.
-      def first_host_from_hash(host_value, port)
+      # Forms a HostInfo object from hash-style input.
+      def host_from_hash(host_value, port)
         return nil unless host_value
-
-        first_host = Array(host_value).flat_map { |h| h.to_s.split(',') }.first&.strip
-        return nil unless first_host
 
         ports = port.to_s.split(',').map { |p| p.strip.to_i }
         resolved_port = ports.first || Host::HostInfo::NO_PORT
         resolved_port = Host::HostInfo::NO_PORT if resolved_port.zero?
-        Host::HostInfo.new(host: first_host, port: resolved_port)
+        Host::HostInfo.new(host: host_value.strip, port: resolved_port)
       end
 
       def extract_host_section(authority_and_rest)

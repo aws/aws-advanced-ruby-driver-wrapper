@@ -25,46 +25,39 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'postgresql://myuser:mypass@myhost:5432/mydb')
       expect(config.driver_name).to eq(:postgresql)
       expect(config.driver_props[:host]).to eq('myhost')
-      expect(config.driver_props[:port]).to eq(5432)
+      expect(config.driver_props[:port]).to eq('5432')
       expect(config.driver_props[:user]).to eq('myuser')
       expect(config.driver_props[:password]).to eq('mypass')
       expect(config.driver_props[:dbname]).to eq('mydb')
     end
 
     it 'parses multi-host PG URIs' do
-      config = parser.parse(:postgresql, 'postgresql://user:pass@host1,host2:5432/mydb')
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(-1)
+      config = parser.parse(:postgresql, 'postgresql://user:pass@host1,host2:5433/mydb')
+      expect(config.initial_host_info.host).to eq('host1,host2')
+      expect(config.initial_host_info.port).to eq('-1,5433')
       expect(config.driver_props[:host]).to eq('host1,host2')
     end
 
     it 'parses multi-host URIs with per-host ports' do
       config = parser.parse(:postgresql, 'postgresql://host1:5432,host2:5433/db')
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(5432)
+      expect(config.initial_host_info.host).to eq('host1,host2')
+      expect(config.initial_host_info.port).to eq('5432,5433')
       expect(config.driver_props[:host]).to eq('host1,host2')
       expect(config.driver_props[:port]).to eq('5432,5433')
     end
 
     it 'parses multi-host URIs with no ports' do
       config = parser.parse(:postgresql, 'postgresql://host1,host2/db')
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(-1)
-      expect(config.driver_props[:host]).to eq('host1,host2')
-    end
-
-    it 'parses multi-host URIs with mixed ports (only second host has port)' do
-      config = parser.parse(:postgresql, 'postgresql://host1,host2:5433/db')
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(-1)
+      expect(config.initial_host_info.host).to eq('host1,host2')
+      expect(config.initial_host_info.port).to eq('-1')
       expect(config.driver_props[:host]).to eq('host1,host2')
     end
 
     it 'parses multi-host URIs with mixed ports (only first host has port)' do
-      config = parser.parse(:postgresql, 'postgresql://host1:5432,host2/db')
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(5432)
-      expect(config.driver_props[:host]).to eq('host1,host2')
+      config = parser.parse(:postgresql, 'postgresql://host1:5433,host2/db')
+      expect(config.initial_host_info.host).to eq('host1,host2')
+      expect(config.initial_host_info.port).to eq('5433,-1')
+      expect(config.driver_props[:host]).to eq('host1,host2') # TODO: should this include the port? The main goal is to have the community driver connect using the same string or properties as the original
     end
 
     it 'extracts wrapper properties from query params into wrapper_config' do
@@ -89,7 +82,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'handles URI with no database' do
       config = parser.parse(:postgresql, 'postgresql://host:5432')
       expect(config.driver_props[:host]).to eq('host')
-      expect(config.driver_props[:port]).to eq(5432)
+      expect(config.driver_props[:port]).to eq('5432')
       expect(config.driver_props).not_to have_key(:dbname)
     end
 
@@ -112,7 +105,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, host: 'myhost', dbname: 'mydb', port: 5432)
       expect(config.driver_props[:host]).to eq('myhost')
       expect(config.driver_props[:dbname]).to eq('mydb')
-      expect(config.driver_props[:port]).to eq(5432)
+      expect(config.driver_props[:port]).to eq('5432')
     end
 
     it 'splits wrapper properties from driver properties' do
@@ -140,20 +133,20 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'parses initial_host_info from hash' do
       config = parser.parse(:postgresql, host: 'myhost', port: 5432)
       expect(config.initial_host_info.host).to eq('myhost')
-      expect(config.initial_host_info.port).to eq(5432)
+      expect(config.initial_host_info.port).to eq('5432')
     end
 
     it 'parses comma-separated hosts from hash' do
-      config = parser.parse(:postgresql, host: 'host1,host2', port: 5432)
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(5432)
+      config = parser.parse(:postgresql, host: 'host1,host2', port: 5433)
+      expect(config.initial_host_info.host).to eq('host1,host2')
+      expect(config.initial_host_info.port).to eq('5433,5433')
       expect(config.driver_props[:host]).to eq('host1,host2')
     end
 
     it 'parses per-host ports from hash' do
       config = parser.parse(:postgresql, host: 'host1,host2', port: '5432,5433')
       expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(5432)
+      expect(config.initial_host_info.port).to eq('5432')
       expect(config.driver_props[:host]).to eq('host1,host2')
       expect(config.driver_props[:port]).to eq('5432,5433')
     end
@@ -175,7 +168,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'myhost', 5432, nil, nil, 'mydb', 'user', 'pass')
       expect(config.driver_name).to eq(:postgresql)
       expect(config.driver_props[:host]).to eq('myhost')
-      expect(config.driver_props[:port]).to eq(5432)
+      expect(config.driver_props[:port]).to eq('5432')
       expect(config.driver_props[:dbname]).to eq('mydb')
       expect(config.driver_props[:user]).to eq('user')
       expect(config.driver_props[:password]).to eq('pass')
@@ -202,8 +195,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
 
     it 'parses multi-host conninfo with per-host ports' do
       config = parser.parse(:postgresql, 'host=host1,host2 port=5432,5433 dbname=mydb')
-      expect(config.initial_host_info.host).to eq('host1')
-      expect(config.initial_host_info.port).to eq(5432)
+      expect(config.initial_host_info.host).to eq('host1,host2')
+      expect(config.initial_host_info.port).to eq('5432,5433')
       expect(config.driver_props[:host]).to eq('host1,host2')
       expect(config.driver_props[:port]).to eq('5432,5433')
     end
