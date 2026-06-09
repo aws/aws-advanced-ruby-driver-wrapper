@@ -22,7 +22,7 @@ require_relative 'host_role'
 module AwsRubyDatabaseDriverWrapper
   module Host
     class HostInfo
-      NO_PORT = -1
+      NO_PORT = '-1'
       DEFAULT_WEIGHT = 100
 
       attr_accessor :host, :port, :role, :availability_strategy, :weight, :id, :last_update_time

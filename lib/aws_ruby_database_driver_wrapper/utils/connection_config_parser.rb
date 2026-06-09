@@ -59,24 +59,28 @@ module AwsRubyDatabaseDriverWrapper
       # Parses a URI connection string, e.g.
       #   "postgresql://user:pass@host1,host2:5432/mydb?sslmode=require"
       def parse_uri(driver_name, uri_string, **overrides)
+        # eg ["postgresql", "user:pass@host1,host2:5432/mydb?sslmode=require"]
         scheme_rest = uri_string.split('://', 2)
+        # eg "user:pass@host1,host2:5432/mydb?sslmode=require"
         authority_and_rest = scheme_rest[1] || ''
-
+        # eg "host1,host2:5432"
         host_section = extract_host_section(authority_and_rest)
 
-        parsed_uri = URI.parse(uri_string)
-        user = parsed_uri.user ? URI.decode_www_form_component(parsed_uri.user) : nil
-        password = parsed_uri.password ? URI.decode_www_form_component(parsed_uri.password) : nil
-
-        query_params = parsed_uri.query ? URI.decode_www_form(parsed_uri.query).to_h : {}
-        driver_config = build_driver_config_from_uri(host_section, user, password, parsed_uri, driver_name)
+        # eg "user", "pass", "/mydb", "sslmode=require"
+        user, password, path, query_string = parse_uri_parts(uri_string, authority_and_rest)
+        # eg {"sslmode" => "require"}
+        query_params = query_string ? URI.decode_www_form(query_string).to_h : {}
+        # eg {host: "host1,host2", user: "user", password: "pass", dbname: "mydb", sslmode: "require"}
+        driver_config = build_driver_config_from_uri(host_section, user, password, path, driver_name)
+        # eg {sslmode: "require"}
         all_props = query_params.each_with_object({}) { |(k, v), h| h[k.to_sym] = v }
         overrides.transform_keys(&:to_sym).each { |k, v| all_props[k] = v }
 
+        # eg {}, {sslmode: "require"}, {}
         wrapper_config, extra_driver, prefixed_config = split_props(all_props)
         driver_config.merge!(extra_driver)
 
-        initial_host_info = host_from_string(host_section, parsed_uri.port)
+        initial_host_info = host_from_string(host_section)
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
@@ -101,6 +105,7 @@ module AwsRubyDatabaseDriverWrapper
       def parse_hash(driver_name, params)
         params = params.transform_keys(&:to_sym)
         wrapper_config, driver_config, prefixed_config = split_props(params)
+        driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
         initial_host_info = host_from_hash(driver_config[:host] || driver_config[:hostname], driver_config[:port])
 
         ConnectionConfig.new(
@@ -120,6 +125,7 @@ module AwsRubyDatabaseDriverWrapper
         all_props = positional.merge(kwargs.transform_keys(&:to_sym))
 
         wrapper_config, driver_config, prefixed_config = split_props(all_props)
+        driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
         initial_host_info = host_from_hash(driver_config[:host], driver_config[:port])
 
         ConnectionConfig.new(
@@ -154,24 +160,52 @@ module AwsRubyDatabaseDriverWrapper
         [wrapper_config, driver_config, prefixed_config]
       end
 
-      # Forms a HostInfo object from a connection string.
-      def host_from_string(host_string, default_port)
+      # Forms a HostInfo object from a URI host section string.
+      # Each host entry may or may not have a port; missing ports are represented as -1.
+      # The resulting port is a comma-delimited string of per-host ports.
+      def host_from_string(host_string, _default_port = nil)
         host_string = host_string&.strip
         return nil if host_string.nil? || host_string.empty?
 
-        host, port = host_string.include?(':') ? host_string.split(':', 2) : [host_string, nil]
-        resolved_port = (port || default_port)&.to_i || Host::HostInfo::NO_PORT
-        Host::HostInfo.new(host: host.strip, port: resolved_port)
+        entries = host_string.split(',').map(&:strip)
+        hosts = []
+        ports = []
+        entries.each do |entry|
+          if entry.include?(':')
+            h, p = entry.split(':', 2)
+            hosts << h
+            ports << p.to_s
+          else
+            hosts << entry
+            ports << Host::HostInfo::NO_PORT
+          end
+        end
+
+        port_str = ports.uniq.length == 1 ? ports.first : ports.join(',')
+        Host::HostInfo.new(host: hosts.join(','), port: port_str)
       end
 
       # Forms a HostInfo object from hash-style input.
+      # If a single port is given with multiple hosts, the port is replicated for all hosts.
+      # The resulting port is always a comma-delimited string matching the host count.
       def host_from_hash(host_value, port)
         return nil unless host_value
 
-        ports = port.to_s.split(',').map { |p| p.strip.to_i }
-        resolved_port = ports.first || Host::HostInfo::NO_PORT
-        resolved_port = Host::HostInfo::NO_PORT if resolved_port.zero?
-        Host::HostInfo.new(host: host_value.strip, port: resolved_port)
+        host_str = host_value.to_s.strip
+        hosts = host_str.split(',').map(&:strip)
+        ports = port.to_s.split(',').map(&:strip)
+
+        if ports.empty? || (ports.length == 1 && ports.first.empty?)
+          port_str = ([Host::HostInfo::NO_PORT] * hosts.length).join(',')
+        elsif ports.length == 1
+          # Single port applies to all hosts
+          port_str = ([ports.first] * hosts.length).join(',')
+        else
+          # Per-host ports already specified
+          port_str = ports.join(',')
+        end
+
+        Host::HostInfo.new(host: hosts.join(','), port: port_str)
       end
 
       def extract_host_section(authority_and_rest)
@@ -183,7 +217,69 @@ module AwsRubyDatabaseDriverWrapper
         without_userinfo.split(%r{[/?#]}, 2).first || ''
       end
 
-      def build_driver_config_from_uri(host_section, user, password, parsed_uri, protocol)
+      # Parses user, password, path, and query from a PostgreSQL-style URI.
+      # Falls back to manual parsing when URI.parse fails (e.g. multi-host with per-host ports).
+      def parse_uri_parts(uri_string, authority_and_rest)
+        begin
+          parsed = URI.parse(uri_string)
+          user = parsed.user ? URI.decode_www_form_component(parsed.user) : nil
+          password = parsed.password ? URI.decode_www_form_component(parsed.password) : nil
+          path = parsed.path
+          query_string = parsed.query
+        rescue URI::InvalidURIError
+          # Manual parsing for multi-host URIs that break standard URI parsing
+          user, password = extract_userinfo(authority_and_rest)
+          path, query_string = extract_path_and_query(authority_and_rest)
+        end
+        [user, password, path, query_string]
+      end
+
+      # Extracts user:password from the authority section before the @ sign.
+      def extract_userinfo(authority_and_rest)
+        return [nil, nil] unless authority_and_rest.include?('@')
+
+        userinfo = authority_and_rest.split('@', 2).first
+        if userinfo.include?(':')
+          user, pass = userinfo.split(':', 2)
+          [URI.decode_www_form_component(user), URI.decode_www_form_component(pass)]
+        else
+          [URI.decode_www_form_component(userinfo), nil]
+        end
+      end
+
+      # Extracts path and query string from the authority-and-rest section.
+      def extract_path_and_query(authority_and_rest)
+        without_userinfo = if authority_and_rest.include?('@')
+                             authority_and_rest.split('@', 2).last
+                           else
+                             authority_and_rest
+                           end
+        # Remove host section
+        remainder = without_userinfo.split(%r{[/?#]}, 2)[1] || ''
+
+        # Determine if we split on / or ?
+        first_delim_idx = without_userinfo.index(%r{[/?#]})
+        if first_delim_idx.nil?
+          ['', nil]
+        else
+          delim = without_userinfo[first_delim_idx]
+          if delim == '/'
+            path_and_query = '/' + remainder
+            if path_and_query.include?('?')
+              path, query = path_and_query.split('?', 2)
+              [path, query]
+            else
+              [path_and_query, nil]
+            end
+          elsif delim == '?'
+            ['', remainder]
+          else
+            ['', nil]
+          end
+        end
+      end
+
+      def build_driver_config_from_uri(host_section, user, password, path, protocol)
         config = {}
 
         entries = host_section.split(',').map(&:strip)
@@ -196,21 +292,26 @@ module AwsRubyDatabaseDriverWrapper
             ports << p.to_i
           else
             hosts << entry
-            ports << parsed_uri.port if parsed_uri.port
+            ports << nil
           end
         end
 
-        config[:host] = hosts.length > 1 ? hosts.join(',') : hosts.first
-        if ports.length > 1
-          config[:port] = ports.join(',')
-        elsif ports.length == 1
-          config[:port] = ports.first
+        config[:host] = hosts.join(',')
+
+        # Only include port in driver_props when all hosts have explicit ports
+        actual_ports = ports.compact
+        if actual_ports.length == ports.length && actual_ports.any?
+          if hosts.length > 1
+            config[:port] = actual_ports.map(&:to_s).join(',')
+          else
+            config[:port] = actual_ports.first.to_s
+          end
         end
 
         config[:user] = user if user
         config[:password] = password if password
 
-        db = parsed_uri.path&.sub(%r{^/}, '')
+        db = path&.sub(%r{^/}, '')
         unless db.to_s.empty?
           config[protocol == :postgresql ? :dbname : :database] = db
         end

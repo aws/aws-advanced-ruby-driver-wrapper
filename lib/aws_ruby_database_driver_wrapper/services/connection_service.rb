@@ -99,6 +99,7 @@ module AwsRubyDatabaseDriverWrapper
       # Whether the initial connection URL specified multiple hosts.
       #
       # @return [Boolean]
+      # TODO: move to ConnectionConfig and change implementation
       def multi_host_url?
         @config.driver_props[:host].to_s.include?(',')
       end
