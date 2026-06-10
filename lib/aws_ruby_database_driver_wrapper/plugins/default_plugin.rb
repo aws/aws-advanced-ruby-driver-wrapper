@@ -23,6 +23,7 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     class DefaultPlugin
       SUBSCRIBED_METHODS = Set['*'].freeze
+      HOST_PORT_KEYS = %i[host port].freeze
 
       def initialize(service_container, **options)
         @service_container = service_container
@@ -43,7 +44,7 @@ module AwsRubyDatabaseDriverWrapper
                    host: config.original_host,
                    port: config.original_port
                  )
-                 multi_host_props = (props || {}).reject { |k, _| %i[host port].include?(k.to_sym) }
+                 multi_host_props = (props || {}).reject { |k, _| HOST_PORT_KEYS.include?(k.to_sym) }
                  driver_dialect.connect(multi_host_info, multi_host_props)
                else
                  driver_dialect.connect(host_info, props)
