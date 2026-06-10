@@ -105,13 +105,12 @@ tasks.withType<Test> {
     }
 }
 
-tasks.register<Test>("test-ruby-3.2-mysql") {
+tasks.register<Test>("test-ruby-4.0-mysql") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-ruby-3-3", "true")
-        systemProperty("exclude-ruby-3-4", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-bg", "true")
@@ -122,13 +121,12 @@ tasks.register<Test>("test-ruby-3.2-mysql") {
     }
 }
 
-tasks.register<Test>("test-ruby-3.2-pg") {
+tasks.register<Test>("test-ruby-4.0-pg") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-ruby-3-3", "true")
-        systemProperty("exclude-ruby-3-4", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-bg", "true")
@@ -144,8 +142,6 @@ tasks.register<Test>("test-ruby-3.3-mysql") {
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
         systemProperty("exclude-performance", "true")
-        systemProperty("exclude-ruby-3-2", "true")
-        systemProperty("exclude-ruby-3-4", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-traces-telemetry", "true")
@@ -161,42 +157,6 @@ tasks.register<Test>("test-ruby-3.3-pg") {
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
         systemProperty("exclude-performance", "true")
-        systemProperty("exclude-ruby-3-2", "true")
-        systemProperty("exclude-ruby-3-4", "true")
-        systemProperty("exclude-multi-az-cluster", "true")
-        systemProperty("exclude-multi-az-instance", "true")
-        systemProperty("exclude-bg", "true")
-        systemProperty("exclude-traces-telemetry", "true")
-        systemProperty("exclude-metrics-telemetry", "true")
-        systemProperty("exclude-mysql-driver", "true")
-        systemProperty("exclude-mysql-engine", "true")
-    }
-}
-
-tasks.register<Test>("test-ruby-3.4-mysql") {
-    group = "verification"
-    filter.includeTestsMatching("integration.host.TestRunner.runTests")
-    doFirst {
-        systemProperty("exclude-performance", "true")
-        systemProperty("exclude-ruby-3-2", "true")
-        systemProperty("exclude-ruby-3-3", "true")
-        systemProperty("exclude-multi-az-cluster", "true")
-        systemProperty("exclude-multi-az-instance", "true")
-        systemProperty("exclude-bg", "true")
-        systemProperty("exclude-traces-telemetry", "true")
-        systemProperty("exclude-metrics-telemetry", "true")
-        systemProperty("exclude-pg-driver", "true")
-        systemProperty("exclude-pg-engine", "true")
-    }
-}
-
-tasks.register<Test>("test-ruby-3.4-pg") {
-    group = "verification"
-    filter.includeTestsMatching("integration.host.TestRunner.runTests")
-    doFirst {
-        systemProperty("exclude-performance", "true")
-        systemProperty("exclude-ruby-3-2", "true")
-        systemProperty("exclude-ruby-3-3", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-bg", "true")
@@ -213,15 +173,6 @@ tasks.register<Test>("test-docker") {
     environment("AWS_ACCESS_KEY_ID", System.getenv("AWS_ACCESS_KEY_ID") ?: "")
     environment("AWS_SECRET_ACCESS_KEY", System.getenv("AWS_SECRET_ACCESS_KEY") ?: "")
     environment("AWS_SESSION_TOKEN", System.getenv("AWS_SESSION_TOKEN") ?: "")
-    if (System.getProperty("os.name", "").lowercase().contains("windows")) {
-        environment("DOCKER_HOST", "tcp://localhost:2377")
-        environment("DOCKER_API_VERSION", "1.41")
-        environment("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", "/var/run/docker.sock")
-        environment("TESTCONTAINERS_HOST_OVERRIDE", "localhost")
-        environment("TESTCONTAINERS_RYUK_DISABLED", "true")
-        jvmArgs("-DDOCKER_HOST=tcp://localhost:2377")
-        jvmArgs("-Dtestcontainers.dockerHostOverride=tcp://localhost:2377")
-    }
     doFirst {
         systemProperty("exclude-aurora", "true")
         systemProperty("exclude-multi-az-cluster", "true")
