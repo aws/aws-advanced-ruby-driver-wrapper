@@ -99,9 +99,8 @@ module AwsRubyDatabaseDriverWrapper
       # Whether the initial connection URL specified multiple hosts.
       #
       # @return [Boolean]
-      # TODO: move to ConnectionConfig and change implementation
       def multi_host_url?
-        @config.multi_host?
+        @config.multi_host_url?
       end
 
       # @return [Boolean] whether the driver is PostgreSQL

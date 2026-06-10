@@ -24,8 +24,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'parses a PostgreSQL URI with host, port, user, password, and dbname' do
       config = parser.parse(:postgresql, 'postgresql://myuser:mypass@myhost:5432/mydb')
       expect(config.driver_name).to eq(:postgresql)
-      expect(config.driver_props).not_to have_key(:host)
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props[:host]).to eq('myhost')
+      expect(config.driver_props[:port]).to eq('5432')
       expect(config.driver_props[:user]).to eq('myuser')
       expect(config.driver_props[:password]).to eq('mypass')
       expect(config.driver_props[:dbname]).to eq('mydb')
@@ -35,23 +35,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'postgresql://user:pass@host1,host2:5433/mydb')
       expect(config.initial_host_info.host).to eq('host1,host2')
       expect(config.initial_host_info.port).to eq('-1,5433')
-      expect(config.driver_props).not_to have_key(:host)
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props[:host]).to eq('host1,host2')
+      expect(config.driver_props[:port]).to eq(',5433')
     end
 
     it 'parses multi-host URIs with per-host ports' do
       config = parser.parse(:postgresql, 'postgresql://host1:5432,host2:5433/db')
       expect(config.initial_host_info.host).to eq('host1,host2')
       expect(config.initial_host_info.port).to eq('5432,5433')
-      expect(config.driver_props).not_to have_key(:host)
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props[:host]).to eq('host1,host2')
+      expect(config.driver_props[:port]).to eq('5432,5433')
     end
 
     it 'parses multi-host URIs with no ports' do
       config = parser.parse(:postgresql, 'postgresql://host1,host2/db')
       expect(config.initial_host_info.host).to eq('host1,host2')
       expect(config.initial_host_info.port).to eq('-1')
-      expect(config.driver_props).not_to have_key(:host)
+      expect(config.driver_props[:host]).to eq('host1,host2')
       expect(config.driver_props).not_to have_key(:port)
     end
 
@@ -59,8 +59,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'postgresql://host1:5433,host2/db')
       expect(config.initial_host_info.host).to eq('host1,host2')
       expect(config.initial_host_info.port).to eq('5433,-1')
-      expect(config.driver_props).not_to have_key(:host)
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props).not_to have_key('host1,host2')
+      expect(config.driver_props).not_to have_key('5433,')
     end
 
     it 'extracts wrapper properties from query params into wrapper_config' do
@@ -79,13 +79,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'handles URI with no query params' do
       config = parser.parse(:postgresql, 'postgresql://host/db')
       expect(config.wrapper_props).to eq({})
-      expect(config.driver_props).not_to have_key(:host)
+      expect(config.driver_props[:host]).to eq('host')
+      expect(config.driver_props).not_to have_key(:port)
     end
 
     it 'handles URI with no database' do
       config = parser.parse(:postgresql, 'postgresql://host:5432')
-      expect(config.driver_props).not_to have_key(:host)
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props[:host]).to eq('host')
+      expect(config.driver_props[:port]).to eq('5432')
       expect(config.driver_props).not_to have_key(:dbname)
     end
 
@@ -119,8 +120,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'postgresql://h1:5432,h2:5433,h3:5434/db')
       expect(config.initial_host_info.host).to eq('h1,h2,h3')
       expect(config.initial_host_info.port).to eq('5432,5433,5434')
-      expect(config.driver_props).not_to have_key(:host)
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props[:host]).to eq('h1,h2,h3')
+      expect(config.driver_props[:port]).to eq('5432,5433,5434')
     end
   end
 
@@ -363,32 +364,32 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
   describe 'multi_host?' do
     it 'returns true for multi-host URI' do
       config = parser.parse(:postgresql, 'postgresql://host1,host2:5433/mydb')
-      expect(config.multi_host?).to be true
+      expect(config.multi_host_url?).to be true
     end
 
     it 'returns false for single-host URI' do
       config = parser.parse(:postgresql, 'postgresql://myhost:5432/mydb')
-      expect(config.multi_host?).to be false
+      expect(config.multi_host_url?).to be false
     end
 
     it 'returns true for comma-separated hosts in hash' do
       config = parser.parse(:postgresql, host: 'host1,host2', port: 5433)
-      expect(config.multi_host?).to be true
+      expect(config.multi_host_url?).to be true
     end
 
     it 'returns false for single host in hash' do
       config = parser.parse(:postgresql, host: 'myhost', port: 5432)
-      expect(config.multi_host?).to be false
+      expect(config.multi_host_url?).to be false
     end
 
     it 'returns true for multi-host conninfo string' do
       config = parser.parse(:postgresql, 'host=host1,host2 port=5432,5433')
-      expect(config.multi_host?).to be true
+      expect(config.multi_host_url?).to be true
     end
 
     it 'returns false for single-host conninfo string' do
       config = parser.parse(:postgresql, 'host=localhost port=5432')
-      expect(config.multi_host?).to be false
+      expect(config.multi_host_url?).to be false
     end
   end
 end

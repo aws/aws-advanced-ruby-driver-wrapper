@@ -40,23 +40,17 @@ module AwsRubyDatabaseDriverWrapper
                 'URI strings and positional arguments are not supported.'
         end
 
-        config = if args.length == 1 && args.first.is_a?(String)
-                   str = args.first
-                   if str.include?('://')
-                     parse_uri(driver_name, str, **kwargs)
-                   else
-                     parse_conninfo(driver_name, str, **kwargs)
-                   end
-                 elsif args.length == 1 && args.first.is_a?(Hash)
-                   parse_hash(driver_name, args.first.merge(kwargs))
-                 elsif args.empty? && !kwargs.empty?
-                   parse_hash(driver_name, kwargs)
-                 else
-                   parse_positional(driver_name, args, kwargs)
-                 end
+        if args.length == 1 && args.first.is_a?(String)
+          str = args.first
+          return parse_uri(driver_name, str, **kwargs) if str.include?('://')
 
-        config.instance_variable_set(:@multi_host, config.initial_host_info&.host&.include?(',') || false)
-        config
+          return parse_conninfo(driver_name, str, **kwargs)
+        end
+
+        return parse_hash(driver_name, args.first.merge(kwargs)) if args.length == 1 && args.first.is_a?(Hash)
+        return parse_hash(driver_name, kwargs) if args.empty? && !kwargs.empty?
+
+        parse_positional(driver_name, args, kwargs)
       end
 
       # Parses a URI connection string, e.g.
@@ -83,20 +77,19 @@ module AwsRubyDatabaseDriverWrapper
         wrapper_config, extra_driver, prefixed_config = split_props(all_props)
         driver_config.merge!(extra_driver)
 
-        # Host and port are captured in initial_host_info for URIs, not in driver_props.
-        driver_config.delete(:host)
-        driver_config.delete(:port)
-
         initial_host_info = string_to_host_info(host_section)
-        original_host, original_port = host_port_from_uri(host_section)
+        host, port = host_port_from_uri(host_section)
+        driver_config[:host] = host
+        driver_config[:port] = port unless port.to_s.tr(',', '').empty?
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
-          original_host: original_host,
-          original_port: original_port,
+          original_host: host,
+          original_port: port,
+          multi_host_url: host.include?(','),
           driver_name: driver_name
         )
       end
@@ -128,6 +121,7 @@ module AwsRubyDatabaseDriverWrapper
           initial_host_info: initial_host_info,
           original_host: original_host,
           original_port: original_port,
+          multi_host_url: original_host.to_s.include?(','),
           driver_name: driver_name
         )
       end
@@ -153,6 +147,7 @@ module AwsRubyDatabaseDriverWrapper
           initial_host_info: initial_host_info,
           original_host: original_host,
           original_port: original_port,
+          multi_host_url: original_host.to_s.include?(','),
           driver_name: driver_name
         )
       end

@@ -23,7 +23,7 @@ module AwsRubyDatabaseDriverWrapper
                     :original_host, :original_port
 
       def initialize(wrapper_props: {}, driver_props: {}, prefixed_props: {}, initial_host_info: nil,
-                     driver_name: nil, original_host: nil, original_port: nil, multi_host: false)
+                     driver_name: nil, original_host: nil, original_port: nil, multi_host_url: false)
         @wrapper_props = wrapper_props
         @driver_props = driver_props
         @prefixed_props = prefixed_props
@@ -31,11 +31,11 @@ module AwsRubyDatabaseDriverWrapper
         @driver_name = driver_name
         @original_host = original_host
         @original_port = original_port
-        @multi_host = multi_host
+        @multi_host_url = multi_host_url
       end
 
-      def multi_host?
-        @multi_host
+      def multi_host_url?
+        @multi_host_url
       end
 
       def cluster_id
