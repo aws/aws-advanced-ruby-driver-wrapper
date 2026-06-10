@@ -16,6 +16,7 @@
 
 require_relative '../errors'
 require_relative 'host_info'
+require_relative 'host_role'
 
 module AwsRubyDatabaseDriverWrapper
   module Host
@@ -49,12 +50,6 @@ module AwsRubyDatabaseDriverWrapper
         '<none>'
       end
 
-      # Force monitoring refresh is not supported for static host list providers.
-      # @raise [Errors::AwsError]
-      def force_monitoring_refresh(_verify_writer, _timeout_ms)
-        raise Errors::AwsError, 'force_monitoring_refresh is not supported for ConnectionStringHostListProvider'
-      end
-
       # No-op — there is no monitor to stop for this host list provider.
       def stop_monitor; end
 
@@ -63,8 +58,24 @@ module AwsRubyDatabaseDriverWrapper
       def initialize_hosts
         return unless @hosts.nil?
 
-        initial_host = @service_container.connection_service.initial_host_info
-        @hosts = [initial_host]
+        connection_service = @service_container.connection_service
+        config = connection_service.config
+        @hosts = if config.multi_host_url?
+                   build_multi_host_list(config.original_host, config.original_port)
+                 else
+                   [connection_service.initial_host_info]
+                 end
+      end
+
+      def build_multi_host_list(original_host, original_port)
+        hosts = original_host.split(',').map(&:strip)
+        ports = original_port.to_s.split(',', -1)
+
+        hosts.each_with_index.map do |host, i|
+          port = ports[i]&.strip
+          port_value = port.nil? || port.empty? ? HostInfo::NO_PORT : port
+          HostInfo.new(host: host, port: port_value, role: HostRole::UNKNOWN)
+        end
       end
     end
   end

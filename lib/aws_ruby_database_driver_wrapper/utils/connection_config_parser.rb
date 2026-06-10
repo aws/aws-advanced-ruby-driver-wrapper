@@ -178,7 +178,7 @@ module AwsRubyDatabaseDriverWrapper
       # Forms a HostInfo object from a URI host section string.
       # Each host entry may or may not have a port; missing ports are represented as -1.
       # The resulting port is a comma-delimited string of per-host ports.
-      def string_to_host_info(host, _default_port = nil)
+      def string_to_host_info(host)
         host_str = host&.strip
         return nil if host_str.nil? || host_str.empty?
 
