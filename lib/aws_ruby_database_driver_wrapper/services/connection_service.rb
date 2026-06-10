@@ -101,7 +101,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Boolean]
       # TODO: move to ConnectionConfig and change implementation
       def multi_host_url?
-        @config.driver_props[:host].to_s.include?(',')
+        @config.multi_host?
       end
 
       # @return [Boolean] whether the driver is PostgreSQL

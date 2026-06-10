@@ -34,15 +34,20 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def connect(host_info, props, is_initial_connection, _pipeline_callable)
+        connection_service = @service_container.connection_service
         driver_dialect = @service_container.dialect_service.driver_dialect
-        conn = driver_dialect.connect(host_info, props)
+
+        conn = if is_initial_connection && connection_service.multi_host_url?
+                 driver_dialect.connect_with_initial_args(connection_service.config, props)
+               else
+                 driver_dialect.connect(host_info, props)
+               end
 
         @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
-        @service_container.connection_service.update_current_connection(conn, host_info)
+        connection_service.update_current_connection(conn, host_info)
 
         if is_initial_connection
           @service_container.dialect_service.update_dialect(conn)
-          connection_service = @service_container.connection_service
 
           if connection_service.pg? && connection_service.multi_host_url?
             connection_service.config.initial_host_info = Host::HostInfo.new(

@@ -120,6 +120,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
       before do
         allow(mock_config).to receive(:initial_host_info=)
+        allow(driver_dialect).to receive(:connect_with_initial_args).and_return(mock_connection)
       end
 
       it 'updates initial_host_info from the resolved connection' do

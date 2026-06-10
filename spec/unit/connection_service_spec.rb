@@ -151,7 +151,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
     context 'when the host contains a comma' do
       let(:config) do
         instance_double('ConnectionConfig',
-                        driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'host1,host2' }, initial_host_info: nil)
+                        driver_name: :postgresql, wrapper_props: {}, driver_props: { host: 'host1,host2' },
+                        initial_host_info: nil, multi_host?: true)
       end
 
       it 'returns true' do
@@ -161,6 +162,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
 
     context 'when the host does not contain a comma' do
       it 'returns false' do
+        allow(config).to receive(:multi_host?).and_return(false)
         expect(service.multi_host_url?).to be false
       end
     end
