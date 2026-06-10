@@ -36,15 +36,6 @@ module AwsRubyDatabaseDriverWrapper
         ::Mysql2::Client.new(**prepare_connect_config(host_info, config))
       end
 
-      # MySQL does not support multi-host connection strings natively.
-      # Falls back to standard single-host connect behavior.
-      def connect_with_initial_args(connection_config, props)
-        host_info = connection_config.initial_host_info
-        override_props = (props || {}).reject { |k, _| %i[host port].include?(k.to_sym) }
-        config = connection_config.initial_options.merge(override_props)
-        connect(host_info, config)
-      end
-
       def execute(connection, sql)
         connection.query(sql)
       end

@@ -20,17 +20,17 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     class ConnectionConfig
       attr_accessor :wrapper_props, :driver_props, :prefixed_props, :initial_host_info, :driver_name,
-                    :initial_args, :initial_options
+                    :original_host, :original_port
 
       def initialize(wrapper_props: {}, driver_props: {}, prefixed_props: {}, initial_host_info: nil,
-                     driver_name: nil, initial_args: [], initial_options: {}, multi_host: false)
+                     driver_name: nil, original_host: nil, original_port: nil, multi_host: false)
         @wrapper_props = wrapper_props
         @driver_props = driver_props
         @prefixed_props = prefixed_props
         @initial_host_info = initial_host_info
         @driver_name = driver_name
-        @initial_args = initial_args
-        @initial_options = initial_options
+        @original_host = original_host
+        @original_port = original_port
         @multi_host = multi_host
       end
 

@@ -304,41 +304,59 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     end
   end
 
-  describe 'initial_args and initial_options' do
-    it 'stores initial_args from a URI string' do
+  describe 'original_host and original_port' do
+    it 'extracts from a single-host URI with port' do
+      config = parser.parse(:postgresql, 'postgresql://host:5432/db')
+      expect(config.original_host).to eq('host')
+      expect(config.original_port).to eq('5432')
+    end
+
+    it 'extracts from a single-host URI without port' do
       config = parser.parse(:postgresql, 'postgresql://host/db')
-      expect(config.initial_args).to eq(['postgresql://host/db'])
-      expect(config.initial_options).to eq({})
+      expect(config.original_host).to eq('host')
+      expect(config.original_port).to eq('')
     end
 
-    it 'stores initial_args from a conninfo string' do
-      config = parser.parse(:postgresql, 'host=localhost port=5432')
-      expect(config.initial_args).to eq(['host=localhost port=5432'])
-      expect(config.initial_options).to eq({})
+    it 'extracts from a multi-host URI with mixed ports' do
+      config = parser.parse(:postgresql, 'postgresql://host1,host2:5433/db')
+      expect(config.original_host).to eq('host1,host2')
+      expect(config.original_port).to eq(',5433')
     end
 
-    it 'stores initial_args and initial_options from keyword arguments' do
-      config = parser.parse(:postgresql, host: 'myhost', port: 5432)
-      expect(config.initial_args).to eq([])
-      expect(config.initial_options).to eq({ host: 'myhost', port: 5432 })
+    it 'extracts from a multi-host URI with all ports' do
+      config = parser.parse(:postgresql, 'postgresql://host1:5432,host2:5433/db')
+      expect(config.original_host).to eq('host1,host2')
+      expect(config.original_port).to eq('5432,5433')
     end
 
-    it 'stores initial_args from positional arguments' do
-      config = parser.parse(:postgresql, 'myhost', 5432, nil, nil, 'mydb')
-      expect(config.initial_args).to eq(['myhost', 5432, nil, nil, 'mydb'])
-      expect(config.initial_options).to eq({})
+    it 'extracts from a multi-host URI with no ports' do
+      config = parser.parse(:postgresql, 'postgresql://host1,host2/db')
+      expect(config.original_host).to eq('host1,host2')
+      expect(config.original_port).to eq(',')
     end
 
-    it 'stores both initial_args and initial_options when mixed' do
-      config = parser.parse(:postgresql, 'myhost', 5432, nil, nil, 'mydb', cluster_id: 'test')
-      expect(config.initial_args).to eq(['myhost', 5432, nil, nil, 'mydb'])
-      expect(config.initial_options).to eq({ cluster_id: 'test' })
+    it 'extracts from keyword arguments' do
+      config = parser.parse(:postgresql, host: 'host1,host2', port: '5432,5433')
+      expect(config.original_host).to eq('host1,host2')
+      expect(config.original_port).to eq('5432,5433')
     end
 
-    it 'stores initial_args from a hash positional argument' do
-      config = parser.parse(:postgresql, { host: 'myhost', dbname: 'mydb' })
-      expect(config.initial_args).to eq([{ host: 'myhost', dbname: 'mydb' }])
-      expect(config.initial_options).to eq({})
+    it 'extracts from keyword arguments with single port' do
+      config = parser.parse(:postgresql, host: 'host1,host2', port: 5433)
+      expect(config.original_host).to eq('host1,host2')
+      expect(config.original_port).to eq('5433')
+    end
+
+    it 'extracts from a conninfo string' do
+      config = parser.parse(:postgresql, 'host=host1,host2 port=5432,5433')
+      expect(config.original_host).to eq('host1,host2')
+      expect(config.original_port).to eq('5432,5433')
+    end
+
+    it 'extracts from positional arguments' do
+      config = parser.parse(:postgresql, 'myhost', 5432)
+      expect(config.original_host).to eq('myhost')
+      expect(config.original_port).to eq('5432')
     end
   end
 

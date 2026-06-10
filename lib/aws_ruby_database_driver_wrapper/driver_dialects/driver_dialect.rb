@@ -37,16 +37,6 @@ module AwsRubyDatabaseDriverWrapper
         raise NotImplementedError
       end
 
-      # Connects using the original args/options the user passed to the wrapper.
-      # Used for initial multi-host connections so the community driver handles
-      # multi-host failover natively.
-      #
-      # @param connection_config [Utils::ConnectionConfig] the parsed connection configuration
-      # @param props [Hash] additional properties to merge (e.g. IAM tokens), excluding :host and :port
-      def connect_with_initial_args(connection_config, props)
-        raise NotImplementedError
-      end
-
       def execute(connection, sql)
         raise NotImplementedError
       end

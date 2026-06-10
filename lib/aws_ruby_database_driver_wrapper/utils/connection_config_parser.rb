@@ -40,9 +40,6 @@ module AwsRubyDatabaseDriverWrapper
                 'URI strings and positional arguments are not supported.'
         end
 
-        initial_args = args.dup
-        initial_options = kwargs.dup
-
         config = if args.length == 1 && args.first.is_a?(String)
                    str = args.first
                    if str.include?('://')
@@ -58,8 +55,6 @@ module AwsRubyDatabaseDriverWrapper
                    parse_positional(driver_name, args, kwargs)
                  end
 
-        config.initial_args = initial_args
-        config.initial_options = initial_options
         config.instance_variable_set(:@multi_host, config.initial_host_info&.host&.include?(',') || false)
         config
       end
@@ -93,12 +88,15 @@ module AwsRubyDatabaseDriverWrapper
         driver_config.delete(:port)
 
         initial_host_info = string_to_host_info(host_section)
+        original_host, original_port = host_port_from_uri(host_section)
 
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
+          original_host: original_host,
+          original_port: original_port,
           driver_name: driver_name
         )
       end
@@ -120,11 +118,16 @@ module AwsRubyDatabaseDriverWrapper
         driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
         initial_host_info = hash_to_host_info(driver_config)
 
+        original_host = driver_config[:host] || driver_config[:hostname]
+        original_port = driver_config[:port]
+
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
+          original_host: original_host,
+          original_port: original_port,
           driver_name: driver_name
         )
       end
@@ -140,11 +143,16 @@ module AwsRubyDatabaseDriverWrapper
         driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
         initial_host_info = hash_to_host_info(driver_config)
 
+        original_host = driver_config[:host]
+        original_port = driver_config[:port]
+
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
           initial_host_info: initial_host_info,
+          original_host: original_host,
+          original_port: original_port,
           driver_name: driver_name
         )
       end
@@ -215,6 +223,31 @@ module AwsRubyDatabaseDriverWrapper
                              authority_and_rest
                            end
         without_userinfo.split(%r{[/?#]}, 2).first || ''
+      end
+
+      # Extracts original_host and original_port from a URI host section.
+      # Missing ports are represented as empty strings in the comma-delimited port string.
+      # E.g. "host1,host2:5433" => ["host1,host2", ",5433"]
+      #      "host1:5432,host2:5433" => ["host1,host2", "5432,5433"]
+      #      "host1,host2" => ["host1,host2", ","]
+      def host_port_from_uri(host_section)
+        entries = host_section.split(',').map(&:strip)
+        hosts = []
+        ports = []
+        entries.each do |entry|
+          if entry.include?(':')
+            h, p = entry.split(':', 2)
+            hosts << h
+            ports << p
+          else
+            hosts << entry
+            ports << ''
+          end
+        end
+
+        original_host = hosts.join(',')
+        original_port = ports.join(',')
+        [original_host, original_port]
       end
 
       # Parses user, password, path, and query from a PostgreSQL-style URI.

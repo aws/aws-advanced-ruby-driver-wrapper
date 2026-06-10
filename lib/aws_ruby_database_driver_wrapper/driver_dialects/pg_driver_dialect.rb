@@ -49,20 +49,6 @@ module AwsRubyDatabaseDriverWrapper
         ::PG::Connection.new(**prepare_connect_config(host_info, config))
       end
 
-      # Connects using the original args/options the user passed.
-      # Props (except :host and :port) are merged as keyword overrides so the PG gem
-      # handles multi-host connection natively.
-      def connect_with_initial_args(connection_config, props)
-        args = connection_config.initial_args.dup
-        options = connection_config.initial_options.dup
-
-        # Merge props (except host/port) as keyword overrides
-        override_props = (props || {}).reject { |k, _| %i[host port].include?(k.to_sym) }
-        options.merge!(override_props)
-
-        ::PG::Connection.new(*args, **options)
-      end
-
       def execute(connection, sql)
         connection.exec(sql)
       end

@@ -107,7 +107,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
     context 'multi-host PG initial connection' do
       let(:mock_config) do
-        instance_double(AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig, initial_host_info: nil)
+        instance_double(AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig,
+                        initial_host_info: nil,
+                        original_host: 'host1,host2',
+                        original_port: ',5433')
       end
       let(:connection_service) do
         instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
@@ -120,7 +123,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
       before do
         allow(mock_config).to receive(:initial_host_info=)
-        allow(driver_dialect).to receive(:connect_with_initial_args).and_return(mock_connection)
       end
 
       it 'updates initial_host_info from the resolved connection' do
@@ -128,6 +130,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
         expect(mock_config).to have_received(:initial_host_info=) do |new_info|
           expect(new_info.host).to eq('test-instance.us-east-1.rds.example.com')
           expect(new_info.port).to eq(5432)
+        end
+      end
+
+      it 'connects using original_host and original_port' do
+        plugin.connect(host_info, driver_props, true, nil)
+        expect(driver_dialect).to have_received(:connect) do |hi, props|
+          expect(hi.host).to eq('host1,host2')
+          expect(hi.port).to eq(',5433')
+          expect(props).not_to have_key(:host)
+          expect(props).not_to have_key(:port)
         end
       end
 
