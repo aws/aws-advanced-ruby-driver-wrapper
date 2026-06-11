@@ -156,7 +156,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
                         original_port: '5433')
       end
 
-      it 'assigns the single port to the first host and NO_PORT to the rest' do
+      it 'assigns the single port to all hosts' do
         hosts = provider.refresh
         expect(hosts.length).to eq(3)
 
@@ -164,10 +164,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
         expect(hosts[0].port).to eq('5433')
 
         expect(hosts[1].host).to eq('host2')
-        expect(hosts[1].port).to eq(host_info_class::NO_PORT)
+        expect(hosts[1].port).to eq('5433')
 
         expect(hosts[2].host).to eq('host3')
-        expect(hosts[2].port).to eq(host_info_class::NO_PORT)
+        expect(hosts[2].port).to eq('5433')
       end
     end
 

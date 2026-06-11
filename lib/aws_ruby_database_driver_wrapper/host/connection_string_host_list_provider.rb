@@ -69,11 +69,19 @@ module AwsRubyDatabaseDriverWrapper
 
       def build_multi_host_list(original_host, original_port)
         hosts = original_host.split(',').map(&:strip)
-        ports = original_port.to_s.split(',', -1)
+        ports = original_port.split(',', -1)
+
+        # If a single port is specified (no commas), it applies to all hosts.
+        # If commas are present, each port maps positionally to each host (empty entries become NO_PORT).
+        single_port = !original_port.include?(',')
 
         hosts.each_with_index.map do |host, i|
-          port = ports[i]&.strip
-          port_value = port.nil? || port.empty? ? HostInfo::NO_PORT : port
+          port_value = if single_port
+                         original_port.strip.empty? ? HostInfo::NO_PORT : original_host.strip
+                       else
+                         port = ports[i]&.strip
+                         port.nil? || port.empty? ? HostInfo::NO_PORT : port
+                       end
           HostInfo.new(host: host, port: port_value, role: HostRole::UNKNOWN)
         end
       end
