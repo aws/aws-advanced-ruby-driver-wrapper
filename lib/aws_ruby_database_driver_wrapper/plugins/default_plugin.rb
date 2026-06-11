@@ -37,13 +37,15 @@ module AwsRubyDatabaseDriverWrapper
       def connect(host_info, props, is_initial_connection, _pipeline_callable)
         connection_service = @service_container.connection_service
         driver_dialect = @service_container.dialect_service.driver_dialect
+        target_host_info = if is_initial_connection && connection_service.multi_host_url?
+                             # If the user specified a multi-host URL, we should always pass the same hosts/ports they
+                             # specified. Note that host_info may have a different value than initial_host_info.
+                             connection_service.initial_host_info
+                           else
+                             host_info
+                           end
 
-        conn = if is_initial_connection && connection_service.multi_host_url?
-                 driver_dialect.connect(connection_service.initial_host_info, props)
-               else
-                 driver_dialect.connect(host_info, props)
-               end
-
+        conn = driver_dialect.connect(target_host_info, props)
         @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
         connection_service.update_current_connection(conn, host_info)
 
