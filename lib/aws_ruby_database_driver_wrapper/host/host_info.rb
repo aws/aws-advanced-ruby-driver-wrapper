@@ -65,16 +65,20 @@ module AwsRubyDatabaseDriverWrapper
         to_s
       end
 
-      def dup
-        HostInfo.new(
-          host: host,
-          port: port,
+      # Returns a deep copy of this HostInfo, duplicating all mutable fields.
+      # @return [HostInfo]
+      def deep_dup
+        copy = HostInfo.new(
+          host: host.dup,
+          port: port.dup,
           role: role,
           availability: availability,
           weight: weight,
-          id: id,
+          id: id&.dup,
           last_update_time: last_update_time
         )
+        @all_identifiers.each { |identifier| copy.add_aliases(identifier) }
+        copy
       end
 
       def url

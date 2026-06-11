@@ -26,21 +26,22 @@ module AwsRubyDatabaseDriverWrapper
       # @param service_container [Services::ServiceContainer]
       def initialize(service_container:)
         @service_container = service_container
-        @hosts = nil
+        @hosts = []
+        @initialized = false
       end
 
       # Returns the static host list parsed from the connection string.
       # @return [Array<HostInfo>]
       def refresh
         initialize_hosts
-        @hosts.dup
+        @hosts.map(&:deep_dup)
       end
 
       # Same as {#refresh} — the host list is static and never changes.
       # @return [Array<HostInfo>]
       def force_refresh(_verify_writer = false, _timeout_ms = 0)
         initialize_hosts
-        @hosts.dup
+        @hosts.map(&:deep_dup)
       end
 
       # Returns the cluster ID. Since this is a static provider with no cluster awareness,
@@ -56,7 +57,7 @@ module AwsRubyDatabaseDriverWrapper
       private
 
       def initialize_hosts
-        return unless @hosts.nil?
+        return if @initialized
 
         connection_service = @service_container.connection_service
         config = connection_service.config
@@ -65,19 +66,21 @@ module AwsRubyDatabaseDriverWrapper
                  else
                    [connection_service.initial_host_info]
                  end
+        @initialized = true
       end
 
       def build_multi_host_list(original_host, original_port)
         hosts = original_host.split(',').map(&:strip)
-        ports = original_port.split(',', -1)
+        port_str = original_port.to_s
 
         # If a single port is specified (no commas), it applies to all hosts.
         # If commas are present, each port maps positionally to each host (empty entries become NO_PORT).
-        single_port = !original_port.include?(',')
+        single_port = !port_str.include?(',')
+        ports = port_str.split(',', -1)
 
         hosts.each_with_index.map do |host, i|
           port_value = if single_port
-                         original_port.strip.empty? ? HostInfo::NO_PORT : original_host.strip
+                         port_str.strip.empty? ? HostInfo::NO_PORT : port_str.strip
                        else
                          port = ports[i]&.strip
                          port.nil? || port.empty? ? HostInfo::NO_PORT : port
