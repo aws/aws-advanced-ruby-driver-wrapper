@@ -19,8 +19,8 @@ require_relative '../property_definition'
 module AwsRubyDatabaseDriverWrapper
   module Utils
     class ConnectionConfig
-      attr_accessor :wrapper_props, :driver_props, :prefixed_props, :initial_host_info, :driver_name,
-                    :original_host, :original_port
+      attr_accessor :wrapper_props, :driver_props, :prefixed_props, :initial_host_info, :driver_name
+      attr_reader :original_host, :original_port
 
       def initialize(wrapper_props: {}, driver_props: {}, prefixed_props: {}, initial_host_info: nil,
                      driver_name: nil, original_host: nil, original_port: nil, multi_host_url: false)

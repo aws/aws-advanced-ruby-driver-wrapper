@@ -39,13 +39,7 @@ module AwsRubyDatabaseDriverWrapper
         driver_dialect = @service_container.dialect_service.driver_dialect
 
         conn = if is_initial_connection && connection_service.multi_host_url?
-                 config = connection_service.config
-                 multi_host_info = Host::HostInfo.new(
-                   host: config.original_host,
-                   port: config.original_port
-                 )
-                 multi_host_props = (props || {}).reject { |k, _| HOST_PORT_KEYS.include?(k.to_sym) }
-                 driver_dialect.connect(multi_host_info, multi_host_props)
+                 driver_dialect.connect(connection_service.initial_host_info, props)
                else
                  driver_dialect.connect(host_info, props)
                end

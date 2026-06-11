@@ -38,6 +38,8 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       # Same as {#refresh} — the host list is static and never changes.
+      # @param _verify_writer [Boolean] unused; accepted for compatibility with other host list providers.
+      # @param _timeout_ms [Integer] unused; accepted for compatibility with other host list providers.
       # @return [Array<HostInfo>]
       def force_refresh(_verify_writer = false, _timeout_ms = 0)
         initialize_hosts
