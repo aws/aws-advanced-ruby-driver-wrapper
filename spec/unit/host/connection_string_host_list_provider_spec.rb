@@ -31,16 +31,20 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
   end
 
   let(:config) do
-    instance_double('ConnectionConfig',
-                    multi_host_url?: false,
-                    original_host: 'myhost',
-                    original_port: '5432')
+    instance_double(
+      'ConnectionConfig',
+      multi_host_url?: false,
+      original_host: 'myhost',
+      original_port: '5432'
+    )
   end
 
   let(:connection_service) do
-    instance_double('ConnectionService',
-                    initial_host_info: initial_host_info,
-                    config: config)
+    instance_double(
+      'ConnectionService',
+      initial_host_info: initial_host_info,
+      config: config
+    )
   end
 
   let(:service_container) do
@@ -66,10 +70,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with per-host ports' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'host1,host2',
-                        original_port: '5432,5433')
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'host1,host2',
+          original_port: '5432,5433'
+        )
       end
 
       it 'returns a HostInfo for each host with correct ports' do
@@ -88,10 +94,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with mixed ports (first missing)' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'host1,host2',
-                        original_port: ',5433')
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'host1,host2',
+          original_port: ',5433'
+        )
       end
 
       it 'uses NO_PORT for hosts without an explicit port' do
@@ -110,10 +118,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with mixed ports (last missing)' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'host1,host2',
-                        original_port: '5432,')
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'host1,host2',
+          original_port: '5432,'
+        )
       end
 
       it 'uses NO_PORT for the trailing host without a port' do
@@ -130,10 +140,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with no ports at all' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'host1,host2',
-                        original_port: ',')
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'host1,host2',
+          original_port: ','
+        )
       end
 
       it 'uses NO_PORT for all hosts' do
@@ -150,10 +162,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with single port (from hash input)' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'host1,host2,host3',
-                        original_port: '5433')
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'host1,host2,host3',
+          original_port: '5433'
+        )
       end
 
       it 'assigns the single port to all hosts' do
@@ -173,10 +187,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with three hosts and three ports' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'h1,h2,h3',
-                        original_port: '5432,5433,5434')
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'h1,h2,h3',
+          original_port: '5432,5433,5434'
+        )
       end
 
       it 'correctly assigns each port positionally' do
@@ -196,10 +212,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvi
 
     context 'multi-host connection with nil original_port' do
       let(:config) do
-        instance_double('ConnectionConfig',
-                        multi_host_url?: true,
-                        original_host: 'host1,host2',
-                        original_port: nil)
+        instance_double(
+          'ConnectionConfig',
+          multi_host_url?: true,
+          original_host: 'host1,host2',
+          original_port: nil
+        )
       end
 
       it 'uses NO_PORT for all hosts' do
