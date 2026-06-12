@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative 'driver_dialect'
+require_relative '../host/connection_string_host_list_provider'
 
 module AwsRubyDatabaseDriverWrapper
   module DriverDialects
@@ -69,7 +70,7 @@ module AwsRubyDatabaseDriverWrapper
       def prepare_connect_config(host_info, config)
         cfg = config.dup
         cfg[:host] = host_info.host
-        cfg[:port] = host_info.port if host_info.port_specified?
+        cfg[:port] = host_info.port.to_i if host_info.port_specified?
         cfg
       end
     end

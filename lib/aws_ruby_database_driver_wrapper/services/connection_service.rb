@@ -100,7 +100,7 @@ module AwsRubyDatabaseDriverWrapper
       #
       # @return [Boolean]
       def multi_host_url?
-        @config.driver_props[:host].to_s.include?(',')
+        @config.multi_host_url?
       end
 
       # @return [Boolean] whether the driver is PostgreSQL

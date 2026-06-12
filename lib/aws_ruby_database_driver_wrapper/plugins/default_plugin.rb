@@ -23,6 +23,7 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     class DefaultPlugin
       SUBSCRIBED_METHODS = Set['*'].freeze
+      HOST_PORT_KEYS = %i[host port].freeze
 
       def initialize(service_container, **options)
         @service_container = service_container
@@ -34,15 +35,22 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def connect(host_info, props, is_initial_connection, _pipeline_callable)
+        connection_service = @service_container.connection_service
         driver_dialect = @service_container.dialect_service.driver_dialect
-        conn = driver_dialect.connect(host_info, props)
+        target_host_info = if is_initial_connection && connection_service.multi_host_url?
+                             # If the user specified a multi-host URL, we should always pass the same hosts/ports they
+                             # specified. Note that host_info may have a different value than initial_host_info.
+                             connection_service.initial_host_info
+                           else
+                             host_info
+                           end
 
+        conn = driver_dialect.connect(target_host_info, props)
         @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
-        @service_container.connection_service.update_current_connection(conn, host_info)
+        connection_service.update_current_connection(conn, host_info)
 
         if is_initial_connection
           @service_container.dialect_service.update_dialect(conn)
-          connection_service = @service_container.connection_service
 
           if connection_service.pg? && connection_service.multi_host_url?
             connection_service.config.initial_host_info = Host::HostInfo.new(
