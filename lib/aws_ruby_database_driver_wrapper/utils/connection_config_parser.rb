@@ -130,7 +130,7 @@ module AwsRubyDatabaseDriverWrapper
       #   parse_positional(:postgresql, ["myhost", 5432, nil, nil, "mydb", "user", "pass"], { cluster_id: "test" })
       def parse_positional(driver_name, args, kwargs)
         keys = %i[host port options tty dbname user password]
-        positional = keys.zip(args).compact.to_h
+        positional = keys.zip(args).to_h.compact
         all_props = positional.merge(kwargs.transform_keys(&:to_sym))
 
         wrapper_config, driver_config, prefixed_config = split_props(all_props)
