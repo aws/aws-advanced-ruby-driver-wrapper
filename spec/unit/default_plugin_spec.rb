@@ -106,14 +106,24 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     end
 
     context 'multi-host PG initial connection' do
+      let(:initial_host_info_obj) do
+        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+          host: 'host1,host2',
+          port: ',5433'
+        )
+      end
       let(:mock_config) do
-        instance_double(AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig, initial_host_info: nil)
+        instance_double(AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig,
+                        initial_host_info: initial_host_info_obj,
+                        original_host: 'host1,host2',
+                        original_port: ',5433')
       end
       let(:connection_service) do
         instance_double(AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
                         pg?: true,
                         multi_host_url?: true,
                         config: mock_config,
+                        initial_host_info: initial_host_info_obj,
                         wrapper_props: wrapper_props,
                         update_current_connection: nil)
       end
@@ -130,9 +140,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
         end
       end
 
+      it 'connects using initial_host_info from the connection service' do
+        plugin.connect(host_info, driver_props, true, nil)
+        expect(driver_dialect).to have_received(:connect).with(initial_host_info_obj, driver_props)
+      end
+
       it 'does not update initial_host_info on non-initial connection' do
         plugin.connect(host_info, driver_props, false, nil)
         expect(mock_config).not_to have_received(:initial_host_info=)
+      end
+
+      it 'passes host_info to the driver on non-initial connection' do
+        plugin.connect(host_info, driver_props, false, nil)
+        expect(driver_dialect).to have_received(:connect).with(host_info, driver_props)
       end
     end
 

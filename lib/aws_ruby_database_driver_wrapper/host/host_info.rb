@@ -22,7 +22,7 @@ require_relative 'host_role'
 module AwsRubyDatabaseDriverWrapper
   module Host
     class HostInfo
-      NO_PORT = -1
+      NO_PORT = '-1'
       DEFAULT_WEIGHT = 100
 
       attr_accessor :host, :port, :role, :availability_strategy, :weight, :id, :last_update_time
@@ -65,16 +65,20 @@ module AwsRubyDatabaseDriverWrapper
         to_s
       end
 
-      def dup
-        HostInfo.new(
-          host: host,
-          port: port,
+      # Returns a deep copy of this HostInfo, duplicating all mutable fields.
+      # @return [HostInfo]
+      def deep_dup
+        copy = HostInfo.new(
+          host: host.dup,
+          port: port.dup,
           role: role,
           availability: availability,
           weight: weight,
-          id: id,
+          id: id&.dup,
           last_update_time: last_update_time
         )
+        @all_identifiers.each { |identifier| copy.add_aliases(identifier) }
+        copy
       end
 
       def url
