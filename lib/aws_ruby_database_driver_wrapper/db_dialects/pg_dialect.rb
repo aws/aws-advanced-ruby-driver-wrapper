@@ -16,6 +16,7 @@
 
 require_relative 'dialect_codes'
 require_relative 'utils/dialect_utils'
+require_relative '../host/connection_string_host_list_provider'
 
 module AwsRubyDatabaseDriverWrapper
   module DbDialects

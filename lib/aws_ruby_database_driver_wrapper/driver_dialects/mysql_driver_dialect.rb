@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative 'driver_dialect'
+require_relative '../host/connection_string_host_list_provider'
 
 module AwsRubyDatabaseDriverWrapper
   module DriverDialects
