@@ -29,8 +29,7 @@ module AwsRubyDatabaseDriverWrapper
         AwsRubyDatabaseDriverWrapper::DialectCodes::RDS_PG,
         AwsRubyDatabaseDriverWrapper::DialectCodes::RDS_MYSQL,
         AwsRubyDatabaseDriverWrapper::DialectCodes::PG,
-        AwsRubyDatabaseDriverWrapper::DialectCodes::MYSQL,
-        AwsRubyDatabaseDriverWrapper::DialectCodes::MARIADB
+        AwsRubyDatabaseDriverWrapper::DialectCodes::MYSQL
       ].freeze
 
       def initialize(_driver_dialect = nil); end

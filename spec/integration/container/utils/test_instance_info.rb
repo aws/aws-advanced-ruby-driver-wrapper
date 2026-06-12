@@ -14,28 +14,24 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-source 'https://rubygems.org'
+module Integration
+  class TestInstanceInfo
+    attr_reader :instance_id, :host, :port
 
-gemspec
+    def initialize(instance_info)
+      @instance_id = instance_info['instanceId'] || instance_info['DBInstanceIdentifier']
+      @host = instance_info['host']
+      @port = instance_info['port']
 
-gem 'activerecord', '>= 6.1'
-gem 'mysql2', '>= 0.5.7'
-gem 'pg', '>= 1.6.3'
+      endpoint = instance_info['Endpoint']
+      return unless endpoint
 
-group :development do
-  gem 'bundler'
-  gem 'bundler-audit'
-  gem 'rdoc'
-  gem 'rubocop'
-  gem 'rubocop-performance'
-  gem 'yard'
-end
+      @host ||= endpoint['Address']
+      @port ||= endpoint['Port']
+    end
 
-group :test do
-  gem 'aws-sdk-rds'
-  gem 'dotenv'
-  gem 'rspec'
-  gem 'simplecov', require: false
-  gem 'simplecov-cobertura', require: false
-  gem 'toxiproxy'
+    def url
+      "#{@host}:#{@port}"
+    end
+  end
 end

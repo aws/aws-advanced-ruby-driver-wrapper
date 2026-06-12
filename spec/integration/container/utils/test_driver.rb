@@ -14,28 +14,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-source 'https://rubygems.org'
-
-gemspec
-
-gem 'activerecord', '>= 6.1'
-gem 'mysql2', '>= 0.5.7'
-gem 'pg', '>= 1.6.3'
-
-group :development do
-  gem 'bundler'
-  gem 'bundler-audit'
-  gem 'rdoc'
-  gem 'rubocop'
-  gem 'rubocop-performance'
-  gem 'yard'
-end
-
-group :test do
-  gem 'aws-sdk-rds'
-  gem 'dotenv'
-  gem 'rspec'
-  gem 'simplecov', require: false
-  gem 'simplecov-cobertura', require: false
-  gem 'toxiproxy'
+module Integration
+  module TestDriver
+    PG = :pg
+    MYSQL = :mysql
+  end
 end
