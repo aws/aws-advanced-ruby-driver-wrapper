@@ -12,8 +12,8 @@
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
-#  limitations under the License.module DialectCodes
-#
+#  limitations under the License.
+
 module AwsRubyDatabaseDriverWrapper
   module DialectCodes
     # MySQL variants
@@ -31,8 +31,6 @@ module AwsRubyDatabaseDriverWrapper
     # https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/multi-az-db-clusters-concepts.html
     MULTI_AZ_PG_CLUSTER = 'multi-az-pg-cluster'
     PG = 'pg'
-
-    MARIADB = 'mariadb'
 
     UNKNOWN = 'unknown'
     CUSTOM = 'custom'

@@ -14,28 +14,18 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-source 'https://rubygems.org'
-
-gemspec
-
-gem 'activerecord', '>= 6.1'
-gem 'mysql2', '>= 0.5.7'
-gem 'pg', '>= 1.6.3'
-
-group :development do
-  gem 'bundler'
-  gem 'bundler-audit'
-  gem 'rdoc'
-  gem 'rubocop'
-  gem 'rubocop-performance'
-  gem 'yard'
-end
-
-group :test do
-  gem 'aws-sdk-rds'
-  gem 'dotenv'
-  gem 'rspec'
-  gem 'simplecov', require: false
-  gem 'simplecov-cobertura', require: false
-  gem 'toxiproxy'
+module Integration
+  module TestEnvironmentFeatures
+    IAM = :iam
+    SECRETS_MANAGER = :secrets_manager
+    FAILOVER_SUPPORTED = :failover_supported
+    NETWORK_OUTAGES_ENABLED = :network_outages_enabled
+    AWS_CREDENTIALS_ENABLED = :aws_credentials_enabled
+    PERFORMANCE = :performance
+    SKIP_MYSQL_DRIVER_TESTS = :skip_mysql_driver_tests
+    SKIP_PG_DRIVER_TESTS = :skip_pg_driver_tests
+    TELEMETRY_TRACES_ENABLED = :telemetry_traces_enabled
+    TELEMETRY_METRICS_ENABLED = :telemetry_metrics_enabled
+    BLUE_GREEN_DEPLOYMENT = :blue_green_deployment
+  end
 end
