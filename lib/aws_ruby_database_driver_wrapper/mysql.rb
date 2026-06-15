@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../aws_ruby_database_driver_wrapper'
+require_relative 'shutdown_hooks'
 require_relative 'utils/connection_config_parser'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'

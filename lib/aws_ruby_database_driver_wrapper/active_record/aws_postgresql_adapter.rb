@@ -108,6 +108,6 @@ if ActiveRecord::ConnectionAdapters.respond_to?(:register)
   ActiveRecord::ConnectionAdapters.register(
     'aws_postgresql',
     'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
-    'aws_ruby_database_driver_wrapper/activerecord/aws_postgresql_adapter'
+    'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
   )
 end

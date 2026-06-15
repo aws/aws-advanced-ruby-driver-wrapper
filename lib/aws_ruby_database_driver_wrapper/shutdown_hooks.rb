@@ -42,6 +42,7 @@ module AwsRubyDatabaseDriverWrapper
   end
 
   def self.shutdown(grace_period_sec: 10)
+    puts 'calling shutdown...'
     shutdown_service.shutdown(grace_period_sec)
   end
 end

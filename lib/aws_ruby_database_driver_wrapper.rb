@@ -29,16 +29,19 @@ end
 
 require_relative 'aws_ruby_database_driver_wrapper/shutdown_hooks'
 
-# Register the aws_postgresql adapter with ActiveRecord if ActiveRecord is loaded.
-# This allows users to specify adapter: "aws_postgresql" without an extra require.
-if defined?(ActiveRecord)
-  if defined?(PG)
-    require_relative 'aws_ruby_database_driver_wrapper/postgresql'
-    require_relative 'aws_ruby_database_driver_wrapper/activerecord/aws_postgresql_adapter'
-  end
+# Register adapters with ActiveRecord if it is loaded.
+# The register call is lazy — the adapter file is only loaded when a connection is first established.
+# Users will not load the code for both adapters if they are only using one of them.
+if defined?(ActiveRecord::ConnectionAdapters) && ActiveRecord::ConnectionAdapters.respond_to?(:register)
+  ActiveRecord::ConnectionAdapters.register(
+    'aws_postgresql',
+    'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
+    'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
+  )
 
-  if defined?(Mysql2)
-    require_relative 'aws_ruby_database_driver_wrapper/mysql'
-    require_relative 'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
-  end
+  ActiveRecord::ConnectionAdapters.register(
+    'aws_mysql2',
+    'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
+    'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
+  )
 end
