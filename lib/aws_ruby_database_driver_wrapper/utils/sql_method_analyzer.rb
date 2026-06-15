@@ -21,18 +21,18 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     module SqlMethodAnalyzer
       EXECUTE_SQL_METHODS = Set[
-        RubyMethod::CONNECTION_EXEC,
-        RubyMethod::CONNECTION_ASYNC_EXEC,
-        RubyMethod::CONNECTION_EXEC_PARAMS,
-        RubyMethod::CONNECTION_EXEC_PREPARED,
-        RubyMethod::CONNECTION_QUERY,
-        RubyMethod::CONNECTION_SEND_QUERY,
-        RubyMethod::CONNECTION_SEND_QUERY_PARAMS,
-        RubyMethod::STATEMENT_EXECUTE
+        RubyMethod::CONNECTION_EXEC.name,
+        RubyMethod::CONNECTION_ASYNC_EXEC.name,
+        RubyMethod::CONNECTION_EXEC_PARAMS.name,
+        RubyMethod::CONNECTION_EXEC_PREPARED.name,
+        RubyMethod::CONNECTION_QUERY.name,
+        RubyMethod::CONNECTION_SEND_QUERY.name,
+        RubyMethod::CONNECTION_SEND_QUERY_PARAMS.name,
+        RubyMethod::STATEMENT_EXECUTE.name
       ].freeze
 
       CLOSE_TRANSACTION_METHODS = Set[
-        RubyMethod::CONNECTION_CLOSE
+        RubyMethod::CONNECTION_CLOSE.name
       ].freeze
 
       module_function
@@ -51,7 +51,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def closes_transaction?(method_name, args)
         return true if CLOSE_TRANSACTION_METHODS.include?(method_name)
-        return true if method_name == RubyMethod::CONNECTION_TRANSACTION
+        return true if method_name == RubyMethod::CONNECTION_TRANSACTION.name
         return false unless EXECUTE_SQL_METHODS.include?(method_name)
 
         sql = first_statement(args&.first)

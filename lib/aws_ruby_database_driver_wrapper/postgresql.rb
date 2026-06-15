@@ -35,116 +35,202 @@ module AwsRubyDatabaseDriverWrapper
     def initialize(*args, **options)
       config = Utils::ConnectionConfigParser.parse(:postgresql, *args, **options)
       @service_container = Services::ServiceUtility.create_standard_container(config)
+      @prepared_on = {}
+      @async_conn = nil
+      @copy_conn = nil
       conn_service = @service_container.connection_service
-      @connection =
-        @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
+      @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
 
     def exec(sql, *params)
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_EXEC,
-        ->(*args) { @connection.exec(*args) }, sql, *params
-      )
-      return result if result.nil?
-
-      WrapperPgResult.new(result, @service_container, @connection)
+      result = pm.execute(RubyMethod::CONNECTION_EXEC, current_conn, ->(*a) { current_conn.exec(*a) }, sql, *params)
+      wrap_pg_result(result)
     end
 
     def exec_params(sql, params, result_format = 0, type_map = nil)
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_EXEC_PARAMS,
-        ->(*args) { @connection.exec_params(*args) },
+      result = pm.execute(
+        RubyMethod::CONNECTION_EXEC_PARAMS, current_conn,
+        ->(*a) { current_conn.exec_params(*a) },
         sql, params, result_format, type_map
       )
-      return result if result.nil?
-
-      WrapperPgResult.new(result, @service_container, @connection)
-    end
-
-    def prepare(stmt_name, sql, param_types = nil)
-      @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_PREPARE,
-        ->(*args) { @connection.prepare(*args) },
-        stmt_name, sql, param_types
-      )
-    end
-
-    def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_EXEC_PREPARED,
-        ->(*args) { @connection.exec_prepared(*args) },
-        stmt_name, params, result_format, type_map
-      )
-      return result if result.nil?
-
-      WrapperPgResult.new(result, @service_container, @connection)
-    end
-
-    def transaction(&block)
-      @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_TRANSACTION,
-        ->(&b) { @connection.transaction(&b) },
-        &block
-      )
+      wrap_pg_result(result)
     end
 
     def async_exec(sql, *params)
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_ASYNC_EXEC,
-        ->(*args) { @connection.async_exec(*args) },
-        sql, *params
-      )
-      return result if result.nil?
-
-      WrapperPgResult.new(result, @service_container, @connection)
+      result = pm.execute(RubyMethod::CONNECTION_ASYNC_EXEC, current_conn, ->(*a) { current_conn.async_exec(*a) }, sql, *params)
+      wrap_pg_result(result)
     end
 
-    def get_result # rubocop:disable Naming/AccessorMethodName
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_GET_RESULT,
-        -> { @connection.get_result }
-      )
-      return result if result.nil?
+    def transaction(&block)
+      pm.execute(RubyMethod::CONNECTION_TRANSACTION, current_conn, ->(&b) { current_conn.transaction(&b) }, &block)
+    end
 
-      WrapperPgResult.new(result, @service_container, @connection)
+    def close
+      pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
+    end
+
+    alias finish close
+
+    def ping
+      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
+    end
+
+    def reset
+      pm.execute(RubyMethod::CONNECTION_RESET, current_conn, -> { current_conn.reset })
+    end
+
+    # -- Prepared statement writers (store @prepared_on) --
+
+    def prepare(stmt_name, sql, param_types = nil)
+      pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, stmt_name, sql, param_types)
+      @prepared_on[stmt_name] = current_conn
+      nil
+    end
+
+    def send_prepare(stmt_name, sql, param_types = nil)
+      pm.execute(RubyMethod::CONNECTION_SEND_PREPARE, current_conn, ->(*a) { current_conn.send_prepare(*a) }, stmt_name, sql, param_types)
+      @prepared_on[stmt_name] = current_conn
+      @async_conn = current_conn
+    end
+
+    # -- Prepared statement readers (check bounded to @prepared_on) --
+
+    def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
+      result = pm.execute(
+        RubyMethod::CONNECTION_EXEC_PREPARED, current_conn,
+        ->(*a) { current_conn.exec_prepared(*a) },
+        stmt_name, params, result_format, type_map,
+        bounded_conn: @prepared_on[stmt_name]
+      )
+      wrap_pg_result(result)
+    end
+
+    def describe_prepared(stmt_name)
+      result = pm.execute(
+        RubyMethod::CONNECTION_DESCRIBE_PREPARED, current_conn,
+        ->(*a) { current_conn.describe_prepared(*a) },
+        stmt_name, bounded_conn: @prepared_on[stmt_name]
+      )
+      wrap_pg_result(result)
+    end
+
+    # Cross-domain: reads @prepared_on, writes @async_conn
+    def send_query_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
+      pm.execute(
+        RubyMethod::CONNECTION_SEND_QUERY_PREPARED, current_conn,
+        ->(*a) { current_conn.send_query_prepared(*a) },
+        stmt_name, params, result_format, type_map,
+        bounded_conn: @prepared_on[stmt_name]
+      )
+      @async_conn = current_conn
+    end
+
+    # -- Async writers (store @async_conn) --
+
+    def send_query(sql, *params)
+      pm.execute(RubyMethod::CONNECTION_SEND_QUERY, current_conn, ->(*a) { current_conn.send_query(*a) }, sql, *params)
+      @async_conn = current_conn
+    end
+
+    def send_query_params(sql, params, result_format = 0, type_map = nil)
+      pm.execute(
+        RubyMethod::CONNECTION_SEND_QUERY_PARAMS, current_conn,
+        ->(*a) { current_conn.send_query_params(*a) },
+        sql, params, result_format, type_map
+      )
+      @async_conn = current_conn
+    end
+
+    # -- Async readers (check bounded to @async_conn) --
+
+    def get_result # rubocop:disable Naming/AccessorMethodName
+      result = pm.execute(RubyMethod::CONNECTION_GET_RESULT, current_conn, -> { current_conn.get_result }, bounded_conn: @async_conn)
+      @async_conn = nil if result.nil?
+      wrap_pg_result(result)
     end
 
     def get_last_result # rubocop:disable Naming/AccessorMethodName
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_GET_LAST_RESULT,
-        -> { @connection.get_last_result }
-      )
-      return result if result.nil?
-
-      WrapperPgResult.new(result, @service_container, @connection)
+      result = pm.execute(RubyMethod::CONNECTION_GET_LAST_RESULT, current_conn, lambda {
+        current_conn.get_last_result
+      }, bounded_conn: @async_conn)
+      @async_conn = nil
+      wrap_pg_result(result)
     end
 
-    # Catch methods not explicitly defined
-    def method_missing(method_name, *args, **options, &block)
-      raise NoMethodError, 'Connection not initialized' if @connection.nil?
+    # -- COPY writer (store @copy_conn) --
 
-      raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless @connection.respond_to?(method_name)
+    def copy_data(sql, coder = nil, &block)
+      @copy_conn = current_conn
+      pm.execute(RubyMethod::CONNECTION_COPY_DATA, current_conn, ->(*a, &b) { current_conn.copy_data(*a, &b) }, sql, coder, &block)
+    ensure
+      @copy_conn = nil
+    end
 
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, "connection.#{method_name}",
-        ->(*a, **opts, &b) { @connection.send(method_name, *a, **opts, &b) },
-        *args, **options, &block
+    # -- COPY readers (check bounded to @copy_conn) --
+
+    def put_copy_data(buffer, encoder = nil)
+      pm.execute(
+        RubyMethod::CONNECTION_PUT_COPY_DATA, current_conn,
+        ->(*a) { current_conn.put_copy_data(*a) },
+        buffer, encoder, bounded_conn: @copy_conn
       )
-      return result if result.nil? || !result.is_a?(PG::Result)
+    end
 
-      WrapperPgResult.new(result, @service_container, @connection)
+    def get_copy_data(async = false, decoder = nil)
+      pm.execute(
+        RubyMethod::CONNECTION_GET_COPY_DATA, current_conn,
+        ->(*a) { current_conn.get_copy_data(*a) },
+        async, decoder, bounded_conn: @copy_conn
+      )
+    end
+
+    def put_copy_end(error_message = nil)
+      pm.execute(
+        RubyMethod::CONNECTION_PUT_COPY_END, current_conn,
+        ->(*a) { current_conn.put_copy_end(*a) },
+        error_message, bounded_conn: @copy_conn
+      )
+      @copy_conn = nil
+    end
+
+    # -- method_missing: non-network bypasses pipeline --
+
+    def method_missing(method_name, *args, **options, &block)
+      conn = current_conn
+      raise NoMethodError, 'Connection not initialized' if conn.nil?
+      raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
+
+      method_key = "connection.#{method_name}"
+      return conn.send(method_name, *args, **options, &block) unless network_bound_methods.include?(method_key)
+
+      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, *args, **options, &block)
+      wrap_pg_result(result)
     end
 
     def respond_to_missing?(method, include_private = false)
-      @connection.respond_to?(method, include_private) || super
+      current_conn.respond_to?(method, include_private) || super
     end
 
     private
 
     def current_conn
       @service_container.connection_service.current_connection
+    end
+
+    def pm
+      @service_container.plugin_manager
+    end
+
+    def network_bound_methods
+      @network_bound_methods ||= @service_container.dialect_service.driver_dialect.network_bound_methods
+    end
+
+    def wrap_pg_result(result)
+      return result unless result.is_a?(PG::Result)
+
+      WrapperPgResult.new(result, @service_container, current_conn)
     end
   end
 
@@ -158,63 +244,38 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def each(&block)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH,
-        ->(&blk) { @result.each(&blk) },
-        &block
-      )
+      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) }, bounded_conn: @connection, &block)
     end
 
     def each_row(&block)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH_ROW,
-        ->(&blk) { @result.each_row(&blk) },
-        &block
-      )
+      pm.execute(RubyMethod::RESULT_EACH_ROW, current_conn, ->(&blk) { @result.each_row(&blk) }, bounded_conn: @connection, &block)
     end
 
     def to_a
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TO_A,
-        -> { @result.to_a }
-      )
+      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection)
     end
 
     def [](index)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_BRACKET,
-        ->(*args) { @result[*args] }, index
-      )
+      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection)
     end
 
     def values
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_VALUES,
-        -> { @result.values }
-      )
+      pm.execute(RubyMethod::RESULT_VALUES, current_conn, -> { @result.values }, bounded_conn: @connection)
     end
 
     def column_values(index)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_COLUMN_VALUES,
-        ->(*args) { @result.column_values(*args) }, index
-      )
+      pm.execute(RubyMethod::RESULT_COLUMN_VALUES, current_conn, ->(*a) { @result.column_values(*a) }, index, bounded_conn: @connection)
     end
 
     def field_values(field_name)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_FIELD_VALUES,
-        ->(*args) { @result.field_values(*args) }, field_name
-      )
+      pm.execute(RubyMethod::RESULT_FIELD_VALUES, current_conn, ->(*a) { @result.field_values(*a) }, field_name, bounded_conn: @connection)
     end
 
     def tuple(index)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TUPLE,
-        ->(*args) { @result.tuple(*args) }, index
-      )
+      pm.execute(RubyMethod::RESULT_TUPLE, current_conn, ->(*a) { @result.tuple(*a) }, index, bounded_conn: @connection)
     end
 
+    # Delegate non-network methods directly
     def fields
       @result.fields
     end
@@ -253,6 +314,16 @@ module AwsRubyDatabaseDriverWrapper
 
     def respond_to_missing?(method, include_private = false)
       @result.respond_to?(method, include_private) || super
+    end
+
+    private
+
+    def current_conn
+      @service_container.connection_service.current_connection
+    end
+
+    def pm
+      @service_container.plugin_manager
     end
   end
 end

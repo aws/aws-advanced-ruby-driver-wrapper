@@ -179,19 +179,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
 
   describe '#execute' do
     it 'passes through to the target callable' do
-      result = plugin.execute(nil, 'test_method', -> { 42 })
+      result = plugin.execute('test_method', -> { 42 })
       expect(result).to eq(42)
     end
 
     it 'forwards arguments to the callable' do
       callable = ->(*args) { args.sum }
-      result = plugin.execute(nil, 'connection.exec', callable, 1, 2, 3)
+      result = plugin.execute('connection.exec', callable, 1, 2, 3)
       expect(result).to eq(6)
     end
 
     it 'forwards blocks to the callable' do
       callable = ->(&block) { block.call(10) }
-      result = plugin.execute(nil, 'connection.exec', callable) { |x| x * 2 }
+      result = plugin.execute('connection.exec', callable) { |x| x * 2 }
       expect(result).to eq(20)
     end
 
@@ -207,7 +207,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
       let(:session_state_service) { nil }
 
       it 'does not raise when session_state_service is nil' do
-        result = plugin.execute(nil, 'connection.exec', ->(*_) { 'ok' }, 'BEGIN')
+        result = plugin.execute('connection.exec', ->(*_) { 'ok' }, 'BEGIN')
         expect(result).to eq('ok')
       end
     end

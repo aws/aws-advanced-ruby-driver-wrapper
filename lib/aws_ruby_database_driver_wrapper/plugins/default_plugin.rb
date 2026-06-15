@@ -78,7 +78,7 @@ module AwsRubyDatabaseDriverWrapper
         driver_dialect.connect(host_info, props)
       end
 
-      def execute(_target_obj, target_method_name, target_callable, *args, **options, &block)
+      def execute(target_method_name, target_callable, *args, **options, &block)
         session = @service_container.session_state_service
         autocommit_before = session&.autocommit?
 
