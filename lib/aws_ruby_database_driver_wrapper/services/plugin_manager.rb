@@ -103,7 +103,10 @@ module AwsRubyDatabaseDriverWrapper
       def load_plugins(service_container)
         wrapper_props = service_container.connection_service.wrapper_props
         plugin_codes = wrapper_props[:wrapper_plugins] || DEFAULT_PLUGINS
-        plugin_classes = plugin_codes.empty? ? [] : get_plugin_classes(plugin_codes.split(','), wrapper_props)
+        codes_list = plugin_codes.split(',').map(&:strip)
+        raise Errors::AwsError, 'Duplicate plugins detected' if codes_list.length != codes_list.uniq.length
+
+        plugin_classes = plugin_codes.empty? ? [] : get_plugin_classes(codes_list, wrapper_props)
 
         plugins = plugin_classes.map do |plugin_class|
           plugin_class.new(service_container, **wrapper_props)
@@ -115,9 +118,8 @@ module AwsRubyDatabaseDriverWrapper
 
       def get_plugin_classes(plugin_code_list, wrapper_props)
         plugin_classes = plugin_code_list.map do |plugin_code|
-          code = plugin_code.strip
-          plugin_class = self.class.plugin_classes[code]
-          raise Errors::AwsError, "Invalid plugin: #{code}" if plugin_class.nil?
+          plugin_class = self.class.plugin_classes[plugin_code]
+          raise Errors::AwsError, "Invalid plugin: #{plugin_code}" if plugin_class.nil?
 
           plugin_class
         end
