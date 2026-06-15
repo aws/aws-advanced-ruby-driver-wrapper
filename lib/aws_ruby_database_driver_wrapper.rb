@@ -25,9 +25,24 @@ require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require_relative 'aws_ruby_database_driver_wrapper/services/shutdown_service'
 
 module AwsRubyDatabaseDriverWrapper
+  def self.shutdown_service
+    @shutdown_service ||= Services::ShutdownService.instance
+  end
+
+  def self.shutdown(grace_period_sec: 10)
+    shutdown_service.shutdown(grace_period_sec)
+  end
 end
 
-require_relative 'aws_ruby_database_driver_wrapper/shutdown_hooks'
+# Register signal traps and at_exit hook for graceful shutdown.
+%w[TERM INT].each do |signal|
+  trap(signal) do
+    AwsRubyDatabaseDriverWrapper.shutdown
+    exit(0)
+  end
+end
+
+at_exit { AwsRubyDatabaseDriverWrapper.shutdown }
 
 # Register adapters with ActiveRecord if it is loaded.
 # The register call is lazy — the adapter file is only loaded when a connection is first established.
