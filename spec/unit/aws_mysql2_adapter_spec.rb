@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
+require 'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
 require 'aws_ruby_database_driver_wrapper/errors'
 
 RSpec.describe ActiveRecord::ConnectionAdapters::AwsMysql2Adapter do
