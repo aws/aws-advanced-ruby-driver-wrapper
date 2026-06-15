@@ -24,6 +24,13 @@ require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor_state'
 require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require_relative 'aws_ruby_database_driver_wrapper/services/shutdown_service'
 
+module AwsRubyDatabaseDriverWrapper
+end
+
+require_relative 'aws_ruby_database_driver_wrapper/shutdown_hooks'
+
+# Register the aws_postgresql adapter with ActiveRecord if ActiveRecord is loaded.
+# This allows users to specify adapter: "aws_postgresql" without an extra require.
 if defined?(ActiveRecord)
   if defined?(PG)
     require_relative 'aws_ruby_database_driver_wrapper/postgresql'
@@ -33,28 +40,5 @@ if defined?(ActiveRecord)
   if defined?(Mysql2)
     require_relative 'aws_ruby_database_driver_wrapper/mysql'
     require_relative 'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
-  end
-end
-
-module AwsRubyDatabaseDriverWrapper
-  # Clean up resources on SIGTERM.
-  %w[TERM INT].each do |signal|
-    trap(signal) do
-      shutdown
-      exit(0)
-    end
-  end
-
-  # Clean up resources on process exit.
-  at_exit do
-    shutdown
-  end
-
-  def self.shutdown_service
-    @shutdown_service ||= Services::ShutdownService.instance
-  end
-
-  def self.shutdown(grace_period_sec: 10)
-    shutdown_service.shutdown(grace_period_sec)
   end
 end

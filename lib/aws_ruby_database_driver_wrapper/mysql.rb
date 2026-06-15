@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative '../aws_ruby_database_driver_wrapper'
 require_relative 'utils/connection_config_parser'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'
@@ -28,6 +29,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def initialize(**options)
+      AwsRubyDatabaseDriverWrapper.ensure_shutdown_hooks_registered
       config = Utils::ConnectionConfigParser.parse(:mysql2, **options)
       @service_container = Services::ServiceUtility.create_standard_container(config)
       conn_service = @service_container.connection_service

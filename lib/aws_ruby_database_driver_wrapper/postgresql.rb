@@ -33,6 +33,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def initialize(*args, **options)
+      AwsRubyDatabaseDriverWrapper.ensure_shutdown_hooks_registered
       config = Utils::ConnectionConfigParser.parse(:postgresql, *args, **options)
       @service_container = Services::ServiceUtility.create_standard_container(config)
       conn_service = @service_container.connection_service

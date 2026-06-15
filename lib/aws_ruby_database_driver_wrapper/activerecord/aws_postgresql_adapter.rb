@@ -16,6 +16,7 @@
 
 require 'active_record/connection_adapters/postgresql_adapter'
 require_relative '../postgresql'
+require_relative '../errors'
 require_relative '../utils/ar_constants'
 
 module ActiveRecord
