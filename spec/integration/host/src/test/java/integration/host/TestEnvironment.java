@@ -1269,12 +1269,10 @@ public class TestEnvironment implements AutoCloseable {
 
   private static String getContainerBaseImageName(TestEnvironmentRequest request) {
     switch (request.getTargetRubyVersion()) {
-      case RUBY_3_2:
-        return "ruby:3.2";
       case RUBY_3_3:
         return "ruby:3.3";
-      case RUBY_3_4:
-        return "ruby:3.4";
+      case RUBY_4_0:
+        return "ruby:4.0";
       default:
         throw new NotImplementedException(request.getTargetRubyVersion().toString());
     }
@@ -1479,12 +1477,13 @@ public class TestEnvironment implements AutoCloseable {
           }
           deleteCustomClusterParameterGroup(this.info.getClusterParameterGroupName());
         } else {
+          boolean hasParamGroup = !StringUtils.isNullOrEmpty(this.info.getClusterParameterGroupName());
           try {
-            deleteDbCluster(false);
+            deleteDbCluster(hasParamGroup);
           } catch (Exception ex) {
             if (firstException == null) firstException = ex;
           }
-          if (!StringUtils.isNullOrEmpty(this.info.getClusterParameterGroupName())) {
+          if (hasParamGroup) {
             deleteCustomClusterParameterGroup(this.info.getClusterParameterGroupName());
           }
         }

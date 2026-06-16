@@ -23,6 +23,7 @@ require_relative 'utils/connection_utils'
 require_relative 'utils/database_engine_deployment'
 require_relative 'utils/proxy_helper'
 require_relative 'utils/rds_test_utility'
+require_relative 'utils/spec_helper'
 require_relative 'utils/test_environment'
 require_relative 'utils/test_environment_features'
 
@@ -131,50 +132,5 @@ module Integration
       raise "Cluster endpoint #{cluster_endpoint} (#{cluster_ip}) does not resolve to writer #{writer_host} (#{writer_ip})"
     end
     private_class_method :wait_for_dns
-  end
-end
-
-# ─── RSpec hooks ─────────────────────────────────────────────────────────────
-
-RSpec.shared_context 'integration setup' do
-  before(:each) do |example|
-    driver = example.metadata[:test_driver]
-    Integration::IntegrationHelper.setup_test(
-      current_driver: driver,
-      test_name: example.full_description
-    )
-  end
-end
-
-RSpec.configure do |config|
-  config.include_context 'integration setup', :integration
-  config.include Integration::ConditionChecker, :integration
-
-  config.before(:each, :integration) do |example|
-    if (deployments = example.metadata[:deployments])
-      enable_on_deployments(*deployments)
-    end
-    if (deployments = example.metadata[:require_deployments])
-      require_deployments(*deployments)
-    end
-    if (features = example.metadata[:features])
-      enable_on_features(*features)
-    end
-    if (engines = example.metadata[:enable_on_engines])
-      enable_on_engines(*engines)
-    end
-    if (engines = example.metadata[:disable_on_engines])
-      disable_on_engines(*engines)
-    end
-    if (features = example.metadata[:disable_on_features])
-      disable_on_features(*features)
-    end
-  end
-
-  # Parameterise by allowed test drivers. Tag specs with :parameterize_drivers
-  # and iterate over allowed_test_drivers in shared examples.
-  config.before(:each, :parameterize_drivers) do
-    env = Integration::TestEnvironment.current
-    skip 'No allowed drivers for this environment' if env.allowed_test_drivers.empty?
   end
 end

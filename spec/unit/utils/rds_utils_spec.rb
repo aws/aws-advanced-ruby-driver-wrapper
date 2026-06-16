@@ -192,17 +192,17 @@ ENDPOINTS = [
   # -- Global DB --
   { host: 'global-cluster-test-name.global-XYZ.global.rds.amazonaws.com',
     type: URL_TYPE::RDS_GLOBAL_WRITER_CLUSTER, region: nil, cluster_id: nil,
-    instance_identity: nil, host_pattern: nil,
+    instance_identity: nil, host_pattern: '?',
     rds_dns: false, cluster_url: nil },
 
   # -- ELB --
   { host: 'elb-name.elb.us-east-2.amazonaws.com',
     type: :elb, region: 'us-east-2', cluster_id: nil,
-    instance_identity: nil, host_pattern: nil,
+    instance_identity: nil, host_pattern: '?',
     rds_dns: false, cluster_url: nil },
   { host: 'elb-name.elb.us-east-2.amazonaws.com.',
     type: :elb, region: nil, cluster_id: nil,
-    instance_identity: nil, host_pattern: nil,
+    instance_identity: nil, host_pattern: '?',
     rds_dns: false, cluster_url: nil },
 
   # -- Broken China paths --
@@ -216,7 +216,7 @@ ENDPOINTS = [
     rds_dns: true, cluster_url: nil },
   { host: 'database-test-name.cluster-XYZ.rds.amazonaws.com.cn',
     type: :broken, region: nil, cluster_id: nil,
-    instance_identity: nil, host_pattern: nil,
+    instance_identity: nil, host_pattern: '?',
     rds_dns: false, cluster_url: nil }
 ].freeze
 
@@ -326,8 +326,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RdsUtils do
       end
 
       it 'returns nil for nil and empty' do
-        expect(utils.public_send(method, nil)).to be_nil
-        expect(utils.public_send(method, '')).to be_nil
+        expect(utils.public_send(method, nil)).to be_nil unless method == :rds_instance_host_pattern
+        expect(utils.public_send(method, '')).to be_nil unless method == :rds_instance_host_pattern
+      end
+
+      if method == :rds_instance_host_pattern
+        it 'returns ? for nil and empty' do
+          expect(utils.rds_instance_host_pattern(nil)).to eq('?')
+          expect(utils.rds_instance_host_pattern('')).to eq('?')
+        end
       end
     end
   end
@@ -539,7 +546,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RdsUtils do
       expect(utils.reader_cluster_dns?("#{us_reader}#{suffix}")).to be false
       expect(utils.limitless_db_shard_group_dns?("#{us_limitless}#{suffix}")).to be false
       expect(utils.rds_cluster_host_url("#{us_cluster}#{suffix}")).to be_nil
-      expect(utils.rds_instance_host_pattern("#{us_cluster}#{suffix}")).to be_nil
+      expect(utils.rds_instance_host_pattern("#{us_cluster}#{suffix}")).to eq('?')
       expect(utils.rds_region("#{us_cluster}#{suffix}")).to be_nil
     end
 

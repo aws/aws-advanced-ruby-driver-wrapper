@@ -629,11 +629,31 @@ public class AuroraTestUtility {
   }
 
   public void deleteCustomClusterParameterGroup(String groupName) {
-    rdsClient.deleteDBClusterParameterGroup(
-        DeleteDbClusterParameterGroupRequest.builder()
-            .dbClusterParameterGroupName(groupName)
-            .build()
-    );
+    int remainingAttempts = 10;
+    while (--remainingAttempts >= 0) {
+      try {
+        rdsClient.deleteDBClusterParameterGroup(
+            DeleteDbClusterParameterGroupRequest.builder()
+                .dbClusterParameterGroupName(groupName)
+                .build());
+        return;
+      } catch (software.amazon.awssdk.services.rds.model.DbClusterParameterGroupNotFoundException ex) {
+        return;
+      } catch (software.amazon.awssdk.services.rds.model.InvalidDbParameterGroupStateException ex) {
+        if (remainingAttempts == 0) {
+          throw ex;
+        }
+        LOGGER.finest(String.format(
+            "Parameter group %s still in use, retrying in 60s (%d attempts left). %s",
+            groupName, remainingAttempts, ex.getMessage()));
+        try {
+          TimeUnit.SECONDS.sleep(60);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException(ie);
+        }
+      }
+    }
   }
 
   /**
