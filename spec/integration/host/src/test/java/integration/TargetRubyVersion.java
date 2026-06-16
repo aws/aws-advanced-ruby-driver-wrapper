@@ -17,7 +17,6 @@
 package integration;
 
 public enum TargetRubyVersion {
-  RUBY_3_2,
   RUBY_3_3,
-  RUBY_3_4
+  RUBY_4_0
 }

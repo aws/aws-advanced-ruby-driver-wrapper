@@ -333,11 +333,11 @@ module AwsRubyDatabaseDriverWrapper
 
       def rds_instance_host_pattern(host)
         prepared = prepared_host(host)
-        return nil if blank?(prepared)
+        return '?' if blank?(prepared)
 
         groups = cache_match(prepared, *DNS_PATTERNS)
         domain = groups&.[]('domain')
-        domain ? "?.#{domain}" : nil
+        domain ? "?.#{domain}" : '?'
       end
 
       def rds_region(host)

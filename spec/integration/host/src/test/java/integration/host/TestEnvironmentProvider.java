@@ -117,13 +117,10 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
             }
 
             for (TargetRubyVersion targetRubyVersion : TargetRubyVersion.values()) {
-              if (targetRubyVersion == TargetRubyVersion.RUBY_3_2 && config.excludeRuby32) {
-                continue;
-              }
               if (targetRubyVersion == TargetRubyVersion.RUBY_3_3 && config.excludeRuby33) {
                 continue;
               }
-              if (targetRubyVersion == TargetRubyVersion.RUBY_3_4 && config.excludeRuby34) {
+              if (targetRubyVersion == TargetRubyVersion.RUBY_4_0 && config.excludeRuby40) {
                 continue;
               }
 

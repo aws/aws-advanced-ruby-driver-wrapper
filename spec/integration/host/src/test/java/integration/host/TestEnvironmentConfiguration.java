@@ -42,12 +42,10 @@ public class TestEnvironmentConfiguration {
       Boolean.parseBoolean(System.getProperty("exclude-iam", "false"));
   public boolean noSecretsManager =
       Boolean.parseBoolean(System.getProperty("exclude-secrets-manager", "false"));
-  public boolean excludeRuby32 =
-    Boolean.parseBoolean(System.getProperty("exclude-ruby-3-2", "false"));
   public boolean excludeRuby33 =
     Boolean.parseBoolean(System.getProperty("exclude-ruby-3-3", "false"));
-  public boolean excludeRuby34 =
-    Boolean.parseBoolean(System.getProperty("exclude-ruby-3-4", "false"));
+  public boolean excludeRuby40 =
+    Boolean.parseBoolean(System.getProperty("exclude-ruby-4-0", "false"));
   public boolean testEncryptionOnly =
       Boolean.parseBoolean(System.getProperty("test-encryption-only", "false"));
   public boolean testMetricsOnly =
