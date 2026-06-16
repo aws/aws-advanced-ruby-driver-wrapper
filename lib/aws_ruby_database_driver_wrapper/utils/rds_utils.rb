@@ -136,9 +136,9 @@ module AwsRubyDatabaseDriverWrapper
       /ix
 
       # -- Blue/green deployment --
-      BG_GREEN_HOST_PATTERN = /.*(?<prefix>-green-[0-9a-z]{6})\..*/i
-      BG_GREEN_HOSTID_PATTERN = /(.*)-green-[0-9a-z]{6}$/i
-      BG_OLD_HOST_PATTERN = /.*(?<prefix>-old1)\..*/i
+      BG_GREEN_HOST_PATTERN = /(?<prefix>-green-[0-9a-z]{6})\./i
+      BG_GREEN_HOSTID_PATTERN = /\A(.+)-green-[0-9a-z]{6}\z/i
+      BG_OLD_HOST_PATTERN = /(?<prefix>-old1)\./i
 
       # -- Global database --
       AURORA_GLOBAL_WRITER_DNS_PATTERN = /

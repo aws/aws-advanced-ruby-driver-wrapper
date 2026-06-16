@@ -25,7 +25,7 @@ require_relative '../host/host_role'
 module AwsRubyDatabaseDriverWrapper
   module Utils
     module ConnectionConfigParser
-      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|(\S+))/
+      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|([^\s]++))/
 
       module_function
 
