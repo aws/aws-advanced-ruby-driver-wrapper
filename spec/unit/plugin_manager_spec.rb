@@ -351,6 +351,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'Invalid plugin: nonexistent_plugin')
     end
 
+    it 'raises an error when duplicate plugin codes are passed' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'failover,failover')
+      expect { described_class.new(container) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'Duplicate plugins detected')
+    end
+
+    it 'does not raise an error when all plugin codes are unique' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'failover')
+      expect { described_class.new(container) }.not_to raise_error
+    end
+
     it 'does not sort the plugin list when auto_sort_plugins is false' do
       stub_plugin_a = Class.new(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)
       stub_plugin_b = Class.new(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)
