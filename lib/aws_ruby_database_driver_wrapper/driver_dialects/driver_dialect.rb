@@ -24,13 +24,13 @@ module AwsRubyDatabaseDriverWrapper
       include Logging
 
       COMMON_NETWORK_BOUND_METHODS = Set[
-        RubyMethod::CONNECT,
-        RubyMethod::CONNECTION_CLOSE,
-        RubyMethod::CONNECTION_PING,
-        RubyMethod::CONNECTION_RESET,
-        RubyMethod::CONNECTION_PREPARE,
-        RubyMethod::STATEMENT_EXECUTE,
-        RubyMethod::STATEMENT_CLOSE
+        RubyMethod::CONNECT.name,
+        RubyMethod::CONNECTION_CLOSE.name,
+        RubyMethod::CONNECTION_PING.name,
+        RubyMethod::CONNECTION_RESET.name,
+        RubyMethod::CONNECTION_PREPARE.name,
+        RubyMethod::STATEMENT_EXECUTE.name,
+        RubyMethod::STATEMENT_CLOSE.name
       ].freeze
 
       def connect(host_info, config)

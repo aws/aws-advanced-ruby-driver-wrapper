@@ -15,58 +15,78 @@
 #  limitations under the License.
 
 module AwsRubyDatabaseDriverWrapper
-  module RubyMethod
-    CONNECT                        = 'connect'
+  # Represents a method that can be intercepted by the plugin pipeline.
+  MethodInfo = Struct.new(:name, :check_bounded_connection, keyword_init: true) do
+    def to_s
+      name
+    end
+  end
 
-    # -- Connection methods (shared) --
-    CONNECTION_CLOSE               = 'connection.close'
-    CONNECTION_PING                = 'connection.ping'
-    CONNECTION_RESET               = 'connection.reset'
-    CONNECTION_PREPARE             = 'connection.prepare'
-    CONNECTION_ESCAPE              = 'connection.escape'
+  module RubyMethod
+    def self.define(name, check_bounded_connection:)
+      MethodInfo.new(name: name, check_bounded_connection: check_bounded_connection).freeze
+    end
+
+    # -- Internal pipeline methods --
+    CONNECT = define('connect', check_bounded_connection: false)
+
+    # -- Connection methods --
+    CONNECTION_CLOSE               = define('connection.close', check_bounded_connection: false)
+    CONNECTION_PING                = define('connection.ping', check_bounded_connection: false)
+    CONNECTION_RESET               = define('connection.reset', check_bounded_connection: false)
+    CONNECTION_PREPARE             = define('connection.prepare', check_bounded_connection: false)
+    CONNECTION_ESCAPE              = define('connection.escape', check_bounded_connection: false)
 
     # -- Connection methods (mysql2-specific) --
-    CONNECTION_QUERY               = 'connection.query'
-    CONNECTION_QUERY_ASYNC         = 'connection.query_async'
-    CONNECTION_SELECT_DB           = 'connection.select_db'
-    CONNECTION_MORE_RESULTS        = 'connection.more_results'
-    CONNECTION_NEXT_RESULT         = 'connection.next_result'
-    CONNECTION_STORE_RESULT        = 'connection.store_result'
-    CONNECTION_ABANDON_RESULTS     = 'connection.abandon_results!'
+    CONNECTION_QUERY               = define('connection.query', check_bounded_connection: false)
+    CONNECTION_QUERY_ASYNC         = define('connection.query_async', check_bounded_connection: false)
+    CONNECTION_SELECT_DB           = define('connection.select_db', check_bounded_connection: false)
+    CONNECTION_MORE_RESULTS        = define('connection.more_results', check_bounded_connection: true)
+    CONNECTION_NEXT_RESULT         = define('connection.next_result', check_bounded_connection: true)
+    CONNECTION_STORE_RESULT        = define('connection.store_result', check_bounded_connection: true)
+    CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: false)
 
     # -- Connection methods (pg-specific) --
-    CONNECTION_EXEC                = 'connection.exec'
-    CONNECTION_ASYNC_EXEC          = 'connection.async_exec'
-    CONNECTION_EXEC_PARAMS         = 'connection.exec_params'
-    CONNECTION_EXEC_PREPARED       = 'connection.exec_prepared'
-    CONNECTION_DESCRIBE_PREPARED   = 'connection.describe_prepared'
-    CONNECTION_DESCRIBE_PORTAL     = 'connection.describe_portal'
-    CONNECTION_TRANSACTION         = 'connection.transaction'
-    CONNECTION_COPY_DATA           = 'connection.copy_data'
-    CONNECTION_PUT_COPY_DATA       = 'connection.put_copy_data'
-    CONNECTION_GET_COPY_DATA       = 'connection.get_copy_data'
-    CONNECTION_PUT_COPY_END        = 'connection.put_copy_end'
-    CONNECTION_SEND_QUERY          = 'connection.send_query'
-    CONNECTION_SEND_QUERY_PARAMS   = 'connection.send_query_params'
-    CONNECTION_SEND_QUERY_PREPARED = 'connection.send_query_prepared'
-    CONNECTION_SEND_PREPARE        = 'connection.send_prepare'
-    CONNECTION_GET_RESULT          = 'connection.get_result'
-    CONNECTION_GET_LAST_RESULT     = 'connection.get_last_result'
-    CONNECTION_CANCEL              = 'connection.cancel'
-    CONNECTION_SET_CLIENT_ENCODING = 'connection.set_client_encoding'
+    CONNECTION_EXEC                = define('connection.exec', check_bounded_connection: false)
+    CONNECTION_ASYNC_EXEC          = define('connection.async_exec', check_bounded_connection: false)
+    CONNECTION_EXEC_PARAMS         = define('connection.exec_params', check_bounded_connection: false)
+    CONNECTION_EXEC_PREPARED       = define('connection.exec_prepared', check_bounded_connection: true)
+    CONNECTION_DESCRIBE_PREPARED   = define('connection.describe_prepared', check_bounded_connection: true)
+    CONNECTION_DESCRIBE_PORTAL     = define('connection.describe_portal', check_bounded_connection: false)
+    CONNECTION_TRANSACTION         = define('connection.transaction', check_bounded_connection: false)
+    CONNECTION_COPY_DATA           = define('connection.copy_data', check_bounded_connection: false)
+    CONNECTION_PUT_COPY_DATA       = define('connection.put_copy_data', check_bounded_connection: true)
+    CONNECTION_GET_COPY_DATA       = define('connection.get_copy_data', check_bounded_connection: true)
+    CONNECTION_PUT_COPY_END        = define('connection.put_copy_end', check_bounded_connection: true)
+    CONNECTION_SEND_QUERY          = define('connection.send_query', check_bounded_connection: false)
+    CONNECTION_SEND_QUERY_PARAMS   = define('connection.send_query_params', check_bounded_connection: false)
+    CONNECTION_SEND_QUERY_PREPARED = define('connection.send_query_prepared', check_bounded_connection: true)
+    CONNECTION_SEND_PREPARE        = define('connection.send_prepare', check_bounded_connection: false)
+    CONNECTION_GET_RESULT          = define('connection.get_result', check_bounded_connection: true)
+    CONNECTION_GET_LAST_RESULT     = define('connection.get_last_result', check_bounded_connection: true)
+    CONNECTION_CANCEL              = define('connection.cancel', check_bounded_connection: false)
+    CONNECTION_SET_CLIENT_ENCODING = define('connection.set_client_encoding', check_bounded_connection: false)
+    CONNECTION_WAIT_FOR_NOTIFY     = define('connection.wait_for_notify', check_bounded_connection: false)
+    CONNECTION_NOTIFIES            = define('connection.notifies', check_bounded_connection: false)
+    CONNECTION_CONSUME_INPUT       = define('connection.consume_input', check_bounded_connection: false)
+    CONNECTION_FLUSH               = define('connection.flush', check_bounded_connection: false)
+    CONNECTION_LO_OPEN             = define('connection.lo_open', check_bounded_connection: false)
+    CONNECTION_LO_READ             = define('connection.lo_read', check_bounded_connection: true)
+    CONNECTION_LO_WRITE            = define('connection.lo_write', check_bounded_connection: true)
+    CONNECTION_LO_CLOSE            = define('connection.lo_close', check_bounded_connection: true)
 
     # -- Statement methods --
-    STATEMENT_EXECUTE              = 'statement.execute'
-    STATEMENT_CLOSE                = 'statement.close'
+    STATEMENT_EXECUTE              = define('statement.execute', check_bounded_connection: true)
+    STATEMENT_CLOSE                = define('statement.close', check_bounded_connection: false)
 
     # -- Result methods --
-    RESULT_EACH                    = 'result.each'
-    RESULT_EACH_ROW                = 'result.each_row'
-    RESULT_TO_A                    = 'result.to_a'
-    RESULT_BRACKET                 = 'result.[]'
-    RESULT_VALUES                  = 'result.values'
-    RESULT_COLUMN_VALUES           = 'result.column_values'
-    RESULT_FIELD_VALUES            = 'result.field_values'
-    RESULT_TUPLE                   = 'result.tuple'
+    RESULT_EACH                    = define('result.each', check_bounded_connection: true)
+    RESULT_EACH_ROW                = define('result.each_row', check_bounded_connection: true)
+    RESULT_TO_A                    = define('result.to_a', check_bounded_connection: true)
+    RESULT_BRACKET                 = define('result.[]', check_bounded_connection: true)
+    RESULT_VALUES                  = define('result.values', check_bounded_connection: true)
+    RESULT_COLUMN_VALUES           = define('result.column_values', check_bounded_connection: true)
+    RESULT_FIELD_VALUES            = define('result.field_values', check_bounded_connection: true)
+    RESULT_TUPLE                   = define('result.tuple', check_bounded_connection: true)
   end
 end

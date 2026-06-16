@@ -42,7 +42,7 @@ module TestPlugins
       result
     end
 
-    def execute(_target_obj, _target_method_name, pipeline_callable, *_args, **_options)
+    def execute(_target_method_name, pipeline_callable, *_args, **_options)
       @calls << "#{self.class.name.split('::').last}:before execute"
       result = pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after execute"
@@ -85,7 +85,7 @@ module TestPlugins
       raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error'
     end
 
-    def execute(_target_obj, _target_method_name, pipeline_callable, *_args, **_options)
+    def execute(_target_method_name, pipeline_callable, *_args, **_options)
       @calls << "#{self.class.name.split('::').last}:before execute"
       raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
 
@@ -116,8 +116,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        target_obj = Object.new
-        result = manager.execute(nil, nil, target_obj, 'test_call_a', lambda {
+        Object.new
+        result = manager.execute('test_call_a', nil, lambda {
           calls << 'target_call'
           'result_value'
         })
@@ -145,7 +145,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        result = manager.execute(nil, nil, Object.new, 'test_call_b', lambda {
+        result = manager.execute('test_call_b', nil, lambda {
           calls << 'target_call'
           'result_value'
         })
@@ -171,7 +171,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        result = manager.execute(nil, nil, Object.new, 'test_call_c', lambda {
+        result = manager.execute('test_call_c', nil, lambda {
           calls << 'target_call'
           'result_value'
         })
@@ -287,9 +287,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
       ]
       manager = build_manager_with_plugins(plugins)
 
-      target = Object.new
+      Object.new
       3.times do
-        manager.execute(nil, nil, target, 'test_call_a', -> { 'result' })
+        manager.execute('test_call_a', nil, -> { 'result' })
       end
 
       cache = manager.instance_variable_get(:@pipeline_cache)
@@ -297,7 +297,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
       expect(cache.size).to eq(1)
 
       # Call a different method to verify it gets its own cache entry
-      manager.execute(nil, nil, target, 'test_call_b', -> { 'result' })
+      manager.execute('test_call_b', nil, -> { 'result' })
       expect(cache).to have_key('test_call_b')
       expect(cache.size).to eq(2)
     end
@@ -307,10 +307,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
       plugins = [TestPlugins::TestPluginOne.new(calls)]
       manager = build_manager_with_plugins(plugins)
 
-      manager.execute(nil, nil, Object.new, 'test_call_a', -> { 'result' })
+      manager.execute('test_call_a', nil, -> { 'result' })
       first_pipeline = manager.instance_variable_get(:@pipeline_cache)['test_call_a']
 
-      manager.execute(nil, nil, Object.new, 'test_call_a', -> { 'result' })
+      manager.execute('test_call_a', nil, -> { 'result' })
       second_pipeline = manager.instance_variable_get(:@pipeline_cache)['test_call_a']
 
       expect(first_pipeline).to equal(second_pipeline)

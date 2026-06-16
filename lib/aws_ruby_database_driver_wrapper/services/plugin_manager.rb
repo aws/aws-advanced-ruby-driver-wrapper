@@ -16,6 +16,7 @@
 
 require 'logger'
 require_relative '../errors'
+require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 
@@ -74,15 +75,22 @@ module AwsRubyDatabaseDriverWrapper
         )
       end
 
-      def execute(current_conn, target_conn, target_obj, target_method_name, target_callable, *args, **kwargs, &block)
-        if !target_method_name.end_with?('close') && !target_conn.nil? && target_conn != current_conn
-          raise Errors::AwsError, "Method invoked against old connection: #{target_conn}"
+      def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, **kwargs, &block)
+        if ruby_method.is_a?(MethodInfo)
+          method_name = ruby_method.name
+
+          if ruby_method.check_bounded_connection && !bounded_conn.nil? && !current_conn.nil? && (bounded_conn != current_conn)
+            raise Errors::AwsError, "Method invoked against old connection: #{bounded_conn}"
+          end
+        else
+          # Fallback for dynamic method names (method_missing with string)
+          method_name = ruby_method.to_s
         end
 
         execute_with_subscribed_plugins(
-          target_method_name,
+          method_name,
           lambda do |plugin, next_plugin_callable|
-            plugin.execute(target_obj, target_method_name, next_plugin_callable, *args, **kwargs, &block)
+            plugin.execute(method_name, next_plugin_callable, *args, **kwargs, &block)
           end,
           target_callable
         )
