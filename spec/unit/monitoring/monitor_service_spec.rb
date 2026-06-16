@@ -17,7 +17,6 @@
 require_relative '../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require 'aws_ruby_database_driver_wrapper/services/monitor_service'
-require 'aws_ruby_database_driver_wrapper'
 require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::MonitorService do
