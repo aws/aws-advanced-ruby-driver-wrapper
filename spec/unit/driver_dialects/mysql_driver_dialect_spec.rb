@@ -89,6 +89,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
       expect(result[:port]).to eq(3306)
     end
 
+    it 'omits host when not specified (localhost default)' do
+      no_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        host: AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_HOST, port: '3306'
+      )
+      result = dialect.prepare_connect_config(no_host, config)
+      expect(result).not_to have_key(:host)
+      expect(result[:port]).to eq(3306)
+    end
+
+    it 'omits both host and port when neither specified' do
+      bare = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new
+      result = dialect.prepare_connect_config(bare, config)
+      expect(result).not_to have_key(:host)
+      expect(result).not_to have_key(:port)
+    end
+
     it 'omits port when not specified' do
       no_port = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com')
       result = dialect.prepare_connect_config(no_port, config)

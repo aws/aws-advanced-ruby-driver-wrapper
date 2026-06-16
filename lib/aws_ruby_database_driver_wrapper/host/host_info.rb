@@ -23,12 +23,13 @@ module AwsRubyDatabaseDriverWrapper
   module Host
     class HostInfo
       NO_PORT = '-1'
+      NO_HOST = ''
       DEFAULT_WEIGHT = 100
 
       attr_accessor :host, :port, :role, :availability_strategy, :weight, :id, :last_update_time
 
       def initialize(
-        host:,
+        host: NO_HOST,
         port: NO_PORT,
         role: HostRole::WRITER,
         availability: HostAvailability::AVAILABLE,
@@ -137,6 +138,10 @@ module AwsRubyDatabaseDriverWrapper
 
       def port_specified?
         port != NO_PORT
+      end
+
+      def host_specified?
+        !host.nil? && host != NO_HOST
       end
 
       # Returns the availability of this host.

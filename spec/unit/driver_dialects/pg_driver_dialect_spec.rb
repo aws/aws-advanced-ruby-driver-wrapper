@@ -103,6 +103,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
       expect(result[:port]).to eq(5432)
     end
 
+    it 'omits host when not specified (Unix socket)' do
+      no_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        host: AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_HOST, port: '5432'
+      )
+      result = dialect.prepare_connect_config(no_host, config)
+      expect(result).not_to have_key(:host)
+      expect(result[:port]).to eq('5432')
+    end
+
+    it 'omits both host and port when neither specified' do
+      bare = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new
+      result = dialect.prepare_connect_config(bare, config)
+      expect(result).not_to have_key(:host)
+      expect(result).not_to have_key(:port)
+    end
+
     it 'does not mutate the original config' do
       original = config.dup
       dialect.prepare_connect_config(host_info, config)
