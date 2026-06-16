@@ -17,7 +17,6 @@
 require 'rspec'
 require 'aws_ruby_database_driver_wrapper/services/service_utility'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ServiceUtility do
   let(:config) do

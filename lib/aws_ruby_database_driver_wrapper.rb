@@ -24,32 +24,7 @@ require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor_state'
 require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require_relative 'aws_ruby_database_driver_wrapper/services/shutdown_service'
 
-if defined?(ActiveRecord)
-  if defined?(PG)
-    require_relative 'aws_ruby_database_driver_wrapper/postgresql'
-    require_relative 'aws_ruby_database_driver_wrapper/activerecord/aws_postgresql_adapter'
-  end
-
-  if defined?(Mysql2)
-    require_relative 'aws_ruby_database_driver_wrapper/mysql'
-    require_relative 'aws_ruby_database_driver_wrapper/activerecord/aws_mysql2_adapter'
-  end
-end
-
 module AwsRubyDatabaseDriverWrapper
-  # Clean up resources on SIGTERM.
-  %w[TERM INT].each do |signal|
-    trap(signal) do
-      shutdown
-      exit(0)
-    end
-  end
-
-  # Clean up resources on process exit.
-  at_exit do
-    shutdown
-  end
-
   def self.shutdown_service
     @shutdown_service ||= Services::ShutdownService.instance
   end
@@ -57,4 +32,31 @@ module AwsRubyDatabaseDriverWrapper
   def self.shutdown(grace_period_sec: 10)
     shutdown_service.shutdown(grace_period_sec)
   end
+end
+
+# Register signal traps and at_exit hook for graceful shutdown.
+%w[TERM INT].each do |signal|
+  trap(signal) do
+    AwsRubyDatabaseDriverWrapper.shutdown
+    exit(0)
+  end
+end
+
+at_exit { AwsRubyDatabaseDriverWrapper.shutdown }
+
+# Register adapters with ActiveRecord if it is loaded.
+# The register call is lazy — the adapter file is only loaded when a connection is first established.
+# Users will not load the code for both adapters if they are only using one of them.
+if defined?(ActiveRecord::ConnectionAdapters) && ActiveRecord::ConnectionAdapters.respond_to?(:register)
+  ActiveRecord::ConnectionAdapters.register(
+    'aws_postgresql',
+    'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
+    'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
+  )
+
+  ActiveRecord::ConnectionAdapters.register(
+    'aws_mysql2',
+    'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
+    'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
+  )
 end
