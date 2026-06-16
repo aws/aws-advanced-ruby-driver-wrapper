@@ -30,7 +30,6 @@ module AwsRubyDatabaseDriverWrapper
     class RdsHostListProvider
       include Logging
 
-      MONITORING_PROPERTY_PREFIX = 'topology-monitoring-'
       TOPOLOGY_CACHE_NAME = :topology
       DEFAULT_TOPOLOGY_QUERY_TIMEOUT_SEC = 5.0
       MONITOR_EXPIRATION_TIMEOUT_SEC = 900.0 # 15 minutes
@@ -49,7 +48,7 @@ module AwsRubyDatabaseDriverWrapper
         validate_host_pattern!(@instance_template.host)
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host_info.host)
 
-        prefixed = @service_container.connection_service.prefixed_props[MONITORING_PROPERTY_PREFIX] || {}
+        prefixed = @service_container.connection_service.prefixed_props[PropertyDefinition::TOPOLOGY_MONITORING_PREFIX] || {}
         @monitoring_driver_props, @monitoring_wrapper_props = build_monitoring_props(prefixed)
 
         register_monitor_type
