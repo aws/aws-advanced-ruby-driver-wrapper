@@ -134,7 +134,7 @@ module AwsRubyDatabaseDriverWrapper
 
         @dialect_confirmed = true
         swap_host_list_provider if @dialect_code != original_dialect_code
-        @service_container.host_service.host_list_provider.refresh
+        @all_hosts = @service_container.host_service.host_list_provider.refresh
         @db_dialect
       end
 
