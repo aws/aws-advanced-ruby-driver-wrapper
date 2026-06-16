@@ -23,14 +23,14 @@ module AwsRubyDatabaseDriverWrapper
       include DriverDialect
 
       NETWORK_BOUND_METHODS = (COMMON_NETWORK_BOUND_METHODS | Set[
-        RubyMethod::CONNECTION_QUERY,
-        RubyMethod::CONNECTION_QUERY_ASYNC,
-        RubyMethod::CONNECTION_SELECT_DB,
-        RubyMethod::CONNECTION_MORE_RESULTS,
-        RubyMethod::CONNECTION_NEXT_RESULT,
-        RubyMethod::CONNECTION_STORE_RESULT,
-        RubyMethod::CONNECTION_ABANDON_RESULTS,
-        RubyMethod::RESULT_EACH
+        RubyMethod::CONNECTION_QUERY.name,
+        RubyMethod::CONNECTION_QUERY_ASYNC.name,
+        RubyMethod::CONNECTION_SELECT_DB.name,
+        RubyMethod::CONNECTION_MORE_RESULTS.name,
+        RubyMethod::CONNECTION_NEXT_RESULT.name,
+        RubyMethod::CONNECTION_STORE_RESULT.name,
+        RubyMethod::CONNECTION_ABANDON_RESULTS.name,
+        RubyMethod::RESULT_EACH.name
       ]).freeze
 
       def connect(host_info, config)

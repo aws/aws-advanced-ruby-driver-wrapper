@@ -19,11 +19,10 @@ require 'aws_ruby_database_driver_wrapper/ruby_method'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::SqlMethodAnalyzer do
   let(:analyzer) { described_class }
-
-  EXEC   = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_EXEC
-  QUERY  = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_QUERY
-  CLOSE  = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE
-  TXN    = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_TRANSACTION
+  EXEC   = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_EXEC.name
+  QUERY  = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_QUERY.name
+  CLOSE  = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE.name
+  TXN    = AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_TRANSACTION.name
 
   # ─── opens_transaction? ──────────────────────────────────────────────
   #   [description, method, args, autocommit, expected]

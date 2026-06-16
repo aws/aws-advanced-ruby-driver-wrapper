@@ -32,7 +32,7 @@ module AwsRubyDatabaseDriverWrapper
         @conn
       end
 
-      def execute(_target_obj, _target_method_name, pipeline_callable, *args, **_options)
+      def execute(_target_method_name, pipeline_callable, *args, **_options)
         raise Errors::FailoverFailedError if args.any? && args[0].respond_to?(:downcase) && args[0].downcase == 'simulate failover_failed'
 
         raise Errors::FailoverSuccessError if args.any? && args[0].respond_to?(:downcase) && args[0].downcase == 'simulate failover_success'

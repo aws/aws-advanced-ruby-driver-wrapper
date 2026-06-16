@@ -30,87 +30,95 @@ module AwsRubyDatabaseDriverWrapper
     def initialize(**options)
       config = Utils::ConnectionConfigParser.parse(:mysql2, **options)
       @service_container = Services::ServiceUtility.create_standard_container(config)
+      @async_conn = nil
       conn_service = @service_container.connection_service
-      @connection =
-        @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
+      @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
     def query(sql, options = {})
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_QUERY,
-        ->(*args) { @connection.query(*args) }, sql, options
-      )
-      return result if result.nil?
-
-      Mysql2WrapperResult.new(result, @service_container, @connection)
+      result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options)
+      wrap_mysql_result(result)
     end
 
     def prepare(sql)
-      mysql_stmt = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_PREPARE,
-        ->(*args) { @connection.prepare(*args) }, sql
-      )
-      Mysql2WrapperStatement.new(@service_container, @connection, mysql_stmt)
+      mysql_stmt = pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, sql)
+      Mysql2WrapperStatement.new(@service_container, current_conn, mysql_stmt)
     end
 
     def escape(string)
-      @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_ESCAPE,
-        ->(*args) { @connection.escape(*args) }, string
-      )
+      pm.execute(RubyMethod::CONNECTION_ESCAPE, current_conn, ->(*a) { current_conn.escape(*a) }, string)
     end
 
     def ping
-      @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_PING,
-        -> { @connection.ping }
-      )
+      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
     end
 
     def close
-      @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_CLOSE,
-        -> { @connection.close }
-      )
+      pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
     end
+
+    # -- Async writer (store @async_conn) --
 
     def query_async(sql, options = {})
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, RubyMethod::CONNECTION_QUERY_ASYNC,
-        ->(*args) { @connection.query_async(*args) },
-        sql, options
-      )
-      return result if result.nil?
-
-      Mysql2WrapperResult.new(result, @service_container, @connection)
+      result = pm.execute(RubyMethod::CONNECTION_QUERY_ASYNC, current_conn, ->(*a) { current_conn.query_async(*a) }, sql, options)
+      @async_conn = current_conn
+      wrap_mysql_result(result)
     end
 
-    # Catch methods not explicitly defined
+    # -- Async readers (check bounded to @async_conn) --
+
+    def store_result
+      result = pm.execute(RubyMethod::CONNECTION_STORE_RESULT, current_conn, -> { current_conn.store_result }, bounded_conn: @async_conn)
+      @async_conn = nil
+      wrap_mysql_result(result)
+    end
+
+    def more_results
+      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results }, bounded_conn: @async_conn)
+    end
+
+    def next_result
+      pm.execute(RubyMethod::CONNECTION_NEXT_RESULT, current_conn, -> { current_conn.next_result }, bounded_conn: @async_conn)
+    end
+
+    # -- method_missing: non-network bypasses pipeline --
+
     def method_missing(method_name, *args, **options, &block)
-      raise NoMethodError, 'Connection not initialized' if @connection.nil?
+      conn = current_conn
+      raise NoMethodError, 'Connection not initialized' if conn.nil?
+      raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
-      raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless @connection.respond_to?(method_name)
+      method_key = "connection.#{method_name}"
+      return conn.send(method_name, *args, **options, &block) unless network_bound_methods.include?(method_key)
 
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @connection, "connection.#{method_name}",
-        ->(*a, **opts, &b) { @connection.send(method_name, *a, **opts, &b) },
-        *args, **options, &block
-      )
-      return result if result.nil? || !result.is_a?(Mysql2::Result)
-
-      Mysql2WrapperResult.new(result, @service_container, @connection)
+      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, *args, **options, &block)
+      wrap_mysql_result(result)
     end
 
     def respond_to_missing?(method, include_private = false)
-      @connection.respond_to?(method, include_private) || super
+      current_conn.respond_to?(method, include_private) || super
     end
 
     private
 
     def current_conn
       @service_container.connection_service.current_connection
+    end
+
+    def pm
+      @service_container.plugin_manager
+    end
+
+    def network_bound_methods
+      @network_bound_methods ||= @service_container.dialect_service.driver_dialect.network_bound_methods
+    end
+
+    def wrap_mysql_result(result)
+      return result unless result.is_a?(Mysql2::Result)
+
+      Mysql2WrapperResult.new(result, @service_container, current_conn)
     end
   end
 
@@ -122,20 +130,18 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def execute(*params, **options)
-      result = @service_container.plugin_manager.execute(
-        current_conn, @connection, @mysql_stmt, RubyMethod::STATEMENT_EXECUTE,
-        ->(*params, **options) { @mysql_stmt.execute(*params, **options) },
-        *params, **options
+      result = pm.execute(
+        RubyMethod::STATEMENT_EXECUTE, current_conn,
+        ->(*p, **o) { @mysql_stmt.execute(*p, **o) },
+        *params, bounded_conn: @connection, **options
       )
-      return result if result.nil?
+      return result unless result.is_a?(Mysql2::Result)
 
       Mysql2WrapperResult.new(result, @service_container, @connection)
     end
 
     def close
-      @service_container.plugin_manager.execute(
-        current_conn, @connection, @mysql_stmt, RubyMethod::STATEMENT_CLOSE, -> { @mysql_stmt.close }
-      )
+      pm.execute(RubyMethod::STATEMENT_CLOSE, current_conn, -> { @mysql_stmt.close })
     end
 
     # Delegate non-network methods directly
@@ -168,6 +174,10 @@ module AwsRubyDatabaseDriverWrapper
     def current_conn
       @service_container.connection_service.current_connection
     end
+
+    def pm
+      @service_container.plugin_manager
+    end
   end
 
   class Mysql2WrapperResult
@@ -180,27 +190,18 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def each(*args, &block)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_EACH,
-        ->(&blk) { @result.each(*args, &blk) },
-        &block
-      )
+      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(*args, &blk) }, bounded_conn: @connection, &block)
     end
 
     def to_a
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_TO_A,
-        -> { @result.to_a }
-      )
+      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection)
     end
 
     def [](index)
-      @service_container.plugin_manager.execute(
-        @service_container.connection_service.current_connection, @connection, @connection, RubyMethod::RESULT_BRACKET,
-        ->(*args) { @result[*args] }, index
-      )
+      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection)
     end
 
+    # Delegate non-network methods directly
     def fields
       @result.fields
     end
@@ -223,6 +224,16 @@ module AwsRubyDatabaseDriverWrapper
 
     def server_flags
       @result.server_flags
+    end
+
+    private
+
+    def current_conn
+      @service_container.connection_service.current_connection
+    end
+
+    def pm
+      @service_container.plugin_manager
     end
   end
 end

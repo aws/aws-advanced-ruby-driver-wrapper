@@ -133,11 +133,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
 
     it 'includes CONNECTION_EXEC' do
-      expect(dialect.network_bound_methods).to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_EXEC)
+      expect(dialect.network_bound_methods).to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_EXEC.name)
     end
 
     it 'excludes CONNECTION_ESCAPE' do
-      expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE)
+      expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
     end
   end
 end
