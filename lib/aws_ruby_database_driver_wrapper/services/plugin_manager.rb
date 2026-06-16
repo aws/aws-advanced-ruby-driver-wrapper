@@ -93,7 +93,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def plugin_in_use?(plugin_class)
-        return false if @plugins&.empty?
+        return false if @plugins.nil? || @plugins.empty?
 
         @plugins.any?(plugin_class)
       end

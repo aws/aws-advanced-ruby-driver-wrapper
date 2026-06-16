@@ -199,22 +199,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
 
     it 'returns the host matching the queried id' do
-      allow(dialect).to receive(:query_host_id).with(connection).and_return('reader-id')
+      allow(dialect).to receive(:instance_identity).with(connection).and_return('reader-id')
       allow(host_list_provider).to receive(:refresh).and_return(hosts)
 
       result = service.identify_host(connection)
       expect(result).to eq(reader)
     end
 
-    it 'returns nil when query_host_id returns nil' do
-      allow(dialect).to receive(:query_host_id).with(connection).and_return(nil)
+    it 'returns nil when instance_identity returns nil' do
+      allow(dialect).to receive(:instance_identity).with(connection).and_return(nil)
 
       result = service.identify_host(connection)
       expect(result).to be_nil
     end
 
     it 'falls back to force_refresh when refresh returns nil' do
-      allow(dialect).to receive(:query_host_id).with(connection).and_return('writer-id')
+      allow(dialect).to receive(:instance_identity).with(connection).and_return('writer-id')
       allow(host_list_provider).to receive(:refresh).and_return(nil)
       allow(host_list_provider).to receive(:force_refresh).and_return(hosts)
 
@@ -223,7 +223,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
 
     it 'returns nil when both refresh and force_refresh return nil' do
-      allow(dialect).to receive(:query_host_id).with(connection).and_return('writer-id')
+      allow(dialect).to receive(:instance_identity).with(connection).and_return('writer-id')
       allow(host_list_provider).to receive(:refresh).and_return(nil)
       allow(host_list_provider).to receive(:force_refresh).and_return(nil)
 

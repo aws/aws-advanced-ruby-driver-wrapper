@@ -180,7 +180,7 @@ module AwsRubyDatabaseDriverWrapper
       # The resulting port is a comma-delimited string of per-host ports.
       def string_to_host_info(host)
         host_str = host&.strip
-        return nil if host_str.nil? || host_str.empty?
+        return Host::HostInfo.new if host_str.nil? || host_str.empty?
 
         entries = host_str.split(',').map(&:strip)
         hosts = []
@@ -204,11 +204,13 @@ module AwsRubyDatabaseDriverWrapper
       # If a single port is given (even with multiple hosts), the port is kept as-is.
       # The resulting port is always a string.
       def hash_to_host_info(hash)
-        host_str = hash[:host]&.strip || hash[:hostname]&.strip
-        return nil unless host_str
-
+        host_str = hash[:host]&.to_s&.strip || hash[:hostname]&.to_s&.strip
         port_str = hash[:port]&.to_s&.strip
-        port_str.to_s.empty? ? Host::HostInfo.new(host: host_str) : Host::HostInfo.new(host: host_str, port: port_str)
+
+        Host::HostInfo.new(
+          host: host_str || Host::HostInfo::NO_HOST,
+          port: port_str || Host::HostInfo::NO_PORT
+        )
       end
 
       def extract_host_section(authority_and_rest)
