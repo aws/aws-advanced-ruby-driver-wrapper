@@ -212,6 +212,36 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       expect(config.initial_host_info.host).to eq('myhost')
       expect(config.initial_host_info.port).to eq('-1')
     end
+
+    it 'handles nil host with port specified' do
+      config = parser.parse(:postgresql, host: nil, port: 5433, user: 'u', password: 'p')
+      expect(config.initial_host_info).not_to be_nil
+      expect(config.initial_host_info.host_specified?).to be false
+      expect(config.initial_host_info.port_specified?).to be true
+      expect(config.initial_host_info.port).to eq('5433')
+    end
+
+    it 'handles empty string host' do
+      config = parser.parse(:postgresql, host: '', port: 5432, user: 'u', password: 'p')
+      expect(config.initial_host_info).not_to be_nil
+      expect(config.initial_host_info.host_specified?).to be false
+    end
+
+    it 'handles nil host and nil port (Unix socket defaults)' do
+      config = parser.parse(:postgresql, host: nil, user: 'u', password: 'p')
+      expect(config.initial_host_info).not_to be_nil
+      expect(config.initial_host_info.host_specified?).to be false
+      expect(config.initial_host_info.port_specified?).to be false
+    end
+
+    it 'handles only user/password with no host or port' do
+      config = parser.parse(:postgresql, user: 'u', password: 'p', dbname: 'mydb')
+      expect(config.initial_host_info).not_to be_nil
+      expect(config.initial_host_info.host_specified?).to be false
+      expect(config.initial_host_info.port_specified?).to be false
+      expect(config.driver_props[:user]).to eq('u')
+      expect(config.driver_props[:dbname]).to eq('mydb')
+    end
   end
 
   describe 'PG positional argument parsing' do

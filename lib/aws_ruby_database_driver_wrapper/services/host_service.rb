@@ -104,7 +104,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection [Object]
       # @return [Host::HostInfo, nil]
       def identify_host(connection)
-        id = @service_container.dialect_service.db_dialect.query_host_id(connection)
+        id = @service_container.dialect_service.db_dialect.instance_identity(connection)
         return nil if id.nil?
 
         hosts = @host_list_provider&.refresh

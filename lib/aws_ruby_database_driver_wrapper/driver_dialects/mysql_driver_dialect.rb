@@ -69,7 +69,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def prepare_connect_config(host_info, config)
         cfg = config.dup
-        cfg[:host] = host_info.host
+        cfg[:host] = host_info.host if host_info.host_specified?
         cfg[:port] = host_info.port.to_i if host_info.port_specified?
         cfg
       end

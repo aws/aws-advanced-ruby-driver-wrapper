@@ -46,7 +46,17 @@ module AwsRubyDatabaseDriverWrapper
                            end
 
         conn = driver_dialect.connect(target_host_info, props)
-        @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+
+        # If host was not specified (Unix socket / localhost), fill in from the live connection.
+        if host_info.nil? || !host_info.host_specified?
+          host_info = Host::HostInfo.new(
+            host: conn.respond_to?(:host) && conn.host ? conn.host : Host::HostInfo::NO_HOST,
+            port: conn.respond_to?(:port) && conn.port ? conn.port.to_s : Host::HostInfo::NO_PORT
+          )
+        else
+          @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+        end
+
         connection_service.update_current_connection(conn, host_info)
 
         if is_initial_connection
