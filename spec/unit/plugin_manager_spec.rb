@@ -116,7 +116,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        Object.new
         result = manager.execute('test_call_a', nil, lambda {
           calls << 'target_call'
           'result_value'
@@ -287,7 +286,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
       ]
       manager = build_manager_with_plugins(plugins)
 
-      Object.new
       3.times do
         manager.execute('test_call_a', nil, -> { 'result' })
       end

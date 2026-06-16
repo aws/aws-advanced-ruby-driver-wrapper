@@ -17,7 +17,7 @@
 source 'https://rubygems.org'
 gemspec path: '..'
 
-gem 'activerecord', '~> 7.1.0'
+gem 'activerecord', '~> 8.1.0'
 gem 'mysql2', '>= 0.5.7'
 gem 'pg', '>= 1.6.3'
 

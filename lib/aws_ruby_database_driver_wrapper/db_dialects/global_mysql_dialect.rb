@@ -80,7 +80,7 @@ module AwsRubyDatabaseDriverWrapper
         require_relative '../utils/global_aurora_topology_utils'
         require_relative '../host/global_aurora_host_list_provider'
         topology_utils = Utils::GlobalAuroraTopologyUtils.new(dialect: self)
-        Host::GlobalAuroraHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
+        Host::GlobalAuroraHostListProvider.new(service_container:, topology_utils:)
       end
     end
   end

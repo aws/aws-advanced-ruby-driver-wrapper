@@ -14,7 +14,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
 require_relative 'host_availability'
 require_relative 'host_availability_strategy'
 require_relative 'host_role'
@@ -72,11 +71,11 @@ module AwsRubyDatabaseDriverWrapper
         copy = HostInfo.new(
           host: host.dup,
           port: port.dup,
-          role: role,
-          availability: availability,
-          weight: weight,
+          role:,
+          availability:,
+          weight:,
           id: id&.dup,
-          last_update_time: last_update_time
+          last_update_time:
         )
         @all_identifiers.each { |identifier| copy.add_aliases(identifier) }
         copy

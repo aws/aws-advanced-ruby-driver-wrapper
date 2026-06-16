@@ -14,24 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-require 'set'
-
 module AwsRubyDatabaseDriverWrapper
   module Utils
     module Events
       # Event signaling that monitors for a cluster should be reset. Immediate delivery.
-      class MonitorResetEvent
-        attr_reader :cluster_id, :endpoints
-
-        def initialize(cluster_id:, endpoints:)
-          @cluster_id = cluster_id
-          @endpoints = endpoints.freeze
-          freeze
-        end
-
-        def immediate_delivery?
-          true
-        end
+      MonitorResetEvent = Data.define(:cluster_id, :endpoints) do
+        def immediate_delivery? = true
       end
     end
   end

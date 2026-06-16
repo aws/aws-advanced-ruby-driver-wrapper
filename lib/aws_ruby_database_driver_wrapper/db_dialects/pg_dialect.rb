@@ -78,7 +78,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param service_container [Services::ServiceContainer]
       # @return [Host::ConnectionStringHostListProvider] the host list provider
       def create_host_list_provider(service_container)
-        Host::ConnectionStringHostListProvider.new(service_container: service_container)
+        Host::ConnectionStringHostListProvider.new(service_container:)
       end
     end
   end

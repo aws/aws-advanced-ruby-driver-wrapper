@@ -85,7 +85,7 @@ module AwsRubyDatabaseDriverWrapper
           url_type = RdsUtils.identify_rds_type(host_pattern)
           # assign HostRole of READER if using the reader cluster URL, otherwise assume a HostRole of WRITER
           role = url_type == RdsUrlType::RDS_READER_CLUSTER ? Host::HostRole::READER : Host::HostRole::WRITER
-          templates[region] = Host::HostInfo.new(id: '?', host: host_pattern, port: port, role: role)
+          templates[region] = Host::HostInfo.new(id: '?', host: host_pattern, port:, role:)
         end
 
         logger.debug("Detected global database patterns: #{templates}")

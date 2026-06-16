@@ -60,7 +60,7 @@ module AwsRubyDatabaseDriverWrapper
             plugin.connect(host_info, props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
-          plugin_to_skip: plugin_to_skip
+          plugin_to_skip:
         )
       end
 
@@ -71,7 +71,7 @@ module AwsRubyDatabaseDriverWrapper
             plugin.internal_connect(host_info, props, wrapper_override_props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
-          plugin_to_skip: plugin_to_skip
+          plugin_to_skip:
         )
       end
 

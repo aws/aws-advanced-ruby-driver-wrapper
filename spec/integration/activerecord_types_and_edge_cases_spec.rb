@@ -276,33 +276,23 @@ RSpec.shared_examples 'ActiveRecord types and edge cases' do |driver_helper|
   describe 'Advisory locks' do
     it 'supports get_advisory_lock and release_advisory_lock' do
       conn = ActiveRecord::Base.connection
-      # Advisory locks are used internally by AR migrations
-      # Test that the connection supports the lock/unlock cycle
-      if conn.respond_to?(:get_advisory_lock)
-        lock_id = 123_456
-        acquired = conn.get_advisory_lock(lock_id)
-        expect(acquired).to be true
+      lock_id = 123_456
+      acquired = conn.get_advisory_lock(lock_id)
+      expect(acquired).to be true
 
-        released = conn.release_advisory_lock(lock_id)
-        expect(released).to be true
-      else
-        skip 'Advisory locks not supported by this adapter'
-      end
+      released = conn.release_advisory_lock(lock_id)
+      expect(released).to be true
     end
 
     it 'prevents double-acquisition of the same lock from same connection' do
       conn = ActiveRecord::Base.connection
-      if conn.respond_to?(:get_advisory_lock)
-        lock_id = 789_012
-        conn.get_advisory_lock(lock_id)
-        # Getting the same lock again should succeed (reentrant in PG, same session in MySQL)
-        second = conn.get_advisory_lock(lock_id)
-        expect(second).to be true
-        conn.release_advisory_lock(lock_id)
-        conn.release_advisory_lock(lock_id)
-      else
-        skip 'Advisory locks not supported by this adapter'
-      end
+      lock_id = 789_012
+      conn.get_advisory_lock(lock_id)
+      # Getting the same lock again should succeed (reentrant in PG, same session in MySQL)
+      second = conn.get_advisory_lock(lock_id)
+      expect(second).to be true
+      conn.release_advisory_lock(lock_id)
+      conn.release_advisory_lock(lock_id)
     end
   end
 

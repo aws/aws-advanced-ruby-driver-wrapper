@@ -51,14 +51,14 @@ module AwsRubyDatabaseDriverWrapper
         (?<dns>proxy-|cluster-|cluster-ro-|cluster-custom-|shardgrp-)?
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.(?:rds|rds-fips)\.amazonaws\.(?:com|au|eu|uk)\.?)$
-      /ix.freeze
+      /ix
 
       AURORA_CLUSTER_PATTERN = /
         ^(?<instance>.+)\.
         (?<dns>cluster-|cluster-ro-)+
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.(?:rds|rds-fips)\.amazonaws\.(?:com|au|eu|uk)\.?)$
-      /ix.freeze
+      /ix
 
       # -- Limitless (covers all TLD variants) --
       AURORA_LIMITLESS_CLUSTER_PATTERN = /
@@ -67,7 +67,7 @@ module AwsRubyDatabaseDriverWrapper
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.(?:rds|rds-fips)\.(?:amazonaws\.com\.?|amazonaws\.eu\.?|amazonaws\.au\.?|amazonaws\.uk\.?
         |amazonaws\.com\.cn\.?|sc2s\.sgov\.gov\.?|c2s\.ic\.gov\.?))$
-      /ix.freeze
+      /ix
 
       # -- China (new format: <xyz>.rds.<region>.amazonaws.com.cn) --
       AURORA_CHINA_DNS_PATTERN = /
@@ -75,14 +75,14 @@ module AwsRubyDatabaseDriverWrapper
         (?<dns>proxy-|cluster-|cluster-ro-|cluster-custom-|shardgrp-)?
         (?<domain>[a-zA-Z0-9]+\.(?:rds|rds-fips)\.(?<region>[a-zA-Z0-9-]+)
         \.amazonaws\.com\.cn\.?)$
-      /ix.freeze
+      /ix
 
       AURORA_CHINA_CLUSTER_PATTERN = /
         ^(?<instance>.+)\.
         (?<dns>cluster-|cluster-ro-)+
         (?<domain>[a-zA-Z0-9]+\.(?:rds|rds-fips)\.(?<region>[a-zA-Z0-9-]+)
         \.amazonaws\.com\.cn\.?)$
-      /ix.freeze
+      /ix
 
       # -- China (old/legacy format: <xyz>.<region>.rds.amazonaws.com.cn) --
       AURORA_OLD_CHINA_DNS_PATTERN = /
@@ -90,14 +90,14 @@ module AwsRubyDatabaseDriverWrapper
         (?<dns>proxy-|cluster-|cluster-ro-|cluster-custom-|shardgrp-)?
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.(?:rds|rds-fips)\.amazonaws\.com\.cn\.?)$
-      /ix.freeze
+      /ix
 
       AURORA_OLD_CHINA_CLUSTER_PATTERN = /
         ^(?<instance>.+)\.
         (?<dns>cluster-|cluster-ro-)+
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.(?:rds|rds-fips)\.amazonaws\.com\.cn\.?)$
-      /ix.freeze
+      /ix
 
       # -- Gov / ISO / ISOB regions --
       AURORA_GOV_DNS_PATTERN = /
@@ -105,47 +105,47 @@ module AwsRubyDatabaseDriverWrapper
         (?<dns>proxy-|cluster-|cluster-ro-|cluster-custom-|shardgrp-)?
         (?<domain>[a-zA-Z0-9]+\.(?:rds|rds-fips)\.(?<region>[a-zA-Z0-9-]+)
         \.(?:amazonaws\.com\.?|c2s\.ic\.gov\.?|sc2s\.sgov\.gov\.?))$
-      /ix.freeze
+      /ix
 
       AURORA_GOV_CLUSTER_PATTERN = /
         ^(?<instance>.+)\.
         (?<dns>cluster-|cluster-ro-)+
         (?<domain>[a-zA-Z0-9]+\.(?:rds|rds-fips)\.(?<region>[a-zA-Z0-9-]+)
         \.(?:amazonaws\.com\.?|c2s\.ic\.gov\.?|sc2s\.sgov\.gov\.?))$
-      /ix.freeze
+      /ix
 
       # -- ELB (region extraction only) --
       ELB_PATTERN = /
         ^(?<instance>.+)\.elb\.
         (?<region>[a-zA-Z0-9-]+)\.amazonaws\.(?:com|au|eu|uk)\.?$
-      /ix.freeze
+      /ix
 
       # -- IP addresses --
       IP_V4 = /
         ^(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.
         (?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){2}
         (?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$
-      /x.freeze
+      /x
 
-      IP_V6 = /^[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){7}$/i.freeze
+      IP_V6 = /^[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){7}$/i
 
       IP_V6_COMPRESSED = /
         ^(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?
         ::
         (?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,5})?$
-      /ix.freeze
+      /ix
 
       # -- Blue/green deployment --
-      BG_GREEN_HOST_PATTERN = /.*(?<prefix>-green-[0-9a-z]{6})\..*/i.freeze
-      BG_GREEN_HOSTID_PATTERN = /(.*)-green-[0-9a-z]{6}$/i.freeze
-      BG_OLD_HOST_PATTERN = /.*(?<prefix>-old1)\..*/i.freeze
+      BG_GREEN_HOST_PATTERN = /.*(?<prefix>-green-[0-9a-z]{6})\..*/i
+      BG_GREEN_HOSTID_PATTERN = /(.*)-green-[0-9a-z]{6}$/i
+      BG_OLD_HOST_PATTERN = /.*(?<prefix>-old1)\..*/i
 
       # -- Global database --
       AURORA_GLOBAL_WRITER_DNS_PATTERN = /
         ^(?<instance>.+)\.
         (?<dns>global-)?
         (?<domain>[a-zA-Z0-9]+\.global\.rds\.amazonaws\.com\.?)$
-      /ix.freeze
+      /ix
 
       # -- RDS Proxy endpoints --
       RDS_PROXY_ENDPOINT_DNS_PATTERN = /
@@ -153,21 +153,21 @@ module AwsRubyDatabaseDriverWrapper
         (?<dns>proxy-)?
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.rds\.amazonaws\.com\.?)$
-      /ix.freeze
+      /ix
 
       RDS_PROXY_ENDPOINT_CHINA_DNS_PATTERN = /
         ^(?<instance>.+)\.endpoint\.
         (?<dns>proxy-)+
         (?<domain>[a-zA-Z0-9]+\.rds\.(?<region>[a-zA-Z0-9-]+)
         \.amazonaws\.com\.cn\.?)$
-      /ix.freeze
+      /ix
 
       RDS_PROXY_ENDPOINT_OLD_CHINA_DNS_PATTERN = /
         ^(?<instance>.+)\.endpoint\.
         (?<dns>proxy-)?
         (?<domain>[a-zA-Z0-9]+\.(?<region>[a-zA-Z0-9-]+)
         \.rds\.amazonaws\.com\.cn\.?)$
-      /ix.freeze
+      /ix
 
       DNS_PATTERNS = [
         AURORA_DNS_PATTERN,

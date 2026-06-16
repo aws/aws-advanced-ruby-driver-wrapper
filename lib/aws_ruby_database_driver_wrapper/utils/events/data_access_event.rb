@@ -18,30 +18,8 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     module Events
       # Event indicating data was accessed. Batched delivery (not immediate).
-      class DataAccessEvent
-        attr_reader :data_type, :key
-
-        def initialize(data_type:, key:)
-          @data_type = data_type
-          @key = key
-          freeze
-        end
-
-        def immediate_delivery?
-          false
-        end
-
-        def eql?(other)
-          other.instance_of?(self.class) &&
-            @data_type == other.data_type &&
-            @key == other.key
-        end
-
-        def hash
-          [self.class, @data_type, @key].hash
-        end
-
-        alias == eql?
+      DataAccessEvent = Data.define(:data_type, :key) do
+        def immediate_delivery? = false
       end
     end
   end

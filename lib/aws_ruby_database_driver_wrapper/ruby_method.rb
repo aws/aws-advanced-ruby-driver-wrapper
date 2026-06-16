@@ -15,8 +15,7 @@
 #  limitations under the License.
 
 module AwsRubyDatabaseDriverWrapper
-  # Represents a method that can be intercepted by the plugin pipeline.
-  MethodInfo = Struct.new(:name, :check_bounded_connection, keyword_init: true) do
+  MethodInfo = Data.define(:name, :check_bounded_connection) do
     def to_s
       name
     end
@@ -24,7 +23,7 @@ module AwsRubyDatabaseDriverWrapper
 
   module RubyMethod
     def self.define(name, check_bounded_connection:)
-      MethodInfo.new(name: name, check_bounded_connection: check_bounded_connection).freeze
+      MethodInfo.new(name:, check_bounded_connection:)
     end
 
     # -- Internal pipeline methods --
