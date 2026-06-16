@@ -189,7 +189,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
 
   describe 'monitoring property prefix mechanism' do
     let(:prefixed_props) do
-      { 'topology-monitoring-' => { connect_timeout: 3, socket_timeout: 2 } }
+      { AwsRubyDatabaseDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { connect_timeout: 3, socket_timeout: 2 } }
     end
 
     it 'builds monitoring_driver_props with overridden values' do
@@ -206,7 +206,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
 
   describe 'monitoring wrapper overrides' do
     let(:prefixed_props) do
-      { 'topology-monitoring-' => { cluster_topology_refresh_rate_ms: 1000 } }
+      { AwsRubyDatabaseDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_ms: 1000 } }
     end
 
     it 'separates wrapper props from driver props' do
