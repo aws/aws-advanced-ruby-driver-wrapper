@@ -62,7 +62,7 @@ module AwsRubyDatabaseDriverWrapper
 
     # Known prefixes for internal connection overrides. Each prefix maps to a key
     # used in ConnectionConfig#prefixed_props. Plugins define their own prefix here.
-    TOPOLOGY_MONITORING_PREFIX = 'topology-monitoring-'
+    TOPOLOGY_MONITORING_PREFIX = 'topology_monitoring_'
 
     KNOWN_PREFIXES = [
       TOPOLOGY_MONITORING_PREFIX

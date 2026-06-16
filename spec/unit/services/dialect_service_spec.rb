@@ -17,6 +17,8 @@
 require_relative '../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/services/dialect_service'
 require 'aws_ruby_database_driver_wrapper/services/connection_service'
+require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_ruby_database_driver_wrapper/services/host_service'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
@@ -32,13 +34,35 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
     instance_double(
       AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
       initial_host_info: host_info,
-      wrapper_props: wrapper_props
+      wrapper_props: wrapper_props,
+      prefixed_props: {},
+      driver_props: { host: host, port: '5432' }
     )
   end
 
   def build_service(driver_name, host: 'localhost', wrapper_props: {})
     conn_service = build_connection_service(host: host, wrapper_props: wrapper_props)
     described_class.new(conn_service, driver_name)
+  end
+
+  def build_service_with_container(driver_name, host: 'localhost', wrapper_props: {})
+    conn_service = build_connection_service(host: host, wrapper_props: wrapper_props)
+    service = described_class.new(conn_service, driver_name)
+
+    host_list_provider = double('HostListProvider', refresh: [], stop_monitor: nil)
+    host_service = double('HostService', host_list_provider: host_list_provider, 'host_list_provider=': nil)
+    monitor_service = double('MonitorService', register_type: nil)
+    storage_service = double('StorageService', register: nil)
+
+    container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+      connection_service: conn_service,
+      dialect_service: service,
+      host_service: host_service,
+      monitor_service: monitor_service,
+      storage_service: storage_service
+    )
+    service.setup_initial_provider(container)
+    service
   end
 
   describe '#initialize' do
@@ -202,11 +226,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
       let(:connection) { instance_double('PG::Connection') }
       let(:host) { 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com' }
       let(:conn_service) { build_connection_service(host: host) }
-      let(:service) { described_class.new(conn_service, :postgresql) }
+      let(:global_patterns) { '?.xyz.us-east-2.rds.amazonaws.com,?.abc.us-west-2.rds.amazonaws.com' }
+      let(:service) do
+        build_service_with_container(:postgresql, host: host,
+                                                  wrapper_props: { global_cluster_instance_host_patterns: global_patterns })
+      end
 
       it 'returns current dialect without updating when not updatable' do
-        global_conn_service = build_connection_service(host: 'my-global.global-xyz.global.rds.amazonaws.com')
-        global_service = described_class.new(global_conn_service, :postgresql)
+        global_service = build_service_with_container(
+          :postgresql,
+          host: 'my-global.global-xyz.global.rds.amazonaws.com',
+          wrapper_props: { global_cluster_instance_host_patterns: '?.xyz.us-east-1.rds.amazonaws.com,?.abc.us-west-2.rds.amazonaws.com' }
+        )
         original_dialect = global_service.db_dialect
 
         result = global_service.update_dialect(connection)
@@ -289,8 +320,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
     context 'MySQL driver' do
       let(:connection) { instance_double('Mysql2::Client') }
       let(:host) { 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com' }
+      let(:global_patterns) { '?.xyz.us-east-2.rds.amazonaws.com,?.abc.us-west-2.rds.amazonaws.com' }
       let(:conn_service) { build_connection_service(host: host) }
-      let(:service) { described_class.new(conn_service, :mysql2) }
+      let(:service) do
+        build_service_with_container(:mysql2, host: host,
+                                              wrapper_props: { global_cluster_instance_host_patterns: global_patterns })
+      end
 
       it 'updates to GlobalMysqlDialect when global tables exist' do
         status_result = [{ 'tmp' => 1 }]
