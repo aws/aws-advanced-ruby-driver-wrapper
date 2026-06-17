@@ -361,26 +361,5 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
       container = service_container_with_wrapper_props(wrapper_plugins: 'failover')
       expect { described_class.new(container) }.not_to raise_error
     end
-
-    it 'does not sort the plugin list when auto_sort_plugins is false' do
-      stub_plugin_a = Class.new(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)
-      stub_plugin_b = Class.new(AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin)
-
-      described_class.register_plugin('plugin_a', stub_plugin_a, weight: 900)
-      described_class.register_plugin('plugin_b', stub_plugin_b, weight: 100)
-
-      container = service_container_with_wrapper_props(wrapper_plugins: 'plugin_a,plugin_b', auto_sort_plugins: false)
-      manager = described_class.new(container)
-      plugins = manager.instance_variable_get(:@plugins)
-
-      # DefaultPlugin is always appended last; the first two should preserve insertion order
-      expect(plugins[0]).to be_a(stub_plugin_a)
-      expect(plugins[1]).to be_a(stub_plugin_b)
-    ensure
-      described_class.plugin_classes.delete('plugin_a')
-      described_class.plugin_classes.delete('plugin_b')
-      described_class.plugin_weights.delete(stub_plugin_a)
-      described_class.plugin_weights.delete(stub_plugin_b)
-    end
   end
 end

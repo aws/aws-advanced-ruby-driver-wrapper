@@ -172,7 +172,24 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
+        validate_props!(wrapper_config)
+        prefixed_config.each_value { |prefixed| validate_props!(prefixed) }
+
         [wrapper_config, driver_config, prefixed_config]
+      end
+
+      # Validates that values in a config hash match the expected type of their corresponding WrapperProperty.
+      # Raises TypeError if a value is present but incompatible. Strings that represent valid integers
+      # are accepted for Integer-typed properties.
+      def validate_props!(config)
+        config.each do |key, value|
+          prop = PropertyDefinition::KNOWN_PROPERTIES[key]
+          next if prop&.type.nil? || value.nil?
+          next if value.is_a?(prop.type)
+          next if prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/)
+
+          raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}"
+        end
       end
 
       # Forms a HostInfo object from a URI host section string.

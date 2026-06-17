@@ -16,12 +16,13 @@
 
 module AwsRubyDatabaseDriverWrapper
   class WrapperProperty
-    attr_reader :name, :default_value, :description
+    attr_reader :name, :default_value, :description, :type
 
-    def initialize(name, description, default_value: nil)
+    def initialize(name, description, default_value: nil, type: nil)
       @name = name.to_sym
       @description = description
       @default_value = default_value
+      @type = type
     end
 
     # @return [String, Boolean, Integer, nil] the value from props, or the property's default

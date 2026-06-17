@@ -124,7 +124,7 @@ module AwsRubyDatabaseDriverWrapper
         plugins
       end
 
-      def get_plugin_classes(plugin_code_list, wrapper_props)
+      def get_plugin_classes(plugin_code_list, _wrapper_props)
         plugin_classes = plugin_code_list.map do |plugin_code|
           plugin_class = self.class.plugin_classes[plugin_code]
           raise Errors::AwsError, "Invalid plugin: #{plugin_code}" if plugin_class.nil?
@@ -134,10 +134,8 @@ module AwsRubyDatabaseDriverWrapper
 
         return [] if plugin_classes.empty?
 
-        if wrapper_props.fetch(:auto_sort_plugins, true)
-          weights = plugin_weights_for(plugin_classes)
-          plugin_classes.sort_by! { |ft| weights[ft] }
-        end
+        weights = plugin_weights_for(plugin_classes)
+        plugin_classes.sort_by! { |ft| weights[ft] }
 
         plugin_classes
       end

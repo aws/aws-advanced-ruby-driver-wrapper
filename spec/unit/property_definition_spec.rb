@@ -55,24 +55,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::PropertyDefinition do
   end
 
   describe 'WrapperProperty#get_bool' do
+    let(:bool_wrapper_property) { AwsRubyDatabaseDriverWrapper::WrapperProperty.new(:bool_wrapper_property, 'test', default_value: true) }
+
     it 'returns boolean true from boolean value' do
-      result = described_class::AUTO_SORT_PLUGIN_ORDER.get_bool({ auto_sort_plugin_order: true })
-      expect(result).to be true
+      expect(bool_wrapper_property.get_bool({ bool_wrapper_property: true })).to be true
     end
 
     it 'returns boolean true from string "true"' do
-      result = described_class::AUTO_SORT_PLUGIN_ORDER.get_bool({ auto_sort_plugin_order: 'true' })
-      expect(result).to be true
+      expect(bool_wrapper_property.get_bool({ bool_wrapper_property: 'true' })).to be true
     end
 
     it 'returns boolean false from string "false"' do
-      result = described_class::AUTO_SORT_PLUGIN_ORDER.get_bool({ auto_sort_plugin_order: 'false' })
-      expect(result).to be false
+      expect(bool_wrapper_property.get_bool({ bool_wrapper_property: 'false' })).to be false
     end
 
     it 'returns default when not present' do
-      result = described_class::AUTO_SORT_PLUGIN_ORDER.get_bool({})
-      expect(result).to be true
+      expect(bool_wrapper_property.get_bool({})).to be true
     end
   end
 
