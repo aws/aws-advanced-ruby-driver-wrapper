@@ -67,7 +67,8 @@ module AwsRubyDatabaseDriverWrapper
         @dialect_cache = {}
         @can_update = false
         @driver_dialect = DriverDialects::DriverDialectManager.get_dialect(driver_name)
-        @error_handler = DriverDialects::DriverDialectManager.get_error_handler(driver_name)
+        @error_handler = AwsRubyDatabaseDriverWrapper.config.custom_error_handler ||
+                         DriverDialects::DriverDialectManager.get_error_handler(driver_name)
         @db_dialect = init_dialect
         @dialect_confirmed = false
       end
@@ -176,6 +177,15 @@ module AwsRubyDatabaseDriverWrapper
       def init_dialect
         @can_update = false
         @db_dialect = nil
+
+        # Check for a custom dialect object injected via config
+        custom = AwsRubyDatabaseDriverWrapper.config.custom_dialect
+        if custom
+          @dialect_code = :custom
+          @db_dialect = custom
+          @can_update = false
+          return @db_dialect
+        end
 
         user_dialect_setting = PropertyDefinition::DIALECT.get(@connection_service.wrapper_props)&.to_s
         host = @connection_service.initial_host_info&.host

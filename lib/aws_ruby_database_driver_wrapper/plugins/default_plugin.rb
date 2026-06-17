@@ -69,6 +69,9 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
+        init_func = AwsRubyDatabaseDriverWrapper.config.connection_init_func
+        init_func&.call(conn, host_info)
+
         conn
       end
 
