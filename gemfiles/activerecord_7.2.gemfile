@@ -14,17 +14,22 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-module AwsRubyDatabaseDriverWrapper
-  module Services
-    ServiceContainer = Struct.new(
-      :connection_service,
-      :dialect_service,
-      :event_publisher,
-      :host_service,
-      :plugin_manager,
-      :session_state_service,
-      :storage_service,
-      :monitor_service
-    )
-  end
+source 'https://rubygems.org'
+gemspec path: '..'
+
+gem 'activerecord', '~> 7.2.0'
+gem 'mysql2', '>= 0.5.7'
+gem 'pg', '>= 1.6.3'
+
+group :development do
+  gem 'bundler'
+  gem 'rubocop'
+  gem 'rubocop-performance'
+end
+
+group :test do
+  gem 'dotenv'
+  gem 'rspec'
+  gem 'simplecov', require: false
+  gem 'simplecov-cobertura', require: false
 end

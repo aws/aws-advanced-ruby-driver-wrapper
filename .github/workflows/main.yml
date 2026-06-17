@@ -53,7 +53,7 @@ jobs:
       matrix:
         include:
           - ruby-version: '3.3'
-            gemfile: gemfiles/activerecord_8.0.gemfile
+            gemfile: gemfiles/activerecord_7.2.gemfile
           - ruby-version: '3.4'
             gemfile: gemfiles/activerecord_8.0.gemfile
           - ruby-version: '4.0'
