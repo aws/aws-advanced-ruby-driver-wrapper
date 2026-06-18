@@ -19,39 +19,43 @@ require_relative 'wrapper_property'
 module AwsRubyDatabaseDriverWrapper
   module PropertyDefinition
     # -- General --
-    CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1')
-    PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover')
-    AUTO_SORT_PLUGIN_ORDER = WrapperProperty.new(:auto_sort_plugin_order, 'Auto-sort plugin execution order', default_value: true)
-    DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.')
+    CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
+    PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover', type: String)
+    DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.', type: String)
 
     # -- Failover --
-    FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300)
+    FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300, type: Integer)
 
     # -- Topology Monitoring --
     CLUSTER_INSTANCE_HOST_PATTERN = WrapperProperty.new(
       :cluster_instance_host_pattern,
       'Instance endpoint pattern with ? placeholder. Required for IP/custom domain connections.',
-      default_value: nil
+      default_value: nil,
+      type: String
     )
     GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS = WrapperProperty.new(
       :global_cluster_instance_host_patterns,
       'Comma-separated list of region-prefixed instance patterns for Global Aurora Databases.',
-      default_value: nil
+      default_value: nil,
+      type: String
     )
     CLUSTER_TOPOLOGY_REFRESH_RATE_MS = WrapperProperty.new(
       :cluster_topology_refresh_rate_ms,
       'Cluster topology refresh rate in milliseconds',
-      default_value: 5000
+      default_value: 5000,
+      type: Integer
     )
     CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_MS = WrapperProperty.new(
       :cluster_topology_high_refresh_rate_ms,
       'Cluster topology high refresh rate in milliseconds (used post-failover)',
-      default_value: 100
+      default_value: 100,
+      type: Integer
     )
     CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS = WrapperProperty.new(
       :cluster_topology_max_instance_monitors,
       'Maximum number of parallel instance monitors during topology updates',
-      default_value: 16
+      default_value: 16,
+      type: Integer
     )
 
     # Built once at load time from constants — used by parser to split props

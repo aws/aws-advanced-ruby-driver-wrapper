@@ -310,15 +310,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
 
   describe 'no type coercion at parse time' do
     it 'leaves string values as strings from URI query params' do
-      config = parser.parse(:postgresql, 'postgresql://host/db?auto_sort_plugin_order=true&failover_timeout_sec=120')
+      config = parser.parse(:postgresql, 'postgresql://host/db?failover_timeout_sec=120')
       # Values stay as strings — coercion happens at read time via WrapperProperty getters
-      expect(config.wrapper_props[:auto_sort_plugin_order]).to eq('true')
       expect(config.wrapper_props[:failover_timeout_sec]).to eq('120')
     end
 
     it 'preserves native types from hash input' do
-      config = parser.parse(:postgresql, host: 'h', auto_sort_plugin_order: true, failover_timeout_sec: 120)
-      expect(config.wrapper_props[:auto_sort_plugin_order]).to be true
+      config = parser.parse(:postgresql, host: 'h', failover_timeout_sec: 120)
       expect(config.wrapper_props[:failover_timeout_sec]).to eq(120)
     end
   end
@@ -388,6 +386,52 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'myhost', 5432)
       expect(config.original_host).to eq('myhost')
       expect(config.original_port).to eq('5432')
+    end
+  end
+
+  describe 'type validation' do
+    context 'wrapper props' do
+      it 'accepts a valid type' do
+        expect { parser.parse(:postgresql, host: 'h', cluster_id: 'my-cluster') }.not_to raise_error
+      end
+
+      it 'accepts a string integer for an Integer-typed property' do
+        expect { parser.parse(:postgresql, host: 'h', failover_timeout_sec: '120') }.not_to raise_error
+      end
+
+      it 'raises TypeError for a wrong type' do
+        expect do
+          parser.parse(:postgresql, host: 'h', failover_timeout_sec: [120])
+        end.to raise_error(TypeError, /failover_timeout_sec/)
+      end
+
+      it 'allows nil values regardless of type' do
+        expect { parser.parse(:postgresql, host: 'h', cluster_id: nil) }.not_to raise_error
+      end
+
+      it 'ignores unknown wrapper keys' do
+        expect { parser.parse(:postgresql, host: 'h', unknown_prop: 123) }.not_to raise_error
+      end
+    end
+
+    context 'prefixed props' do
+      it 'accepts a valid type in prefixed props' do
+        expect { parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: 60) }.not_to raise_error
+      end
+
+      it 'accepts a string integer for an Integer-typed prefixed property' do
+        expect { parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: '60') }.not_to raise_error
+      end
+
+      it 'raises TypeError for a wrong type in prefixed props' do
+        expect do
+          parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: [60])
+        end.to raise_error(TypeError, /failover_timeout_sec/)
+      end
+
+      it 'ignores unknown prefixed keys' do
+        expect { parser.parse(:postgresql, host: 'h', topology_monitoring_unknown_prop: 123) }.not_to raise_error
+      end
     end
   end
 
