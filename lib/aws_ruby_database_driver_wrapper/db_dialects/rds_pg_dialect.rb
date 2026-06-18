@@ -38,7 +38,7 @@ module AwsRubyDatabaseDriverWrapper
         WHERE id OPERATOR(pg_catalog.=) rds_tools.dbi_resource_id()
       SQL
 
-      BG_STATUS_QUERY = <<~SQL
+      BG_STATUS_QUERY = <<~SQL.freeze
         SELECT * FROM rds_tools.show_topology('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')
       SQL
 

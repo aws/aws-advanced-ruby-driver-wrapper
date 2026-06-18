@@ -17,17 +17,11 @@
 module AwsRubyDatabaseDriverWrapper
   module Utils
     module HostListUtils
-      def self.writer(hosts)
-        hosts&.find { |host_info| host_info.role == HostRole::WRITER }
-      end
+      def self.writer(hosts) = hosts&.find { |host_info| host_info.role == HostRole::WRITER }
 
-      def self.contains_url?(hosts, url)
-        hosts&.any? { |host_info| host_info.url == url } || false
-      end
+      def self.contains_url?(hosts, url) = hosts&.any? { |host_info| host_info.url == url } || false
 
-      def self.to_host_urls_s(hosts)
-        hosts&.map(&:url)&.join(',') || ''
-      end
+      def self.to_host_urls_s(hosts) = hosts&.map(&:url)&.join(',') || ''
     end
   end
 end

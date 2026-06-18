@@ -39,12 +39,12 @@ module AwsRubyDatabaseDriverWrapper
         monitoring_wrapper_props: {}
       )
         super(
-          service_container: service_container,
-          cluster_id: cluster_id,
-          instance_template: instance_template,
-          topology_utils: topology_utils,
-          monitoring_driver_props: monitoring_driver_props,
-          monitoring_wrapper_props: monitoring_wrapper_props
+          service_container:,
+          cluster_id:,
+          instance_template:,
+          topology_utils:,
+          monitoring_driver_props:,
+          monitoring_wrapper_props:
         )
         @instance_templates_by_region = instance_templates_by_region
       end

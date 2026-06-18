@@ -15,7 +15,6 @@
 #  limitations under the License.
 
 require 'json'
-require 'set'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'proxy_info'

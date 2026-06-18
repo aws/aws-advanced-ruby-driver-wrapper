@@ -24,7 +24,7 @@ module AwsRubyDatabaseDriverWrapper
         SELECT multi_az_db_cluster_source_dbi_resource_id FROM rds_tools.multi_az_db_cluster_source_dbi_resource_id()
       SQL
 
-      TOPOLOGY_QUERY = <<~SQL
+      TOPOLOGY_QUERY = <<~SQL.freeze
         SELECT id AS instance_id, endpoint AS endpoint FROM rds_tools.show_topology('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')
       SQL
 
@@ -79,7 +79,7 @@ module AwsRubyDatabaseDriverWrapper
         require_relative '../utils/multi_az_topology_utils'
         require_relative '../host/rds_host_list_provider'
         topology_utils = Utils::MultiAzTopologyUtils.new(dialect: self)
-        Host::RdsHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
+        Host::RdsHostListProvider.new(service_container:, topology_utils:)
       end
     end
   end

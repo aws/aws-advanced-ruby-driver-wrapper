@@ -14,7 +14,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'database_instances'

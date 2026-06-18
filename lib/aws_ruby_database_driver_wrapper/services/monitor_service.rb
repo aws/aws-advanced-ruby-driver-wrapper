@@ -14,7 +14,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
 require_relative '../monitoring/monitor_state'
 require_relative '../logging'
 require_relative '../utils/storage/sliding_expiration_cache'
@@ -31,7 +30,7 @@ module AwsRubyDatabaseDriverWrapper
       CLEANUP_INTERVAL_SEC = 60.0
 
       # Internal container grouping a cache for a monitor type.
-      CacheContainer = Struct.new(:cache, :produced_data_type, keyword_init: true)
+      CacheContainer = Data.define(:cache, :produced_data_type)
 
       # @param event_publisher [#subscribe] the event publisher to subscribe to.
       def initialize(event_publisher:)
@@ -54,7 +53,7 @@ module AwsRubyDatabaseDriverWrapper
           return if @caches.key?(monitor_type)
 
           cache = Utils::Storage::SlidingExpirationCache.new(ttl: expiration_timeout_sec)
-          @caches[monitor_type] = CacheContainer.new(cache: cache, produced_data_type: produced_data_type)
+          @caches[monitor_type] = CacheContainer.new(cache:, produced_data_type:)
         end
       end
 

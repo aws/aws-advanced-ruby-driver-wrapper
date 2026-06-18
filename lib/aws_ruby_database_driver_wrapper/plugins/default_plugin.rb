@@ -14,7 +14,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
 require_relative '../errors'
 require_relative '../host/host_info'
 require_relative '../host/host_availability'
@@ -78,11 +77,11 @@ module AwsRubyDatabaseDriverWrapper
         driver_dialect.connect(host_info, props)
       end
 
-      def execute(target_method_name, target_callable, *args, **options, &block)
+      def execute(target_method_name, target_callable, *args, **, &)
         session = @service_container.session_state_service
         autocommit_before = session&.autocommit?
 
-        result = target_callable.call(*args, **options, &block)
+        result = target_callable.call(*args, **, &)
 
         session&.update_transaction_state(target_method_name, args, autocommit_before)
 

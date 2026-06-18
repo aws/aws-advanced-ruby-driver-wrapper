@@ -27,9 +27,7 @@ module ActiveRecord
       # ActiveRecord-only keys that should not be passed to the wrapper or native driver.
       AR_ONLY_KEYS = AwsRubyDatabaseDriverWrapper::Utils::AR_COMMON_KEYS
 
-      def adapter_name
-        ADAPTER_NAME
-      end
+      def adapter_name = ADAPTER_NAME
 
       def self.new_client(config)
         AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient.new(**config.except(*AR_ONLY_KEYS))
@@ -68,11 +66,7 @@ module ActiveRecord
           exception
         elsif exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError)
           @connection_broken = true
-          if defined?(ActiveRecord::ConnectionFailed)
-            ActiveRecord::ConnectionFailed.new(message, sql: sql, binds: binds, connection_pool: @pool)
-          else
-            ActiveRecord::ConnectionNotEstablished.new(message)
-          end
+          ActiveRecord::ConnectionFailed.new(message, sql:, binds:, connection_pool: @pool)
         else
           exception
         end
@@ -81,10 +75,8 @@ module ActiveRecord
   end
 end
 
-if ActiveRecord::ConnectionAdapters.respond_to?(:register)
-  ActiveRecord::ConnectionAdapters.register(
-    'aws_mysql2',
-    'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
-    'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
-  )
-end
+ActiveRecord::ConnectionAdapters.register(
+  'aws_mysql2',
+  'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
+  'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
+)

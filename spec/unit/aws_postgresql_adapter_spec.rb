@@ -57,9 +57,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
         adapter.instance_variable_set(:@pool, pool)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
-        expected_class = defined?(ActiveRecord::ConnectionFailed) ?
-                           ActiveRecord::ConnectionFailed : ActiveRecord::ConnectionNotEstablished
-        expect(result).to be_a(expected_class)
+        expect(result).to be_a(ActiveRecord::ConnectionFailed)
         expect(adapter.instance_variable_get(:@connection_broken)).to be true
       end
     end

@@ -112,7 +112,7 @@ module AwsRubyDatabaseDriverWrapper
         pattern = PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.get(props)
         if pattern
           port = initial_host_info.port
-          HostInfo.new(host: pattern, port: port)
+          HostInfo.new(host: pattern, port:)
         else
           auto_pattern = Utils::RdsUtils.rds_instance_host_pattern(initial_host_info.host)
           HostInfo.new(host: auto_pattern, port: initial_host_info.port)
