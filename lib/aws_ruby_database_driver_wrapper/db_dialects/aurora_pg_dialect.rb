@@ -43,7 +43,8 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       INSTANCE_IDENTITY_QUERY = <<~SQL
-        SELECT pg_catalog.aurora_db_instance_identifier() AS instance_name
+        SELECT pg_catalog.aurora_db_instance_identifier() AS instance_id,
+               pg_catalog.aurora_db_instance_identifier() AS instance_name
       SQL
 
       WRITER_ID_QUERY = <<~SQL
