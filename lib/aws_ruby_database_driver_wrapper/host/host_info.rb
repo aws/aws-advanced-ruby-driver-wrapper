@@ -45,7 +45,6 @@ module AwsRubyDatabaseDriverWrapper
         @weight = weight
         @id = id
         @last_update_time = last_update_time
-        @all_identifiers = Set.new([host_and_port])
       end
 
       def ==(other)
@@ -68,7 +67,7 @@ module AwsRubyDatabaseDriverWrapper
       # Returns a deep copy of this HostInfo, duplicating all mutable fields.
       # @return [HostInfo]
       def deep_dup
-        copy = HostInfo.new(
+        HostInfo.new(
           host: host.dup,
           port: port.dup,
           role:,
@@ -77,62 +76,14 @@ module AwsRubyDatabaseDriverWrapper
           id: id&.dup,
           last_update_time:
         )
-        @all_identifiers.each { |identifier| copy.add_aliases(identifier) }
-        copy
       end
 
       def url
         "#{host_and_port}/"
       end
 
-      # Returns all identifiers for this host, which consists of the value returned by {#host_and_port} plus various
-      # aliases, such as the internal IP address, instance URL, or instance name. An example return set could look like
-      # {
-      #   foo.cluster-xyz.rds.amazonaws.com:3306,
-      #   ip-1-2-3-4:3306,
-      #   foo-instance-1.xyz.rds.amazonaws.com,
-      #   foo-instance-1
-      # }
-      #
-      # @return [Set] the set of all identifiers for this host.
-      def all_identifiers
-        @all_identifiers.dup.freeze
-      end
-
       def host_and_port
         port_specified? ? "#{host}:#{port}" : host
-      end
-
-      # Adds aliases for this host to the set of {#all_identifiers}.
-      #
-      # @param aliases [Array<String>] the aliases to add (e.g. IP address, instance name)
-      # @return [void]
-      def add_aliases(*aliases)
-        return if aliases.empty?
-
-        aliases.each do |a|
-          @all_identifiers.add(a)
-        end
-      end
-
-      # Removes aliases for this host from the set of {#all_identifiers}.
-      #
-      # @param aliases [Array<String>] the aliases to remove (e.g. IP address, instance name)
-      # @return [void]
-      def remove_aliases(*aliases)
-        return if aliases.empty?
-
-        aliases.each do |a|
-          @all_identifiers.delete(a)
-        end
-      end
-
-      # Resets {#all_identifiers} by removing all aliases so that it only contains the {#host_and_port}.
-      #
-      # @return [void]
-      def reset_identifiers
-        @all_identifiers.clear
-        @all_identifiers.add(host_and_port)
       end
 
       def port_specified?

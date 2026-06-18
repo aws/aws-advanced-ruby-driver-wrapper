@@ -18,6 +18,7 @@ require_relative 'service_container'
 require_relative 'connection_service'
 require_relative 'dialect_service'
 require_relative 'host_service'
+require_relative 'host_id_cache_service'
 require_relative 'plugin_manager'
 require_relative 'monitor_service'
 require_relative 'session_state_service'
@@ -56,6 +57,7 @@ module AwsRubyDatabaseDriverWrapper
         container.connection_service = ConnectionService.new(container, config)
         container.dialect_service = DialectService.new(container.connection_service, config.driver_name)
         container.host_service = HostService.new(container)
+        container.host_id_cache_service = HostIdCacheService.new
         container.session_state_service = SessionStateService.new
         container.storage_service = CoreServices.storage_service
         container.monitor_service = CoreServices.monitor_service

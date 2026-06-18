@@ -32,6 +32,15 @@ module AwsRubyDatabaseDriverWrapper
   def self.shutdown(grace_period_sec: 10)
     shutdown_service.shutdown(grace_period_sec)
   end
+
+  def self.clear_caches
+    require_relative 'aws_ruby_database_driver_wrapper/services/service_utility'
+    require_relative 'aws_ruby_database_driver_wrapper/services/host_id_cache_service'
+    Services::CoreServices.storage_service.clear_all
+    Utils::RdsUtils.clear_cache
+    Services::DialectService.known_endpoint_dialects.clear
+    Services::HostIdCacheService.clear_cache
+  end
 end
 
 # Register signal traps and at_exit hook for graceful shutdown.

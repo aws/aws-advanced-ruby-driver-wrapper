@@ -102,17 +102,30 @@ module AwsRubyDatabaseDriverWrapper
       # Identify which host in the topology a given connection belongs to.
       #
       # @param connection [Object]
+      # @param connection_host_info [Host::HostInfo, nil] the host info used to establish the connection
       # @return [Host::HostInfo, nil]
-      def identify_host(connection)
-        id = @service_container.dialect_service.db_dialect.instance_identity(connection)
-        return nil if id.nil?
+      def identify_host(connection, connection_host_info = nil)
+        cache_service = @service_container.host_id_cache_service
+        if connection_host_info && cache_service
+          return cache_service.identify_connection(
+            connection, connection_host_info,
+            self, @service_container.dialect_service
+          )
+        end
+
+        id_and_name = @service_container.dialect_service.db_dialect.instance_identity(connection)
+        return nil if id_and_name.nil?
+
+        instance_id, instance_name = id_and_name
 
         hosts = @host_list_provider&.refresh
-        hosts = @host_list_provider&.force_refresh if hosts.nil?
+        if hosts.nil? || hosts.empty?
+          force_refresh_host_list
+          hosts = @all_hosts
+        end
+        return nil if hosts.nil? || hosts.empty?
 
-        return nil if hosts.nil?
-
-        hosts.find { |host_info| host_info.id == id }
+        hosts.find { |h| h.id == instance_id || h.host == instance_name }
       end
 
       private
