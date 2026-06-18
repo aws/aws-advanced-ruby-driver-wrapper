@@ -32,8 +32,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
   let(:dialect_service) { instance_double('DialectService', db_dialect: dialect) }
 
   let(:service_container) do
-    instance_double('ServiceContainer', storage_service: storage_service, dialect_service: dialect_service,
-                                        host_id_cache_service: nil)
+    instance_double('ServiceContainer', storage_service: storage_service, dialect_service: dialect_service)
   end
 
   let(:service) { described_class.new(service_container) }
@@ -212,15 +211,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
 
       result = service.identify_host(connection)
       expect(result).to be_nil
-    end
-
-    it 'falls back to force_refresh when refresh returns nil' do
-      allow(dialect).to receive(:instance_identity).with(connection).and_return(['writer-id', nil])
-      allow(host_list_provider).to receive(:refresh).and_return(nil)
-      allow(host_list_provider).to receive(:force_refresh).with(false, 5.0).and_return(hosts)
-
-      result = service.identify_host(connection)
-      expect(result).to eq(writer)
     end
 
     it 'returns nil when both refresh and force_refresh return nil' do

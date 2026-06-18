@@ -21,7 +21,6 @@ module AwsRubyDatabaseDriverWrapper
       :dialect_service,
       :event_publisher,
       :host_service,
-      :host_id_cache_service,
       :plugin_manager,
       :session_state_service,
       :storage_service,
