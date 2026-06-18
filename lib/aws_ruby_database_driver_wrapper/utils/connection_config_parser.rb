@@ -25,7 +25,7 @@ require_relative '../host/host_role'
 module AwsRubyDatabaseDriverWrapper
   module Utils
     module ConnectionConfigParser
-      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|(\S+))/.freeze
+      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|([^\s]++))/
 
       module_function
 
@@ -86,11 +86,11 @@ module AwsRubyDatabaseDriverWrapper
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
-          initial_host_info: initial_host_info,
+          initial_host_info:,
           original_host: host,
           original_port: port,
           multi_host_url: host.include?(','),
-          driver_name: driver_name
+          driver_name:
         )
       end
 
@@ -118,11 +118,11 @@ module AwsRubyDatabaseDriverWrapper
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
-          initial_host_info: initial_host_info,
-          original_host: original_host,
-          original_port: original_port,
+          initial_host_info:,
+          original_host:,
+          original_port:,
           multi_host_url: original_host.to_s.include?(','),
-          driver_name: driver_name
+          driver_name:
         )
       end
 
@@ -144,11 +144,11 @@ module AwsRubyDatabaseDriverWrapper
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
-          initial_host_info: initial_host_info,
-          original_host: original_host,
-          original_port: original_port,
+          initial_host_info:,
+          original_host:,
+          original_port:,
           multi_host_url: original_host.to_s.include?(','),
-          driver_name: driver_name
+          driver_name:
         )
       end
 

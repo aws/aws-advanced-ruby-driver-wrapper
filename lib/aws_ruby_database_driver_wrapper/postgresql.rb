@@ -22,9 +22,9 @@ require_relative 'errors'
 module AwsRubyDatabaseDriverWrapper
   class WrapperPgConnection
     class << self
-      def new(*args, **options)
+      def new(*, **)
         instance = allocate
-        instance.send(:initialize, *args, **options)
+        instance.send(:initialize, *, **)
         instance
       end
 
@@ -32,8 +32,8 @@ module AwsRubyDatabaseDriverWrapper
       alias connect new
     end
 
-    def initialize(*args, **options)
-      config = Utils::ConnectionConfigParser.parse(:postgresql, *args, **options)
+    def initialize(*, **)
+      config = Utils::ConnectionConfigParser.parse(:postgresql, *, **)
       @service_container = Services::ServiceUtility.create_standard_container(config)
       @prepared_on = {}
       @async_conn = nil
@@ -63,8 +63,8 @@ module AwsRubyDatabaseDriverWrapper
       wrap_pg_result(result)
     end
 
-    def transaction(&block)
-      pm.execute(RubyMethod::CONNECTION_TRANSACTION, current_conn, ->(&b) { current_conn.transaction(&b) }, &block)
+    def transaction(&)
+      pm.execute(RubyMethod::CONNECTION_TRANSACTION, current_conn, ->(&b) { current_conn.transaction(&b) }, &)
     end
 
     def close
@@ -161,9 +161,9 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- COPY writer (store @copy_conn) --
 
-    def copy_data(sql, coder = nil, &block)
+    def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
-      pm.execute(RubyMethod::CONNECTION_COPY_DATA, current_conn, ->(*a, &b) { current_conn.copy_data(*a, &b) }, sql, coder, &block)
+      pm.execute(RubyMethod::CONNECTION_COPY_DATA, current_conn, ->(*a, &b) { current_conn.copy_data(*a, &b) }, sql, coder, &)
     ensure
       @copy_conn = nil
     end
@@ -197,15 +197,15 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- method_missing: non-network bypasses pipeline --
 
-    def method_missing(method_name, *args, **options, &block)
+    def method_missing(method_name, ...)
       conn = current_conn
       raise NoMethodError, 'Connection not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"
-      return conn.send(method_name, *args, **options, &block) unless network_bound_methods.include?(method_key)
+      return conn.send(method_name, ...) unless network_bound_methods.include?(method_key)
 
-      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, *args, **options, &block)
+      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, ...)
       wrap_pg_result(result)
     end
 
@@ -243,12 +243,12 @@ module AwsRubyDatabaseDriverWrapper
       @connection = connection
     end
 
-    def each(&block)
-      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) }, bounded_conn: @connection, &block)
+    def each(&)
+      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) }, bounded_conn: @connection, &)
     end
 
-    def each_row(&block)
-      pm.execute(RubyMethod::RESULT_EACH_ROW, current_conn, ->(&blk) { @result.each_row(&blk) }, bounded_conn: @connection, &block)
+    def each_row(&)
+      pm.execute(RubyMethod::RESULT_EACH_ROW, current_conn, ->(&blk) { @result.each_row(&blk) }, bounded_conn: @connection, &)
     end
 
     def to_a
@@ -308,8 +308,8 @@ module AwsRubyDatabaseDriverWrapper
     alias count ntuples
     alias size ntuples
 
-    def method_missing(method_name, *args, &block)
-      @result.send(method_name, *args, &block)
+    def method_missing(method_name, *, &)
+      @result.send(method_name, *, &)
     end
 
     def respond_to_missing?(method, include_private = false)

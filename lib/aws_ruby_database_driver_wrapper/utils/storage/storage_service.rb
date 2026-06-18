@@ -46,7 +46,7 @@ module AwsRubyDatabaseDriverWrapper
           @lock.synchronize do
             return if @caches.key?(name)
 
-            @caches[name] = ExpirationCache.new(ttl: ttl)
+            @caches[name] = ExpirationCache.new(ttl:)
           end
         end
 
@@ -67,7 +67,7 @@ module AwsRubyDatabaseDriverWrapper
           value = fetch_cache!(name).get(key)
           return nil unless value
 
-          @event_publisher.publish(Events::DataAccessEvent.new(data_type: name, key: key)) if register_access && @event_publisher
+          @event_publisher.publish(Events::DataAccessEvent.new(data_type: name, key:)) if register_access && @event_publisher
 
           value
         end

@@ -88,7 +88,7 @@ module AwsRubyDatabaseDriverWrapper
         require_relative '../utils/multi_az_topology_utils'
         require_relative '../host/rds_host_list_provider'
         topology_utils = Utils::MultiAzTopologyUtils.new(dialect: self)
-        Host::RdsHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
+        Host::RdsHostListProvider.new(service_container:, topology_utils:)
       end
     end
   end

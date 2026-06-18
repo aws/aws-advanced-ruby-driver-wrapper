@@ -46,9 +46,7 @@ module ActiveRecord
         @wrapper_config = wrapper_config
       end
 
-      def adapter_name
-        ADAPTER_NAME
-      end
+      def adapter_name = ADAPTER_NAME
 
       # Note that this config includes wrapper properties.
       def self.new_client(config)
@@ -91,11 +89,7 @@ module ActiveRecord
           exception
         elsif exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError)
           @connection_broken = true
-          if defined?(ActiveRecord::ConnectionFailed)
-            ActiveRecord::ConnectionFailed.new(message, sql: sql, binds: binds, connection_pool: @pool)
-          else
-            ActiveRecord::ConnectionNotEstablished.new(message)
-          end
+          ActiveRecord::ConnectionFailed.new(message, sql:, binds:, connection_pool: @pool)
         else
           exception
         end
@@ -104,10 +98,8 @@ module ActiveRecord
   end
 end
 
-if ActiveRecord::ConnectionAdapters.respond_to?(:register)
-  ActiveRecord::ConnectionAdapters.register(
-    'aws_postgresql',
-    'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
-    'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
-  )
-end
+ActiveRecord::ConnectionAdapters.register(
+  'aws_postgresql',
+  'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
+  'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
+)

@@ -44,9 +44,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
       @subscribed_methods = Set['*']
     end
 
-    def execute(target_method_name, pipeline_callable, *args, **options, &block)
+    def execute(target_method_name, pipeline_callable, ...)
       @calls << "before:#{target_method_name}"
-      result = pipeline_callable.call(*args, **options, &block)
+      result = pipeline_callable.call(...)
       @calls << "after:#{target_method_name}"
       result
     rescue StandardError => e

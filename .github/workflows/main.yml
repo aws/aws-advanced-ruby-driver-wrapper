@@ -1,6 +1,7 @@
 name: Check and Unit Tests
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -51,14 +52,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ruby-version: '2.7'
-            gemfile: gemfiles/activerecord_7.0.gemfile
-          - ruby-version: '3.1'
-            gemfile: gemfiles/activerecord_7.1.gemfile
-          - ruby-version: '3.2'
-            gemfile: gemfiles/activerecord_7.2.gemfile
           - ruby-version: '3.3'
+            gemfile: gemfiles/activerecord_7.2.gemfile
+          - ruby-version: '3.4'
             gemfile: gemfiles/activerecord_8.0.gemfile
+          - ruby-version: '4.0'
+            gemfile: gemfiles/activerecord_8.1.gemfile
     env:
       BUNDLE_GEMFILE: ${{ matrix.gemfile }}
     steps:
