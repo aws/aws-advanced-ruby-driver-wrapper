@@ -40,6 +40,24 @@ GitHub provides additional document on [forking a repository](https://help.githu
 [creating a pull request](https://help.github.com/articles/creating-a-pull-request/).
 
 
+## Secret Scanning Setup
+
+Before committing changes, install [git-secrets](https://github.com/awslabs/git-secrets) to prevent accidental credential leaks:
+
+```bash
+# Install git-secrets (macOS)
+brew install git-secrets
+
+# Set up hooks in this repository
+git secrets --install
+git secrets --register-aws
+```
+
+This installs pre-commit hooks that scan for AWS access keys, secret keys, and other sensitive patterns before each commit. The repository also includes a `.gitallowed` file for known false positives (GovCloud/isolated region endpoint patterns used in tests).
+
+Note: GitHub Push Protection is also enabled at the org level as an additional safety net.
+
+
 ## Finding contributions to work on
 Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
 
