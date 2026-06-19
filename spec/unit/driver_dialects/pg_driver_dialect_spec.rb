@@ -17,12 +17,19 @@
 require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 
+require 'concurrent'
+
 RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('PG::Connection') }
   let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
-  let(:config) { { database: 'testdb', user: 'pguser' } }
+  let(:config) do
+    Concurrent::Map.new.tap do |m|
+      m[:database] = 'testdb'
+      m[:user] = 'pguser'
+    end
+  end
 
   describe '#connect' do
     it 'calls PG::Connection.new with prepared config' do
@@ -91,7 +98,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
 
     it 'preserves :dbname when already present' do
-      cfg = { dbname: 'explicit', database: 'fallback', user: 'pguser' }
+      cfg = Concurrent::Map.new.tap do |m|
+        m[:dbname] = 'explicit'
+        m[:database] = 'fallback'
+        m[:user] = 'pguser'
+      end
       result = dialect.prepare_connect_config(host_info, cfg)
       expect(result[:dbname]).to eq('explicit')
       expect(result).to have_key(:database)
@@ -122,7 +133,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     it 'does not mutate the original config' do
       original = config.dup
       dialect.prepare_connect_config(host_info, config)
-      expect(config).to eq(original)
+      expect(config.size).to eq(original.size)
+      original.each { |k, v| expect(config[k]).to eq(v) }
     end
   end
 
