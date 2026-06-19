@@ -113,10 +113,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection_host_info [Host::HostInfo, nil] the host info used to establish the connection
       # @return [Host::HostInfo, nil]
       def identify_host(connection, connection_host_info = nil)
-        if connection_host_info.nil?
-          host_info, _id_and_name = query_and_identify(connection)
-          return host_info
-        end
+        return find_host(*query_id_and_name(connection)) if connection_host_info.nil?
 
         url_type = Utils::RdsUtils.identify_rds_type(connection_host_info&.host)
         case url_type
@@ -125,8 +122,7 @@ module AwsRubyDatabaseDriverWrapper
         when Utils::RdsUrlType::IP_ADDRESS, Utils::RdsUrlType::OTHER
           get_cached_host_info(connection, connection_host_info)
         else
-          host_info, _id_and_name = query_and_identify(connection)
-          host_info
+          find_host(*query_id_and_name(connection))
         end
       end
 
@@ -146,29 +142,22 @@ module AwsRubyDatabaseDriverWrapper
         id_and_name = get_cached_id(host)
         return if id_and_name
 
-        host_info, id_and_name = query_and_identify(connection)
-        store_id(host, id_and_name)
-        host_info
+        instance_id, instance_name = query_id_and_name(connection)
+        store_id(host, [instance_id, instance_name])
+        find_host(instance_id, instance_name)
       end
 
-      def query_and_identify(connection)
-        id_and_name = query_instance_id_and_name(connection)
-        return [nil, nil] if id_and_name.nil?
-
-        instance_id, instance_name = id_and_name
-        return [nil, id_and_name] if instance_id.nil? && instance_name.nil?
-
-        topology = host_list_provider&.refresh
-        return [nil, id_and_name] if topology.nil? || topology.empty?
-
-        host_info = topology.find { |h| h.id == instance_id || h.host == instance_name }
-        [host_info, id_and_name]
-      end
-
-      def query_instance_id_and_name(connection)
+      def query_id_and_name(connection)
         @service_container.dialect_service.db_dialect.instance_identity(connection)
       rescue StandardError
         [nil, nil]
+      end
+
+      def find_host(instance_id, instance_name)
+        topology = @host_list_provider&.refresh
+        return nil if topology.nil? || topology.empty?
+
+        topology.find { |h| h.id == instance_id || h.host == instance_name }
       end
 
       def get_cached_id(host)

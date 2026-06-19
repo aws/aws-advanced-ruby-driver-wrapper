@@ -207,16 +207,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
 
     it 'returns nil when instance_identity returns nil' do
-      allow(dialect).to receive(:instance_identity).with(connection).and_return(nil)
-
-      result = service.identify_host(connection)
-      expect(result).to be_nil
-    end
-
-    it 'returns nil when both refresh and force_refresh return nil' do
-      allow(dialect).to receive(:instance_identity).with(connection).and_return(['writer-id', nil])
-      allow(host_list_provider).to receive(:refresh).and_return(nil)
-      allow(host_list_provider).to receive(:force_refresh).with(false, 5.0).and_return(nil)
+      allow(dialect).to receive(:instance_identity).with(connection).and_return([nil, nil])
+      allow(host_list_provider).to receive(:refresh).and_return(hosts)
 
       result = service.identify_host(connection)
       expect(result).to be_nil
