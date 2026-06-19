@@ -31,6 +31,14 @@ module AwsRubyDatabaseDriverWrapper
         @all_hosts = []
         @availability_cache = Utils::Storage::ExpirationCache.new
         @host_list_provider = nil
+        @host_id_cache = {}
+        @mutex = Mutex.new
+      end
+
+      class << self
+        def clear_id_cache
+          @mutex.synchronize { @cache.clear }
+        end
       end
 
       # Register a non-default host selector with the HostService (e.g. fastest_response).
@@ -105,27 +113,17 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection_host_info [Host::HostInfo, nil] the host info used to establish the connection
       # @return [Host::HostInfo, nil]
       def identify_host(connection, connection_host_info = nil)
-        cache_service = @service_container.host_id_cache_service
-        if connection_host_info && cache_service
-          return cache_service.identify_connection(
-            connection, connection_host_info,
-            self, @service_container.dialect_service
-          )
+        return find_host(*query_id_and_name(connection)) if connection_host_info.nil?
+
+        url_type = Utils::RdsUtils.identify_rds_type(connection_host_info&.host)
+        case url_type
+        when Utils::RdsUrlType::RDS_INSTANCE
+          connection_host_info
+        when Utils::RdsUrlType::IP_ADDRESS, Utils::RdsUrlType::OTHER
+          get_cached_host_info(connection, connection_host_info)
+        else
+          find_host(*query_id_and_name(connection))
         end
-
-        id_and_name = @service_container.dialect_service.db_dialect.instance_identity(connection)
-        return nil if id_and_name.nil?
-
-        instance_id, instance_name = id_and_name
-
-        hosts = @host_list_provider&.refresh
-        if hosts.nil? || hosts.empty?
-          force_refresh_host_list
-          hosts = @all_hosts
-        end
-        return nil if hosts.nil? || hosts.empty?
-
-        hosts.find { |h| h.id == instance_id || h.host == instance_name }
       end
 
       private
@@ -137,6 +135,37 @@ module AwsRubyDatabaseDriverWrapper
 
           host.availability = availability
         end
+      end
+
+      def get_cached_host_info(connection, connection_host_info)
+        host = connection_host_info.host
+        id_and_name = get_cached_id(host)
+        return if id_and_name
+
+        instance_id, instance_name = query_id_and_name(connection)
+        store_id(host, [instance_id, instance_name])
+        find_host(instance_id, instance_name)
+      end
+
+      def query_id_and_name(connection)
+        @service_container.dialect_service.db_dialect.instance_identity(connection)
+      rescue StandardError
+        [nil, nil]
+      end
+
+      def find_host(instance_id, instance_name)
+        topology = @host_list_provider&.refresh
+        return nil if topology.nil? || topology.empty?
+
+        topology.find { |h| h.id == instance_id || h.host == instance_name }
+      end
+
+      def get_cached_id(host)
+        @mutex.synchronize { @cache[host] }
+      end
+
+      def store_id(host, value)
+        @mutex.synchronize { @cache[host] = value }
       end
     end
   end
