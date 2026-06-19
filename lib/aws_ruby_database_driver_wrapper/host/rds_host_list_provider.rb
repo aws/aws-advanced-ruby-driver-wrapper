@@ -49,8 +49,10 @@ module AwsRubyDatabaseDriverWrapper
         validate_host_pattern!(@instance_template.host)
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host_info.host)
 
-        prefixed = @service_container.connection_service.prefixed_props[PropertyDefinition::TOPOLOGY_MONITORING_PREFIX] || ::Concurrent::Map.new
-        @monitoring_driver_props, @monitoring_wrapper_props = build_monitoring_props(prefixed)
+        prefixed_wrapper_config = @service_container.connection_service.prefixed_wrapper_config[PropertyDefinition::TOPOLOGY_MONITORING_PREFIX]
+        @monitoring_wrapper_props = build_monitoring_wrapper_props(prefixed_wrapper_config || ::Concurrent::Map.new)
+        prefixed_driver_config = @service_container.connection_service.prefixed_driver_config[PropertyDefinition::TOPOLOGY_MONITORING_PREFIX]
+        @monitoring_driver_props = build_monitoring_driver_props(prefixed_driver_config || ::Concurrent::Map.new)
 
         register_monitor_type
         register_topology_cache
@@ -135,20 +137,27 @@ module AwsRubyDatabaseDriverWrapper
 
       # Splits prefixed overrides into driver-level and wrapper-level props.
       # Driver overrides are merged onto base driver_props with defaults applied.
-      # @return [Array(Hash, Hash)] [monitoring_driver_props, monitoring_wrapper_props]
-      def build_monitoring_props(prefixed)
-        monitoring_wrapper = {}
-        monitoring_driver = @service_container.connection_service.driver_props.dup
+      # @return Hash monitoring_driver_props
+      def build_monitoring_driver_props(prefixed_driver_props)
+        monitoring_driver_props = @service_container.connection_service.driver_props.dup
 
-        prefixed.each do |key, value|
-          if PropertyDefinition.wrapper_property?(key)
-            monitoring_wrapper[key] = value
-          else
-            monitoring_driver[key] = value
-          end
+        prefixed_driver_props.each do |key, value|
+          monitoring_driver_props[key] = value
         end
 
-        [monitoring_driver, monitoring_wrapper]
+        monitoring_driver_props
+      end
+
+      # Driver overrides are merged onto base wrapper_props with defaults applied.
+      # @return Hash monitoring_wrapper_props
+      def build_monitoring_wrapper_props(prefixed_wrapper_props)
+        monitoring_wrapper_props = @service_container.connection_service.wrapper_props.dup
+
+        prefixed_wrapper_props.each do |key, value|
+          monitoring_wrapper_props[key] = value
+        end
+
+        monitoring_wrapper_props
       end
 
       def validate_host_pattern!(pattern)

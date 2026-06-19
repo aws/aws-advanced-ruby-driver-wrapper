@@ -90,9 +90,14 @@ module AwsRubyDatabaseDriverWrapper
         @config.initial_host_info = host_info
       end
 
-      # @return [Hash{String => Hash}] prefixed props keyed by prefix (already stripped)
-      def prefixed_props
-        @config.prefixed_props
+      # @return [Hash{String => Hash}] prefixed wrapper props keyed by prefix (already stripped)
+      def prefixed_wrapper_config
+        @config.prefixed_wrapper_config
+      end
+
+      # @return [Hash{String => Hash}] prefixed driver props keyed by prefix (already stripped)
+      def prefixed_driver_config
+        @config.prefixed_wrapper_config
       end
 
       # @return [Hash] driver-specific properties

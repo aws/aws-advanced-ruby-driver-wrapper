@@ -19,10 +19,7 @@ require 'simplecov-cobertura'
 
 SimpleCov.start do
   # Generate both HTML and XML formats
-  SimpleCov.formatters =
-    SimpleCov::Formatter::MultiFormatter.new(
-      [SimpleCov::Formatter::HTMLFormatter, SimpleCov::Formatter::CoberturaFormatter]
-    )
+  self.formatters = [SimpleCov::Formatter::HTMLFormatter, SimpleCov::Formatter::CoberturaFormatter]
 
   # Filter out test files and vendor code from coverage analysis
   add_filter '/spec/'

@@ -20,24 +20,19 @@ module AwsRubyDatabaseDriverWrapper
     # Automatically closes the old connection when replaced.
     class MonitorConnection
       def initialize
-        @mutex = Mutex.new
-        @conn = nil
+        @connection = Concurrent::AtomicReference.new(nil)
       end
 
       # Returns the current connection, or nil.
       def get
-        @mutex.synchronize { @conn }
+        @connection.value
       end
 
       # Replaces the current connection. Closes the old one unless close_old is false.
       # @param new_conn [Object, nil] the new connection.
       # @param close_old [Boolean] whether to close the previous connection.
       def set(new_conn, close_old: true)
-        old = @mutex.synchronize do
-          prev = @conn
-          @conn = new_conn
-          prev
-        end
+        old = @connection.get_and_set(new_conn)
         safe_close(old) if close_old && old && !old.equal?(new_conn)
       end
 
@@ -46,12 +41,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param new_conn [Object] the new connection to set.
       # @return [Boolean] true if the swap succeeded.
       def compare_and_set(expected, new_conn)
-        @mutex.synchronize do
-          return false unless @conn.equal?(expected)
-
-          @conn = new_conn
-          true
-        end
+        @connection.compare_and_set(expected, new_conn)
       end
 
       # Closes and nils the connection.
