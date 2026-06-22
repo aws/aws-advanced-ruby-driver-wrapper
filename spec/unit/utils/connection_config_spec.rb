@@ -23,8 +23,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig do
   describe '#initialize' do
     it 'sets defaults for all attributes' do
       config = described_class.new
-      expect(config.wrapper_props).to eq({})
-      expect(config.driver_props).to eq({})
+      expect(config.wrapper_props).to be_empty
+      expect(config.driver_props).to be_empty
       expect(config.initial_host_info).to be_nil
       expect(config.driver_name).to be_nil
     end
@@ -35,8 +35,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfig do
         driver_props: { host: 'myhost' },
         driver_name: :postgresql
       )
-      expect(config.wrapper_props).to eq({ wrapper_plugins: 'failover' })
-      expect(config.driver_props).to eq({ host: 'myhost' })
+      expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
+      expect(config.driver_props[:host]).to eq('myhost')
       expect(config.driver_name).to eq(:postgresql)
     end
   end

@@ -17,12 +17,19 @@
 require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 
+require 'concurrent'
+
 RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('Mysql2::Client') }
   let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 3306) }
-  let(:config) { { database: 'testdb', username: 'user' } }
+  let(:config) do
+    Concurrent::Map.new.tap do |m|
+      m[:database] = 'testdb'
+      m[:username] = 'user'
+    end
+  end
 
   describe '#connect' do
     it 'calls Mysql2::Client.new with prepared config' do
@@ -114,7 +121,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     it 'does not mutate the original config' do
       original = config.dup
       dialect.prepare_connect_config(host_info, config)
-      expect(config).to eq(original)
+      expect(config.size).to eq(original.size)
+      original.each { |k, v| expect(config[k]).to eq(v) }
     end
   end
 

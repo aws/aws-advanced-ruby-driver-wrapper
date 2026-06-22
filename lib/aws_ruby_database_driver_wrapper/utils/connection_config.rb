@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../property_definition'
 
 module AwsRubyDatabaseDriverWrapper
@@ -22,8 +23,14 @@ module AwsRubyDatabaseDriverWrapper
       attr_accessor :wrapper_props, :driver_props, :prefixed_props, :initial_host_info, :driver_name
       attr_reader :original_host, :original_port
 
-      def initialize(wrapper_props: {}, driver_props: {}, prefixed_props: {}, initial_host_info: nil,
-                     driver_name: nil, original_host: nil, original_port: nil, multi_host_url: false)
+      def initialize(wrapper_props: ::Concurrent::Map.new,
+                     driver_props: ::Concurrent::Map.new,
+                     prefixed_props: ::Concurrent::Map.new,
+                     initial_host_info: nil,
+                     driver_name: nil,
+                     original_host: nil,
+                     original_port: nil,
+                     multi_host_url: false)
         @wrapper_props = wrapper_props
         @driver_props = driver_props
         @prefixed_props = prefixed_props
