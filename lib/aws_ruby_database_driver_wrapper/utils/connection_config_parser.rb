@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'uri'
+require 'concurrent'
 require_relative 'connection_config'
 require_relative '../property_definition'
 require_relative '../host/host_availability'
@@ -75,7 +76,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # eg {}, {sslmode: "require"}, {}
         wrapper_config, extra_driver, prefixed_config = split_props(all_props)
-        driver_config.merge!(extra_driver)
+        extra_driver.each { |k, v| driver_config[k] = v }
 
         initial_host_info = string_to_host_info(host_section)
         host, port = host_port_from_uri(host_section)
@@ -156,15 +157,15 @@ module AwsRubyDatabaseDriverWrapper
       # Keys matching a known prefix are stripped and grouped by prefix in prefixed_config.
       # Known wrapper properties go to wrapper_config. Everything else goes to driver_config.
       def split_props(props)
-        wrapper_config = {}
-        driver_config = {}
-        prefixed_config = {}
+        wrapper_config = ::Concurrent::Map.new
+        driver_config = ::Concurrent::Map.new
+        prefixed_config = ::Concurrent::Map.new
 
         props.each do |key, value|
           key_s = key.to_s
           prefix = PropertyDefinition::KNOWN_PREFIXES.find { |p| key_s.start_with?(p) }
           if prefix
-            (prefixed_config[prefix] ||= {})[key_s.delete_prefix(prefix).to_sym] = value
+            (prefixed_config[prefix] ||= ::Concurrent::Map.new)[key_s.delete_prefix(prefix).to_sym] = value
           elsif PropertyDefinition.wrapper_property?(key)
             wrapper_config[key.to_sym] = value
           else
