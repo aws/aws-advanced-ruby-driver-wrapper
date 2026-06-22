@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: 'Clone repository'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 'Set up Ruby ${{ matrix.ruby-version }}'
         uses: ruby/setup-ruby@v1
@@ -73,7 +73,7 @@ jobs:
 
     steps:
       - name: 'Clone repository'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 'Set up Ruby ${{ matrix.ruby-version }}'
         uses: ruby/setup-ruby@v1
