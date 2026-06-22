@@ -25,19 +25,20 @@ module AwsRubyDatabaseDriverWrapper
 
       attr_accessor :host_list_provider
 
+      @host_id_cache = {}
+      @host_id_cache_mutex = Mutex.new
+
       def initialize(service_container)
         @service_container = service_container
         @strategies = DEFAULT_HOST_SELECTORS.dup
         @all_hosts = []
         @availability_cache = Utils::Storage::ExpirationCache.new
         @host_list_provider = nil
-        @host_id_cache = {}
-        @mutex = Mutex.new
       end
 
       class << self
         def clear_id_cache
-          @mutex.synchronize { @cache.clear }
+          @host_id_cache_mutex.synchronize { @host_id_cache.clear }
         end
       end
 
@@ -161,11 +162,15 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def get_cached_id(host)
-        @mutex.synchronize { @cache[host] }
+        self.class.instance_variable_get(:@host_id_cache_mutex).synchronize do
+          self.class.instance_variable_get(:@host_id_cache)[host]
+        end
       end
 
       def store_id(host, value)
-        @mutex.synchronize { @cache[host] = value }
+        self.class.instance_variable_get(:@host_id_cache_mutex).synchronize do
+          self.class.instance_variable_get(:@host_id_cache)[host] = value
+        end
       end
     end
   end
