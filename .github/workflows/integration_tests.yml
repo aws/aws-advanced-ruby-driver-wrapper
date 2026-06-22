@@ -37,7 +37,7 @@ jobs:
           java-version: 8
 
       - name: 'Configure AWS Credentials'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
           role-session-name: ruby_integration_tests
@@ -88,7 +88,7 @@ jobs:
           java-version: 8
 
       - name: 'Configure AWS Credentials'
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
           role-session-name: ruby_integration_tests
