@@ -54,7 +54,7 @@ jobs:
 
       - name: 'Archive Latest results'
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rspec-integration-report-${{ matrix.ruby-version }}-${{ matrix.environment }}-lts
           path: ./spec/integration/host/build/reports/tests/test/
@@ -105,7 +105,7 @@ jobs:
 
       - name: 'Archive Latest results'
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rspec-integration-report-${{ matrix.ruby-version }}-${{ matrix.environment }}-latest
           path: ./spec/integration/host/build/reports/tests/test/
