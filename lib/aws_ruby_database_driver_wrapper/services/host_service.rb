@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent/map'
 require_relative '../host/random_host_selector'
 
 module AwsRubyDatabaseDriverWrapper
@@ -25,8 +26,7 @@ module AwsRubyDatabaseDriverWrapper
 
       attr_accessor :host_list_provider
 
-      @host_id_cache = {}
-      @host_id_cache_mutex = Mutex.new
+      @host_id_cache = Concurrent::Map.new
 
       def initialize(service_container)
         @service_container = service_container
@@ -37,8 +37,10 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       class << self
+        attr_reader :host_id_cache
+
         def clear_id_cache
-          @host_id_cache_mutex.synchronize { @host_id_cache.clear }
+          @host_id_cache.clear
         end
       end
 
@@ -140,11 +142,9 @@ module AwsRubyDatabaseDriverWrapper
 
       def get_cached_host_info(connection, connection_host_info)
         host = connection_host_info.host
-        id_and_name = get_cached_id(host)
-        return if id_and_name
-
-        instance_id, instance_name = query_id_and_name(connection)
-        store_id(host, [instance_id, instance_name])
+        instance_id, instance_name = self.class.host_id_cache.compute_if_absent(host) do
+          query_id_and_name(connection)
+        end
         find_host(instance_id, instance_name)
       end
 
@@ -159,18 +159,6 @@ module AwsRubyDatabaseDriverWrapper
         return nil if topology.nil? || topology.empty?
 
         topology.find { |h| h.id == instance_id || h.host == instance_name }
-      end
-
-      def get_cached_id(host)
-        self.class.instance_variable_get(:@host_id_cache_mutex).synchronize do
-          self.class.instance_variable_get(:@host_id_cache)[host]
-        end
-      end
-
-      def store_id(host, value)
-        self.class.instance_variable_get(:@host_id_cache_mutex).synchronize do
-          self.class.instance_variable_get(:@host_id_cache)[host] = value
-        end
       end
     end
   end
