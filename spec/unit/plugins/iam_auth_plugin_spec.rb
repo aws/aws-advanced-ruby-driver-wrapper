@@ -95,7 +95,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
            dialect_service: mock_dialect_service)
   end
 
+  let(:mock_credentials) { instance_double(Aws::Credentials, access_key_id: 'AKID', secret_access_key: 'SECRET') }
+  let(:mock_rds_client_config) { double('RdsClientConfig', credentials: mock_credentials) }
+  let(:mock_rds_client) { instance_double(Aws::RDS::Client, config: mock_rds_client_config) }
+
   before do
+    allow(Aws::RDS::Client).to receive(:new).and_return(mock_rds_client)
     allow(mock_storage_service).to receive(:register)
     allow(mock_storage_service).to receive(:get).with(CACHE_NAME, anything).and_return(nil)
     allow(mock_storage_service).to receive(:set)
