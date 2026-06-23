@@ -46,6 +46,10 @@ module AwsRubyDatabaseDriverWrapper
         raise NotImplementedError, 'Unable to gather host id, connected to unknown DB type.'
       end
 
+      def instance_identity(_connection)
+        nil
+      end
+
       def dialect?(_connection)
         false
       end
