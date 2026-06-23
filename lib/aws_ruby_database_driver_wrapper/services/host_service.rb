@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent/map'
 require_relative '../host/random_host_selector'
 
 module AwsRubyDatabaseDriverWrapper
@@ -25,12 +26,22 @@ module AwsRubyDatabaseDriverWrapper
 
       attr_accessor :host_list_provider
 
+      @host_id_cache = Concurrent::Map.new
+
       def initialize(service_container)
         @service_container = service_container
         @strategies = DEFAULT_HOST_SELECTORS.dup
         @all_hosts = []
         @availability_cache = Utils::Storage::ExpirationCache.new
         @host_list_provider = nil
+      end
+
+      class << self
+        attr_reader :host_id_cache
+
+        def clear_id_cache
+          @host_id_cache.clear
+        end
       end
 
       # Register a non-default host selector with the HostService (e.g. fastest_response).
@@ -102,17 +113,20 @@ module AwsRubyDatabaseDriverWrapper
       # Identify which host in the topology a given connection belongs to.
       #
       # @param connection [Object]
+      # @param connection_host_info [Host::HostInfo, nil] the host info used to establish the connection
       # @return [Host::HostInfo, nil]
-      def identify_host(connection)
-        id = @service_container.dialect_service.db_dialect.instance_identity(connection)
-        return nil if id.nil?
+      def identify_host(connection, connection_host_info = nil)
+        return find_host(*query_id_and_name(connection)) if connection_host_info.nil?
 
-        hosts = @host_list_provider&.refresh
-        hosts = @host_list_provider&.force_refresh if hosts.nil?
-
-        return nil if hosts.nil?
-
-        hosts.find { |host_info| host_info.id == id }
+        url_type = Utils::RdsUtils.identify_rds_type(connection_host_info&.host)
+        case url_type
+        when Utils::RdsUrlType::RDS_INSTANCE
+          connection_host_info
+        when Utils::RdsUrlType::IP_ADDRESS, Utils::RdsUrlType::OTHER
+          get_cached_host_info(connection, connection_host_info)
+        else
+          find_host(*query_id_and_name(connection))
+        end
       end
 
       private
@@ -124,6 +138,27 @@ module AwsRubyDatabaseDriverWrapper
 
           host.availability = availability
         end
+      end
+
+      def get_cached_host_info(connection, connection_host_info)
+        host = connection_host_info.host
+        instance_id, instance_name = self.class.host_id_cache.compute_if_absent(host) do
+          query_id_and_name(connection)
+        end
+        find_host(instance_id, instance_name)
+      end
+
+      def query_id_and_name(connection)
+        @service_container.dialect_service.db_dialect.instance_identity(connection)
+      rescue StandardError
+        [nil, nil]
+      end
+
+      def find_host(instance_id, instance_name)
+        topology = @host_list_provider&.refresh
+        return nil if topology.nil? || topology.empty?
+
+        topology.find { |h| h.id == instance_id || h.host == instance_name }
       end
     end
   end

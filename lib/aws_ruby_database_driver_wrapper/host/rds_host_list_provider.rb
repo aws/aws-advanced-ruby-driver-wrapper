@@ -60,7 +60,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Array<HostInfo>]
       def refresh
         stored = stored_topology
-        return stored unless stored.nil?
+        return stored unless stored.nil? || stored.empty?
 
         return initial_host_list unless @service_container.dialect_service.dialect_confirmed?
 
