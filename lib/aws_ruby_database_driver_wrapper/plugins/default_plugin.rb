@@ -24,9 +24,9 @@ module AwsRubyDatabaseDriverWrapper
       SUBSCRIBED_METHODS = Set['*'].freeze
       HOST_PORT_KEYS = %i[host port].freeze
 
-      def initialize(service_container, **options)
+      def initialize(service_container, props = {})
         @service_container = service_container
-        @options = options
+        @props = props
       end
 
       def subscribed_methods

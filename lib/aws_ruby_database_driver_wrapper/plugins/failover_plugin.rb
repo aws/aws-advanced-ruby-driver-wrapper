@@ -17,9 +17,9 @@
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     class FailoverPlugin
-      def initialize(service_container, **options)
+      def initialize(service_container, props = {})
         @service_container = service_container
-        @options = options
+        @props = props
         @subscribed_methods = Set['connect'] | service_container.dialect_service.driver_dialect.network_bound_methods
       end
 
