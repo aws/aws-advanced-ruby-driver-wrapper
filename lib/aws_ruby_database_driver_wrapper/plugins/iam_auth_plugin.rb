@@ -36,18 +36,18 @@ module AwsRubyDatabaseDriverWrapper
         @service_container = service_container
         @props = props
         @credentials_provider = props[:iam_credentials_provider] ||
-                                Aws::RDS::Client.new.config.credentials
+                                Aws::CredentialProviderChain.new.resolve
         expiration = (props[:iam_expiration] || DEFAULT_TOKEN_EXPIRATION_SEC).to_i
         service_container.storage_service.register(IAM_TOKEN_CACHE_NAME, ttl: expiration)
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
       def connect(host_info, props, _is_initial_connection, pipeline_callable)
-        connect_internal(host_info, props, pipeline_callable)
+        iam_connect(host_info, props, pipeline_callable)
       end
 
       def internal_connect(host_info, props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
-        connect_internal(host_info, props, pipeline_callable)
+        iam_connect(host_info, props, pipeline_callable)
       end
 
       def self.clear_cache(storage_service)
@@ -56,26 +56,27 @@ module AwsRubyDatabaseDriverWrapper
 
       private
 
-      def connect_internal(host_info, props, pipeline_callable)
+      def iam_connect(host_info, props, pipeline_callable)
         user = props[:user] || props[:username]
         raise Errors::IamAuthError, 'IamAuthPlugin: :user is required' if user.nil? || user.empty?
 
-        token_prop = (props[:iam_access_token_property_name] || :password).to_sym
-
         host = Utils::IamAuthUtils.resolve_host(props[:iam_host], host_info)
-        port = Utils::IamAuthUtils.resolve_port(
-          props[:iam_default_port],
-          host_info,
-          @service_container.dialect_service.db_dialect.default_port
-        )
         rds_type = Utils::RdsUtils.identify_rds_type(host)
         region   = Utils::IamAuthUtils.region_for(
-          host:, props:, rds_type:, credentials_provider: @credentials_provider
+          host:, props:, rds_type:, credentials_provider: @credentials_provider, rds_client: rds_client
         )
         unless region
           raise Errors::IamAuthError,
                 'IamAuthPlugin: unable to determine AWS region; set :iam_region or use an RDS hostname'
         end
+
+        token_prop = (props[:iam_access_token_property_name] || :password).to_sym
+
+        port = Utils::IamAuthUtils.resolve_port(
+          props[:iam_default_port],
+          host_info,
+          @service_container.dialect_service.db_dialect.default_port
+        )
 
         cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
         entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
@@ -113,6 +114,10 @@ module AwsRubyDatabaseDriverWrapper
           )
           pipeline_callable.call
         end
+      end
+
+      def rds_client
+        @rds_client ||= Aws::RDS::Client.new(credentials: @credentials_provider)
       end
 
       def ensure_aws_sdk!

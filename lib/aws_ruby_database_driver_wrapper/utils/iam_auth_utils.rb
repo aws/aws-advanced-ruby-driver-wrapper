@@ -46,18 +46,18 @@ module AwsRubyDatabaseDriverWrapper
         entry.is_a?(TokenEntry) && Process.clock_gettime(Process::CLOCK_MONOTONIC) < entry.expires_at
       end
 
-      def region_for(host:, props:, rds_type:, credentials_provider:)
+      def region_for(host:, props:, rds_type:, credentials_provider:, rds_client: nil)
         explicit = props[:iam_region]
         return explicit if explicit && !explicit.empty?
 
         return RdsUtils.rds_region(host) unless rds_type == RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER
 
-        region_from_global_cluster(host, credentials_provider)
+        region_from_global_cluster(host, credentials_provider, rds_client: rds_client)
       end
 
-      def region_from_global_cluster(host, credentials_provider)
+      def region_from_global_cluster(host, credentials_provider, rds_client: nil)
         cluster_id = RdsUtils.rds_cluster_id(host)
-        client = Aws::RDS::Client.new(credentials: credentials_provider)
+        client = rds_client || Aws::RDS::Client.new(credentials: credentials_provider)
         arn = client.describe_global_clusters(global_cluster_identifier: cluster_id)
                     .global_clusters
                     .flat_map(&:global_cluster_members)

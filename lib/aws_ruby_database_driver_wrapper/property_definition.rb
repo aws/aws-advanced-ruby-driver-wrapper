@@ -60,8 +60,7 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- IAM Authentication --
     IAM_HOST = WrapperProperty.new(:iam_host, 'Overrides the host used to generate the IAM token', default_value: nil, type: String)
-    IAM_DEFAULT_PORT = WrapperProperty.new(:iam_default_port, 'Overrides the port used to generate the IAM token', default_value: nil,
-                                                                                                                   type: Integer)
+    IAM_PORT = WrapperProperty.new(:iam_port, 'Overrides the port used to generate the IAM token', default_value: nil, type: Integer)
     IAM_REGION = WrapperProperty.new(:iam_region, 'Overrides the AWS region used to generate the IAM token', default_value: nil,
                                                                                                              type: String)
     IAM_EXPIRATION = WrapperProperty.new(:iam_expiration, 'IAM token cache expiration in seconds', default_value: 870, type: Integer)
