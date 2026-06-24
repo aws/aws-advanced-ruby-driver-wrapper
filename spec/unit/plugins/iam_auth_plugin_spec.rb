@@ -36,7 +36,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   MYSQL_CACHE_KEY = "us-east-2:#{MYSQL_HOST}:#{DEFAULT_MYSQL_PORT}:mysqlUser".freeze
   GDB_CACHE_KEY   = "us-east-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser".freeze
 
-  CACHE_NAME = AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin::CACHE_NAME
+  IAM_TOKEN_CACHE_NAME = AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
 
   IAM_AUTH_UTILS = AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils
   RDS_URL_TYPE   = AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType
@@ -102,7 +102,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   before do
     allow(Aws::RDS::Client).to receive(:new).and_return(mock_rds_client)
     allow(mock_storage_service).to receive(:register)
-    allow(mock_storage_service).to receive(:get).with(CACHE_NAME, anything).and_return(nil)
+    allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, anything).and_return(nil)
     allow(mock_storage_service).to receive(:set)
     allow(mock_db_dialect).to receive(:default_port).and_return(DEFAULT_PG_PORT)
     allow(mock_dialect_service).to receive(:driver_dialect)
@@ -124,7 +124,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with valid cached token (PostgreSQL)' do
     it 'uses the cached token and does not call the token generator' do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, PG_CACHE_KEY)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY)
                                                   .and_return(valid_token_entry)
 
       token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
@@ -137,7 +137,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with valid cached token (MySQL)' do
     it 'uses the cached token and does not call the token generator' do
       allow(mock_db_dialect).to receive(:default_port).and_return(DEFAULT_MYSQL_PORT)
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, MYSQL_CACHE_KEY)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, MYSQL_CACHE_KEY)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props.merge(user: 'mysqlUser', password: 'mysqlPassword')
@@ -151,7 +151,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with invalid iam_default_port and host port set' do
     it 'falls back to the host port' do
       port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, port_1234_cache_key)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_1234_cache_key)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props.merge(iam_default_port: '0')
@@ -164,7 +164,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with invalid iam_default_port and no host port' do
     it 'falls back to the dialect default port' do
       cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, cache_key)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, cache_key)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props.merge(iam_default_port: '0')
@@ -177,7 +177,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with host port explicitly specified' do
     it 'uses the host port in the cache key' do
       port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, port_1234_cache_key)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_1234_cache_key)
                                                   .and_return(valid_token_entry)
 
       token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info(port: 1234), props: base_pg_props)
@@ -189,7 +189,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with iam_default_port set to 9999' do
     it 'uses iam_default_port in the cache key, overriding the host port' do
       port_9999_cache_key = "us-east-2:#{PG_HOST}:9999:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, port_9999_cache_key)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_9999_cache_key)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props.merge(iam_default_port: '9999')
@@ -203,7 +203,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     it 'uses the specified region in the cache key' do
       us_west_host = 'pg.testdb.us-west-1.rds.amazonaws.com'
       us_west_cache_key = "us-west-1:#{us_west_host}:#{DEFAULT_PG_PORT}:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, us_west_cache_key)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, us_west_cache_key)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props.merge(iam_region: 'us-west-1')
@@ -215,14 +215,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with expired token in cache' do
     it 'generates a new token and stores a TokenEntry' do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, PG_CACHE_KEY).and_return(nil)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY).and_return(nil)
 
       token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
 
       expect(token).to eq(GENERATED_TOKEN)
       expect(IAM_AUTH_UTILS).to have_received(:generate_token).once
       expect(mock_storage_service).to have_received(:set).with(
-        CACHE_NAME, PG_CACHE_KEY, having_attributes(token: GENERATED_TOKEN)
+        IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY, having_attributes(token: GENERATED_TOKEN)
       )
     end
   end
@@ -234,7 +234,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       expect(token).to eq(GENERATED_TOKEN)
       expect(IAM_AUTH_UTILS).to have_received(:generate_token).once
       expect(mock_storage_service).to have_received(:set).with(
-        CACHE_NAME, PG_CACHE_KEY, having_attributes(token: GENERATED_TOKEN)
+        IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY, having_attributes(token: GENERATED_TOKEN)
       )
     end
 
@@ -254,7 +254,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with iam_host override' do
     it 'generates a token using the overridden host, not the connection host' do
       override_cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, override_cache_key).and_return(nil)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, override_cache_key).and_return(nil)
 
       props = base_pg_props.merge(iam_host: PG_HOST, iam_region: 'us-east-2')
       connect_and_capture_token(plugin: build_plugin, host_info: arbitrary_host_info('8.8.8.8'), props:)
@@ -265,7 +265,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect retry on login error with cached token' do
     it 'generates a fresh token and retries the connect callable' do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, PG_CACHE_KEY)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY)
                                                   .and_return(valid_token_entry)
       allow(mock_dialect_service).to receive(:login_error?).and_return(true)
 
@@ -285,7 +285,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
 
     it 'does not retry when the error is not a login error' do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, PG_CACHE_KEY)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY)
                                                   .and_return(valid_token_entry)
       allow(mock_dialect_service).to receive(:login_error?).and_return(false)
 
@@ -304,7 +304,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
 
     it 'does not retry when the token was freshly generated (not from cache)' do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, PG_CACHE_KEY).and_return(nil)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY).and_return(nil)
       allow(mock_dialect_service).to receive(:login_error?).and_return(true)
 
       call_count = 0
@@ -402,7 +402,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with Global Database endpoint' do
     before do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, GDB_CACHE_KEY).and_return(nil)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, GDB_CACHE_KEY).and_return(nil)
     end
 
     it 'calls region_for with RDS_GLOBAL_WRITER_CLUSTER rds_type' do
@@ -451,7 +451,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       allow(IAM_AUTH_UTILS).to receive(:region_for).and_call_original
 
       gdb_explicit_cache_key = "eu-west-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, gdb_explicit_cache_key)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, gdb_explicit_cache_key)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props.merge(iam_region: 'eu-west-1')
@@ -464,7 +464,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#internal_connect' do
     it 'applies the same token injection as connect' do
-      allow(mock_storage_service).to receive(:get).with(CACHE_NAME, PG_CACHE_KEY)
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
@@ -519,7 +519,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     it 'delegates to the storage service with CACHE_NAME' do
       allow(mock_storage_service).to receive(:clear)
       described_class.clear_cache(mock_storage_service)
-      expect(mock_storage_service).to have_received(:clear).with(CACHE_NAME)
+      expect(mock_storage_service).to have_received(:clear).with(IAM_TOKEN_CACHE_NAME)
     end
   end
 

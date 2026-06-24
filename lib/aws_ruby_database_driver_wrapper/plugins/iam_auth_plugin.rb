@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../errors'
 require_relative '../utils/iam_auth_utils'
 require_relative '../utils/rds_utils'
@@ -25,19 +26,19 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     class IamAuthPlugin
       SUBSCRIBED_METHODS = Set['connect', 'internal_connect'].freeze
-      CACHE_NAME = :iam_token
+      IAM_TOKEN_CACHE_NAME = :iam_token
       DEFAULT_TOKEN_EXPIRATION_SEC = 870
 
       attr_reader :subscribed_methods
 
-      def initialize(service_container, props = {})
+      def initialize(service_container, props = ::Concurrent::Map.new)
         ensure_aws_sdk!
         @service_container = service_container
         @props = props
         @credentials_provider = props[:iam_credentials_provider] ||
                                 Aws::RDS::Client.new.config.credentials
         expiration = (props[:iam_expiration] || DEFAULT_TOKEN_EXPIRATION_SEC).to_i
-        service_container.storage_service.register(CACHE_NAME, ttl: expiration)
+        service_container.storage_service.register(IAM_TOKEN_CACHE_NAME, ttl: expiration)
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
@@ -50,7 +51,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def self.clear_cache(storage_service)
-        storage_service.clear(CACHE_NAME)
+        storage_service.clear(IAM_TOKEN_CACHE_NAME)
       end
 
       private
@@ -77,7 +78,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
-        entry      = @service_container.storage_service.get(CACHE_NAME, cache_key)
+        entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
         expiration = (@props[:iam_expiration] || DEFAULT_TOKEN_EXPIRATION_SEC).to_i
 
         if Utils::IamAuthUtils.valid_entry?(entry)
@@ -89,7 +90,7 @@ module AwsRubyDatabaseDriverWrapper
           )
           props[token_prop] = token
           @service_container.storage_service.set(
-            CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
+            IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
           )
           is_cached_token = false
         end
@@ -108,7 +109,7 @@ module AwsRubyDatabaseDriverWrapper
           )
           props[token_prop] = token
           @service_container.storage_service.set(
-            CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
+            IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
           )
           pipeline_callable.call
         end

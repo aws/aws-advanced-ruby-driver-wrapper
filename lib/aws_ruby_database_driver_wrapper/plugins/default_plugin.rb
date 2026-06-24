@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../errors'
 require_relative '../host/host_info'
 require_relative '../host/host_availability'
@@ -24,7 +25,7 @@ module AwsRubyDatabaseDriverWrapper
       SUBSCRIBED_METHODS = Set['*'].freeze
       HOST_PORT_KEYS = %i[host port].freeze
 
-      def initialize(service_container, props = {})
+      def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
         @props = props
       end
