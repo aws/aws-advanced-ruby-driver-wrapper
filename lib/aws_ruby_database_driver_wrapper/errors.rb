@@ -51,5 +51,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     class IamAuthError < AwsError; end
+
+    class SecretsManagerAuthError < AwsError; end
   end
 end

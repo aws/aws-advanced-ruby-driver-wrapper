@@ -93,6 +93,33 @@ module AwsRubyDatabaseDriverWrapper
                                                    'AWS credentials provider for IAM token generation',
                                                    default_value: nil)
 
+    # -- Secrets Manager --
+    SECRET_ID = WrapperProperty.new(
+      :secret_id, 'The name or ARN of the secret to retrieve', default_value: nil, type: String
+    )
+    SECRET_REGION = WrapperProperty.new(
+      :secret_region, 'AWS region for Secrets Manager API calls', default_value: nil, type: String
+    )
+    SECRET_ENDPOINT = WrapperProperty.new(
+      :secret_endpoint, 'Custom endpoint URL for Secrets Manager', default_value: nil, type: String
+    )
+    SECRET_USERNAME_KEY = WrapperProperty.new(
+      :secret_username_key, 'JSON key containing the username in the secret',
+      default_value: 'username', type: String
+    )
+    SECRET_PASSWORD_KEY = WrapperProperty.new(
+      :secret_password_key, 'JSON key containing the password in the secret',
+      default_value: 'password', type: String
+    )
+    SECRET_EXPIRATION_SEC = WrapperProperty.new(
+      :secret_expiration_sec, 'Cached secret expiration in seconds (minimum: 300)',
+      default_value: 870, type: Integer
+    )
+    SECRET_CREDENTIALS_PROVIDER = WrapperProperty.new(
+      :secret_credentials_provider, 'Custom AWS credentials provider for Secrets Manager',
+      default_value: nil
+    )
+
     # Built once at load time from constants — used by parser to split props
     KNOWN_PROPERTIES = constants
                        .filter_map { |c| const_get(c) if const_get(c).is_a?(WrapperProperty) }
