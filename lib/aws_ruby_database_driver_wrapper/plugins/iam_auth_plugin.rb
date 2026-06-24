@@ -62,7 +62,7 @@ module AwsRubyDatabaseDriverWrapper
 
         host = Utils::IamAuthUtils.resolve_host(props[:iam_host], host_info)
         rds_type = Utils::RdsUtils.identify_rds_type(host)
-        region   = Utils::IamAuthUtils.region_for(
+        region = Utils::IamAuthUtils.region_for(
           host:, props:, rds_type:, credentials_provider: @credentials_provider, rds_client: rds_client
         )
         unless region
@@ -86,13 +86,7 @@ module AwsRubyDatabaseDriverWrapper
           props[token_prop] = entry.token
           is_cached_token   = true
         else
-          token = Utils::IamAuthUtils.generate_token(
-            region:, hostname: host, port:, user:, credentials_provider: @credentials_provider
-          )
-          props[token_prop] = token
-          @service_container.storage_service.set(
-            IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
-          )
+          props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
           is_cached_token = false
         end
 
@@ -105,15 +99,21 @@ module AwsRubyDatabaseDriverWrapper
         rescue StandardError => e
           raise unless is_cached_token && @service_container.dialect_service.login_error?(e)
 
-          token = Utils::IamAuthUtils.generate_token(
-            region:, hostname: host, port:, user:, credentials_provider: @credentials_provider
-          )
-          props[token_prop] = token
-          @service_container.storage_service.set(
-            IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
-          )
+          props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
           pipeline_callable.call
         end
+      end
+
+      def fetch_and_cache_token(region, host, port, user, cache_key, expiration)
+        token = token_generator.auth_token(region:, endpoint: "#{host}:#{port}", user_name: user)
+        @service_container.storage_service.set(
+          IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
+        )
+        token
+      end
+
+      def token_generator
+        @token_generator ||= Aws::RDS::AuthTokenGenerator.new(credentials: @credentials_provider)
       end
 
       def rds_client

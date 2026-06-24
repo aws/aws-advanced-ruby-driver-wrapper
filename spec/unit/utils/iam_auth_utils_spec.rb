@@ -160,7 +160,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
     context 'with a global DB rds_type' do
       it 'calls region_from_global_cluster and returns its result' do
         host = 'global-cluster-test-name.global-XYZ.global.rds.amazonaws.com'
-        allow(utils).to receive(:region_from_global_cluster).with(host, credentials_provider).and_return('us-east-1')
+        allow(utils).to receive(:region_from_global_cluster).with(host, credentials_provider, rds_client: nil).and_return('us-east-1')
         result = utils.region_for(
           host:,
           props: {},

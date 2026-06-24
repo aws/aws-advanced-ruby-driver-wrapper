@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
+require 'aws-sdk-rds'
 require 'aws_ruby_database_driver_wrapper/plugins/iam_auth_plugin'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 require 'aws_ruby_database_driver_wrapper/utils/rds_url_type'
@@ -98,16 +99,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   let(:mock_credentials) { instance_double(Aws::Credentials, access_key_id: 'AKID', secret_access_key: 'SECRET') }
   let(:mock_rds_client_config) { double('RdsClientConfig', credentials: mock_credentials) }
   let(:mock_rds_client) { instance_double(Aws::RDS::Client, config: mock_rds_client_config) }
+  let(:mock_token_generator) { instance_double(Aws::RDS::AuthTokenGenerator) }
 
   before do
+    allow(Aws::CredentialProviderChain).to receive(:new).and_return(double(resolve: mock_credentials))
     allow(Aws::RDS::Client).to receive(:new).and_return(mock_rds_client)
+    allow(Aws::RDS::AuthTokenGenerator).to receive(:new).and_return(mock_token_generator)
+    allow(mock_token_generator).to receive(:auth_token).and_return(GENERATED_TOKEN)
     allow(mock_storage_service).to receive(:register)
     allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, anything).and_return(nil)
     allow(mock_storage_service).to receive(:set)
     allow(mock_db_dialect).to receive(:default_port).and_return(DEFAULT_PG_PORT)
     allow(mock_dialect_service).to receive(:driver_dialect)
       .and_return(AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
-    allow(IAM_AUTH_UTILS).to receive(:generate_token).and_return(GENERATED_TOKEN)
   end
 
   def build_plugin
@@ -130,7 +134,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
 
       expect(token).to eq(TEST_TOKEN)
-      expect(IAM_AUTH_UTILS).not_to have_received(:generate_token)
+      expect(mock_token_generator).not_to have_received(:auth_token)
     end
   end
 
@@ -144,7 +148,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       token = connect_and_capture_token(plugin: build_plugin, host_info: mysql_host_info, props:)
 
       expect(token).to eq(TEST_TOKEN)
-      expect(IAM_AUTH_UTILS).not_to have_received(:generate_token)
+      expect(mock_token_generator).not_to have_received(:auth_token)
     end
   end
 
@@ -220,7 +224,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
 
       expect(token).to eq(GENERATED_TOKEN)
-      expect(IAM_AUTH_UTILS).to have_received(:generate_token).once
+      expect(mock_token_generator).to have_received(:auth_token).once
       expect(mock_storage_service).to have_received(:set).with(
         IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY, having_attributes(token: GENERATED_TOKEN)
       )
@@ -232,21 +236,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
 
       expect(token).to eq(GENERATED_TOKEN)
-      expect(IAM_AUTH_UTILS).to have_received(:generate_token).once
+      expect(mock_token_generator).to have_received(:auth_token).once
       expect(mock_storage_service).to have_received(:set).with(
         IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY, having_attributes(token: GENERATED_TOKEN)
       )
     end
 
-    it 'passes the correct region, host, port, and user to generate_token' do
+    it 'passes the correct region, host, port, and user to auth_token' do
       connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
 
-      expect(IAM_AUTH_UTILS).to have_received(:generate_token).with(
+      expect(mock_token_generator).to have_received(:auth_token).with(
         region: 'us-east-2',
-        hostname: PG_HOST,
-        port: DEFAULT_PG_PORT,
-        user: 'postgresqlUser',
-        credentials_provider: anything
+        endpoint: "#{PG_HOST}:#{DEFAULT_PG_PORT}",
+        user_name: 'postgresqlUser'
       )
     end
   end
@@ -259,7 +261,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       props = base_pg_props.merge(iam_host: PG_HOST, iam_region: 'us-east-2')
       connect_and_capture_token(plugin: build_plugin, host_info: arbitrary_host_info('8.8.8.8'), props:)
 
-      expect(IAM_AUTH_UTILS).to have_received(:generate_token).with(hash_including(hostname: PG_HOST))
+      expect(mock_token_generator).to have_received(:auth_token).with(hash_including(endpoint: "#{PG_HOST}:#{DEFAULT_PG_PORT}"))
     end
   end
 
@@ -281,7 +283,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
       expect(result).to eq(:ok)
       expect(call_count).to eq(2)
-      expect(IAM_AUTH_UTILS).to have_received(:generate_token).once
+      expect(mock_token_generator).to have_received(:auth_token).once
     end
 
     it 'does not retry when the error is not a login error' do
@@ -300,7 +302,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       end.to raise_error(StandardError, 'network timeout')
 
       expect(call_count).to eq(1)
-      expect(IAM_AUTH_UTILS).not_to have_received(:generate_token)
+      expect(mock_token_generator).not_to have_received(:auth_token)
     end
 
     it 'does not retry when the token was freshly generated (not from cache)' do
@@ -414,7 +416,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
         host: GDB_HOST,
         props: anything,
         rds_type: RDS_URL_TYPE::RDS_GLOBAL_WRITER_CLUSTER,
-        credentials_provider: anything
+        credentials_provider: anything,
+        rds_client: anything
       )
     end
 
@@ -423,8 +426,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
       connect_and_capture_token(plugin: build_plugin, host_info: gdb_host_info, props: base_pg_props)
 
-      expect(IAM_AUTH_UTILS).to have_received(:generate_token).with(
-        hash_including(region: 'us-east-1', hostname: GDB_HOST)
+      expect(mock_token_generator).to have_received(:auth_token).with(
+        hash_including(region: 'us-east-1', endpoint: "#{GDB_HOST}:#{DEFAULT_PG_PORT}")
       )
     end
 
