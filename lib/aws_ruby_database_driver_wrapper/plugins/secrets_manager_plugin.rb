@@ -26,10 +26,10 @@ module AwsRubyDatabaseDriverWrapper
 
       SUBSCRIBED_METHODS = Set['connect', 'internal_connect'].freeze
       SECRETS_MANAGER_CACHE_NAME = :secrets_manager
-      DEFAULT_EXPIRATION_SEC = 870
       MIN_EXPIRATION_SEC = 300
       SYNC_FETCH_TIMEOUT_SEC = 60
       SECRETS_ARN_PATTERN = %r{\Aarn:aws:secretsmanager:(?<region>[^:\n]+):[^:\n]*:(?:[^:/\n]*[:/])?}
+      MAX_RETRY_DELAY_MS = 8000
 
       SecretEntry = Data.define(:username, :password, :expires_at) do
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
@@ -53,9 +53,9 @@ module AwsRubyDatabaseDriverWrapper
         ensure_sdk!
         @service_container = service_container
         @props = props
-        @credentials_provider = props[:secret_credentials_provider] ||
+        @credentials_provider = PropertyDefinition::SECRET_CREDENTIALS_PROVIDER.get(props) ||
                                 Aws::CredentialProviderChain.new.resolve
-        @secret_id = props[:secret_id]
+        @secret_id = PropertyDefinition::SECRET_ID.get(props)
         raise Errors::SecretsManagerAuthError, 'secret_id is required' unless @secret_id
 
         @region = resolve_region(props)
@@ -64,10 +64,12 @@ module AwsRubyDatabaseDriverWrapper
                 'Unable to determine region; set :secret_region or use a Secrets Manager ARN'
         end
 
-        @username_key = (props[:secret_username_key] || 'username').to_s
-        @password_key = (props[:secret_password_key] || 'password').to_s
+        @username_key = PropertyDefinition::SECRET_USERNAME_KEY.get(props).to_s
+        @password_key = PropertyDefinition::SECRET_PASSWORD_KEY.get(props).to_s
         @expiration_sec = resolve_expiration(props)
         @cache_key = "#{@secret_id}:#{@region}"
+        @rotation_retry_timeout_ms = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_MS.get_int(props)
+        @rotation_retry_base_delay_ms = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_MS.get_int(props)
 
         service_container.storage_service.register(SECRETS_MANAGER_CACHE_NAME, ttl: @expiration_sec)
         @subscribed_methods = SUBSCRIBED_METHODS
@@ -88,13 +90,50 @@ module AwsRubyDatabaseDriverWrapper
         apply_secret(props)
 
         begin
-          pipeline_callable.call
+          return pipeline_callable.call
         rescue StandardError => e
           raise unless !secret_is_fresh && @service_container.dialect_service.login_error?(e)
+        end
+
+        # First forced refetch + retry
+        fetch_secret_and_report_if_fresh?(force: true)
+        apply_secret(props)
+
+        begin
+          pipeline_callable.call
+        rescue StandardError => e
+          raise unless @rotation_retry_timeout_ms.positive? && @service_container.dialect_service.login_error?(e)
+
+          rotation_retry(props, pipeline_callable, e)
+        end
+      end
+
+      # Retry loop for rotation window: poll GetSecretValue with exponential backoff
+      # until AWSCURRENT is promoted or timeout expires.
+      def rotation_retry(props, pipeline_callable, last_error)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + (@rotation_retry_timeout_ms / 1000.0)
+        delay_ms = @rotation_retry_base_delay_ms
+
+        logger.info("SecretsManagerPlugin: entering rotation retry loop (timeout=#{@rotation_retry_timeout_ms}ms)")
+
+        loop do
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          raise last_error if remaining <= 0
+
+          sleep_sec = [delay_ms / 1000.0, remaining].min
+          sleep(sleep_sec)
 
           fetch_secret_and_report_if_fresh?(force: true)
           apply_secret(props)
-          pipeline_callable.call
+
+          begin
+            return pipeline_callable.call
+          rescue StandardError => e
+            raise unless @service_container.dialect_service.login_error?(e)
+
+            last_error = e
+            delay_ms = [delay_ms * 2, MAX_RETRY_DELAY_MS].min
+          end
         end
       end
 
@@ -173,14 +212,14 @@ module AwsRubyDatabaseDriverWrapper
       def secrets_client
         @secrets_client ||= begin
           opts = { region: @region, credentials: @credentials_provider }
-          endpoint = @props[:secret_endpoint]
+          endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@props)
           opts[:endpoint] = endpoint if endpoint
           Aws::SecretsManager::Client.new(**opts)
         end
       end
 
       def resolve_region(props)
-        explicit = props[:secret_region]
+        explicit = PropertyDefinition::SECRET_REGION.get(props)
         return explicit if explicit
 
         match = SECRETS_ARN_PATTERN.match(@secret_id.to_s)
@@ -188,7 +227,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def resolve_expiration(props)
-        configured = (props[:secret_expiration_sec] || DEFAULT_EXPIRATION_SEC).to_i
+        configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_int(props)
         if configured < MIN_EXPIRATION_SEC
           logger.warn("SecretsManagerPlugin: expiration #{configured}s below minimum #{MIN_EXPIRATION_SEC}s, clamping")
           MIN_EXPIRATION_SEC

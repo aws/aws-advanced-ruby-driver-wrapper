@@ -286,4 +286,100 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin do
       expect(call_count.value).to eq(1)
     end
   end
+
+  describe 'rotation retry loop' do
+    let(:cached_entry) do
+      described_class::SecretEntry.new(
+        username: 'dbuser', password: 'dbpass',
+        expires_at: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 900
+      )
+    end
+
+    let(:rotation_props) do
+      props = Concurrent::Map.new
+      props[:secret_id] = 'my-secret'
+      props[:secret_region] = 'us-west-2'
+      props[:secret_rotation_retry_timeout_ms] = 5000
+      props[:secret_rotation_retry_base_delay_ms] = 100
+      props
+    end
+
+    before do
+      allow(mock_storage_service).to receive(:get).and_return(cached_entry)
+    end
+
+    it 'retries with backoff until new credentials succeed' do
+      allow(mock_dialect_service).to receive(:login_error?).and_return(true)
+
+      plugin = build_plugin(rotation_props)
+      props = Concurrent::Map.new
+      call_count = 0
+
+      # Fails 3 times (cached + first refetch + 1 rotation retry), then succeeds
+      callable = lambda do
+        call_count += 1
+        raise StandardError, 'Access denied' if call_count <= 3
+      end
+
+      plugin.connect(host_info, props, true, callable)
+
+      expect(call_count).to eq(4)
+    end
+
+    it 'raises after timeout expires' do
+      allow(mock_dialect_service).to receive(:login_error?).and_return(true)
+
+      short_timeout_props = Concurrent::Map.new
+      short_timeout_props[:secret_id] = 'my-secret'
+      short_timeout_props[:secret_region] = 'us-west-2'
+      short_timeout_props[:secret_rotation_retry_timeout_ms] = 1000
+      short_timeout_props[:secret_rotation_retry_base_delay_ms] = 600
+
+      plugin = build_plugin(short_timeout_props)
+      props = Concurrent::Map.new
+
+      callable = -> { raise StandardError, 'Access denied' }
+
+      start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect do
+        plugin.connect(host_info, props, true, callable)
+      end.to raise_error(StandardError, 'Access denied')
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
+
+      # Should have waited approximately 1 second (the timeout)
+      expect(elapsed).to be >= 0.9
+      expect(elapsed).to be < 3.0
+    end
+
+    it 'does not enter rotation retry when timeout is 0 (disabled)' do
+      allow(mock_dialect_service).to receive(:login_error?).and_return(true)
+
+      plugin = build_plugin # default: rotation_retry_timeout_ms = 0
+      props = Concurrent::Map.new
+      call_count = 0
+
+      callable = lambda do
+        call_count += 1
+        raise StandardError, 'Access denied'
+      end
+
+      expect do
+        plugin.connect(host_info, props, true, callable)
+      end.to raise_error(StandardError, 'Access denied')
+
+      # Only 2 attempts: initial + one forced refetch retry
+      expect(call_count).to eq(2)
+    end
+
+    it 'does not retry non-login errors during rotation' do
+      allow(mock_dialect_service).to receive(:login_error?).and_return(false)
+
+      plugin = build_plugin(rotation_props)
+      props = Concurrent::Map.new
+
+      expect do
+        plugin.connect(host_info, props, true, -> { raise StandardError, 'network error' })
+      end.to raise_error(StandardError, 'network error')
+    end
+  end
 end

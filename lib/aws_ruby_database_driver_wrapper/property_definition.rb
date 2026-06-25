@@ -119,6 +119,16 @@ module AwsRubyDatabaseDriverWrapper
       :secret_credentials_provider, 'Custom AWS credentials provider for Secrets Manager',
       default_value: nil
     )
+    SECRET_ROTATION_RETRY_TIMEOUT_MS = WrapperProperty.new(
+      :secret_rotation_retry_timeout_ms,
+      'Max time in milliseconds to retry connecting during a secret rotation window (0 = disabled)',
+      default_value: 0, type: Integer
+    )
+    SECRET_ROTATION_RETRY_BASE_DELAY_MS = WrapperProperty.new(
+      :secret_rotation_retry_base_delay_ms,
+      'Base delay in milliseconds for exponential backoff during rotation retry',
+      default_value: 500, type: Integer
+    )
 
     # Built once at load time from constants — used by parser to split props
     KNOWN_PROPERTIES = constants
