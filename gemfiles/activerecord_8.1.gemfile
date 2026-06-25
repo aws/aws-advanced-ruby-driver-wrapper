@@ -28,6 +28,7 @@ group :development do
 end
 
 group :test do
+  gem 'aws-sdk-rds'
   gem 'dotenv'
   gem 'rspec'
   gem 'simplecov', require: false

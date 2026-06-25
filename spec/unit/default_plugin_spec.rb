@@ -52,7 +52,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
     )
   end
   let(:wrapper_props) { { plugins: '' } }
-  let(:plugin) { described_class.new(service_container, **wrapper_props) }
+  let(:plugin) { described_class.new(service_container, wrapper_props) }
   let(:host_info) do
     AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
       host: 'test-instance.abc123.us-east-1.rds.amazonaws.com', port: 5432

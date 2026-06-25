@@ -58,6 +58,18 @@ module AwsRubyDatabaseDriverWrapper
       type: Integer
     )
 
+    # -- IAM Authentication --
+    IAM_HOST = WrapperProperty.new(:iam_host, 'Overrides the host used to generate the IAM token', default_value: nil, type: String)
+    IAM_PORT = WrapperProperty.new(:iam_port, 'Overrides the port used to generate the IAM token', default_value: nil, type: Integer)
+    IAM_REGION = WrapperProperty.new(:iam_region, 'Overrides the AWS region used to generate the IAM token', default_value: nil,
+                                                                                                             type: String)
+    IAM_EXPIRATION = WrapperProperty.new(:iam_expiration, 'IAM token cache expiration in seconds', default_value: 870, type: Integer)
+    IAM_ACCESS_TOKEN_PROPERTY_NAME = WrapperProperty.new(:iam_access_token_property_name, 'Property name used to pass the IAM token',
+                                                         default_value: :password, type: Symbol)
+    IAM_CREDENTIALS_PROVIDER = WrapperProperty.new(:iam_credentials_provider,
+                                                   'AWS credentials provider for IAM token generation',
+                                                   default_value: nil)
+
     # Built once at load time from constants — used by parser to split props
     KNOWN_PROPERTIES = constants
                        .filter_map { |c| const_get(c) if const_get(c).is_a?(WrapperProperty) }
