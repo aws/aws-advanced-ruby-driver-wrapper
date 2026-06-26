@@ -69,20 +69,20 @@ module AwsRubyDatabaseDriverWrapper
                 logger.debug { "Exception connecting to writer #{writer_candidate.host}: #{e.message}" }
               end
 
-              close_conn(candidate_conn)
+              close_quietly(candidate_conn)
               candidate_conn = nil
             end
           end
 
           raise Timeout::Error, 'Timed out waiting for a writer connection'
         ensure
-          close_conn(candidate_conn)
+          close_quietly(candidate_conn)
         end
       end
 
       private
 
-      def close_conn(conn)
+      def close_quietly(conn)
         return if conn.nil?
 
         conn.close

@@ -38,14 +38,12 @@ module AwsRubyDatabaseDriverWrapper
         @props = props
 
         @failover_timeout = FAILOVER_TIMEOUT.get_int(props)
-        @failover_reader_host_selector_strategy = FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
+        @reader_selector_strategy = FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
         @failover_mode = nil
         @rds_url_type = nil
 
         @closed_explicitly = false
-        @is_closed = false
-        @is_in_transaction = false
-        @last_error_dealt_with = nil
+        @last_handled_error = nil
         @writer_host_info = nil
 
         network_methods = @service_container.dialect_service.driver_dialect.network_bound_methods
@@ -108,12 +106,10 @@ module AwsRubyDatabaseDriverWrapper
           return pipeline_callable.call(...)
         end
 
-        handle_invalid_invocation_on_closed_connection if @is_closed && !allowed_on_closed_connection?(method_name)
-
         begin
           pipeline_callable.call(...)
         rescue StandardError => e
-          deal_with_original_error(e)
+          handle_error(e)
         end
       end
 
@@ -172,21 +168,9 @@ module AwsRubyDatabaseDriverWrapper
         can_direct_execute?(method_name)
       end
 
-      def handle_invalid_invocation_on_closed_connection
-        if @closed_explicitly
-          raise Errors::AwsError.new(
-            'No operations allowed after connection closed.',
-            connection_broken: true
-          )
-        else
-          @is_closed = false
-          pick_new_connection
-        end
-      end
-
-      def deal_with_original_error(error)
+      def handle_error(error)
         logger.debug { "Detected error: #{error.message}" }
-        raise error if @last_error_dealt_with == error || !should_error_trigger_connection_switch?(error)
+        raise error if @last_handled_error == error || !should_error_trigger_connection_switch?(error)
 
         invalidate_current_connection
         host_service.set_availability(
@@ -194,7 +178,7 @@ module AwsRubyDatabaseDriverWrapper
           Host::HostAvailability::UNAVAILABLE
         )
         pick_new_connection
-        @last_error_dealt_with = error
+        @last_handled_error = error
         raise error
       end
 
@@ -215,7 +199,6 @@ module AwsRubyDatabaseDriverWrapper
         return if conn.nil?
 
         if @service_container.session_state_service.in_transaction?
-          @is_in_transaction = true
           begin
             driver_dialect.execute('ROLLBACK')
           rescue StandardError
@@ -231,7 +214,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def pick_new_connection
-        if @is_closed && @closed_explicitly
+        if @closed_explicitly
           logger.debug { 'Connection was explicitly closed, skipping failover' }
           return
         end
@@ -259,13 +242,14 @@ module AwsRubyDatabaseDriverWrapper
 
         begin
           result = get_reader_failover_connection(failover_deadline)
+          was_in_transaction = @service_container.session_state_service.in_transaction?
           connection_service.update_current_connection(result.connection, result.host_info)
         rescue Timeout::Error
           raise Errors::FailoverFailedError, 'Unable to connect to a reader instance'
         end
 
         logger.info { "Established connection to: #{connection_service.current_host_info}" }
-        raise_failover_success_error
+        raise_failover_success_error(was_in_transaction)
       ensure
         duration_ms = ((Time.now - failover_start) * 1000).round
         logger.debug { "Reader failover duration: #{duration_ms}ms" }
@@ -291,11 +275,12 @@ module AwsRubyDatabaseDriverWrapper
           )
 
           if result&.connection && result.host_info
+            was_in_transaction = @service_container.session_state_service.in_transaction?
             connection_service.update_current_connection(result.connection, result.host_info)
             # TODO: is there a cleaner way of doing this?
             result.connection = nil # Prevents connection from closing in the ensure block
             logger.debug { "Established connection to: #{connection_service.current_host_info}" }
-            raise_failover_success_error
+            raise_failover_success_error(was_in_transaction)
           end
         rescue Timeout::Error
           raise Errors::FailoverFailedError
@@ -303,12 +288,12 @@ module AwsRubyDatabaseDriverWrapper
           duration_ms = ((Time.now - failover_start) * 1000).round
           logger.debug { "Writer failover duration: #{duration_ms}ms" }
 
-          close_conn(result.connection) if result&.connection && result.connection != connection_service.current_connection
+          close_quietly(result.connection) if result&.connection && result.connection != connection_service.current_connection
         end
       end
 
-      def raise_failover_success_error
-        raise Errors::FailoverSuccessError unless @is_in_transaction || @service_container.session_state_service.in_transaction?
+      def raise_failover_success_error(was_in_transaction)
+        raise Errors::FailoverSuccessError unless was_in_transaction
 
         @service_container.session_state_service.in_transaction = false
         raise Errors::TransactionStateUnknownError
@@ -367,7 +352,7 @@ module AwsRubyDatabaseDriverWrapper
 
               # The role is WRITER or UNKNOWN, and we are in STRICT_READER mode, so the connection is not valid.
               remaining_readers.delete(reader_candidate)
-              close_conn(candidate_conn)
+              close_quietly(candidate_conn)
               candidate_conn = nil
 
               if role == Host::HostRole::WRITER
@@ -384,7 +369,7 @@ module AwsRubyDatabaseDriverWrapper
             rescue StandardError
               remaining_readers.delete(reader_candidate)
             ensure
-              close_conn(candidate_conn)
+              close_quietly(candidate_conn)
             end
           end
 
@@ -414,7 +399,7 @@ module AwsRubyDatabaseDriverWrapper
             end
 
             # The role is WRITER or UNKNOWN, and we are in STRICT_READER mode, so the connection is not valid.
-            close_conn(candidate_conn)
+            close_quietly(candidate_conn)
             candidate_conn = nil
 
             if role == Host::HostRole::WRITER
@@ -429,7 +414,7 @@ module AwsRubyDatabaseDriverWrapper
           rescue StandardError
             logger.debug { "Failed to connect to host: #{original_writer.url}" }
           ensure
-            close_conn(candidate_conn)
+            close_quietly(candidate_conn)
           end
 
           break if Time.now >= deadline
@@ -442,7 +427,7 @@ module AwsRubyDatabaseDriverWrapper
         host_service.select_host(
           hosts,
           Host::HostRole::READER,
-          @failover_reader_host_selector_strategy
+          @reader_selector_strategy
         )
       rescue StandardError
         nil
@@ -481,7 +466,7 @@ module AwsRubyDatabaseDriverWrapper
             if connected_to_reader
               # Stale DNS: cluster writer endpoint resolved to a reader node.
               # Close the bad connection and throw so the connection pool retries.
-              close_conn(conn)
+              close_quietly(conn)
               logger.debug { "Stale DNS detected. Opening a connection to #{writer_candidate}" }
 
               # The caller will handle this result and retry or fail
@@ -510,14 +495,14 @@ module AwsRubyDatabaseDriverWrapper
           writer_conn = @service_container.plugin_manager.connect(@writer_host_info, props, false, plugin_to_skip: self)
           connection_service.initial_host_info = @writer_host_info if is_initial_connection
 
-          close_conn(conn)
+          close_quietly(conn)
           return writer_conn
         end
 
         conn
       end
 
-      def close_conn(conn)
+      def close_quietly(conn)
         return if conn.nil?
 
         driver_dialect.close_connection(conn)
