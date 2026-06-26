@@ -32,7 +32,7 @@ module AwsRubyDatabaseDriverWrapper
         pg_catalog.CONCAT(pg_catalog.inet_server_addr(), ':', pg_catalog.inet_server_port()) AS instance_name
       SQL
 
-      READER_CHECK_QUERY = <<~SQL
+      IS_READER_QUERY = <<~SQL
         SELECT pg_catalog.pg_is_in_recovery()
       SQL
 
@@ -68,7 +68,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def host_role(connection)
-        query_host_role(@driver_dialect, connection, READER_CHECK_QUERY)
+        query_host_role(@driver_dialect, connection, IS_READER_QUERY)
       end
 
       def instance_identity(connection)

@@ -27,14 +27,26 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     class FailoverFailedError < AwsError
-      def initialize
-        super('Failover failed.', connection_broken: true)
+      def initialize(message)
+        super(message, connection_broken: true)
       end
     end
 
     class FailoverSuccessError < AwsError
       def initialize
-        super('Failover succeeded.', needs_reconfiguration: true)
+        super(
+          'The active SQL connection has changed due to a connection failure. Please re-configure session state if required.',
+          needs_reconfiguration: true)
+      end
+    end
+
+    class TransactionStateUnknownError < AwsError
+      def initialize
+        super(
+          'Transaction resolution unknown. Please re-configure session state if required and retry the transaction.',
+          connection_broken: true,
+          needs_reconfiguration: true
+        )
       end
     end
   end

@@ -24,7 +24,26 @@ module AwsRubyDatabaseDriverWrapper
     DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.', type: String)
 
     # -- Failover --
-    FAILOVER_TIMEOUT_SEC = WrapperProperty.new(:failover_timeout_sec, 'Failover timeout in seconds', default_value: 300, type: Integer)
+    FAILOVER_TIMEOUT = WrapperProperty.new(
+      :failover_timeout,
+      'Maximum allowed time in seconds for the failover process.',
+      default_value: 300
+    )
+    FAILOVER_MODE = WrapperProperty.new(
+      :failover_mode,
+      'Set the desired instance role to target during failover.',
+      default_value: nil
+    )
+    FAILOVER_READER_HOST_SELECTOR_STRATEGY = WrapperProperty.new(
+      :failover_reader_host_selector_strategy,
+      'The strategy that should be used to select a new reader host while opening a new connection.',
+      default_value: 'random'
+    )
+    ENABLE_CONNECT_FAILOVER = WrapperProperty.new(
+      :enable_connect_failover,
+      'Enable/disable cluster-aware failover if the initial connection fails due to a network exception.',
+      default_value: false
+    )
 
     # -- Topology Monitoring --
     CLUSTER_INSTANCE_HOST_PATTERN = WrapperProperty.new(
