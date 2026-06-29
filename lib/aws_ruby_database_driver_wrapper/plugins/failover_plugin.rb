@@ -311,14 +311,18 @@ module AwsRubyDatabaseDriverWrapper
 
         while !remaining.empty? && Time.now < deadline
           candidate = select_reader_candidate(remaining)
-          return candidate if candidate
-
-          available = remaining.map do |h|
-            h.deep_dup.tap { |dup| dup.availability = Host::HostAvailability::AVAILABLE }
+          if candidate.nil?
+            # Unable to find available candidate in the host list. Let's try assuming all hosts are available.
+            available = remaining.map do |h|
+              h.deep_dup.tap { |dup| dup.availability = Host::HostAvailability::AVAILABLE }
+            end
+            candidate = select_reader_candidate(available)
           end
 
-          candidate = select_reader_candidate(available)
-          break if candidate.nil?
+          if candidate.nil?
+            logger.debug { 'Unable to find reader in the updated host list.' }
+            break
+          end
 
           outcome, result = attempt_reader_connection(candidate)
           case outcome
