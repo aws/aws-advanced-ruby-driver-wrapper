@@ -27,18 +27,21 @@ module AwsRubyDatabaseDriverWrapper
 
       WriterResult = Data.define(:connection, :host_info)
 
-      def connect_to_writer(service_container, props, plugin_to_skip, deadline:)
-        host_service = service_container.host_service
-        plugin_manager = service_container.plugin_manager
-        dialect_service = service_container.dialect_service
+      def initialize(service_container, props)
+        @host_service = service_container.host_service
+        @plugin_manager = service_container.plugin_manager
+        @dialect_service = service_container.dialect_service
+        @props = props
+      end
 
+      def connect_to_writer(plugin_to_skip, deadline:)
         candidate_conn = nil
         begin
           loop do
             break if Time.now >= deadline
 
-            host_service.refresh_host_list
-            hosts = host_service.all_hosts
+            @host_service.refresh_host_list
+            hosts = @host_service.all_hosts
             writer_candidate = hosts.find { |h| h.role == Host::HostRole::WRITER }
 
             if writer_candidate.nil?
@@ -47,7 +50,7 @@ module AwsRubyDatabaseDriverWrapper
               next
             end
 
-            allowed_hosts = host_service.hosts
+            allowed_hosts = @host_service.hosts
             unless allowed_hosts.any? { |h| h.host_and_port == writer_candidate.host_and_port }
               logger.debug { "New writer not in allowed hosts: #{writer_candidate.url}" }
               sleep(SHORT_DELAY_SEC)
@@ -57,8 +60,8 @@ module AwsRubyDatabaseDriverWrapper
             # TODO: is there a built-in ruby way to make a task run for a specific amount of time?
             while Time.now < deadline
               begin
-                candidate_conn = plugin_manager.connect(writer_candidate, props, false, plugin_to_skip: plugin_to_skip)
-                role = dialect_service.db_dialect.host_role(candidate_conn)
+                candidate_conn = @plugin_manager.connect(writer_candidate, @props, false, plugin_to_skip: plugin_to_skip)
+                role = @dialect_service.db_dialect.host_role(candidate_conn)
                 if role == Host::HostRole::WRITER
                   result = WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })
                   # TODO: is there a cleaner way of doing this?

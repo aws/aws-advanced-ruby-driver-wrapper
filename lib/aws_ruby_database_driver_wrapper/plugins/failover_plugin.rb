@@ -37,11 +37,11 @@ module AwsRubyDatabaseDriverWrapper
         @service_container = service_container
         @props = props
 
+        @retry_util = Utils::RetryUtil.new(service_container, props)
         @failover_timeout = FAILOVER_TIMEOUT.get_int(props)
         @reader_selector_strategy = FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
         @failover_mode = nil
         @rds_url_type = nil
-
         @closed_explicitly = false
         @last_handled_error = nil
 
@@ -150,7 +150,8 @@ module AwsRubyDatabaseDriverWrapper
 
       def can_direct_execute?(method_name)
         method_name == RubyMethod::CONNECTION_CLOSE.name ||
-          method_name == RubyMethod::CONNECTION_PING.name # TODO: should we keep or remove this line?
+          method_name == RubyMethod::CONNECTION_PING.name ||
+          method_name == RubyMethod::CONNECTION_FINISHED.name
       end
 
       def handle_error(error)
@@ -240,7 +241,7 @@ module AwsRubyDatabaseDriverWrapper
       def failover_writer
         failover_start = Time.now
         failover_deadline = failover_start + @failover_timeout
-        retry_util = Utils::RetryUtil.new
+        success = false
 
         logger.info { 'Starting writer failover' }
 
@@ -249,12 +250,11 @@ module AwsRubyDatabaseDriverWrapper
             raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
           end
 
-          result = retry_util.connect_to_writer(@service_container, @props, self, deadline: failover_deadline)
+          result = @retry_util.connect_to_writer(self, deadline: failover_deadline)
           if result&.connection && result.host_info
+            success = true
             was_in_transaction = @service_container.session_state_service.in_transaction?
             connection_service.update_current_connection(result.connection, result.host_info)
-            # TODO: is there a cleaner way of doing this?
-            result = nil # Prevents connection from closing in the ensure block
             raise_failover_success_error(was_in_transaction)
           end
         rescue Timeout::Error
@@ -262,7 +262,7 @@ module AwsRubyDatabaseDriverWrapper
         ensure
           duration_ms = ((Time.now - failover_start) * 1000).round
           logger.debug { "Writer failover duration: #{duration_ms}ms" }
-          close_quietly(result&.connection) if result&.connection != connection_service.current_connection
+          close_quietly(result&.connection) unless success
         end
       end
 
