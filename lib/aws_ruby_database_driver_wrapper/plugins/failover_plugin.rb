@@ -55,7 +55,6 @@ module AwsRubyDatabaseDriverWrapper
       def connect(host_info, props, is_initial_connection, pipeline_callable)
         init_failover_mode
 
-        conn = nil
         unless ENABLE_CONNECT_FAILOVER.get_bool(@props)
           conn = get_verified_connection(is_initial_connection, host_info, props, pipeline_callable)
           raise Errors::AwsError, 'Unable to establish a SQL connection due to an unexpected error' if conn.nil?
@@ -63,47 +62,36 @@ module AwsRubyDatabaseDriverWrapper
           return conn
         end
 
-        host_service = @service_container.host_service
         topology_host = host_service.hosts.find { |h| h.host_and_port == host_info&.host_and_port }
 
         if !topology_host.nil? && topology_host.availability == Host::HostAvailability::UNAVAILABLE
-          begin
-            host_service.refresh_host_list
-            failover
-          rescue Errors::FailoverSuccessError => _e
-            conn = connection_service.current_connection
-          end
-
-          host_service.refresh_host_list if is_initial_connection
-          return conn
+          host_service.refresh_host_list
+          return connect_via_failover(is_initial_connection)
         end
 
         begin
           conn = get_verified_connection(is_initial_connection, host_info, props, pipeline_callable)
+          host_service.refresh_host_list if is_initial_connection
+          conn
         rescue StandardError => e
-          raise unless should_error_trigger_connection_switch?(e)
+          raise unless trigger_failover?(e)
 
           host_service.set_availability(host_info, Host::HostAvailability::UNAVAILABLE)
-          begin
-            failover
-          rescue Errors::FailoverSuccessError
-            conn = connection_service.current_connection
-          end
+          connect_via_failover(is_initial_connection)
         end
-
-        host_service.refresh_host_list if is_initial_connection
-        conn
       end
 
       def execute(method_name, pipeline_callable, ...)
-        if connection_service.current_connection && !can_direct_execute?(method_name) &&
-           !@closed_explicitly && driver_dialect.closed?(connection_service.current_connection)
-          pick_new_connection
-        end
-
         if can_direct_execute?(method_name)
           @closed_explicitly = true if method_name == RubyMethod::CONNECTION_CLOSE.name
           return pipeline_callable.call(...)
+        end
+
+        conn = connection_service.current_connection
+        if conn && !@closed_explicitly && driver_dialect.closed?(connection_service.current_connection)
+          logger.warn("#{method_name} was called on closed connection #{conn} to #{connection_service.current_host_info}." \
+                      'The driver will attempt to failover and then execute.')
+          failover
         end
 
         begin
@@ -114,6 +102,17 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       private
+
+      def connect_via_failover(is_initial_connection)
+        begin
+          failover
+        rescue Errors::FailoverSuccessError => _e
+          conn = connection_service.current_connection
+        end
+
+        host_service.refresh_host_list if is_initial_connection
+        conn
+      end
 
       def connection_service
         @service_container.connection_service
@@ -153,38 +152,34 @@ module AwsRubyDatabaseDriverWrapper
         logger.debug { "failover_mode=#{@failover_mode}" }
       end
 
-      def failover_enabled?
-        @rds_url_type != Utils::RdsUrlType::RDS_PROXY &&
-          @rds_url_type != Utils::RdsUrlType::RDS_PROXY_ENDPOINT &&
-          !host_service.all_hosts.empty?
-      end
-
       def can_direct_execute?(method_name)
         method_name == RubyMethod::CONNECTION_CLOSE.name ||
           method_name == RubyMethod::CONNECTION_PING.name # TODO: should we keep or remove this line?
       end
 
-      def allowed_on_closed_connection?(method_name)
-        can_direct_execute?(method_name)
-      end
-
       def handle_error(error)
         logger.debug { "Detected error: #{error.message}" }
-        raise error if @last_handled_error == error || !should_error_trigger_connection_switch?(error)
+        raise error if @last_handled_error == error || !trigger_failover?(error)
 
         invalidate_current_connection
         host_service.set_availability(
           connection_service.current_host_info,
           Host::HostAvailability::UNAVAILABLE
         )
-        pick_new_connection
+        failover
         @last_handled_error = error
         raise error
       end
 
-      def should_error_trigger_connection_switch?(error)
-        unless failover_enabled?
-          logger.debug { 'Failover is disabled' }
+      def trigger_failover?(error)
+        # TODO: should we throw an exception if the user tries to connect to RDS Proxy instead of checking here?
+        if @rds_url_type != Utils::RdsUrlType::RDS_PROXY &&
+           @rds_url_type != Utils::RdsUrlType::RDS_PROXY_ENDPOINT &&
+           !host_service.all_hosts.empty?
+          logger.debug do
+            "Failover will be skipped for connection to #{connection_service.current_host_info}." \
+              'Failover is skipped when connected to RDS Proxy or no topology information is available.'
+          end
           return false
         end
 
@@ -206,23 +201,15 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
-        begin
-          driver_dialect.close_connection(conn) unless driver_dialect.closed?(conn)
-        rescue StandardError
-          # ignore
-        end
+        close_quietly(conn)
       end
 
-      def pick_new_connection
+      def failover
         if @closed_explicitly
           logger.debug { 'Connection was explicitly closed, skipping failover' }
           return
         end
 
-        failover
-      end
-
-      def failover
         if @failover_mode == FailoverMode::STRICT_WRITER
           failover_writer
         else
@@ -248,7 +235,6 @@ module AwsRubyDatabaseDriverWrapper
           raise Errors::FailoverFailedError, 'Unable to connect to a reader instance'
         end
 
-        logger.info { "Established connection to: #{connection_service.current_host_info}" }
         raise_failover_success_error(was_in_transaction)
       ensure
         duration_ms = ((Time.now - failover_start) * 1000).round
@@ -267,19 +253,12 @@ module AwsRubyDatabaseDriverWrapper
             raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
           end
 
-          result = retry_util.connect_to_writer(
-            @service_container,
-            @props,
-            self,
-            deadline: failover_deadline
-          )
-
+          result = retry_util.connect_to_writer(@service_container, @props, self, deadline: failover_deadline)
           if result&.connection && result.host_info
             was_in_transaction = @service_container.session_state_service.in_transaction?
             connection_service.update_current_connection(result.connection, result.host_info)
             # TODO: is there a cleaner way of doing this?
-            result.connection = nil # Prevents connection from closing in the ensure block
-            logger.debug { "Established connection to: #{connection_service.current_host_info}" }
+            result = nil # Prevents connection from closing in the ensure block
             raise_failover_success_error(was_in_transaction)
           end
         rescue Timeout::Error
@@ -287,12 +266,12 @@ module AwsRubyDatabaseDriverWrapper
         ensure
           duration_ms = ((Time.now - failover_start) * 1000).round
           logger.debug { "Writer failover duration: #{duration_ms}ms" }
-
-          close_quietly(result.connection) if result&.connection && result.connection != connection_service.current_connection
+          close_quietly(result&.connection) if result&.connection != connection_service.current_connection
         end
       end
 
       def raise_failover_success_error(was_in_transaction)
+        logger.debug { "Established connection to: #{connection_service.current_host_info}" }
         raise Errors::FailoverSuccessError unless was_in_transaction
 
         @service_container.session_state_service.in_transaction = false
@@ -302,125 +281,101 @@ module AwsRubyDatabaseDriverWrapper
       def get_reader_failover_connection(deadline)
         original_writer = nil
         original_writer_still_writer = false
-        need_delay = false
 
         loop do
-          sleep(0.1) if need_delay
-          need_delay = true
+          break if Time.now >= deadline
 
-          # the roles in this list might not be accurate, depending on whether the new topology has become available yet
           hosts = host_service.hosts
           reader_candidates = hosts.select { |h| h.role == Host::HostRole::READER }
+          original_writer ||= hosts.find { |h| h.role == Host::HostRole::WRITER }
 
-          if original_writer.nil?
-            host_list_writer = hosts.find { |h| h.role == Host::HostRole::WRITER }
-            if host_list_writer
-              original_writer = host_list_writer
-              original_writer_still_writer = false
-            end
+          result = try_reader_candidates(reader_candidates, deadline)
+          return result if result
+
+          result = try_original_writer(original_writer, original_writer_still_writer)
+          case result
+          when ReaderFailoverResult
+            return result
+          when :still_writer
+            original_writer_still_writer = true
           end
 
-          remaining_readers = reader_candidates.dup
-          while !remaining_readers.empty? && Time.now < deadline
-            reader_candidate = select_reader_candidate(remaining_readers)
-
-            if reader_candidate.nil?
-              # assume all readers are available and try them all
-              available_readers = remaining_readers.map do |h|
-                h.deep_dup.tap { |dup| dup.availability = Host::HostAvailability::AVAILABLE }
-              end
-              reader_candidate = select_reader_candidate(available_readers)
-            end
-
-            if reader_candidate.nil?
-              logger.debug { 'Unable to find reader in updated host list' }
-              break
-            end
-
-            candidate_conn = nil
-            begin
-              candidate_conn = @service_container.plugin_manager.connect(reader_candidate, @props, false, plugin_to_skip: self)
-              # Since the roles in the host list might not be accurate, we execute a query to check the instance's role.
-              role = db_dialect.host_role(candidate_conn)
-              if role == Host::HostRole::READER || @failover_mode != FailoverMode::STRICT_READER
-                updated_host = reader_candidate.deep_dup.tap { |h| h.role = role }
-                result = ReaderFailoverResult.new(candidate_conn, updated_host)
-                # TODO: is there a cleaner way of doing this?
-                candidate_conn = nil # Prevents connection from closing in the ensure block
-                return result
-              end
-
-              # The role is WRITER or UNKNOWN, and we are in STRICT_READER mode, so the connection is not valid.
-              remaining_readers.delete(reader_candidate)
-              close_quietly(candidate_conn)
-              candidate_conn = nil
-
-              if role == Host::HostRole::WRITER
-                # The reader candidate is actually a writer, which is not valid when @failover_mode is STRICT_READER.
-                # We will remove it from the list of reader candidates to avoid retrying it in future iterations.
-                reader_candidates.delete(reader_candidate)
-              else
-                logger.debug do
-                  "Unable to determine host role for #{reader_candidate.url}. " \
-                    'Since failover mode is set to STRICT_READER and the host may be a writer, ' \
-                    'it will not be selected for reader failover.'
-                end
-              end
-            rescue StandardError
-              remaining_readers.delete(reader_candidate)
-            ensure
-              close_quietly(candidate_conn)
-            end
-          end
-
-          # We were not able to connect to any of the original readers. We will try connecting to the original writer,
-          # which may have been demoted to a reader.
-          if original_writer.nil? || Time.now >= deadline
-            # No writer was found in the original topology, or we have timed out.
-            next
-          end
-
-          if @failover_mode == FailoverMode::STRICT_READER && original_writer_still_writer
-            # The original writer has been verified, so it is not valid when in STRICT_READER mode.
-            next
-          end
-
-          candidate_conn = nil
-          begin
-            candidate_conn = @service_container.plugin_manager.connect(original_writer, @props, false, plugin_to_skip: self)
-            role = db_dialect.host_role(candidate_conn)
-
-            if role == Host::HostRole::READER || @failover_mode != FailoverMode::STRICT_READER
-              updated_host = original_writer.deep_dup.tap { |h| h.role = role }
-              result = ReaderFailoverResult.new(candidate_conn, updated_host)
-              # TODO: is there a cleaner way of doing this?
-              candidate_conn = nil # Prevents connection from closing in the ensure block
-              return result
-            end
-
-            # The role is WRITER or UNKNOWN, and we are in STRICT_READER mode, so the connection is not valid.
-            close_quietly(candidate_conn)
-            candidate_conn = nil
-
-            if role == Host::HostRole::WRITER
-              original_writer_still_writer = true
-            else
-              logger.debug do
-                "Unable to determine host role for #{original_writer.url}. " \
-                  'Since failover mode is set to STRICT_READER and the host may be a writer, ' \
-                  'it will not be selected for reader failover.'
-              end
-            end
-          rescue StandardError
-            logger.debug { "Failed to connect to host: #{original_writer.url}" }
-          ensure
-            close_quietly(candidate_conn)
-          end
-
-          break if Time.now >= deadline
+          sleep(0.1)
         end
 
         raise Timeout::Error, 'The reader failover process was not able to establish a connection before timing out.'
+      end
+
+      def try_reader_candidates(reader_candidates, deadline)
+        remaining = reader_candidates.dup
+
+        while !remaining.empty? && Time.now < deadline
+          candidate = select_reader_candidate(remaining)
+          return candidate if candidate
+
+          available = remaining.map do |h|
+            h.deep_dup.tap { |dup| dup.availability = Host::HostAvailability::AVAILABLE }
+          end
+
+          candidate = select_reader_candidate(available)
+          break if candidate.nil?
+
+          outcome, result = attempt_reader_connection(candidate)
+          case outcome
+          when :success
+            return result
+          when :writer
+            reader_candidates.delete(candidate)
+            remaining.delete(candidate)
+          else
+            remaining.delete(candidate)
+          end
+        end
+
+        nil
+      end
+
+      def try_original_writer(original_writer, original_writer_still_writer)
+        return nil if original_writer.nil?
+        return nil if @failover_mode == FailoverMode::STRICT_READER && original_writer_still_writer
+
+        outcome, result = attempt_reader_connection(original_writer)
+        case outcome
+        when :success
+          result
+        when :writer
+          :still_writer
+        else
+          logger.debug { "Failed to connect to host: #{original_writer.url}" }
+          nil
+        end
+      end
+
+      def attempt_reader_connection(host_info)
+        conn = @service_container.plugin_manager.connect(host_info, @props, false, plugin_to_skip: self)
+        # Since the roles in the host list might not be accurate, we execute a query to check the instance's role.
+        role = db_dialect.host_role(conn)
+
+        if role == Host::HostRole::READER || @failover_mode != FailoverMode::STRICT_READER
+          updated_host = host_info.deep_dup.tap { |h| h.role = role }
+          return [:success, ReaderFailoverResult.new(conn, updated_host)]
+        end
+
+        # The role is WRITER or UNKNOWN, and we are in STRICT_READER mode, so the connection is not valid.
+        close_quietly(conn)
+        if role == Host::HostRole::WRITER
+          [:writer, nil]
+        else
+          logger.debug do
+            "Unable to determine host role for #{host_info.url}. " \
+              'Since failover mode is set to STRICT_READER and the host may be a writer, ' \
+              'it will not be selected for reader failover.'
+          end
+          [:unknown, nil]
+        end
+      rescue StandardError
+        close_quietly(conn)
+        [:failed, nil]
       end
 
       def select_reader_candidate(hosts)
