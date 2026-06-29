@@ -395,36 +395,28 @@ module AwsRubyDatabaseDriverWrapper
           return connect_func.call
         end
 
-        # TODO: double check this logic - we can verify that we are connected to a writer regardless of whether we can find the writer
-        writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
-        # Unable to find writer instance endpoint. May occur if this is the first connection and topology isn't available yet.
-        # Continue with the regular workflow.
-        return connect_func.call if writer.nil? || !Utils::RdsUtils.rds_instance?(writer.host)
-
         conn = connect_func.call
         if db_dialect.host_role(conn) == Host::HostRole::WRITER
           host_service.refresh_host_list
           return conn
         end
 
-        # The writer cluster URL resolved to a reader. The topology must be outdated, so we should force a refresh.
+        # The writer cluster URL resolved to a reader. We will try to redirect to the writer instance.
         host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
         writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
-        return conn if writer.nil?
-
-        if Utils::RdsUtils.rds_cluster_dns?(writer.host)
-          # Topology does not contain instance-level DNS — stale DNS detection cannot be performed (no instance IP to compare against).
+        if writer.nil? || Utils::RdsUtils.rds_cluster_dns?(writer.host)
+          # Writer instance endpoint not found - unable to redirect.
           close_quietly(conn)
           raise Errors::AwsError, 'Stale DNS detected - a writer was requested, but the writer cluster endpoint resolved to a reader'
         end
 
-        # Attempt to correct the stale DNS problem by connecting to the writer instance.
-        logger.debug { "Stale DNS data detected. Opening a connection to #{writer.host}" }
         allowed_hosts = host_service.hosts
         unless allowed_hosts.any? { |h| h.host_and_port == writer.host_and_port }
           raise Errors::AwsError, "Current writer #{writer.host_and_port} is not in allowed hosts"
         end
 
+        # Attempt to correct the stale DNS problem by connecting to the writer instance.
+        logger.debug { "Stale DNS data detected. Opening a connection to #{writer.host}" }
         writer_conn = @service_container.plugin_manager.connect(writer, props, false, plugin_to_skip: self)
         connection_service.initial_host_info = writer if is_initial_connection
 
