@@ -46,7 +46,6 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: false)
 
     # -- Connection methods (pg-specific) --
-    CONNECTION_FINISHED            = define('connection.finished?', check_bounded_connection: false)
     CONNECTION_EXEC                = define('connection.exec', check_bounded_connection: false)
     CONNECTION_ASYNC_EXEC          = define('connection.async_exec', check_bounded_connection: false)
     CONNECTION_EXEC_PARAMS         = define('connection.exec_params', check_bounded_connection: false)

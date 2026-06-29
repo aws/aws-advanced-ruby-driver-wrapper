@@ -39,8 +39,8 @@ module AwsRubyDatabaseDriverWrapper
         @props = props
 
         @retry_util = Utils::RetryUtil.new(service_container, props)
-        @failover_timeout = FAILOVER_TIMEOUT.get_int(props)
-        @reader_selector_strategy = FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
+        @failover_timeout = PropertyDefinition::FAILOVER_TIMEOUT_SEC.get_int(props)
+        @reader_selector_strategy = PropertyDefinition::FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
         @failover_mode = nil
         @rds_url_type = nil
         @closed_explicitly = false
@@ -55,7 +55,7 @@ module AwsRubyDatabaseDriverWrapper
       def connect(host_info, props, is_initial_connection, pipeline_callable)
         init_failover_mode
 
-        unless ENABLE_CONNECT_FAILOVER.get_bool(@props)
+        unless PropertyDefinition::ENABLE_CONNECT_FAILOVER.get_bool(@props)
           return verified_connection(is_initial_connection, host_info, props, pipeline_callable)
         end
 
@@ -78,10 +78,10 @@ module AwsRubyDatabaseDriverWrapper
         end
       end
 
-      def execute(method_name, pipeline_callable, ...)
+      def execute(method_name, pipeline_callable, *, **, &)
         if can_direct_execute?(method_name)
           @closed_explicitly = true if method_name == RubyMethod::CONNECTION_CLOSE.name
-          return pipeline_callable.call(...)
+          return pipeline_callable.call
         end
 
         conn = connection_service.current_connection
@@ -92,7 +92,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         begin
-          pipeline_callable.call(...)
+          pipeline_callable.call
         rescue StandardError => e
           handle_error(e)
         end
@@ -134,7 +134,7 @@ module AwsRubyDatabaseDriverWrapper
       def init_failover_mode
         return unless @rds_url_type.nil?
 
-        @failover_mode = FailoverMode.from_value(FAILOVER_MODE.get(@props))
+        @failover_mode = FailoverMode.from_value(PropertyDefinition::FAILOVER_MODE.get(@props))
         initial_host = connection_service.initial_host_info
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host&.host)
 
@@ -151,8 +151,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def can_direct_execute?(method_name)
         method_name == RubyMethod::CONNECTION_CLOSE.name ||
-          method_name == RubyMethod::CONNECTION_PING.name ||
-          method_name == RubyMethod::CONNECTION_FINISHED.name
+          method_name == RubyMethod::CONNECTION_PING.name
       end
 
       def handle_error(error)
