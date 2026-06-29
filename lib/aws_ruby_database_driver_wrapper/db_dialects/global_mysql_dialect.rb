@@ -43,7 +43,7 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       REGION_BY_INSTANCE_ID_QUERY = <<~SQL
-        SELECT AWS_REGION FROM information_schema.aurora_global_db_instance_status WHERE SERVER_ID = %s
+        SELECT AWS_REGION FROM information_schema.aurora_global_db_instance_status WHERE SERVER_ID = ?
       SQL
 
       def dialect?(connection)
