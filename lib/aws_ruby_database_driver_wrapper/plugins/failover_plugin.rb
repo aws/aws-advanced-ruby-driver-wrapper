@@ -395,17 +395,15 @@ module AwsRubyDatabaseDriverWrapper
       def get_verified_connection(is_initial_connection, host_info, props, connect_func)
         url_type = Utils::RdsUtils.identify_rds_type(host_info&.host)
 
-        unless [Utils::RdsUrlType::RDS_WRITER_CLUSTER, Utils::RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER].include?(url_type)
-          # It's not a writer cluster endpoint. Continue with a normal workflow.
+        if url_type != Utils::RdsUrlType::RDS_WRITER_CLUSTER
+          # It's not a writer cluster endpoint. Continue with the regular workflow.
           return connect_func.call
         end
 
-        if url_type == Utils::RdsUrlType::RDS_WRITER_CLUSTER
-          writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
-          # Continue with the regular workflow if no writer was found.
-          # This may occur with the first connection when topology isn't yet available.
-          return connect_func.call unless writer && Utils::RdsUtils.rds_instance?(writer.host)
-        end
+        writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
+        # Continue with the regular workflow if no writer was found.
+        # This may occur with the first connection when topology isn't yet available.
+        return connect_func.call unless writer && Utils::RdsUtils.rds_instance?(writer.host)
 
         conn = connect_func.call
         connected_to_reader = db_dialect.host_role(conn) == Host::HostRole::READER
@@ -417,8 +415,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         if @writer_host_info.nil?
-          writer_candidate = host_service.all_hosts
-                                         .find { |h| h.role == Host::HostRole::WRITER }
+          writer_candidate = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
           if writer_candidate && Utils::RdsUtils.rds_cluster_dns?(writer_candidate.host)
             # Topology has not resolved to instance-level DNS — stale DNS detection
             # cannot be performed (no instance IP to compare against).
