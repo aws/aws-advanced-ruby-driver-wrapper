@@ -44,7 +44,6 @@ module AwsRubyDatabaseDriverWrapper
 
         @closed_explicitly = false
         @last_handled_error = nil
-        @writer_host_info = nil
 
         network_methods = @service_container.dialect_service.driver_dialect.network_bound_methods
         @subscribed_methods = (SUBSCRIBED_METHODS | network_methods).freeze
@@ -56,10 +55,7 @@ module AwsRubyDatabaseDriverWrapper
         init_failover_mode
 
         unless ENABLE_CONNECT_FAILOVER.get_bool(@props)
-          conn = get_verified_connection(is_initial_connection, host_info, props, pipeline_callable)
-          raise Errors::AwsError, 'Unable to establish a SQL connection due to an unexpected error' if conn.nil?
-
-          return conn
+          return get_verified_connection(is_initial_connection, host_info, props, pipeline_callable)
         end
 
         topology_host = host_service.hosts.find { |h| h.host_and_port == host_info&.host_and_port }
@@ -394,68 +390,47 @@ module AwsRubyDatabaseDriverWrapper
 
       def get_verified_connection(is_initial_connection, host_info, props, connect_func)
         url_type = Utils::RdsUtils.identify_rds_type(host_info&.host)
-
         if url_type != Utils::RdsUrlType::RDS_WRITER_CLUSTER
-          # It's not a writer cluster endpoint. Continue with the regular workflow.
+          # We are not using a writer cluster endpoint. No verification needed - continue with the regular workflow.
           return connect_func.call
         end
 
+        # TODO: double check this logic - we can verify that we are connected to a writer regardless of whether we can find the writer
         writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
-        # Continue with the regular workflow if no writer was found.
-        # This may occur with the first connection when topology isn't yet available.
-        return connect_func.call unless writer && Utils::RdsUtils.rds_instance?(writer.host)
+        # Unable to find writer instance endpoint. May occur if this is the first connection and topology isn't available yet.
+        # Continue with the regular workflow.
+        return connect_func.call if writer.nil? || !Utils::RdsUtils.rds_instance?(writer.host)
 
         conn = connect_func.call
-        connected_to_reader = db_dialect.host_role(conn) == Host::HostRole::READER
-        if connected_to_reader
-          # The writer cluster URL resolved to a reader. The topology must be outdated, so we should force a refresh.
-          host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
-        else
+        if db_dialect.host_role(conn) == Host::HostRole::WRITER
           host_service.refresh_host_list
+          return conn
         end
 
-        if @writer_host_info.nil?
-          writer_candidate = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
-          if writer_candidate && Utils::RdsUtils.rds_cluster_dns?(writer_candidate.host)
-            # Topology has not resolved to instance-level DNS — stale DNS detection
-            # cannot be performed (no instance IP to compare against).
-            if connected_to_reader
-              # Stale DNS: cluster writer endpoint resolved to a reader node.
-              # Close the bad connection and throw so the connection pool retries.
-              close_quietly(conn)
-              logger.debug { "Stale DNS detected. Opening a connection to #{writer_candidate}" }
+        # The writer cluster URL resolved to a reader. The topology must be outdated, so we should force a refresh.
+        host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
+        writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
+        return conn if writer.nil?
 
-              # The caller will handle this result and retry or fail
-              return nil
-            end
-
-            # Connected to a writer - the connection is valid and topology info is just lagging
-            return conn
-          end
-          @writer_host_info = writer_candidate
-        end
-
-        return conn if @writer_host_info.nil?
-
-        logger.debug { "Writer host: #{@writer_host_info}" }
-
-        if connected_to_reader
-          # Reconnect to writer host if current connection is reader
-          logger.debug { "Stale DNS data detected. Opening a connection to #{@writer_host_info}" }
-
-          allowed_hosts = host_service.hosts
-          unless allowed_hosts.any? { |h| h.host_and_port == @writer_host_info&.host_and_port }
-            raise Errors::AwsError, "Current writer #{@writer_host_info&.host_and_port} is not in allowed hosts"
-          end
-
-          writer_conn = @service_container.plugin_manager.connect(@writer_host_info, props, false, plugin_to_skip: self)
-          connection_service.initial_host_info = @writer_host_info if is_initial_connection
-
+        if Utils::RdsUtils.rds_cluster_dns?(writer.host)
+          # Topology does not contain instance-level DNS — stale DNS detection cannot be performed (no instance IP to compare against).
           close_quietly(conn)
-          return writer_conn
+          raise Errors::AwsError, 'Stale DNS detected - a writer was requested, but the writer cluster endpoint resolved to a reader'
         end
 
-        conn
+        # Attempt to correct the stale DNS problem by connecting to the writer instance.
+        logger.debug { "Stale DNS data detected. Opening a connection to #{writer.host}" }
+        allowed_hosts = host_service.hosts
+        unless allowed_hosts.any? { |h| h.host_and_port == writer.host_and_port }
+          raise Errors::AwsError, "Current writer #{writer.host_and_port} is not in allowed hosts"
+        end
+
+        writer_conn = @service_container.plugin_manager.connect(writer, props, false, plugin_to_skip: self)
+        connection_service.initial_host_info = writer if is_initial_connection
+
+        # Close the incorrect reader connection.
+        close_quietly(conn)
+        writer_conn
       end
 
       def close_quietly(conn)
