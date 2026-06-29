@@ -31,7 +31,7 @@ module AwsRubyDatabaseDriverWrapper
     class FailoverPlugin
       include Logging
 
-      DefaultPlugin::SUBSCRIBED_METHODS = Set['connect'].freeze
+      FailoverPlugin::SUBSCRIBED_METHODS = Set['connect'].freeze
       ReaderFailoverResult = Data.define(:connection, :host_info)
 
       def initialize(service_container, props = ::Concurrent::Map.new)
