@@ -19,6 +19,7 @@ require_relative '../errors'
 require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
+require_relative '../plugins/iam_auth_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -29,14 +30,16 @@ module AwsRubyDatabaseDriverWrapper
       private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :DEFAULT_PLUGINS, :NOOP_CALLABLE
 
       @plugin_classes = {
-        'failover' => Plugins::FailoverPlugin
+        'failover' => Plugins::FailoverPlugin,
+        'iam' => Plugins::IamAuthPlugin
       }
 
       # The final list of plugins will be sorted by weight, starting from the lowest values up to
       # the highest values. The first plugin of the list will have the lowest weight, and the
       # last one will have the highest weight.
       @plugin_weights = {
-        Plugins::FailoverPlugin => 400
+        Plugins::FailoverPlugin => 400,
+        Plugins::IamAuthPlugin => 1800
       }
 
       class << self
@@ -117,10 +120,10 @@ module AwsRubyDatabaseDriverWrapper
         plugin_classes = plugin_codes.empty? ? [] : get_plugin_classes(codes_list, wrapper_props)
 
         plugins = plugin_classes.map do |plugin_class|
-          plugin_class.new(service_container, **wrapper_props)
+          plugin_class.new(service_container, wrapper_props)
         end
 
-        plugins << Plugins::DefaultPlugin.new(service_container, **wrapper_props)
+        plugins << Plugins::DefaultPlugin.new(service_container, wrapper_props)
         plugins
       end
 

@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../errors'
 require_relative '../host/host_info'
 require_relative '../host/host_role'
