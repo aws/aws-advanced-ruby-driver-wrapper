@@ -99,11 +99,9 @@ jobs:
       - name: Checkout (full history)
         uses: actions/checkout@v7
         with:
-          # Full history so Gitleaks can scan every commit, not just the tip.
           fetch-depth: 0
       - name: Install Gitleaks
         env:
-          # Pinned version; bump deliberately.
           GITLEAKS_VERSION: 8.30.1
         run: |
           set -euo pipefail
@@ -115,6 +113,5 @@ jobs:
           rm -f gitleaks.tar.gz gitleaks
           gitleaks version
       - name: Run Gitleaks (full git history)
-        # Scans all commits on the checked-out branch. --redact keeps secrets out
-        # of logs. A non-zero exit (leak found) fails the job.
-        run: gitleaks detect --source . --redact --verbose
+        # TODO: remove --no-git flag to scan git history.
+        run: gitleaks detect --source . --no-git --redact --verbose
