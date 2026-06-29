@@ -55,7 +55,7 @@ module AwsRubyDatabaseDriverWrapper
         init_failover_mode
 
         unless ENABLE_CONNECT_FAILOVER.get_bool(@props)
-          return get_verified_connection(is_initial_connection, host_info, props, pipeline_callable)
+          return verified_connection(is_initial_connection, host_info, props, pipeline_callable)
         end
 
         topology_host = host_service.hosts.find { |h| h.host_and_port == host_info&.host_and_port }
@@ -66,7 +66,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         begin
-          conn = get_verified_connection(is_initial_connection, host_info, props, pipeline_callable)
+          conn = verified_connection(is_initial_connection, host_info, props, pipeline_callable)
           host_service.refresh_host_list if is_initial_connection
           conn
         rescue StandardError => e
@@ -224,7 +224,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         begin
-          result = get_reader_failover_connection(failover_deadline)
+          result = reader_failover_connection(failover_deadline)
           was_in_transaction = @service_container.session_state_service.in_transaction?
           connection_service.update_current_connection(result.connection, result.host_info)
         rescue Timeout::Error
@@ -274,7 +274,7 @@ module AwsRubyDatabaseDriverWrapper
         raise Errors::TransactionStateUnknownError
       end
 
-      def get_reader_failover_connection(deadline)
+      def reader_failover_connection(deadline)
         original_writer = nil
         original_writer_still_writer = false
 
@@ -388,7 +388,7 @@ module AwsRubyDatabaseDriverWrapper
         nil
       end
 
-      def get_verified_connection(is_initial_connection, host_info, props, connect_func)
+      def verified_connection(is_initial_connection, host_info, props, connect_func)
         url_type = Utils::RdsUtils.identify_rds_type(host_info&.host)
         if url_type != Utils::RdsUrlType::RDS_WRITER_CLUSTER
           # We are not using a writer cluster endpoint. No verification needed - continue with the regular workflow.
