@@ -61,6 +61,10 @@ module AwsRubyDatabaseDriverWrapper
         connection.exec(sql)
       end
 
+      def execute_with_params(connection, sql, params)
+        connection.exec_params(sql, params)
+      end
+
       def ping(connection)
         connection.exec(PING_SQL)
         true

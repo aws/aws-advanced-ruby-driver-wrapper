@@ -49,6 +49,10 @@ module AwsRubyDatabaseDriverWrapper
         @driver_dialect.execute(connection, sql)
       end
 
+      def execute_with_params(connection, sql, params)
+        @driver_dialect.execute_with_params(connection, sql, params)
+      end
+
       def dialect?(connection)
         result = @driver_dialect.execute(connection, VERSION_QUERY)
         result.any? do |row|

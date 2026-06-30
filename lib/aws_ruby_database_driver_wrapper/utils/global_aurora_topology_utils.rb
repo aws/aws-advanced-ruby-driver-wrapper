@@ -53,7 +53,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param conn [Object] the database connection.
       # @return [String, nil] the AWS region, or nil if it cannot be determined.
       def query_region(instance_id, conn)
-        results = @dialect.execute(conn, @dialect.region_by_instance_id_query(instance_id))
+        results = @dialect.execute_with_params(conn, @dialect.region_by_instance_id_query, [instance_id])
         return nil if results.nil? || results.none?
 
         row = results.first
