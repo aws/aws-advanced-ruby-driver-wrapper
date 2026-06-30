@@ -41,6 +41,13 @@ module AwsRubyDatabaseDriverWrapper
         connection.query(sql)
       end
 
+      def execute_with_params(connection, sql, params)
+        stmt = connection.prepare(sql)
+        stmt.execute(*params)
+      ensure
+        stmt&.close
+      end
+
       def ping(connection)
         connection.ping
       rescue StandardError
