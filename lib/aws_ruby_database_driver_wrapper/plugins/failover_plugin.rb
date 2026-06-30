@@ -170,11 +170,11 @@ module AwsRubyDatabaseDriverWrapper
 
       def trigger_failover?(error)
         # TODO: should we throw an exception if the user tries to connect to RDS Proxy instead of checking here?
-        if @rds_url_type != Utils::RdsUrlType::RDS_PROXY &&
-           @rds_url_type != Utils::RdsUrlType::RDS_PROXY_ENDPOINT &&
-           !host_service.all_hosts.empty?
+        if @rds_url_type == Utils::RdsUrlType::RDS_PROXY ||
+           @rds_url_type == Utils::RdsUrlType::RDS_PROXY_ENDPOINT ||
+           host_service.all_hosts.empty?
           logger.debug do
-            "Failover will be skipped for connection to #{connection_service.current_host_info}." \
+            "Failover will be skipped for connection to #{connection_service.current_host_info}. " \
               'Failover is skipped when connected to RDS Proxy or no topology information is available.'
           end
           return false
