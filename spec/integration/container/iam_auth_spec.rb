@@ -26,12 +26,7 @@ require 'aws_ruby_database_driver_wrapper'
 RSpec.describe 'AwsIamAuthentication', :integration,
                features: [Integration::TestEnvironmentFeatures::IAM],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
-  let(:iam_props) do
-    {
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam',
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
-    }
-  end
+  let(:iam_props) { base_iam_props }
 
   let(:iam_config) do
     config = Integration::DriverHelper.native_config(
@@ -55,13 +50,25 @@ RSpec.describe 'AwsIamAuthentication', :integration,
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
     begin
-      AwsRubyDatabaseDriverWrapper.clear_caches
+      AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
+        AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service
+      )
     rescue StandardError
       nil
     end
   end
 
   it 'connects with valid IAM credentials' do
+    target_host = writer.host
+    target_port = writer.port
+    resolved_ip = begin
+      Resolv.getaddress(target_host)
+    rescue StandardError => e
+      "resolution_failed: #{e.message}"
+    end
+    $stdout.puts "[IAM Diag] host=#{target_host}, port=#{target_port}, resolved_ip=#{resolved_ip}, " \
+                 "user=#{env.iam_user_name}, driver=#{drv}"
+
     conn = Integration::DriverHelper.wrapper_connect(drv, **iam_config, **iam_props)
     result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
     expect(result.first['val'].to_i).to eq(1)
@@ -171,5 +178,98 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     expect(cache_size).to eq(1)
   ensure
     conns&.each { |c| Integration::DriverHelper.close(drv, c) if c }
+  end
+
+  context 'global database endpoint', features: [Integration::TestEnvironmentFeatures::GLOBAL_DATABASE] do
+    before do
+      skip 'Global Database not configured' unless env.global_cluster_endpoint
+    end
+
+    let(:gdb_config) do
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: env.global_cluster_endpoint,
+        port: writer.port,
+        user: env.iam_user_name,
+        password: 'anything',
+        dbname: info.default_dbname
+      )
+      case drv
+      when Integration::TestDriver::PG
+        config.merge(sslmode: 'require')
+      when Integration::TestDriver::MYSQL
+        config.merge(ssl_mode: :required)
+      else
+        config
+      end
+    end
+
+    it 'connects via global cluster endpoint with IAM' do
+      conn = Integration::DriverHelper.wrapper_connect(drv, **gdb_config, **iam_props)
+      result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
+      expect(result.first['val'].to_i).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'raises IamAuthError when iam_region is missing for global endpoint' do
+      props_no_region = {
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam',
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name =>
+          "[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{writer.port}"
+      }
+
+      expect do
+        Integration::DriverHelper.wrapper_connect(drv, **gdb_config, **props_no_region)
+      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IamAuthError, /unable to determine connection region/)
+    end
+
+    it 'connects to secondary cluster endpoint with IAM' do
+      skip 'Secondary cluster endpoint not available' unless env.secondary_cluster_endpoint
+
+      secondary_config = Integration::DriverHelper.native_config(
+        drv,
+        host: env.secondary_cluster_endpoint,
+        port: writer.port,
+        user: env.iam_user_name,
+        password: 'anything',
+        dbname: info.default_dbname
+      )
+      case drv
+      when Integration::TestDriver::PG
+        secondary_config = secondary_config.merge(sslmode: 'require')
+      when Integration::TestDriver::MYSQL
+        secondary_config = secondary_config.merge(ssl_mode: :required)
+      end
+
+      secondary_props = iam_props.merge(
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::IAM_REGION.name => env.secondary_region
+      )
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **secondary_config, **secondary_props)
+      result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
+      expect(result.first['val'].to_i).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'concurrent connections to global endpoint all succeed' do
+      threads = Array.new(3) do
+        Thread.new do
+          c = Integration::DriverHelper.wrapper_connect(drv, **gdb_config, **iam_props)
+          r = Integration::DriverHelper.execute(drv, c, 'SELECT 1 AS val')
+          [c, r.first['val'].to_i]
+        end
+      end
+
+      results = threads.map(&:value)
+      conns = results.map(&:first)
+      values = results.map(&:last)
+
+      expect(values).to all(eq(1))
+    ensure
+      conns&.each { |c| Integration::DriverHelper.close(drv, c) if c }
+    end
   end
 end

@@ -629,3 +629,39 @@ tasks.register<Test>("debug-bgd-pg-instance") {
         systemProperty("test-bg-only", "true")
     }
 }
+
+// Global Database
+
+tasks.register<Test>("test-gdb-pg") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-mysql-engine", "true")
+        systemProperty("exclude-ruby-3-3", "true")
+        systemProperty("exclude-global-database", "false")
+    }
+}
+
+tasks.register<Test>("test-gdb-mysql") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-ruby-3-3", "true")
+        systemProperty("exclude-global-database", "false")
+    }
+}

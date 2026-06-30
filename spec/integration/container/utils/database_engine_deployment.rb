@@ -21,5 +21,6 @@ module Integration
     RDS_MULTI_AZ_CLUSTER = :rds_multi_az_cluster
     RDS_MULTI_AZ_INSTANCE = :rds_multi_az_instance
     AURORA = :aurora
+    AURORA_GLOBAL = :aurora_global
   end
 end

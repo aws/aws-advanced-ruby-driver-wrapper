@@ -35,9 +35,9 @@ module AwsRubyDatabaseDriverWrapper
 
       def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
-        @props = props
+        @wrapper_props = props
 
-        @retry_util = Utils::RetryUtil.new(service_container, props)
+        @retry_util = Utils::RetryUtil.new(service_container)
         @failover_timeout = PropertyDefinition::FAILOVER_TIMEOUT_SEC.get_int(props)
         @reader_selector_strategy = PropertyDefinition::FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
         @failover_mode = nil
@@ -50,11 +50,11 @@ module AwsRubyDatabaseDriverWrapper
 
       attr_reader :subscribed_methods
 
-      def connect(host_info, props, is_initial_connection, pipeline_callable)
+      def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
         init_failover_mode
 
-        unless PropertyDefinition::ENABLE_CONNECT_FAILOVER.get_bool(@props)
-          return verified_connection(is_initial_connection, host_info, props, pipeline_callable)
+        unless PropertyDefinition::ENABLE_CONNECT_FAILOVER.get_bool(@wrapper_props)
+          return verified_connection(is_initial_connection, host_info, driver_props, pipeline_callable)
         end
 
         topology_host = host_service.hosts.find { |h| h.host_and_port == host_info&.host_and_port }
@@ -65,7 +65,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         begin
-          conn = verified_connection(is_initial_connection, host_info, props, pipeline_callable)
+          conn = verified_connection(is_initial_connection, host_info, driver_props, pipeline_callable)
           host_service.refresh_host_list if is_initial_connection
           conn
         rescue StandardError => e
@@ -132,7 +132,7 @@ module AwsRubyDatabaseDriverWrapper
       def init_failover_mode
         return unless @rds_url_type.nil?
 
-        @failover_mode = FailoverMode.from_value(PropertyDefinition::FAILOVER_MODE.get(@props))
+        @failover_mode = FailoverMode.from_value(PropertyDefinition::FAILOVER_MODE.get(@wrapper_props))
         initial_host = connection_service.initial_host_info
 
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host&.host)
@@ -355,7 +355,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def attempt_reader_connection(host_info)
-        conn = @service_container.plugin_manager.connect(host_info, @props, false, plugin_to_skip: self)
+        conn = @service_container.plugin_manager.connect(host_info, connection_service.driver_props, false, plugin_to_skip: self)
         # Since the roles in the host list might not be accurate, we execute a query to check the instance's role.
         role = db_dialect.host_role(conn)
 
@@ -391,7 +391,7 @@ module AwsRubyDatabaseDriverWrapper
         nil
       end
 
-      def verified_connection(is_initial_connection, host_info, props, connect_func)
+      def verified_connection(is_initial_connection, host_info, driver_props, connect_func)
         url_type = Utils::RdsUtils.identify_rds_type(host_info&.host)
         if url_type != Utils::RdsUrlType::RDS_WRITER_CLUSTER
           # We are not using a writer cluster endpoint. No verification needed - continue with the regular workflow.
@@ -420,7 +420,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # Attempt to correct the stale DNS problem by connecting to the writer instance.
         logger.debug { "Stale DNS data detected. Opening a connection to #{writer.host}" }
-        writer_conn = @service_container.plugin_manager.connect(writer, props, false, plugin_to_skip: self)
+        writer_conn = @service_container.plugin_manager.connect(writer, driver_props, false, plugin_to_skip: self)
         connection_service.initial_host_info = writer if is_initial_connection
 
         # Close the incorrect reader connection.

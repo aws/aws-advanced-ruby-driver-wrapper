@@ -98,6 +98,30 @@ module Integration
       @info.rds_endpoint
     end
 
+    def global_cluster_endpoint
+      @info.global_cluster_endpoint
+    end
+
+    def global_cluster_identifier
+      @info.global_cluster_identifier
+    end
+
+    def primary_region
+      @info.primary_region
+    end
+
+    def secondary_region
+      @info.secondary_region
+    end
+
+    def secondary_cluster_endpoint
+      @info.secondary_cluster_endpoint
+    end
+
+    def secondary_cluster_identifier
+      @info.secondary_cluster_identifier
+    end
+
     def proxy_info(instance_name)
       raise "Proxy not found: #{instance_name}" if @proxies.nil?
 
