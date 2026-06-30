@@ -42,7 +42,14 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       password: 'anything',
       dbname: info.default_dbname
     )
-    drv == Integration::TestDriver::PG ? config.merge(sslmode: 'require') : config
+    case drv
+    when Integration::TestDriver::PG
+      config.merge(sslmode: 'require')
+    when Integration::TestDriver::MYSQL
+      config.merge(ssl_mode: :required)
+    else
+      config
+    end
   end
 
   before do
@@ -94,7 +101,12 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       password: 'anything',
       dbname: info.default_dbname
     )
-    ip_config = ip_config.merge(sslmode: 'require') if drv == Integration::TestDriver::PG
+    case drv
+    when Integration::TestDriver::PG
+      ip_config = ip_config.merge(sslmode: 'require')
+    when Integration::TestDriver::MYSQL
+      ip_config = ip_config.merge(ssl_mode: :required, enable_cleartext_plugin: true)
+    end
 
     props_with_iam_host = iam_props.merge(
       AwsRubyDatabaseDriverWrapper::PropertyDefinition::IAM_HOST.name => instance_host
