@@ -25,6 +25,12 @@ module AwsRubyDatabaseDriverWrapper
       ACCESS_ERROR_SQL_STATES = Set['08004', '28P01', '28000'].freeze
       READ_ONLY_SQL_STATE = '25006'
 
+      LOGIN_ERROR_MESSAGES = [
+        'PAM authentication failed',
+        'password authentication failed',
+        'authentication failed'
+      ].freeze
+
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
       end
@@ -33,6 +39,19 @@ module AwsRubyDatabaseDriverWrapper
         return false if sql_state.nil?
 
         NETWORK_SQL_STATE_PREFIXES.any? { |prefix| sql_state.start_with?(prefix) }
+      end
+
+      def login_error?(error)
+        return true if super
+
+        # PG::ConnectionBad from auth failure during connect may not carry a SQLSTATE.
+        # Fall back to message inspection.
+        if defined?(PG::ConnectionBad) && error.is_a?(PG::ConnectionBad)
+          msg = error.message
+          return LOGIN_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) } if msg
+        end
+
+        false
       end
 
       def login_error_by_sql_state?(sql_state)
