@@ -94,9 +94,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
 
       it 'raises Timeout::Error when deadline expires' do
         deadline = Time.now + 0.01
-        expect {
+        expect do
           retry_util.connect_to_writer(plugin_to_skip, deadline: deadline)
-        }.to raise_error(Timeout::Error)
+        end.to raise_error(Timeout::Error)
       end
     end
 
@@ -107,9 +107,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
 
       it 'raises Timeout::Error when deadline expires' do
         deadline = Time.now + 0.01
-        expect {
+        expect do
           retry_util.connect_to_writer(plugin_to_skip, deadline: deadline)
-        }.to raise_error(Timeout::Error)
+        end.to raise_error(Timeout::Error)
       end
     end
 
@@ -120,9 +120,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
 
       it 'retries until timeout and closes any partial connections' do
         deadline = Time.now + 0.15
-        expect {
+        expect do
           retry_util.connect_to_writer(plugin_to_skip, deadline: deadline)
-        }.to raise_error(Timeout::Error)
+        end.to raise_error(Timeout::Error)
       end
     end
 
@@ -135,18 +135,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
       it 'closes the connection and retries until timeout' do
         deadline = Time.now + 0.15
         expect(connection).to receive(:close).at_least(:once)
-        expect {
+        expect do
           retry_util.connect_to_writer(plugin_to_skip, deadline: deadline)
-        }.to raise_error(Timeout::Error)
+        end.to raise_error(Timeout::Error)
       end
     end
 
     context 'when deadline has already passed' do
       it 'raises Timeout::Error immediately' do
         deadline = Time.now - 1
-        expect {
+        expect do
           retry_util.connect_to_writer(plugin_to_skip, deadline: deadline)
-        }.to raise_error(Timeout::Error)
+        end.to raise_error(Timeout::Error)
       end
     end
 
