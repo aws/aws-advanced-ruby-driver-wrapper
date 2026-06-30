@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../logging'
 require_relative '../errors'
 require_relative '../property_definition'
@@ -48,7 +49,7 @@ module AwsRubyDatabaseDriverWrapper
         validate_host_pattern!(@instance_template.host)
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host_info.host)
 
-        prefixed = @service_container.connection_service.prefixed_props[PropertyDefinition::TOPOLOGY_MONITORING_PREFIX] || {}
+        prefixed = @service_container.connection_service.prefixed_props[PropertyDefinition::TOPOLOGY_MONITORING_PREFIX] || ::Concurrent::Map.new
         @monitoring_driver_props, @monitoring_wrapper_props = build_monitoring_props(prefixed)
 
         register_monitor_type
@@ -59,7 +60,7 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Array<HostInfo>]
       def refresh
         stored = stored_topology
-        return stored unless stored.nil?
+        return stored unless stored.nil? || stored.empty?
 
         return initial_host_list unless @service_container.dialect_service.dialect_confirmed?
 
@@ -112,7 +113,7 @@ module AwsRubyDatabaseDriverWrapper
         pattern = PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.get(props)
         if pattern
           port = initial_host_info.port
-          HostInfo.new(host: pattern, port: port)
+          HostInfo.new(host: pattern, port:)
         else
           auto_pattern = Utils::RdsUtils.rds_instance_host_pattern(initial_host_info.host)
           HostInfo.new(host: auto_pattern, port: initial_host_info.port)

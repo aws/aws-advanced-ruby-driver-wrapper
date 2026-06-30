@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative 'aws_ruby_database_driver_wrapper/version'
+require_relative 'aws_ruby_database_driver_wrapper/custom_configuration'
 require_relative 'aws_ruby_database_driver_wrapper/property_definition'
 require_relative 'aws_ruby_database_driver_wrapper/logging'
 require_relative 'aws_ruby_database_driver_wrapper/utils/rds_utils'
@@ -25,12 +26,34 @@ require_relative 'aws_ruby_database_driver_wrapper/monitoring/monitor'
 require_relative 'aws_ruby_database_driver_wrapper/services/shutdown_service'
 
 module AwsRubyDatabaseDriverWrapper
+  @config = Configuration.new
+
+  class << self
+    attr_reader :config
+  end
+
   def self.shutdown_service
     @shutdown_service ||= Services::ShutdownService.instance
   end
 
   def self.shutdown(grace_period_sec: 10)
     shutdown_service.shutdown(grace_period_sec)
+  end
+
+  def self.clear_caches
+    require_relative 'aws_ruby_database_driver_wrapper/services/service_utility'
+    require_relative 'aws_ruby_database_driver_wrapper/services/host_service'
+    Services::CoreServices.storage_service.clear_all
+    Utils::RdsUtils.clear_cache
+    Services::DialectService.known_endpoint_dialects.clear
+    Services::HostService.clear_id_cache
+  end
+
+  def self.release_resources
+    require_relative 'aws_ruby_database_driver_wrapper/services/service_utility'
+    Services::CoreServices.monitor_service.shutdown(grace_period: 5)
+    Services::CoreServices.event_publisher.release_resources
+    clear_caches
   end
 end
 

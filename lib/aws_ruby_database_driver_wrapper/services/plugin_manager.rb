@@ -19,6 +19,7 @@ require_relative '../errors'
 require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
+require_relative '../plugins/iam_auth_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -29,14 +30,16 @@ module AwsRubyDatabaseDriverWrapper
       private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :DEFAULT_PLUGINS, :NOOP_CALLABLE
 
       @plugin_classes = {
-        'failover' => Plugins::FailoverPlugin
+        'failover' => Plugins::FailoverPlugin,
+        'iam' => Plugins::IamAuthPlugin
       }
 
       # The final list of plugins will be sorted by weight, starting from the lowest values up to
       # the highest values. The first plugin of the list will have the lowest weight, and the
       # last one will have the highest weight.
       @plugin_weights = {
-        Plugins::FailoverPlugin => 400
+        Plugins::FailoverPlugin => 400,
+        Plugins::IamAuthPlugin => 1800
       }
 
       class << self
@@ -60,7 +63,7 @@ module AwsRubyDatabaseDriverWrapper
             plugin.connect(host_info, props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
-          plugin_to_skip: plugin_to_skip
+          plugin_to_skip:
         )
       end
 
@@ -71,7 +74,7 @@ module AwsRubyDatabaseDriverWrapper
             plugin.internal_connect(host_info, props, wrapper_override_props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
-          plugin_to_skip: plugin_to_skip
+          plugin_to_skip:
         )
       end
 
@@ -117,14 +120,14 @@ module AwsRubyDatabaseDriverWrapper
         plugin_classes = plugin_codes.empty? ? [] : get_plugin_classes(codes_list, wrapper_props)
 
         plugins = plugin_classes.map do |plugin_class|
-          plugin_class.new(service_container, **wrapper_props)
+          plugin_class.new(service_container, wrapper_props)
         end
 
-        plugins << Plugins::DefaultPlugin.new(service_container, **wrapper_props)
+        plugins << Plugins::DefaultPlugin.new(service_container, wrapper_props)
         plugins
       end
 
-      def get_plugin_classes(plugin_code_list, wrapper_props)
+      def get_plugin_classes(plugin_code_list, _wrapper_props)
         plugin_classes = plugin_code_list.map do |plugin_code|
           plugin_class = self.class.plugin_classes[plugin_code]
           raise Errors::AwsError, "Invalid plugin: #{plugin_code}" if plugin_class.nil?
@@ -134,10 +137,8 @@ module AwsRubyDatabaseDriverWrapper
 
         return [] if plugin_classes.empty?
 
-        if wrapper_props.fetch(:auto_sort_plugins, true)
-          weights = plugin_weights_for(plugin_classes)
-          plugin_classes.sort_by! { |ft| weights[ft] }
-        end
+        weights = plugin_weights_for(plugin_classes)
+        plugin_classes.sort_by! { |ft| weights[ft] }
 
         plugin_classes
       end

@@ -52,15 +52,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       expect(config.initial_host_info.host).to eq('host1,host2')
       expect(config.initial_host_info.port).to eq('-1')
       expect(config.driver_props[:host]).to eq('host1,host2')
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props.key?(:port)).to be false
     end
 
     it 'parses multi-host URIs with mixed ports (only first host has port)' do
       config = parser.parse(:postgresql, 'postgresql://host1:5433,host2/db')
       expect(config.initial_host_info.host).to eq('host1,host2')
       expect(config.initial_host_info.port).to eq('5433,-1')
-      expect(config.driver_props).not_to have_key('host1,host2')
-      expect(config.driver_props).not_to have_key('5433,')
+      expect(config.driver_props.key?(:'host1,host2')).to be false
+      expect(config.driver_props.key?(:'5433,')).to be false
     end
 
     it 'extracts wrapper properties from query params into wrapper_config' do
@@ -72,22 +72,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'keeps non-wrapper query params in driver_config' do
       config = parser.parse(:postgresql, 'postgresql://host/db?sslmode=require&wrapper_plugins=failover')
       expect(config.driver_props[:sslmode]).to eq('require')
-      expect(config.driver_props).not_to have_key(:wrapper_plugins)
+      expect(config.driver_props.key?(:wrapper_plugins)).to be false
       expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
     end
 
     it 'handles URI with no query params' do
       config = parser.parse(:postgresql, 'postgresql://host/db')
-      expect(config.wrapper_props).to eq({})
+      expect(config.wrapper_props).to be_empty
       expect(config.driver_props[:host]).to eq('host')
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props.key?(:port)).to be false
     end
 
     it 'handles URI with no database' do
       config = parser.parse(:postgresql, 'postgresql://host:5432')
       expect(config.driver_props[:host]).to eq('host')
       expect(config.driver_props[:port]).to eq('5432')
-      expect(config.driver_props).not_to have_key(:dbname)
+      expect(config.driver_props.key?(:dbname)).to be false
     end
 
     it 'URL-decodes user and password' do
@@ -113,7 +113,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'postgresql://myhost/mydb')
       expect(config.initial_host_info.host).to eq('myhost')
       expect(config.initial_host_info.port).to eq('-1')
-      expect(config.driver_props).not_to have_key(:port)
+      expect(config.driver_props.key?(:port)).to be false
     end
 
     it 'parses three-host URI with all ports' do
@@ -137,8 +137,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, host: 'myhost', wrapper_plugins: 'failover', cluster_id: 'prod')
       expect(config.wrapper_props[:wrapper_plugins]).to eq('failover')
       expect(config.wrapper_props[:cluster_id]).to eq('prod')
-      expect(config.driver_props).not_to have_key(:wrapper_plugins)
-      expect(config.driver_props).not_to have_key(:cluster_id)
+      expect(config.driver_props.key?(:wrapper_plugins)).to be false
+      expect(config.driver_props.key?(:cluster_id)).to be false
       expect(config.driver_props[:host]).to eq('myhost')
     end
 
@@ -182,9 +182,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
                             wrapper_plugins: 'failover',
                             cluster_id: 'no-leak',
                             failover_timeout_sec: 60)
-      expect(config.driver_props).not_to have_key(:wrapper_plugins)
-      expect(config.driver_props).not_to have_key(:cluster_id)
-      expect(config.driver_props).not_to have_key(:failover_timeout_sec)
+      expect(config.driver_props.key?(:wrapper_plugins)).to be false
+      expect(config.driver_props.key?(:cluster_id)).to be false
+      expect(config.driver_props.key?(:failover_timeout_sec)).to be false
     end
 
     it 'handles a single port across multiple hosts (integer port)' do
@@ -285,7 +285,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     it 'extracts wrapper properties from conninfo' do
       config = parser.parse(:postgresql, 'host=localhost port=5432 dbname=mydb cluster_id=test')
       expect(config.wrapper_props[:cluster_id]).to eq('test')
-      expect(config.driver_props).not_to have_key(:cluster_id)
+      expect(config.driver_props.key?(:cluster_id)).to be false
     end
 
     it 'handles single-quoted values with spaces' do
@@ -310,15 +310,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
 
   describe 'no type coercion at parse time' do
     it 'leaves string values as strings from URI query params' do
-      config = parser.parse(:postgresql, 'postgresql://host/db?auto_sort_plugin_order=true&failover_timeout_sec=120')
+      config = parser.parse(:postgresql, 'postgresql://host/db?failover_timeout_sec=120')
       # Values stay as strings — coercion happens at read time via WrapperProperty getters
-      expect(config.wrapper_props[:auto_sort_plugin_order]).to eq('true')
       expect(config.wrapper_props[:failover_timeout_sec]).to eq('120')
     end
 
     it 'preserves native types from hash input' do
-      config = parser.parse(:postgresql, host: 'h', auto_sort_plugin_order: true, failover_timeout_sec: 120)
-      expect(config.wrapper_props[:auto_sort_plugin_order]).to be true
+      config = parser.parse(:postgresql, host: 'h', failover_timeout_sec: 120)
       expect(config.wrapper_props[:failover_timeout_sec]).to eq(120)
     end
   end
@@ -388,6 +386,52 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
       config = parser.parse(:postgresql, 'myhost', 5432)
       expect(config.original_host).to eq('myhost')
       expect(config.original_port).to eq('5432')
+    end
+  end
+
+  describe 'type validation' do
+    context 'wrapper props' do
+      it 'accepts a valid type' do
+        expect { parser.parse(:postgresql, host: 'h', cluster_id: 'my-cluster') }.not_to raise_error
+      end
+
+      it 'accepts a string integer for an Integer-typed property' do
+        expect { parser.parse(:postgresql, host: 'h', failover_timeout_sec: '120') }.not_to raise_error
+      end
+
+      it 'raises TypeError for a wrong type' do
+        expect do
+          parser.parse(:postgresql, host: 'h', failover_timeout_sec: [120])
+        end.to raise_error(TypeError, /failover_timeout_sec/)
+      end
+
+      it 'allows nil values regardless of type' do
+        expect { parser.parse(:postgresql, host: 'h', cluster_id: nil) }.not_to raise_error
+      end
+
+      it 'ignores unknown wrapper keys' do
+        expect { parser.parse(:postgresql, host: 'h', unknown_prop: 123) }.not_to raise_error
+      end
+    end
+
+    context 'prefixed props' do
+      it 'accepts a valid type in prefixed props' do
+        expect { parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: 60) }.not_to raise_error
+      end
+
+      it 'accepts a string integer for an Integer-typed prefixed property' do
+        expect { parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: '60') }.not_to raise_error
+      end
+
+      it 'raises TypeError for a wrong type in prefixed props' do
+        expect do
+          parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: [60])
+        end.to raise_error(TypeError, /failover_timeout_sec/)
+      end
+
+      it 'ignores unknown prefixed keys' do
+        expect { parser.parse(:postgresql, host: 'h', topology_monitoring_unknown_prop: 123) }.not_to raise_error
+      end
     end
   end
 

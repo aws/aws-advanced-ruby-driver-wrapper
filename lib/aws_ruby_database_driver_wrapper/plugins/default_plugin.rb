@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
+require 'concurrent'
 require_relative '../errors'
 require_relative '../host/host_info'
 require_relative '../host/host_availability'
@@ -25,9 +25,9 @@ module AwsRubyDatabaseDriverWrapper
       SUBSCRIBED_METHODS = Set['*'].freeze
       HOST_PORT_KEYS = %i[host port].freeze
 
-      def initialize(service_container, **options)
+      def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
-        @options = options
+        @props = props
       end
 
       def subscribed_methods
@@ -70,6 +70,9 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
+        init_func = AwsRubyDatabaseDriverWrapper.config.connection_init_func
+        init_func&.call(conn, host_info)
+
         conn
       end
 
@@ -78,11 +81,11 @@ module AwsRubyDatabaseDriverWrapper
         driver_dialect.connect(host_info, props)
       end
 
-      def execute(target_method_name, target_callable, *args, **options, &block)
+      def execute(target_method_name, target_callable, *args, **, &)
         session = @service_container.session_state_service
         autocommit_before = session&.autocommit?
 
-        result = target_callable.call(*args, **options, &block)
+        result = target_callable.call(*args, **, &)
 
         session&.update_transaction_state(target_method_name, args, autocommit_before)
 

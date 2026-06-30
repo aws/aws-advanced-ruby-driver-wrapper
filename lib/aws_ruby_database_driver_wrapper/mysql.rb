@@ -21,14 +21,14 @@ require_relative 'errors'
 
 module AwsRubyDatabaseDriverWrapper
   class Mysql2WrapperClient
-    def self.new(**options)
+    def self.new(**)
       instance = allocate
-      instance.send(:initialize, **options)
+      instance.send(:initialize, **)
       instance
     end
 
-    def initialize(**options)
-      config = Utils::ConnectionConfigParser.parse(:mysql2, **options)
+    def initialize(**)
+      config = Utils::ConnectionConfigParser.parse(:mysql2, **)
       @service_container = Services::ServiceUtility.create_standard_container(config)
       @async_conn = nil
       conn_service = @service_container.connection_service
@@ -85,15 +85,15 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- method_missing: non-network bypasses pipeline --
 
-    def method_missing(method_name, *args, **options, &block)
+    def method_missing(method_name, ...)
       conn = current_conn
       raise NoMethodError, 'Connection not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"
-      return conn.send(method_name, *args, **options, &block) unless network_bound_methods.include?(method_key)
+      return conn.send(method_name, ...) unless network_bound_methods.include?(method_key)
 
-      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, *args, **options, &block)
+      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, ...)
       wrap_mysql_result(result)
     end
 
@@ -129,11 +129,11 @@ module AwsRubyDatabaseDriverWrapper
       @mysql_stmt = mysql_stmt
     end
 
-    def execute(*params, **options)
+    def execute(*params, **)
       result = pm.execute(
         RubyMethod::STATEMENT_EXECUTE, current_conn,
         ->(*p, **o) { @mysql_stmt.execute(*p, **o) },
-        *params, bounded_conn: @connection, **options
+        *params, bounded_conn: @connection, **
       )
       return result unless result.is_a?(Mysql2::Result)
 

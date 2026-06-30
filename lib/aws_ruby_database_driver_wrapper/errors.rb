@@ -37,5 +37,7 @@ module AwsRubyDatabaseDriverWrapper
         super('Failover succeeded.', needs_reconfiguration: true)
       end
     end
+
+    class IamAuthError < AwsError; end
   end
 end

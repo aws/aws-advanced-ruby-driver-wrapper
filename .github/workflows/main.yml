@@ -1,6 +1,7 @@
 name: Check and Unit Tests
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -27,7 +28,7 @@ jobs:
   markdown-link-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: tcort/github-action-markdown-link-check@v1
         with:
           use-quiet-mode: 'yes'
@@ -36,7 +37,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -51,18 +52,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - ruby-version: '2.7'
-            gemfile: gemfiles/activerecord_7.0.gemfile
-          - ruby-version: '3.1'
-            gemfile: gemfiles/activerecord_7.1.gemfile
-          - ruby-version: '3.2'
-            gemfile: gemfiles/activerecord_7.2.gemfile
           - ruby-version: '3.3'
+            gemfile: gemfiles/activerecord_7.2.gemfile
+          - ruby-version: '3.4'
             gemfile: gemfiles/activerecord_8.0.gemfile
+          - ruby-version: '4.0'
+            gemfile: gemfiles/activerecord_8.1.gemfile
     env:
       BUNDLE_GEMFILE: ${{ matrix.gemfile }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Set up Ruby ${{ matrix.ruby-version }}
         uses: ruby/setup-ruby@v1
         with:
@@ -83,7 +82,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.3'

@@ -24,8 +24,7 @@ module AwsRubyDatabaseDriverWrapper
       :plugin_manager,
       :session_state_service,
       :storage_service,
-      :monitor_service,
-      keyword_init: true
+      :monitor_service
     )
   end
 end

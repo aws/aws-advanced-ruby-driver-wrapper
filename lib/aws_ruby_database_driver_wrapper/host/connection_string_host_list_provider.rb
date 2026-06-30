@@ -87,7 +87,7 @@ module AwsRubyDatabaseDriverWrapper
                          port = ports[i]&.strip
                          port.nil? || port.empty? ? HostInfo::NO_PORT : port
                        end
-          HostInfo.new(host: host, port: port_value, role: HostRole::UNKNOWN)
+          HostInfo.new(host:, port: port_value, role: HostRole::UNKNOWN)
         end
       end
     end

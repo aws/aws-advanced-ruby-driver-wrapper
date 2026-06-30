@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'uri'
+require 'concurrent'
 require_relative 'connection_config'
 require_relative '../property_definition'
 require_relative '../host/host_availability'
@@ -25,7 +26,7 @@ require_relative '../host/host_role'
 module AwsRubyDatabaseDriverWrapper
   module Utils
     module ConnectionConfigParser
-      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|(\S+))/.freeze
+      CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|([^\s]++))/
 
       module_function
 
@@ -75,7 +76,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # eg {}, {sslmode: "require"}, {}
         wrapper_config, extra_driver, prefixed_config = split_props(all_props)
-        driver_config.merge!(extra_driver)
+        extra_driver.each { |k, v| driver_config[k] = v }
 
         initial_host_info = string_to_host_info(host_section)
         host, port = host_port_from_uri(host_section)
@@ -86,11 +87,11 @@ module AwsRubyDatabaseDriverWrapper
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
-          initial_host_info: initial_host_info,
+          initial_host_info:,
           original_host: host,
           original_port: port,
           multi_host_url: host.include?(','),
-          driver_name: driver_name
+          driver_name:
         )
       end
 
@@ -118,11 +119,11 @@ module AwsRubyDatabaseDriverWrapper
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
-          initial_host_info: initial_host_info,
-          original_host: original_host,
-          original_port: original_port,
+          initial_host_info:,
+          original_host:,
+          original_port:,
           multi_host_url: original_host.to_s.include?(','),
-          driver_name: driver_name
+          driver_name:
         )
       end
 
@@ -144,11 +145,11 @@ module AwsRubyDatabaseDriverWrapper
           wrapper_props: wrapper_config,
           driver_props: driver_config,
           prefixed_props: prefixed_config,
-          initial_host_info: initial_host_info,
-          original_host: original_host,
-          original_port: original_port,
+          initial_host_info:,
+          original_host:,
+          original_port:,
           multi_host_url: original_host.to_s.include?(','),
-          driver_name: driver_name
+          driver_name:
         )
       end
 
@@ -156,15 +157,15 @@ module AwsRubyDatabaseDriverWrapper
       # Keys matching a known prefix are stripped and grouped by prefix in prefixed_config.
       # Known wrapper properties go to wrapper_config. Everything else goes to driver_config.
       def split_props(props)
-        wrapper_config = {}
-        driver_config = {}
-        prefixed_config = {}
+        wrapper_config = ::Concurrent::Map.new
+        driver_config = ::Concurrent::Map.new
+        prefixed_config = ::Concurrent::Map.new
 
         props.each do |key, value|
           key_s = key.to_s
           prefix = PropertyDefinition::KNOWN_PREFIXES.find { |p| key_s.start_with?(p) }
           if prefix
-            (prefixed_config[prefix] ||= {})[key_s.delete_prefix(prefix).to_sym] = value
+            (prefixed_config[prefix] ||= ::Concurrent::Map.new)[key_s.delete_prefix(prefix).to_sym] = value
           elsif PropertyDefinition.wrapper_property?(key)
             wrapper_config[key.to_sym] = value
           else
@@ -172,7 +173,24 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
+        validate_props!(wrapper_config)
+        prefixed_config.each_value { |prefixed| validate_props!(prefixed) }
+
         [wrapper_config, driver_config, prefixed_config]
+      end
+
+      # Validates that values in a config hash match the expected type of their corresponding WrapperProperty.
+      # Raises TypeError if a value is present but incompatible. Strings that represent valid integers
+      # are accepted for Integer-typed properties.
+      def validate_props!(config)
+        config.each do |key, value|
+          prop = PropertyDefinition::KNOWN_PROPERTIES[key]
+          next if prop&.type.nil? || value.nil?
+          next if value.is_a?(prop.type)
+          next if prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/)
+
+          raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}"
+        end
       end
 
       # Forms a HostInfo object from a URI host section string.

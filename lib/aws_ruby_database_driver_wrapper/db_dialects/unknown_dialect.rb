@@ -46,6 +46,10 @@ module AwsRubyDatabaseDriverWrapper
         raise NotImplementedError, 'Unable to gather host id, connected to unknown DB type.'
       end
 
+      def instance_identity(_connection)
+        nil
+      end
+
       def dialect?(_connection)
         false
       end
@@ -61,7 +65,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param service_container [Services::ServiceContainer]
       # @return [Host::ConnectionStringHostListProvider] the host list provider
       def create_host_list_provider(service_container)
-        Host::ConnectionStringHostListProvider.new(service_container: service_container)
+        Host::ConnectionStringHostListProvider.new(service_container:)
       end
     end
   end

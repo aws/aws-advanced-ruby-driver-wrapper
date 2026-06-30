@@ -17,7 +17,7 @@
 module ActiveRecordAdapterHelper
   # Resets the quoted_table_name cache on a list of model classes.
   # This is necessary when switching between PG and MySQL adapters in the same process
-  # because AR 7.2 caches quoted_table_name using adapter_class.quote_table_name.
+  # because AR caches quoted_table_name using adapter_class.quote_table_name.
   def self.reset_table_name_cache(model_classes)
     model_classes.each { |klass| klass.instance_variable_set(:@quoted_table_name, nil) }
   end

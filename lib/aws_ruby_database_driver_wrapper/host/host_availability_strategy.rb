@@ -17,9 +17,7 @@
 module AwsRubyDatabaseDriverWrapper
   module Host
     class HostAvailabilityStrategy
-      def host_availability(raw_host_availability)
-        raw_host_availability
-      end
+      def host_availability(raw_host_availability) = raw_host_availability
 
       def host_availability=(_host_availability)
         # Intentionally do nothing.

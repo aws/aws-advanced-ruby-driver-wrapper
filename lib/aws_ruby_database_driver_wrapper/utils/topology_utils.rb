@@ -48,12 +48,12 @@ module AwsRubyDatabaseDriverWrapper
 
         Host::HostInfo.new(
           host: endpoint,
-          port: port,
-          role: role,
+          port:,
+          role:,
           availability: Host::HostAvailability::AVAILABLE,
-          weight: weight,
+          weight:,
           id: instance_id,
-          last_update_time: last_update_time
+          last_update_time:
         )
       end
 

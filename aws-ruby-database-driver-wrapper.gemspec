@@ -26,7 +26,7 @@ Gem::Specification.new do |spec|
   # TODO: uncomment URIs
   # spec.homepage = 'github.com/aws/aws-ruby-database-driver-wrapper'
   spec.license = 'Apache-2.0'
-  spec.required_ruby_version = '>= 2.7.0'
+  spec.required_ruby_version = '>= 3.3.0'
 
   # spec.metadata['homepage_uri'] = spec.homepage
   # spec.metadata['source_code_uri'] = 'github.com/aws/aws-ruby-database-driver-wrapper'
@@ -43,6 +43,8 @@ Gem::Specification.new do |spec|
   spec.bindir = 'exe'
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']
+
+  spec.add_dependency 'concurrent-ruby', '~> 1.0'
 
   spec.post_install_message = <<~MSG
     ═══════════════════════════════════════════════════════════════

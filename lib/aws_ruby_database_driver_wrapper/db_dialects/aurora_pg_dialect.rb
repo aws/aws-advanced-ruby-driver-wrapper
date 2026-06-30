@@ -43,7 +43,8 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       INSTANCE_IDENTITY_QUERY = <<~SQL
-        SELECT pg_catalog.aurora_db_instance_identifier() AS instance_name
+        SELECT pg_catalog.aurora_db_instance_identifier() AS instance_id,
+               pg_catalog.aurora_db_instance_identifier() AS instance_name
       SQL
 
       WRITER_ID_QUERY = <<~SQL
@@ -56,7 +57,7 @@ module AwsRubyDatabaseDriverWrapper
         SELECT 'pg_catalog.get_blue_green_fast_switchover_metadata'::regproc
       SQL
 
-      BG_STATUS_QUERY = <<~SQL
+      BG_STATUS_QUERY = <<~SQL.freeze
         SELECT * FROM pg_catalog.get_blue_green_fast_switchover_metadata('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')
       SQL
 
@@ -116,7 +117,7 @@ module AwsRubyDatabaseDriverWrapper
         require_relative '../utils/aurora_topology_utils'
         require_relative '../host/rds_host_list_provider'
         topology_utils = Utils::AuroraTopologyUtils.new(dialect: self)
-        Host::RdsHostListProvider.new(service_container: service_container, topology_utils: topology_utils)
+        Host::RdsHostListProvider.new(service_container:, topology_utils:)
       end
     end
   end

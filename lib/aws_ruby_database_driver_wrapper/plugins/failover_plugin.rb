@@ -14,14 +14,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'set'
+require 'concurrent'
 
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     class FailoverPlugin
-      def initialize(service_container, **options)
+      def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
-        @options = options
+        @props = props
         @subscribed_methods = Set['connect'] | service_container.dialect_service.driver_dialect.network_bound_methods
       end
 
