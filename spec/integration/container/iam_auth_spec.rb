@@ -55,11 +55,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
     begin
-      AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
-        AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(
-          event_publisher: nil
-        )
-      )
+      AwsRubyDatabaseDriverWrapper.clear_caches
     rescue StandardError
       nil
     end
