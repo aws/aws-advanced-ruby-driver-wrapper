@@ -671,6 +671,14 @@ public class TestEnvironment implements AutoCloseable {
         if (clusterExists) {
           throw new RuntimeException("Can't pick up a cluster name.");
         }
+      } else {
+        // A specific RDS_DB_NAME was provided. If the cluster already exists, fail without cleanup.
+        if (env.auroraUtil.doesClusterExist(env.rdsDbName)) {
+          throw new RuntimeException(
+              "REUSE_RDS_DB is false but DB cluster '" + env.rdsDbName + "' already exists. "
+                  + "Either set REUSE_RDS_DB=true to reuse the existing cluster, "
+                  + "or remove/rename the existing cluster before running tests.");
+        }
       }
 
       try {
@@ -839,6 +847,14 @@ public class TestEnvironment implements AutoCloseable {
       if (StringUtils.isNullOrEmpty(env.rdsDbName)) {
         env.rdsDbName = getRandomName(env);
         LOGGER.finer("RDS Instance to create: " + env.rdsDbName);
+      } else {
+        // A specific RDS_DB_NAME was provided. If the instance already exists, fail without cleanup.
+        if (env.auroraUtil.doesInstanceExist(env.rdsDbName)) {
+          throw new RuntimeException(
+              "REUSE_RDS_DB is false but RDS instance '" + env.rdsDbName + "' already exists. "
+                  + "Either set REUSE_RDS_DB=true to reuse the existing instance, "
+                  + "or remove/rename the existing instance before running tests.");
+        }
       }
 
       try {
