@@ -86,6 +86,10 @@ module AwsRubyDatabaseDriverWrapper
         @config.initial_host_info
       end
 
+      def initial_host_info=(host_info)
+        @config.initial_host_info = host_info
+      end
+
       # @return [Hash{String => Hash}] prefixed props keyed by prefix (already stripped)
       def prefixed_props
         @config.prefixed_props

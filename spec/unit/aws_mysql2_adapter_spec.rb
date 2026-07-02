@@ -52,7 +52,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsMysql2Adapter do
 
     context 'when exception is a FailoverFailedError' do
       it 'returns a connection error and sets connection_broken' do
-        exception = AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError.new
+        exception = AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError.new('')
         pool = double('pool')
         adapter.instance_variable_set(:@pool, pool)
 
