@@ -81,6 +81,10 @@ module AwsRubyDatabaseDriverWrapper
         cfg[:port] = host_info.port.to_i if host_info.port_specified?
         cfg
       end
+
+      def user_property_key
+        :username
+      end
     end
   end
 end

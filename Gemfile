@@ -33,6 +33,7 @@ end
 
 group :test do
   gem 'aws-sdk-rds'
+  gem 'aws-sdk-secretsmanager'
   gem 'dotenv'
   gem 'rspec'
   gem 'simplecov', require: false

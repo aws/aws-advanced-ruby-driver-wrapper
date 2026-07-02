@@ -44,7 +44,7 @@ module AwsRubyDatabaseDriverWrapper
         @topology_utils = topology_utils
 
         props = @service_container.connection_service.wrapper_props
-        @cluster_id = PropertyDefinition::CLUSTER_ID.get(props).to_s
+        @cluster_id = PropertyDefinition::CLUSTER_ID.get_string(props)
         @instance_template = build_instance_template(props)
         validate_host_pattern!(@instance_template.host)
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host_info.host)

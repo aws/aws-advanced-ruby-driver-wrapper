@@ -43,5 +43,10 @@ module AwsRubyDatabaseDriverWrapper
       val = get(props, override)
       val.is_a?(Integer) ? val : val.to_i
     end
+
+    def get_string(props, override = nil)
+      val = get(props, override)
+      val&.to_s
+    end
   end
 end
