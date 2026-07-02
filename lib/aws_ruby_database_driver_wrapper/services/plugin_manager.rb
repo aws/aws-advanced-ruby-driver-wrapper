@@ -20,6 +20,7 @@ require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
+require_relative '../plugins/secrets_manager_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -31,7 +32,8 @@ module AwsRubyDatabaseDriverWrapper
 
       @plugin_classes = {
         'failover' => Plugins::FailoverPlugin,
-        'iam' => Plugins::IamAuthPlugin
+        'iam' => Plugins::IamAuthPlugin,
+        'secretsManager' => Plugins::SecretsManagerPlugin
       }
 
       # The final list of plugins will be sorted by weight, starting from the lowest values up to
@@ -39,7 +41,8 @@ module AwsRubyDatabaseDriverWrapper
       # last one will have the highest weight.
       @plugin_weights = {
         Plugins::FailoverPlugin => 400,
-        Plugins::IamAuthPlugin => 1800
+        Plugins::IamAuthPlugin => 1800,
+        Plugins::SecretsManagerPlugin => 1900
       }
 
       class << self

@@ -67,6 +67,12 @@ module AwsRubyDatabaseDriverWrapper
       def prepare_connect_config(host_info, config)
         raise NotImplementedError
       end
+
+      # Returns the property key the underlying driver expects for the database username.
+      # Override in driver-specific dialects where the key differs.
+      def user_property_key
+        :user
+      end
     end
   end
 end
