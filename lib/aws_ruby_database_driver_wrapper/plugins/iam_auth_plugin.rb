@@ -59,20 +59,21 @@ module AwsRubyDatabaseDriverWrapper
         user = props[:user] || props[:username]
         raise Errors::IamAuthError, 'IamAuthPlugin: :user is required' if user.nil? || user.empty?
 
-        host = Utils::IamAuthUtils.resolve_host(PropertyDefinition::IAM_HOST.get(props), host_info)
+        host = Utils::IamAuthUtils.resolve_host(PropertyDefinition::IAM_HOST.get(@props), host_info)
         rds_type = Utils::RdsUtils.identify_rds_type(host)
         region = Utils::IamAuthUtils.region_for(
-          host:, props:, rds_type:, credentials_provider: @credentials_provider, rds_client: rds_client
+          host:, props: @props, rds_type:, credentials_provider: @credentials_provider,
+          rds_client_func: -> { rds_client(PropertyDefinition::IAM_REGION.get(@props)) }
         )
         unless region
           raise Errors::IamAuthError,
                 'IamAuthPlugin: unable to determine AWS region; set :iam_region or use an RDS hostname'
         end
 
-        token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(props).to_sym
+        token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(@props).to_sym
 
         port = Utils::IamAuthUtils.resolve_port(
-          props[:iam_default_port],
+          PropertyDefinition::IAM_PORT.get(@props),
           host_info,
           @service_container.dialect_service.db_dialect.default_port
         )
@@ -115,8 +116,11 @@ module AwsRubyDatabaseDriverWrapper
         @token_generator ||= Aws::RDS::AuthTokenGenerator.new(credentials: @credentials_provider)
       end
 
-      def rds_client
-        @rds_client ||= Aws::RDS::Client.new(credentials: @credentials_provider)
+      def rds_client(region = nil)
+        @rds_client ||= Aws::RDS::Client.new(
+          credentials: @credentials_provider,
+          **(region ? { region: region } : {})
+        )
       end
 
       def ensure_aws_sdk!
