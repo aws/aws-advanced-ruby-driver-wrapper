@@ -114,8 +114,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       .and_return(AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
   end
 
-  def build_plugin
-    described_class.new(mock_service_container)
+  def build_plugin(wrapper_props = Concurrent::Map.new)
+    described_class.new(mock_service_container, wrapper_props)
   end
 
   # Connects through the plugin, always raises inside the pipeline callable,
@@ -152,27 +152,27 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
-  describe '#connect with invalid iam_default_port and host port set' do
+  describe '#connect with invalid iam_port and host port set' do
     it 'falls back to the host port' do
       port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_1234_cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_default_port: '0')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info(port: 1234), props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '0' }), host_info: pg_host_info(port: 1234), props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
   end
 
-  describe '#connect with invalid iam_default_port and no host port' do
+  describe '#connect with invalid iam_port and no host port' do
     it 'falls back to the dialect default port' do
       cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_default_port: '0')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '0' }), host_info: pg_host_info, props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -190,14 +190,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
-  describe '#connect with iam_default_port set to 9999' do
-    it 'uses iam_default_port in the cache key, overriding the host port' do
+  describe '#connect with iam_port set to 9999' do
+    it 'uses iam_port in the cache key, overriding the host port' do
       port_9999_cache_key = "us-east-2:#{PG_HOST}:9999:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_9999_cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_default_port: '9999')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info(port: 1234), props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '9999' }), host_info: pg_host_info(port: 1234), props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -210,8 +210,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, us_west_cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_region: 'us-west-1')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: arbitrary_host_info(us_west_host), props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_region: 'us-west-1' }), host_info: arbitrary_host_info(us_west_host),
+                                        props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -258,8 +259,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       override_cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, override_cache_key).and_return(nil)
 
-      props = base_pg_props.merge(iam_host: PG_HOST, iam_region: 'us-east-2')
-      connect_and_capture_token(plugin: build_plugin, host_info: arbitrary_host_info('8.8.8.8'), props:)
+      props = base_pg_props
+      connect_and_capture_token(plugin: build_plugin({ iam_host: PG_HOST, iam_region: 'us-east-2' }),
+                                host_info: arbitrary_host_info('8.8.8.8'), props:)
 
       expect(mock_token_generator).to have_received(:auth_token).with(hash_including(endpoint: "#{PG_HOST}:#{DEFAULT_PG_PORT}"))
     end
@@ -417,7 +419,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
         props: anything,
         rds_type: RDS_URL_TYPE::RDS_GLOBAL_WRITER_CLUSTER,
         credentials_provider: anything,
-        rds_client: anything
+        rds_client_func: anything
       )
     end
 
@@ -457,8 +459,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, gdb_explicit_cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_region: 'eu-west-1')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: gdb_host_info, props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_region: 'eu-west-1' }), host_info: gdb_host_info, props:)
 
       expect(token).to eq(TEST_TOKEN)
       expect(IAM_AUTH_UTILS).not_to have_received(:region_from_global_cluster)
