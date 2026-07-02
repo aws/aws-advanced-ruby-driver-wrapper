@@ -30,7 +30,7 @@ module AwsRubyDatabaseDriverWrapper
         SELECT @@hostname AS instance_id, CONCAT(@@hostname, ':', @@port) AS instance_name
       SQL
 
-      READER_CHECK_QUERY = <<~SQL
+      IS_READER_QUERY = <<~SQL
         SELECT @@read_only
       SQL
 
@@ -75,7 +75,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def host_role(connection)
-        query_host_role(@driver_dialect, connection, READER_CHECK_QUERY)
+        query_host_role(@driver_dialect, connection, self.class::IS_READER_QUERY)
       end
 
       def instance_identity(connection)
