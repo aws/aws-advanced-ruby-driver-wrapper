@@ -51,6 +51,10 @@ module AwsRubyDatabaseDriverWrapper
         @driver_dialect.execute(connection, sql)
       end
 
+      def execute_with_params(connection, sql, params)
+        @driver_dialect.execute_with_params(connection, sql, params)
+      end
+
       def dialect?(connection)
         check_existence_queries(@driver_dialect, connection, PG_PROC_EXISTS_QUERY)
       end

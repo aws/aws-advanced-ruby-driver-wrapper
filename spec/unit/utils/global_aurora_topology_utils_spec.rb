@@ -167,8 +167,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
 
   describe '#query_region' do
     it 'returns the region for a given instance ID' do
-      allow(dialect).to receive(:region_by_instance_id_query).with('my-instance').and_return('SELECT region ...')
-      allow(dialect).to receive(:execute).with(conn, 'SELECT region ...').and_return(
+      allow(dialect).to receive(:region_by_instance_id_query).and_return('SELECT region ...')
+      allow(dialect).to receive(:execute_with_params).with(conn, 'SELECT region ...', ['my-instance']).and_return(
         [{ 'aws_region' => 'us-east-1' }]
       )
 
@@ -176,22 +176,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
     end
 
     it 'returns nil when the query returns no results' do
-      allow(dialect).to receive(:region_by_instance_id_query).with('unknown').and_return('SELECT region ...')
-      allow(dialect).to receive(:execute).with(conn, 'SELECT region ...').and_return([])
+      allow(dialect).to receive(:region_by_instance_id_query).and_return('SELECT region ...')
+      allow(dialect).to receive(:execute_with_params).with(conn, 'SELECT region ...', ['unknown']).and_return([])
 
       expect(subject.query_region('unknown', conn)).to be_nil
     end
 
     it 'returns nil when the query returns nil' do
-      allow(dialect).to receive(:region_by_instance_id_query).with('unknown').and_return('SELECT region ...')
-      allow(dialect).to receive(:execute).with(conn, 'SELECT region ...').and_return(nil)
+      allow(dialect).to receive(:region_by_instance_id_query).and_return('SELECT region ...')
+      allow(dialect).to receive(:execute_with_params).with(conn, 'SELECT region ...', ['unknown']).and_return(nil)
 
       expect(subject.query_region('unknown', conn)).to be_nil
     end
 
     it 'returns nil when the region value is empty' do
-      allow(dialect).to receive(:region_by_instance_id_query).with('instance-1').and_return('SELECT region ...')
-      allow(dialect).to receive(:execute).with(conn, 'SELECT region ...').and_return(
+      allow(dialect).to receive(:region_by_instance_id_query).and_return('SELECT region ...')
+      allow(dialect).to receive(:execute_with_params).with(conn, 'SELECT region ...', ['instance-1']).and_return(
         [{ 'aws_region' => '' }]
       )
 

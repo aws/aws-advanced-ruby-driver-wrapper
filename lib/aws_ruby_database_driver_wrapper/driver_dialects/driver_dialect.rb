@@ -40,6 +40,10 @@ module AwsRubyDatabaseDriverWrapper
         raise NotImplementedError
       end
 
+      def execute_with_params(connection, sql, params)
+        raise NotImplementedError
+      end
+
       def ping(connection)
         raise NotImplementedError
       end
