@@ -152,27 +152,27 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
-  describe '#connect with invalid iam_default_port and host port set' do
+  describe '#connect with invalid iam_port and host port set' do
     it 'falls back to the host port' do
       port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_1234_cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_default_port: '0')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info(port: 1234), props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '0' }), host_info: pg_host_info(port: 1234), props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
   end
 
-  describe '#connect with invalid iam_default_port and no host port' do
+  describe '#connect with invalid iam_port and no host port' do
     it 'falls back to the dialect default port' do
       cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, cache_key)
                                                   .and_return(valid_token_entry)
 
-      props = base_pg_props.merge(iam_default_port: '0')
-      token = connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props:)
+      props = base_pg_props
+      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '0' }), host_info: pg_host_info, props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -190,14 +190,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
-  describe '#connect with iam_default_port set to 9999' do
-    it 'uses iam_default_port in the cache key, overriding the host port' do
+  describe '#connect with iam_port set to 9999' do
+    it 'uses iam_port in the cache key, overriding the host port' do
       port_9999_cache_key = "us-east-2:#{PG_HOST}:9999:postgresqlUser"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_9999_cache_key)
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
-      token = connect_and_capture_token(plugin: build_plugin({ iam_default_port: '9999' }), host_info: pg_host_info(port: 1234), props:)
+      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '9999' }), host_info: pg_host_info(port: 1234), props:)
 
       expect(token).to eq(TEST_TOKEN)
     end

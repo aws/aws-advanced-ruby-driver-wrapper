@@ -62,11 +62,8 @@ module AwsRubyDatabaseDriverWrapper
         host = Utils::IamAuthUtils.resolve_host(PropertyDefinition::IAM_HOST.get(@props), host_info)
         rds_type = Utils::RdsUtils.identify_rds_type(host)
         region = Utils::IamAuthUtils.region_for(
-          host:, props:, rds_type:, credentials_provider: @credentials_provider, rds_client: rds_client
-        )
-        region = Utils::IamAuthUtils.region_for(
           host:, props: @props, rds_type:, credentials_provider: @credentials_provider,
-          rds_client_func: -> { rds_client(@props[:iam_region]) }
+          rds_client_func: -> { rds_client(PropertyDefinition::IAM_REGION.get(@props)) }
         )
         unless region
           raise Errors::IamAuthError,
@@ -76,7 +73,7 @@ module AwsRubyDatabaseDriverWrapper
         token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(@props).to_sym
 
         port = Utils::IamAuthUtils.resolve_port(
-          @props[:iam_default_port],
+          PropertyDefinition::IAM_PORT.get(@props),
           host_info,
           @service_container.dialect_service.db_dialect.default_port
         )
@@ -122,7 +119,7 @@ module AwsRubyDatabaseDriverWrapper
       def rds_client(region = nil)
         @rds_client ||= Aws::RDS::Client.new(
           credentials: @credentials_provider,
-          **({ region: region } if region)
+          **(region ? { region: region } : {})
         )
       end
 
