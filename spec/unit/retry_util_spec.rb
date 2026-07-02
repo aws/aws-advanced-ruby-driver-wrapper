@@ -45,7 +45,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
   let(:props) { Concurrent::Map.new }
 
   let(:db_dialect) { double('db_dialect') }
-  let(:dialect_service) { double('dialect_service', db_dialect: db_dialect) }
+  let(:driver_dialect) { double('driver_dialect', close_connection: nil) }
+  let(:dialect_service) { double('dialect_service', db_dialect: db_dialect, driver_dialect: driver_dialect) }
   let(:plugin_manager) { double('plugin_manager') }
 
   let(:host_service) do
@@ -134,7 +135,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
 
       it 'closes the connection and retries until timeout' do
         deadline = Time.now + 0.15
-        expect(connection).to receive(:close).at_least(:once)
+        expect(driver_dialect).to receive(:close_connection).with(connection).at_least(:once)
         expect do
           retry_util.connect_to_writer(plugin_to_skip, deadline: deadline)
         end.to raise_error(Timeout::Error)
