@@ -166,6 +166,13 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     values = results.map(&:last)
 
     expect(values).to all(eq(1))
+
+    # Verify that all connections shared a single cached token
+    sc = conns.first.instance_variable_get(:@service_container)
+    cache_size = sc.storage_service.size(
+      AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
+    )
+    expect(cache_size).to eq(1)
   ensure
     conns&.each { |c| Integration::DriverHelper.close(drv, c) if c }
   end
