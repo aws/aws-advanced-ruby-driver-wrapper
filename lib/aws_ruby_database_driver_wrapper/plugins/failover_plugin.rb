@@ -31,7 +31,6 @@ module AwsRubyDatabaseDriverWrapper
     class FailoverPlugin
       include Logging
 
-      FailoverPlugin::SUBSCRIBED_METHODS = Set['connect'].freeze
       ReaderFailoverResult = Data.define(:connection, :host_info)
 
       def initialize(service_container, props = ::Concurrent::Map.new)
@@ -44,10 +43,9 @@ module AwsRubyDatabaseDriverWrapper
         @failover_mode = nil
         @rds_url_type = nil
         @closed_explicitly = false
-        @last_handled_error = nil
 
         network_methods = @service_container.dialect_service.driver_dialect.network_bound_methods
-        @subscribed_methods = (SUBSCRIBED_METHODS | network_methods).freeze
+        @subscribed_methods = (Set['connect'] | network_methods).freeze
       end
 
       attr_reader :subscribed_methods
@@ -86,7 +84,7 @@ module AwsRubyDatabaseDriverWrapper
 
         conn = connection_service.current_connection
         if conn && !@closed_explicitly && driver_dialect.closed?(connection_service.current_connection)
-          logger.warn("#{method_name} was called on closed connection #{conn} to #{connection_service.current_host_info}." \
+          logger.warn("#{method_name} was called on closed connection #{conn} to #{connection_service.current_host_info}. " \
                       'The driver will attempt to failover and then execute.')
           failover
         end
@@ -136,7 +134,14 @@ module AwsRubyDatabaseDriverWrapper
 
         @failover_mode = FailoverMode.from_value(PropertyDefinition::FAILOVER_MODE.get(@props))
         initial_host = connection_service.initial_host_info
+
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host&.host)
+        if @rds_url_type == Utils::RdsUrlType::RDS_PROXY ||
+           @rds_url_type == Utils::RdsUrlType::RDS_PROXY_ENDPOINT
+          raise Errors::AwsError,
+                'The failover plugin is not compatible with RDS Proxy endpoints. ' \
+                'RDS Proxy handles failover internally - please remove the failover plugin from your configuration.'
+        end
 
         if @failover_mode.nil?
           @failover_mode = if @rds_url_type == Utils::RdsUrlType::RDS_READER_CLUSTER
@@ -156,26 +161,23 @@ module AwsRubyDatabaseDriverWrapper
 
       def handle_error(error)
         logger.debug { "Detected error: #{error.message}" }
-        raise error if @last_handled_error == error || !trigger_failover?(error)
+        raise error unless trigger_failover?(error)
 
         invalidate_current_connection
         host_service.set_availability(
           connection_service.current_host_info,
           Host::HostAvailability::UNAVAILABLE
         )
+
         failover
-        @last_handled_error = error
+        # Failover will be skipped if the connection was explicitly closed. In this case we raise the error here.
         raise error
       end
 
       def trigger_failover?(error)
-        # TODO: should we throw an exception if the user tries to connect to RDS Proxy instead of checking here?
-        if @rds_url_type == Utils::RdsUrlType::RDS_PROXY ||
-           @rds_url_type == Utils::RdsUrlType::RDS_PROXY_ENDPOINT ||
-           host_service.all_hosts.empty?
+        if host_service.all_hosts.empty?
           logger.debug do
-            "Failover will be skipped for connection to #{connection_service.current_host_info}. " \
-              'Failover is skipped when connected to RDS Proxy or no topology information is available.'
+            "Skipping failover for #{connection_service.current_host_info}: no topology available."
           end
           return false
         end
@@ -258,7 +260,8 @@ module AwsRubyDatabaseDriverWrapper
             raise_failover_success_error(was_in_transaction)
           end
         rescue Timeout::Error
-          raise Errors::FailoverFailedError
+          raise Errors::FailoverFailedError,
+                "Writer failover timed out after #{@failover_timeout}s. Unable to connect to a new writer instance."
         ensure
           duration_ms = ((Time.now - failover_start) * 1000).round
           logger.debug { "Writer failover duration: #{duration_ms}ms" }

@@ -35,52 +35,45 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def connect_to_writer(plugin_to_skip, deadline:)
-        candidate_conn = nil
-        begin
-          loop do
-            break if Time.now >= deadline
+        loop do
+          break if Time.now >= deadline
 
-            @host_service.refresh_host_list
-            hosts = @host_service.all_hosts
-            writer_candidate = hosts.find { |h| h.role == Host::HostRole::WRITER }
+          @host_service.refresh_host_list
+          hosts = @host_service.all_hosts
+          writer_candidate = hosts.find { |h| h.role == Host::HostRole::WRITER }
 
-            if writer_candidate.nil?
-              logger.debug { 'No writer host found in topology' }
-              sleep(SHORT_DELAY_SEC)
-              next
-            end
-
-            allowed_hosts = @host_service.hosts
-            unless allowed_hosts.any? { |h| h.host_and_port == writer_candidate.host_and_port }
-              logger.debug { "New writer not in allowed hosts: #{writer_candidate.url}" }
-              sleep(SHORT_DELAY_SEC)
-              next
-            end
-
-            # TODO: is there a built-in ruby way to make a task run for a specific amount of time?
-            while Time.now < deadline
-              begin
-                candidate_conn = @plugin_manager.connect(writer_candidate, @props, false, plugin_to_skip: plugin_to_skip)
-                role = @dialect_service.db_dialect.host_role(candidate_conn)
-                if role == Host::HostRole::WRITER
-                  result = WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })
-                  # TODO: is there a cleaner way of doing this?
-                  candidate_conn = nil # Prevents connection from closing in the ensure block
-                  return result
-                end
-              rescue StandardError => e
-                logger.debug { "Exception connecting to writer #{writer_candidate.host}: #{e.message}" }
-              end
-
-              close_quietly(candidate_conn)
-              candidate_conn = nil
-            end
+          if writer_candidate.nil?
+            logger.debug { 'No writer host found in topology' }
+            sleep(SHORT_DELAY_SEC)
+            next
           end
 
-          raise Timeout::Error, 'Timed out waiting for a writer connection'
-        ensure
-          close_quietly(candidate_conn)
+          allowed_hosts = @host_service.hosts
+          unless allowed_hosts.any? { |h| h.host_and_port == writer_candidate.host_and_port }
+            logger.debug { "New writer not in allowed hosts: #{writer_candidate.url}" }
+            sleep(SHORT_DELAY_SEC)
+            next
+          end
+
+          success = false
+          while Time.now < deadline
+            begin
+              candidate_conn = @plugin_manager.connect(writer_candidate, @props, false, plugin_to_skip: plugin_to_skip)
+              role = @dialect_service.db_dialect.host_role(candidate_conn)
+              if role == Host::HostRole::WRITER
+                result = WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })
+                success = true
+                return result
+              end
+            rescue StandardError => e
+              logger.debug { "Exception connecting to writer #{writer_candidate.host}: #{e.message}" }
+            end
+
+            close_quietly(candidate_conn) unless success
+          end
         end
+
+        raise Timeout::Error, 'Timed out waiting for a writer connection'
       end
 
       private
@@ -88,7 +81,7 @@ module AwsRubyDatabaseDriverWrapper
       def close_quietly(conn)
         return if conn.nil?
 
-        conn.close
+        @dialect_service.driver_dialect.close_connection(conn)
       rescue StandardError
         # ignore
       end
