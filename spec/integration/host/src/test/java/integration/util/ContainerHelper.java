@@ -113,11 +113,13 @@ public class ContainerHelper {
     Long exitCode = execInContainer(container, consumer, "bundle", "install");
     assertEquals(0, exitCode, "Bundle install failed.");
 
+    String filter = System.getenv("FILTER");
+
     ArrayList<String> commands = new ArrayList<>();
     commands.add("bundle");
     commands.add("exec");
     commands.add("rspec");
-    commands.add("spec/integration/container");
+    commands.add(StringUtils.isNullOrEmpty(filter) ? "spec/integration/container" : filter);
     if (!StringUtils.isNullOrEmpty(includeTags)) {
       commands.add("--tag");
       commands.add(includeTags);

@@ -5,6 +5,7 @@
 /pkg/
 /spec/reports/
 /spec/examples.txt
+/spec/integration/host/build
 /tmp/
 **/bin
 
