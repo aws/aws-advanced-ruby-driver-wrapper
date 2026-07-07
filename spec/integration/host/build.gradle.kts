@@ -109,6 +109,7 @@ tasks.register<Test>("test-ruby-4.0-mysql") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-ruby-3-3", "true")
         systemProperty("exclude-multi-az-cluster", "true")
@@ -125,6 +126,7 @@ tasks.register<Test>("test-ruby-4.0-pg") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-ruby-3-3", "true")
         systemProperty("exclude-multi-az-cluster", "true")
@@ -141,6 +143,7 @@ tasks.register<Test>("test-ruby-3.3-mysql") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
@@ -156,6 +159,7 @@ tasks.register<Test>("test-ruby-3.3-pg") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
