@@ -142,18 +142,55 @@ public class ContainerHelper {
     TargetRubyVersion targetRubyVersion)
     throws IOException, InterruptedException {
     System.out.println("==== Container console feed ==== >>>>");
-    Consumer<OutputFrame> consumer = new ConsoleConsumer();
+    Consumer<OutputFrame> consumer = new ConsoleConsumer(true);
     execInContainer(container, consumer, "printenv", "TEST_ENV_DESCRIPTION");
+
+    Long exitCode = execInContainer(container, consumer, "bundle", "install");
+    assertEquals(0, exitCode, "Bundle install failed.");
+
+    String filter = System.getenv("FILTER");
+    integration.DebugEnv debugEnv = integration.DebugEnv.fromEnv();
+    String testPath = StringUtils.isNullOrEmpty(filter) ? "spec/integration/container" : filter;
 
     ArrayList<String> commands = new ArrayList<>();
     commands.add("bundle");
     commands.add("exec");
+    commands.add("rdbg");
+    commands.add("--open");
+    commands.add("--host");
+    commands.add("0.0.0.0");
+    commands.add("--port");
+    commands.add("5005");
+    commands.add("-c");
+    commands.add("--");
     commands.add("rspec");
-    commands.add("spec/integration/container");
-    commands.add("--tag");
-    commands.add("~integration"); // exclude full integration suite for debug
 
-    Long exitCode = execInContainer(container, consumer, commands.toArray(new String[0]));
+    commands.add(testPath);
+    if (!StringUtils.isNullOrEmpty(includeTags)) {
+      commands.add("--tag");
+      commands.add(includeTags);
+    }
+    if (!StringUtils.isNullOrEmpty(excludeTags)) {
+      commands.add("--tag");
+      commands.add("~" + excludeTags);
+    }
+
+    switch (debugEnv) {
+      case VSCODE:
+        System.out.println("\n\n    " +
+            "Debug server listening on 0.0.0.0:5005." +
+            "\n    In VS Code, select 'Attach to Docker rdbg' in Run and Debug and click the green play button." +
+            "\n\n");
+        break;
+      case TERMINAL:
+        System.out.println("\n\n    " +
+            "Debug server listening on 0.0.0.0:5005." +
+            "\n    From a separate terminal, run: rdbg --attach localhost:5005" +
+            "\n\n");
+        break;
+    }
+
+    exitCode = execInContainer(container, consumer, commands.toArray(new String[0]));
     System.out.println("==== Container console feed ==== <<<<");
     assertEquals(0, exitCode, "Some tests failed.");
   }
