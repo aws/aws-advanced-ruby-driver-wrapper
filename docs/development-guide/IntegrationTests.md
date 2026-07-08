@@ -33,12 +33,15 @@ If you need to update them, edit your `.env` file and run `loadenv` again.
 
 ## Running Tests
 
-You can choose which test environments to run by editing the boolean property values in `TestEnvironmentConfiguration.java`.
-
 To run the integration tests, pick a task defined in the `build.gradle.kts` file and execute it with gradle:
 ```bash
 ./gradlew test-aurora
 ```
+
+You can configure which test environments to run against by editing/adding the system property values in the gradle task you have picked 
+from `build.gradle.kts`.
+For example, to skip mysql aurora tests you can add `systemProperty("exclude-mysql-engine", "true")` to the `test-aurora` task defined 
+in `build.gradle.kts`.
 
 ### Filtering to a specific file or test
 
