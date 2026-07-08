@@ -67,6 +67,10 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
         // Not in use.
         continue;
       }
+      if (deployment == DatabaseEngineDeployment.AURORA_GLOBAL) {
+        // Handled separately below the main loop.
+        continue;
+      }
       if (deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_CLUSTER && config.noMultiAzCluster) {
         continue;
       }
@@ -197,6 +201,43 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
               }
             }
           }
+        }
+      }
+    }
+
+    // Global Database environments (separate from main loop — different deployment lifecycle)
+    if (!config.noGlobalDatabase) {
+      for (DatabaseEngine engine : DatabaseEngine.values()) {
+        if (engine == DatabaseEngine.PG && config.noPgEngine) {
+          continue;
+        }
+        if (engine == DatabaseEngine.MYSQL && config.noMysqlEngine) {
+          continue;
+        }
+
+        for (TargetRubyVersion targetRubyVersion : TargetRubyVersion.values()) {
+          if (targetRubyVersion == TargetRubyVersion.RUBY_3_3 && config.excludeRuby33) {
+            continue;
+          }
+          if (targetRubyVersion == TargetRubyVersion.RUBY_4_0 && config.excludeRuby40) {
+            continue;
+          }
+
+          resultContextList.add(
+              getEnvironment(
+                  new TestEnvironmentRequest(
+                      engine,
+                      DatabaseInstances.MULTI_INSTANCE,
+                      2,
+                      DatabaseEngineDeployment.AURORA_GLOBAL,
+                      targetRubyVersion,
+                      TestEnvironmentFeatures.GLOBAL_DATABASE,
+                      TestEnvironmentFeatures.IAM,
+                      TestEnvironmentFeatures.FAILOVER_SUPPORTED,
+                      TestEnvironmentFeatures.NETWORK_OUTAGES_ENABLED,
+                      TestEnvironmentFeatures.AWS_CREDENTIALS_ENABLED,
+                      config.noPgDriver ? TestEnvironmentFeatures.SKIP_PG_DRIVER_TESTS : null,
+                      config.noMysqlDriver ? TestEnvironmentFeatures.SKIP_MYSQL_DRIVER_TESTS : null)));
         }
       }
     }
