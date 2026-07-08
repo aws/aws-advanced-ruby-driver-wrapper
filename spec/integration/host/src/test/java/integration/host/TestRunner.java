@@ -44,11 +44,6 @@ public class TestRunner {
 
   @TestTemplate
   public void debugTests(TestEnvironmentRequest testEnvironmentRequest) throws Exception {
-    if (System.getenv("DEBUG_ENV") == null) {
-      throw new RuntimeException("Environment variable 'DEBUG_ENV' is required to debug the integration tests. " +
-                                 "Please set 'DEBUG_ENV' to 'RUBYMINE' or 'VSCODE'.");
-    }
-
     try (final TestEnvironment env = TestEnvironment.build(testEnvironmentRequest)) {
       env.debugTests("in-container");
     }
