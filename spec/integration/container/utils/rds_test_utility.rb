@@ -291,6 +291,37 @@ module Integration
       end
     end
 
+    def crash_instance(instance_id)
+      env = TestEnvironment.current
+      if env.deployment == DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
+        simulate_temporary_failure(instance_id, 0, 5)
+        sleep(1)
+      else
+        failover_cluster_and_wait_until_writer_changed
+      end
+    end
+
+    def failover_cluster_and_wait_until_writer_changed(max_retries: 3)
+      env = TestEnvironment.current
+      cluster_id = env.cluster_name
+      initial_writer_id = cluster_writer_instance_id(cluster_id)
+
+      writer_changed = false
+      max_retries.times do |attempt|
+        @client.failover_db_cluster(db_cluster_identifier: cluster_id)
+
+        writer_changed = RetryHelper.retry_until(timeout_secs: 300, delay_secs: 5) do
+          current_writer = cluster_writer_instance_id(cluster_id)
+          current_writer != initial_writer_id
+        end
+        break if writer_changed
+
+        TestUtils.logger.warn("Failover attempt #{attempt + 1}/#{max_retries}: writer did not change, retrying")
+      end
+
+      raise "Writer did not change after #{max_retries} failover attempts" unless writer_changed
+    end
+
     def sleep_sql(seconds)
       self.class.sleep_sql(TestEnvironment.current.engine).call(seconds)
     end

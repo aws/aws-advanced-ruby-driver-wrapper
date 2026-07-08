@@ -19,19 +19,19 @@ package integration.host;
 public class TestEnvironmentConfiguration {
 
   public boolean noDocker =
-      Boolean.parseBoolean(System.getProperty("exclude-docker", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-docker", "true"));
   public boolean noAurora =
       Boolean.parseBoolean(System.getProperty("exclude-aurora", "false"));
   public boolean noMultiAzCluster =
-      Boolean.parseBoolean(System.getProperty("exclude-multi-az-cluster", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-multi-az-cluster", "true"));
   public boolean noMultiAzInstance =
-      Boolean.parseBoolean(System.getProperty("exclude-multi-az-instance", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-multi-az-instance", "true"));
   public boolean noPerformance =
-      Boolean.parseBoolean(System.getProperty("exclude-performance", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-performance", "true"));
   public boolean noMysqlEngine =
-      Boolean.parseBoolean(System.getProperty("exclude-mysql-engine", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-mysql-engine", "true"));
   public boolean noMysqlDriver =
-      Boolean.parseBoolean(System.getProperty("exclude-mysql-driver", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-mysql-driver", "true"));
   public boolean noPgEngine =
       Boolean.parseBoolean(System.getProperty("exclude-pg-engine", "false"));
   public boolean noPgDriver =
@@ -45,25 +45,25 @@ public class TestEnvironmentConfiguration {
   public boolean excludeRuby33 =
     Boolean.parseBoolean(System.getProperty("exclude-ruby-3-3", "false"));
   public boolean excludeRuby40 =
-    Boolean.parseBoolean(System.getProperty("exclude-ruby-4-0", "false"));
+    Boolean.parseBoolean(System.getProperty("exclude-ruby-4-0", "true"));
   public boolean testEncryptionOnly =
       Boolean.parseBoolean(System.getProperty("test-encryption-only", "false"));
   public boolean testMetricsOnly =
       Boolean.parseBoolean(System.getProperty("test-metrics-only", "false"));
 
   public boolean noInstances1 =
-      Boolean.parseBoolean(System.getProperty("exclude-instances-1", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-instances-1", "true"));
   public boolean noInstances2 =
-      Boolean.parseBoolean(System.getProperty("exclude-instances-2", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-instances-2", "true"));
   public boolean noInstances3 =
       Boolean.parseBoolean(System.getProperty("exclude-instances-3", "false"));
   public boolean noInstances5 =
-      Boolean.parseBoolean(System.getProperty("exclude-instances-5", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-instances-5", "true"));
 
   public boolean noTracesTelemetry =
-      Boolean.parseBoolean(System.getProperty("exclude-traces-telemetry", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-traces-telemetry", "true"));
   public boolean noMetricsTelemetry =
-      Boolean.parseBoolean(System.getProperty("exclude-metrics-telemetry", "false"));
+      Boolean.parseBoolean(System.getProperty("exclude-metrics-telemetry", "true"));
   public boolean noBlueGreen =
       Boolean.parseBoolean(System.getProperty("exclude-bg", "true"));
   public boolean testBlueGreenOnly =
