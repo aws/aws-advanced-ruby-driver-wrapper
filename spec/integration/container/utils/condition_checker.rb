@@ -101,7 +101,7 @@ module Integration
 
       current_features = env.features
       skip 'The current test environment contains test features for which this test is disabled' if
-        disable_on_test_features.any? { |f| current_features.include?(f) }
+        disable_on_test_features.intersect?(current_features)
     end
   end
 end
