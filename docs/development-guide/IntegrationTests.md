@@ -38,7 +38,7 @@ To run the integration tests, pick a task defined in the `build.gradle.kts` file
 ./gradlew test-aurora
 ```
 
-You can configure which test environments to run against by editing/adding the system property values in the gradle task you have picked 
+You can configure which test environments to run against by editing/adding system property values in the gradle task you have picked 
 from `build.gradle.kts`.
 For example, to skip mysql aurora tests you can add `systemProperty("exclude-mysql-engine", "true")` to the `test-aurora` task defined 
 in `build.gradle.kts`.
