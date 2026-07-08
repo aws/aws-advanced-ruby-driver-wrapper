@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: tcort/github-action-markdown-link-check@v1
+      - uses: tcort/github-action-markdown-link-check@e7c7a18363c842693fadde5d41a3bd3573a7a225 # v1
         with:
           use-quiet-mode: 'yes'
           folder-path: 'docs'
@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -63,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Set up Ruby ${{ matrix.ruby-version }}
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
         with:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true
@@ -71,7 +71,7 @@ jobs:
         run: bundle exec rspec spec/unit
       - name: Upload coverage reports
         if: matrix.ruby-version == '3.3'
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
         with:
           files: ./coverage/coverage.xml
           flags: unittests
@@ -83,7 +83,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: ruby/setup-ruby@v1
+      - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -91,3 +91,27 @@ jobs:
         run: bundle exec bundle-audit update
       - name: Run security audit
         run: bundle exec bundle-audit check
+
+  secret-scan:
+    name: Gitleaks secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install Gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks.tar.gz gitleaks
+          gitleaks version
+      - name: Run Gitleaks (full git history)
+        # TODO: remove --no-git flag to scan git history.
+        run: gitleaks detect --source . --no-git --redact --verbose

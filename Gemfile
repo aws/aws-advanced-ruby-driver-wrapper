@@ -28,7 +28,7 @@ group :development do
   gem 'rdoc'
   gem 'rubocop'
   gem 'rubocop-performance'
-  gem 'yard'
+  gem 'yard', '>= 0.9.44'
 end
 
 group :test do
