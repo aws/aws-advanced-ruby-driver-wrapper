@@ -264,6 +264,7 @@ public class AuroraTestUtility {
 
     switch (deployment) {
       case AURORA:
+      case AURORA_GLOBAL:
         createAuroraCluster(
             username, password, dbName, identifier, region, engine, instanceClass,
             version, clusterParameterGroupName, numInstances);
@@ -708,6 +709,31 @@ public class AuroraTestUtility {
     }
   }
 
+  public void ec2AuthorizeIPByGroupId(String securityGroupId, String ipAddress) {
+    if (StringUtils.isNullOrEmpty(ipAddress) || StringUtils.isNullOrEmpty(securityGroupId)) {
+      return;
+    }
+
+    try {
+      IpRange ipRange = IpRange.builder()
+          .cidrIp(ipAddress + "/32")
+          .description("Test run at " + Instant.now())
+          .build();
+      IpPermission ipPermission = IpPermission.builder()
+          .ipRanges(ipRange)
+          .ipProtocol("-1")
+          .fromPort(0)
+          .toPort(65535)
+          .build();
+      ec2Client.authorizeSecurityGroupIngress(
+          (builder) -> builder.groupId(securityGroupId).ipPermissions(ipPermission));
+    } catch (Ec2Exception exception) {
+      if (!DUPLICATE_IP_ERROR_CODE.equalsIgnoreCase(exception.awsErrorDetails().errorCode())) {
+        throw exception;
+      }
+    }
+  }
+
   private boolean ipExists(String ipAddress) {
     final DescribeSecurityGroupsResponse response =
         ec2Client.describeSecurityGroups(
@@ -760,6 +786,7 @@ public class AuroraTestUtility {
   public void deleteCluster(String identifier, DatabaseEngineDeployment deployment, boolean waitForCompletion) {
     switch (deployment) {
       case AURORA:
+      case AURORA_GLOBAL:
         this.deleteAuroraCluster(identifier, waitForCompletion);
         break;
       case RDS_MULTI_AZ_CLUSTER:
@@ -1135,6 +1162,7 @@ public class AuroraTestUtility {
   public String getDbInstanceClass(TestEnvironmentRequest request) {
     switch (request.getDatabaseEngineDeployment()) {
       case AURORA:
+      case AURORA_GLOBAL:
         return request.getFeatures().contains(TestEnvironmentFeatures.BLUE_GREEN_DEPLOYMENT)
             ? "db.r7g.2xlarge"
             : "db.r5.large";
@@ -2431,5 +2459,258 @@ public class AuroraTestUtility {
     } catch (Exception ex) {
       LOGGER.warning(ex.getMessage());
     }
+  }
+
+  public String createGlobalCluster(String globalClusterId, String engine, String engineVersion, String sourceClusterArn) {
+    LOGGER.finer("Creating global cluster: " + globalClusterId);
+    software.amazon.awssdk.services.rds.model.CreateGlobalClusterRequest.Builder requestBuilder =
+        software.amazon.awssdk.services.rds.model.CreateGlobalClusterRequest.builder()
+            .globalClusterIdentifier(globalClusterId);
+
+    if (sourceClusterArn != null && !sourceClusterArn.isEmpty()) {
+      // When creating from an existing cluster, engine/engineVersion are inherited from source
+      requestBuilder.sourceDBClusterIdentifier(sourceClusterArn);
+    } else {
+      requestBuilder.engine(engine).engineVersion(engineVersion);
+    }
+
+    software.amazon.awssdk.services.rds.model.CreateGlobalClusterResponse response =
+        rdsClient.createGlobalCluster(requestBuilder.build());
+    String endpoint = response.globalCluster().globalClusterResourceId();
+    LOGGER.finer("Created global cluster: " + globalClusterId + " resourceId=" + endpoint);
+    return response.globalCluster().globalClusterArn();
+  }
+
+  public void deleteGlobalCluster(String globalClusterId) {
+    LOGGER.finer("Deleting global cluster: " + globalClusterId);
+    try {
+      rdsClient.deleteGlobalCluster(
+          software.amazon.awssdk.services.rds.model.DeleteGlobalClusterRequest.builder()
+              .globalClusterIdentifier(globalClusterId)
+              .build());
+    } catch (Exception ex) {
+      LOGGER.warning("Failed to delete global cluster " + globalClusterId + ": " + ex.getMessage());
+    }
+  }
+
+  public void removeClusterFromGlobalCluster(String globalClusterId, String clusterArn) {
+    LOGGER.finer("Removing cluster " + clusterArn + " from global cluster " + globalClusterId);
+    try {
+      rdsClient.removeFromGlobalCluster(
+          software.amazon.awssdk.services.rds.model.RemoveFromGlobalClusterRequest.builder()
+              .globalClusterIdentifier(globalClusterId)
+              .dbClusterIdentifier(clusterArn)
+              .build());
+    } catch (Exception ex) {
+      LOGGER.warning("Failed to remove cluster from global cluster: " + ex.getMessage());
+    }
+  }
+
+  public boolean doesGlobalClusterExist(String globalClusterId) {
+    try {
+      software.amazon.awssdk.services.rds.model.DescribeGlobalClustersResponse response =
+          rdsClient.describeGlobalClusters(
+              software.amazon.awssdk.services.rds.model.DescribeGlobalClustersRequest.builder()
+                  .globalClusterIdentifier(globalClusterId)
+                  .build());
+      return response.hasGlobalClusters() && !response.globalClusters().isEmpty();
+    } catch (software.amazon.awssdk.services.rds.model.GlobalClusterNotFoundException ex) {
+      return false;
+    }
+  }
+
+  public software.amazon.awssdk.services.rds.model.GlobalCluster describeGlobalCluster(String globalClusterId) {
+    software.amazon.awssdk.services.rds.model.DescribeGlobalClustersResponse response =
+        rdsClient.describeGlobalClusters(
+            software.amazon.awssdk.services.rds.model.DescribeGlobalClustersRequest.builder()
+                .globalClusterIdentifier(globalClusterId)
+                .build());
+    if (!response.hasGlobalClusters() || response.globalClusters().isEmpty()) {
+      throw new RuntimeException("Global cluster not found: " + globalClusterId);
+    }
+    return response.globalClusters().get(0);
+  }
+
+  public void waitUntilGlobalClusterAvailable(String globalClusterId, int timeoutMinutes) {
+    LOGGER.finest("Waiting for global cluster " + globalClusterId + " to become available...");
+    Instant deadline = Instant.now().plus(timeoutMinutes, ChronoUnit.MINUTES);
+    while (Instant.now().isBefore(deadline)) {
+      try {
+        software.amazon.awssdk.services.rds.model.GlobalCluster gc = describeGlobalCluster(globalClusterId);
+        String status = gc.status();
+        LOGGER.finest("Global cluster status: " + status);
+        if ("available".equalsIgnoreCase(status)) {
+          return;
+        }
+        Thread.sleep(30000);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Interrupted while waiting for global cluster", e);
+      } catch (Exception e) {
+        LOGGER.warning("Error checking global cluster status: " + e.getMessage());
+        try { Thread.sleep(30000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+      }
+    }
+    throw new RuntimeException("Global cluster " + globalClusterId + " did not become available within " + timeoutMinutes + " minutes");
+  }
+
+  public String getGlobalClusterEndpoint(String globalClusterId) {
+    software.amazon.awssdk.services.rds.model.GlobalCluster gc = describeGlobalCluster(globalClusterId);
+    // The global cluster endpoint format: <id>.global-<resourceId>.global.rds.amazonaws.com
+    String globalResourceId = gc.globalClusterResourceId();
+    return globalClusterId + ".global-" + globalResourceId + ".global.rds.amazonaws.com";
+  }
+
+  public String createSecondaryCluster(
+      String identifier, String globalClusterId, String engine, String engineVersion,
+      Region secondaryRegion, AwsCredentialsProvider credentialsProvider, int numInstances) {
+
+    RdsClient secondaryRdsClient = RdsClient.builder()
+        .region(secondaryRegion)
+        .credentialsProvider(credentialsProvider)
+        .build();
+
+    try {
+      LOGGER.finer("Creating secondary cluster " + identifier + " in " + secondaryRegion.id());
+      secondaryRdsClient.createDBCluster(
+          CreateDbClusterRequest.builder()
+              .dbClusterIdentifier(identifier)
+              .globalClusterIdentifier(globalClusterId)
+              .engine(engine)
+              .enableIAMDatabaseAuthentication(true)
+              .kmsKeyId("alias/aws/rds")
+              .build());
+
+      // Create instances in the secondary cluster
+      for (int i = 1; i <= numInstances; i++) {
+        String instanceId = identifier + "-" + i;
+        LOGGER.finer("Creating secondary instance: " + instanceId);
+        secondaryRdsClient.createDBInstance(
+            CreateDbInstanceRequest.builder()
+                .dbClusterIdentifier(identifier)
+                .dbInstanceIdentifier(instanceId)
+                .dbInstanceClass("db.r5.large")
+                .engine(engine)
+                .publiclyAccessible(true)
+                .build());
+      }
+
+      // Wait for instances to be available
+      LOGGER.finer("Waiting for secondary cluster instances to become available...");
+      for (int i = 1; i <= numInstances; i++) {
+        String instanceId = identifier + "-" + i;
+        RdsWaiter waiter = secondaryRdsClient.waiter();
+        waiter.waitUntilDBInstanceAvailable(
+            requestBuilder -> requestBuilder.dbInstanceIdentifier(instanceId),
+            configBuilder -> configBuilder.maxAttempts(480).waitTimeout(Duration.ofMinutes(120)));
+      }
+
+      // Get the cluster endpoint
+      DescribeDbClustersResponse describeResponse = secondaryRdsClient.describeDBClusters(
+          DescribeDbClustersRequest.builder().dbClusterIdentifier(identifier).build());
+      if (describeResponse.hasDbClusters() && !describeResponse.dbClusters().isEmpty()) {
+        return describeResponse.dbClusters().get(0).endpoint();
+      }
+      throw new RuntimeException("Secondary cluster created but endpoint not found: " + identifier);
+    } finally {
+      secondaryRdsClient.close();
+    }
+  }
+
+  public void deleteSecondaryCluster(String identifier, Region secondaryRegion, AwsCredentialsProvider credentialsProvider) {
+    RdsClient secondaryRdsClient = RdsClient.builder()
+        .region(secondaryRegion)
+        .credentialsProvider(credentialsProvider)
+        .build();
+    try {
+      LOGGER.finer("Deleting secondary cluster: " + identifier);
+      // Delete instances first
+      DescribeDbClustersResponse describeResponse = secondaryRdsClient.describeDBClusters(
+          DescribeDbClustersRequest.builder().dbClusterIdentifier(identifier).build());
+      if (describeResponse.hasDbClusters() && !describeResponse.dbClusters().isEmpty()) {
+        DBCluster cluster = describeResponse.dbClusters().get(0);
+        for (DBClusterMember member : cluster.dbClusterMembers()) {
+          try {
+            secondaryRdsClient.deleteDBInstance(
+                DeleteDbInstanceRequest.builder()
+                    .dbInstanceIdentifier(member.dbInstanceIdentifier())
+                    .skipFinalSnapshot(true)
+                    .build());
+          } catch (Exception ex) {
+            LOGGER.warning("Failed to delete secondary instance " + member.dbInstanceIdentifier() + ": " + ex.getMessage());
+          }
+        }
+        // Wait for all instances to be deleted
+        for (DBClusterMember member : cluster.dbClusterMembers()) {
+          waitUntilInstanceDeleted(secondaryRdsClient, member.dbInstanceIdentifier(), 15);
+        }
+      }
+      // Delete the cluster
+      secondaryRdsClient.deleteDBCluster(
+          software.amazon.awssdk.services.rds.model.DeleteDbClusterRequest.builder()
+              .dbClusterIdentifier(identifier)
+              .skipFinalSnapshot(true)
+              .build());
+      // Wait for cluster to be fully deleted
+      waitUntilClusterDeleted(secondaryRdsClient, identifier, 15);
+    } catch (Exception ex) {
+      LOGGER.warning("Failed to delete secondary cluster " + identifier + ": " + ex.getMessage());
+    } finally {
+      secondaryRdsClient.close();
+    }
+  }
+
+  public void waitUntilClusterDeleted(RdsClient client, String clusterId, int timeoutMinutes) {
+    LOGGER.finest("Waiting for cluster " + clusterId + " to be deleted...");
+    Instant deadline = Instant.now().plus(timeoutMinutes, ChronoUnit.MINUTES);
+    while (Instant.now().isBefore(deadline)) {
+      try {
+        DescribeDbClustersResponse resp = client.describeDBClusters(
+            DescribeDbClustersRequest.builder().dbClusterIdentifier(clusterId).build());
+        if (!resp.hasDbClusters() || resp.dbClusters().isEmpty()) {
+          return;
+        }
+        String status = resp.dbClusters().get(0).status();
+        LOGGER.finest("Cluster " + clusterId + " status: " + status);
+        Thread.sleep(15000);
+      } catch (software.amazon.awssdk.services.rds.model.DbClusterNotFoundException e) {
+        // Cluster is gone
+        return;
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Interrupted while waiting for cluster deletion", e);
+      } catch (Exception e) {
+        LOGGER.warning("Error checking cluster deletion status: " + e.getMessage());
+        try { Thread.sleep(15000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+      }
+    }
+    LOGGER.warning("Cluster " + clusterId + " was not deleted within " + timeoutMinutes + " minutes");
+  }
+
+  public void waitUntilInstanceDeleted(RdsClient client, String instanceId, int timeoutMinutes) {
+    LOGGER.finest("Waiting for instance " + instanceId + " to be deleted...");
+    Instant deadline = Instant.now().plus(timeoutMinutes, ChronoUnit.MINUTES);
+    while (Instant.now().isBefore(deadline)) {
+      try {
+        DescribeDbInstancesResponse resp = client.describeDBInstances(
+            DescribeDbInstancesRequest.builder().dbInstanceIdentifier(instanceId).build());
+        if (!resp.hasDbInstances() || resp.dbInstances().isEmpty()) {
+          return;
+        }
+        String status = resp.dbInstances().get(0).dbInstanceStatus();
+        LOGGER.finest("Instance " + instanceId + " status: " + status);
+        Thread.sleep(15000);
+      } catch (software.amazon.awssdk.services.rds.model.DbInstanceNotFoundException e) {
+        // Instance is gone
+        return;
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException("Interrupted while waiting for instance deletion", e);
+      } catch (Exception e) {
+        LOGGER.warning("Error checking instance deletion status: " + e.getMessage());
+        try { Thread.sleep(15000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+      }
+    }
+    LOGGER.warning("Instance " + instanceId + " was not deleted within " + timeoutMinutes + " minutes");
   }
 }

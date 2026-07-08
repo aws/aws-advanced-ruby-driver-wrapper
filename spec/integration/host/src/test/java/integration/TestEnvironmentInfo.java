@@ -46,6 +46,14 @@ public class TestEnvironmentInfo {
   // Random alphanumeric combination that is used to form a test cluster name or an instance name.
   private String randomBase = null;
 
+  // Global Database fields
+  private String globalClusterEndpoint;
+  private String globalClusterIdentifier;
+  private String primaryRegion;
+  private String secondaryRegion;
+  private String secondaryClusterEndpoint;
+  private String secondaryClusterIdentifier;
+
   public TestDatabaseInfo getDatabaseInfo() {
     return this.databaseInfo;
   }
@@ -204,5 +212,53 @@ public class TestEnvironmentInfo {
 
   public void setRandomBase(String randomBase) {
     this.randomBase = randomBase;
+  }
+
+  public String getGlobalClusterEndpoint() {
+    return this.globalClusterEndpoint;
+  }
+
+  public void setGlobalClusterEndpoint(String globalClusterEndpoint) {
+    this.globalClusterEndpoint = globalClusterEndpoint;
+  }
+
+  public String getGlobalClusterIdentifier() {
+    return this.globalClusterIdentifier;
+  }
+
+  public void setGlobalClusterIdentifier(String globalClusterIdentifier) {
+    this.globalClusterIdentifier = globalClusterIdentifier;
+  }
+
+  public String getPrimaryRegion() {
+    return this.primaryRegion;
+  }
+
+  public void setPrimaryRegion(String primaryRegion) {
+    this.primaryRegion = primaryRegion;
+  }
+
+  public String getSecondaryRegion() {
+    return this.secondaryRegion;
+  }
+
+  public void setSecondaryRegion(String secondaryRegion) {
+    this.secondaryRegion = secondaryRegion;
+  }
+
+  public String getSecondaryClusterEndpoint() {
+    return this.secondaryClusterEndpoint;
+  }
+
+  public void setSecondaryClusterEndpoint(String secondaryClusterEndpoint) {
+    this.secondaryClusterEndpoint = secondaryClusterEndpoint;
+  }
+
+  public String getSecondaryClusterIdentifier() {
+    return this.secondaryClusterIdentifier;
+  }
+
+  public void setSecondaryClusterIdentifier(String secondaryClusterIdentifier) {
+    this.secondaryClusterIdentifier = secondaryClusterIdentifier;
   }
 }

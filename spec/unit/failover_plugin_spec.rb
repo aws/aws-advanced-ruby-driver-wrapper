@@ -88,7 +88,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
            current_host_info: writer_host,
            initial_host_info: writer_host,
            'initial_host_info=': nil,
-           update_current_connection: nil)
+           update_current_connection: nil,
+           driver_props: props)
   end
 
   let(:plugin_manager) do

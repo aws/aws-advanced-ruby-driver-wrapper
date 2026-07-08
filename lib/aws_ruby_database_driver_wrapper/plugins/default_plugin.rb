@@ -25,16 +25,15 @@ module AwsRubyDatabaseDriverWrapper
       SUBSCRIBED_METHODS = Set['*'].freeze
       HOST_PORT_KEYS = %i[host port].freeze
 
-      def initialize(service_container, props = ::Concurrent::Map.new)
+      def initialize(service_container, _props)
         @service_container = service_container
-        @props = props
       end
 
       def subscribed_methods
         SUBSCRIBED_METHODS
       end
 
-      def connect(host_info, props, is_initial_connection, _pipeline_callable)
+      def connect(host_info, driver_props, is_initial_connection, _pipeline_callable)
         connection_service = @service_container.connection_service
         driver_dialect = @service_container.dialect_service.driver_dialect
         target_host_info = if is_initial_connection && connection_service.multi_host_url?
@@ -45,7 +44,7 @@ module AwsRubyDatabaseDriverWrapper
                              host_info
                            end
 
-        conn = driver_dialect.connect(target_host_info, props)
+        conn = driver_dialect.connect(target_host_info, driver_props)
 
         # If host was not specified (Unix socket / localhost), fill in from the live connection.
         if host_info.nil? || !host_info.host_specified?
@@ -76,9 +75,9 @@ module AwsRubyDatabaseDriverWrapper
         conn
       end
 
-      def internal_connect(host_info, props, _, _is_initial_connection, _pipeline_callable)
+      def internal_connect(host_info, driver_props, _, _is_initial_connection, _pipeline_callable)
         driver_dialect = @service_container.dialect_service.driver_dialect
-        driver_dialect.connect(host_info, props)
+        driver_dialect.connect(host_info, driver_props)
       end
 
       def execute(target_method_name, target_callable, *args, **, &)

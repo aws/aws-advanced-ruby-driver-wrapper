@@ -33,7 +33,7 @@ module AwsRubyDatabaseDriverWrapper
       def initialize(service_container, props = ::Concurrent::Map.new)
         ensure_aws_sdk!
         @service_container = service_container
-        @props = props
+        @wrapper_props = props
         @credentials_provider = PropertyDefinition::IAM_CREDENTIALS_PROVIDER.get(props) ||
                                 Aws::CredentialProviderChain.new.resolve
         expiration = PropertyDefinition::IAM_EXPIRATION.get_int(props)
@@ -41,12 +41,12 @@ module AwsRubyDatabaseDriverWrapper
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
-      def connect(host_info, props, _is_initial_connection, pipeline_callable)
-        iam_connect(host_info, props, pipeline_callable)
+      def connect(host_info, driver_props, _is_initial_connection, pipeline_callable)
+        iam_connect(host_info, driver_props, pipeline_callable)
       end
 
-      def internal_connect(host_info, props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
-        iam_connect(host_info, props, pipeline_callable)
+      def internal_connect(host_info, driver_props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
+        iam_connect(host_info, driver_props, pipeline_callable)
       end
 
       def self.clear_cache(storage_service)
@@ -55,43 +55,50 @@ module AwsRubyDatabaseDriverWrapper
 
       private
 
-      def iam_connect(host_info, props, pipeline_callable)
-        user = props[:user] || props[:username]
+      def iam_connect(host_info, driver_props, pipeline_callable)
+        user = driver_props[:user] || driver_props[:username]
         raise Errors::IamAuthError, 'IamAuthPlugin: :user is required' if user.nil? || user.empty?
 
-        host = Utils::IamAuthUtils.resolve_host(PropertyDefinition::IAM_HOST.get(@props), host_info)
+        host = Utils::IamAuthUtils.resolve_host(PropertyDefinition::IAM_HOST.get(@wrapper_props), host_info)
         rds_type = Utils::RdsUtils.identify_rds_type(host)
-        region = Utils::IamAuthUtils.region_for(
-          host:, props: @props, rds_type:, credentials_provider: @credentials_provider,
-          rds_client_func: -> { rds_client(PropertyDefinition::IAM_REGION.get(@props)) }
-        )
+        begin
+          region = Utils::IamAuthUtils.region_for(
+            host:, props: @wrapper_props, rds_type:, credentials_provider: @credentials_provider,
+            rds_client_func: -> { rds_client }
+          )
+        rescue Aws::Errors::MissingRegionError
+          raise Errors::IamAuthError,
+                'IamAuthPlugin: unable to determine connection region. ' \
+                "If you are using a non-standard RDS URL, please set the 'iam_region' property."
+        end
         unless region
           raise Errors::IamAuthError,
-                'IamAuthPlugin: unable to determine AWS region; set :iam_region or use an RDS hostname'
+                'IamAuthPlugin: unable to determine connection region. ' \
+                "If you are using a non-standard RDS URL, please set the 'iam_region' property."
         end
 
-        token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(@props).to_sym
+        token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(@wrapper_props).to_sym
 
         port = Utils::IamAuthUtils.resolve_port(
-          PropertyDefinition::IAM_PORT.get(@props),
+          PropertyDefinition::IAM_PORT.get(@wrapper_props),
           host_info,
           @service_container.dialect_service.db_dialect.default_port
         )
 
         cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
         entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
-        expiration = PropertyDefinition::IAM_EXPIRATION.get_int(@props)
+        expiration = PropertyDefinition::IAM_EXPIRATION.get_int(@wrapper_props)
 
         if Utils::IamAuthUtils.valid_entry?(entry)
-          props[token_prop] = entry.token
-          is_cached_token   = true
+          driver_props[token_prop] = entry.token
+          is_cached_token = true
         else
-          props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
+          driver_props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
           is_cached_token = false
         end
 
         if @service_container.dialect_service.driver_dialect == DriverDialects::DriverDialectManager::MYSQL_DIALECT
-          props[:enable_cleartext_plugin] = true
+          driver_props[:enable_cleartext_plugin] = true
         end
 
         begin
@@ -99,7 +106,7 @@ module AwsRubyDatabaseDriverWrapper
         rescue StandardError => e
           raise unless is_cached_token && @service_container.dialect_service.login_error?(e)
 
-          props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
+          driver_props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
           pipeline_callable.call
         end
       end
@@ -116,11 +123,14 @@ module AwsRubyDatabaseDriverWrapper
         @token_generator ||= Aws::RDS::AuthTokenGenerator.new(credentials: @credentials_provider)
       end
 
-      def rds_client(region = nil)
-        @rds_client ||= Aws::RDS::Client.new(
-          credentials: @credentials_provider,
-          **(region ? { region: region } : {})
-        )
+      def rds_client
+        @rds_client ||= begin
+          region = PropertyDefinition::IAM_REGION.get(@wrapper_props)
+          Aws::RDS::Client.new(
+            credentials: @credentials_provider,
+            **(region ? { region: region } : {})
+          )
+        end
       end
 
       def ensure_aws_sdk!

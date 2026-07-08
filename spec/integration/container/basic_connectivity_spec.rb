@@ -27,13 +27,7 @@ require 'timeout'
 RSpec.describe 'BasicConnectivity', :integration,
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   # TODO: telemetry properties are not yet implemented in the Ruby wrapper
-  let(:wrapper_props) do
-    {
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => '',
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
-      connect_timeout: 3
-    }
-  end
+  let(:wrapper_props) { base_wrapper_props }
 
   def query_one(conn)
     result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
@@ -112,6 +106,63 @@ RSpec.describe 'BasicConnectivity', :integration,
       expect do
         Integration::DriverHelper.native_connect(drv, **bad_config)
       end.to raise_error(StandardError)
+    end
+  end
+
+  context 'global database connectivity',
+          features: [Integration::TestEnvironmentFeatures::GLOBAL_DATABASE] do
+    before do
+      skip 'Global Database not configured' unless env.global_cluster_endpoint
+    end
+
+    it 'connects to global cluster endpoint' do
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: env.global_cluster_endpoint,
+        port: writer.port,
+        user: info.username,
+        password: info.password,
+        dbname: info.default_dbname
+      )
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **wrapper_props)
+      expect(query_one(conn)).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'connects to primary cluster endpoint' do
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: info.cluster_endpoint,
+        port: writer.port,
+        user: info.username,
+        password: info.password,
+        dbname: info.default_dbname
+      )
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **wrapper_props)
+      expect(query_one(conn)).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'connects to secondary cluster endpoint' do
+      skip 'Secondary cluster endpoint not available' unless env.secondary_cluster_endpoint
+
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: env.secondary_cluster_endpoint,
+        port: writer.port,
+        user: info.username,
+        password: info.password,
+        dbname: info.default_dbname
+      )
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **wrapper_props)
+      expect(query_one(conn)).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
     end
   end
 end

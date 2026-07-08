@@ -56,9 +56,15 @@ import org.testcontainers.containers.Network;
 import org.testcontainers.containers.ToxiproxyContainer;
 import org.testcontainers.shaded.org.apache.commons.lang3.NotImplementedException;
 import org.testcontainers.utility.MountableFile;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.rds.model.BlueGreenDeployment;
 import software.amazon.awssdk.services.rds.model.DBCluster;
 import software.amazon.awssdk.services.rds.model.DBInstance;
+import software.amazon.awssdk.services.rds.model.DescribeDbClustersRequest;
+import software.amazon.awssdk.services.rds.model.DescribeDbClustersResponse;
 import integration.util.StringUtils;
 
 public class TestEnvironment implements AutoCloseable {
@@ -159,6 +165,10 @@ public class TestEnvironment implements AutoCloseable {
 
         break;
 
+      case AURORA_GLOBAL:
+        env = createGlobalDatabaseEnvironment(request);
+        break;
+
       default:
         throw new NotImplementedException(request.getDatabaseEngineDeployment().toString());
     }
@@ -195,6 +205,7 @@ public class TestEnvironment implements AutoCloseable {
   private static void cleanUp(TestEnvironment env) {
     DatabaseEngineDeployment deployment = env.info.getRequest().getDatabaseEngineDeployment();
     if (deployment == DatabaseEngineDeployment.AURORA
+        || deployment == DatabaseEngineDeployment.AURORA_GLOBAL
         || deployment == DatabaseEngineDeployment.RDS
         || deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_INSTANCE
         || deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_CLUSTER) {
@@ -215,6 +226,7 @@ public class TestEnvironment implements AutoCloseable {
   private static void authorizeRunnerIpAddress(TestEnvironment env) {
     DatabaseEngineDeployment deployment = env.info.getRequest().getDatabaseEngineDeployment();
     if (deployment == DatabaseEngineDeployment.AURORA
+        || deployment == DatabaseEngineDeployment.AURORA_GLOBAL
         || deployment == DatabaseEngineDeployment.RDS
         || deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_INSTANCE
         || deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_CLUSTER) {
@@ -268,6 +280,7 @@ public class TestEnvironment implements AutoCloseable {
         final DatabaseEngineDeployment deployment =
             resultTestEnvironment.info.getRequest().getDatabaseEngineDeployment();
         if (deployment == DatabaseEngineDeployment.AURORA
+            || deployment == DatabaseEngineDeployment.AURORA_GLOBAL
             || deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_CLUSTER) {
           LOGGER.finer(() -> String.format("Use pre-created DB cluster: %s.cluster-%s",
               resultTestEnvironment.rdsDbName, resultTestEnvironment.rdsDbDomain));
@@ -579,6 +592,184 @@ public class TestEnvironment implements AutoCloseable {
       default:
         throw new NotImplementedException(env.info.getRequest().getDatabaseEngine().toString());
     }
+  }
+
+  private static TestEnvironment createGlobalDatabaseEnvironment(TestEnvironmentRequest request) {
+    TestEnvironment env = new TestEnvironment(request);
+    initRandomBase(env);
+    initDatabaseParams(env);
+    initAwsCredentials(env);
+    initEnv(env);
+
+    String globalClusterId = config.gdbGlobalClusterIdentifier;
+    String secondaryRegion = config.gdbSecondaryRegion;
+
+    if (StringUtils.isNullOrEmpty(secondaryRegion)) {
+      throw new RuntimeException("GDB_SECONDARY_REGION environment variable is required for AURORA_GLOBAL deployment");
+    }
+
+    int port = getPort(request);
+    env.info.setPrimaryRegion(env.info.getRegion());
+    env.info.setSecondaryRegion(secondaryRegion);
+
+    if (env.reuseDb) {
+      // Reuse existing global database
+      if (StringUtils.isNullOrEmpty(globalClusterId)) {
+        throw new RuntimeException(
+            "GDB_GLOBAL_CLUSTER_IDENTIFIER is required when REUSE_RDS_DB=true for AURORA_GLOBAL deployment");
+      }
+      if (!env.auroraUtil.doesGlobalClusterExist(globalClusterId)) {
+        throw new RuntimeException(
+            "Requested to reuse global cluster '" + globalClusterId + "' but it does not exist");
+      }
+
+      LOGGER.finer("Reusing existing global cluster: " + globalClusterId);
+      env.info.setGlobalClusterIdentifier(globalClusterId);
+
+      software.amazon.awssdk.services.rds.model.GlobalCluster gc = env.auroraUtil.describeGlobalCluster(globalClusterId);
+
+      // Use the endpoint from the API response — do not construct it manually
+      String globalEndpoint = gc.endpoint();
+      env.info.setGlobalClusterEndpoint(globalEndpoint);
+
+      // Find primary and secondary members
+      for (software.amazon.awssdk.services.rds.model.GlobalClusterMember member : gc.globalClusterMembers()) {
+        String clusterArn = member.dbClusterArn();
+        if (member.isWriter()) {
+          // Primary cluster — extract the cluster identifier from the ARN
+          String primaryClusterId = clusterArn.substring(clusterArn.lastIndexOf(':') + 1);
+          env.rdsDbName = primaryClusterId;
+          env.info.setRdsDbName(primaryClusterId);
+        } else {
+          // Secondary cluster
+          String secondaryClusterId = clusterArn.substring(clusterArn.lastIndexOf(':') + 1);
+          env.info.setSecondaryClusterIdentifier(secondaryClusterId);
+        }
+      }
+
+      // Get primary cluster info from RDS
+      DBCluster primaryCluster = env.auroraUtil.getClusterInfo(env.rdsDbName);
+      String primaryEndpoint = primaryCluster.endpoint();
+      String primaryReaderEndpoint = primaryCluster.readerEndpoint();
+
+      // Derive the domain suffix from the primary endpoint
+      // e.g. "my-cluster.cluster-abc123.us-east-1.rds.amazonaws.com" -> "abc123.us-east-1.rds.amazonaws.com"
+      String domainSuffix = primaryEndpoint.substring(primaryEndpoint.indexOf(".") + 1);
+      env.rdsDbDomain = domainSuffix;
+
+      env.info.setDatabaseEngine(primaryCluster.engine());
+      env.info.setDatabaseEngineVersion(primaryCluster.engineVersion());
+
+      // Set database info
+      TestDatabaseInfo databaseInfo = env.info.getDatabaseInfo();
+      databaseInfo.setClusterEndpoint(primaryEndpoint, port);
+      databaseInfo.setClusterReadOnlyEndpoint(primaryReaderEndpoint, port);
+      databaseInfo.setInstanceEndpointSuffix(domainSuffix, port);
+
+      // Fetch live instances for the primary cluster
+      List<TestInstanceInfo> instances = env.auroraUtil.getTestInstancesInfo(env.rdsDbName);
+      databaseInfo.getInstances().clear();
+      databaseInfo.getInstances().addAll(instances);
+
+      // Set secondary cluster endpoint
+      String secondaryClusterId = env.info.getSecondaryClusterIdentifier();
+      if (!StringUtils.isNullOrEmpty(secondaryClusterId)) {
+        AwsCredentialsProvider credProvider = DefaultCredentialsProvider.create();
+        RdsClient secondaryRds = RdsClient.builder()
+            .region(Region.of(secondaryRegion))
+            .credentialsProvider(credProvider)
+            .build();
+        try {
+          DescribeDbClustersResponse resp = secondaryRds.describeDBClusters(
+              DescribeDbClustersRequest.builder().dbClusterIdentifier(secondaryClusterId).build());
+          if (resp.hasDbClusters() && !resp.dbClusters().isEmpty()) {
+            env.info.setSecondaryClusterEndpoint(resp.dbClusters().get(0).endpoint());
+          }
+        } finally {
+          secondaryRds.close();
+        }
+      }
+
+      LOGGER.finer("Global cluster endpoint: " + globalEndpoint);
+      LOGGER.finer("Primary cluster endpoint: " + primaryEndpoint);
+
+    } else {
+      // Create new global database
+      LOGGER.finer("Creating new global database environment");
+
+      // Create the primary Aurora cluster (reuses existing createDbCluster logic which
+      // handles cluster creation, endpoint setup, instance creation, and waitForClusterAvailable)
+      createDbCluster(env, request.getNumOfInstances());
+
+      // Create global cluster with primary as source
+      if (StringUtils.isNullOrEmpty(globalClusterId)) {
+        globalClusterId = "gdb-" + env.info.getRandomBase();
+      }
+      env.info.setGlobalClusterIdentifier(globalClusterId);
+
+      // Get the primary cluster ARN
+      DBCluster primaryCluster = env.auroraUtil.getClusterInfo(env.rdsDbName);
+      String primaryClusterArn = primaryCluster.dbClusterArn();
+
+      env.auroraUtil.createGlobalCluster(globalClusterId,
+          env.info.getDatabaseEngine(), env.info.getDatabaseEngineVersion(), primaryClusterArn);
+
+      env.auroraUtil.waitUntilGlobalClusterAvailable(globalClusterId, 20);
+
+      // Create secondary cluster
+      String secondaryClusterId = "gdb-secondary-" + env.info.getRandomBase();
+      env.info.setSecondaryClusterIdentifier(secondaryClusterId);
+      AwsCredentialsProvider credProvider = DefaultCredentialsProvider.create();
+
+      String secondaryEndpoint = env.auroraUtil.createSecondaryCluster(
+          secondaryClusterId, globalClusterId,
+          env.info.getDatabaseEngine(), env.info.getDatabaseEngineVersion(),
+          Region.of(secondaryRegion), credProvider, 1);
+      env.info.setSecondaryClusterEndpoint(secondaryEndpoint);
+
+      env.auroraUtil.waitUntilGlobalClusterAvailable(globalClusterId, 20);
+
+      // Set global cluster endpoint from API response
+      software.amazon.awssdk.services.rds.model.GlobalCluster gc = env.auroraUtil.describeGlobalCluster(globalClusterId);
+      String globalEndpoint = gc.endpoint();
+      env.info.setGlobalClusterEndpoint(globalEndpoint);
+
+      LOGGER.finer("Global cluster endpoint: " + globalEndpoint);
+    }
+
+    authorizeRunnerIpAddress(env);
+
+    // Also authorize in the cluster's actual security group
+    try {
+      DBCluster clusterInfo = env.auroraUtil.getClusterInfo(env.rdsDbName);
+      if (clusterInfo.vpcSecurityGroups() != null) {
+        String runnerIP = env.auroraUtil.getPublicIPAddress();
+        for (software.amazon.awssdk.services.rds.model.VpcSecurityGroupMembership sg : clusterInfo.vpcSecurityGroups()) {
+          env.auroraUtil.ec2AuthorizeIPByGroupId(sg.vpcSecurityGroupId(), runnerIP);
+        }
+      }
+    } catch (Exception ex) {
+      LOGGER.warning("Failed to authorize IP in cluster security group: " + ex.getMessage());
+    }
+
+    // Authorize IP in secondary region for cross-region connectivity
+    if (!StringUtils.isNullOrEmpty(secondaryRegion) && !StringUtils.isNullOrEmpty(env.info.getSecondaryClusterEndpoint())) {
+      try {
+        AuroraTestUtility secondaryUtil = new AuroraTestUtility(secondaryRegion, env.rdsEndpoint);
+        String runnerIP = secondaryUtil.getPublicIPAddress();
+        secondaryUtil.ec2AuthorizeIP(runnerIP);
+        LOGGER.finer("Authorized runner IP " + runnerIP + " in secondary region " + secondaryRegion);
+      } catch (Exception ex) {
+        LOGGER.warning("Failed to authorize IP in secondary region: " + ex.getMessage());
+      }
+      waitForConnectivity(env.info.getSecondaryClusterEndpoint(), port);
+    }
+
+    waitForConnectivity(env.info.getDatabaseInfo().getClusterEndpoint(), port);
+
+    configureIamAccess(env);
+
+    return env;
   }
 
   private static void createDbCluster(TestEnvironment env) {
@@ -989,6 +1180,7 @@ public class TestEnvironment implements AutoCloseable {
   private static String getDbEngine(TestEnvironmentRequest request) {
     switch (request.getDatabaseEngineDeployment()) {
       case AURORA:
+      case AURORA_GLOBAL:
         return getAuroraDbEngine(request);
       case RDS:
       case RDS_MULTI_AZ_CLUSTER:
@@ -1342,6 +1534,7 @@ public class TestEnvironment implements AutoCloseable {
       String url;
       switch (deployment) {
         case AURORA:
+        case AURORA_GLOBAL:
         case RDS_MULTI_AZ_CLUSTER:
           url = String.format(
               "%s%s:%d/%s",
@@ -1538,6 +1731,75 @@ public class TestEnvironment implements AutoCloseable {
       case DOCKER:
         // no external resources to dispose
         // do nothing
+        break;
+      case AURORA_GLOBAL:
+        if (!this.reuseDb) {
+          // Remove secondary cluster from global cluster, delete it
+          String secondaryClusterId = this.info.getSecondaryClusterIdentifier();
+          String globalClusterId = this.info.getGlobalClusterIdentifier();
+          String secondaryRegion = this.info.getSecondaryRegion();
+          if (!StringUtils.isNullOrEmpty(secondaryClusterId) && !StringUtils.isNullOrEmpty(globalClusterId)) {
+            try {
+              // Get secondary cluster ARN and remove from global cluster
+              AwsCredentialsProvider credProvider = DefaultCredentialsProvider.create();
+              RdsClient secRds = RdsClient.builder().region(Region.of(secondaryRegion)).credentialsProvider(credProvider).build();
+              try {
+                DescribeDbClustersResponse secDesc = secRds.describeDBClusters(
+                    DescribeDbClustersRequest.builder().dbClusterIdentifier(secondaryClusterId).build());
+                if (secDesc.hasDbClusters() && !secDesc.dbClusters().isEmpty()) {
+                  String secArn = secDesc.dbClusters().get(0).dbClusterArn();
+                  this.auroraUtil.removeClusterFromGlobalCluster(globalClusterId, secArn);
+                  // Wait for removal to propagate by polling global cluster status
+                  this.auroraUtil.waitUntilGlobalClusterAvailable(globalClusterId, 10);
+                }
+              } finally {
+                secRds.close();
+              }
+              // Delete secondary cluster and wait for it to be fully gone
+              this.auroraUtil.deleteSecondaryCluster(secondaryClusterId, Region.of(secondaryRegion), credProvider);
+            } catch (Exception ex) {
+              LOGGER.warning("Failed to clean up secondary cluster: " + ex.getMessage());
+              if (firstException == null) firstException = ex;
+            }
+          }
+          // Remove primary from global cluster
+          if (!StringUtils.isNullOrEmpty(globalClusterId) && !StringUtils.isNullOrEmpty(this.rdsDbName)) {
+            try {
+              DBCluster primaryCluster = this.auroraUtil.getClusterInfo(this.rdsDbName);
+              if (primaryCluster != null) {
+                String primaryArn = primaryCluster.dbClusterArn();
+                this.auroraUtil.removeClusterFromGlobalCluster(globalClusterId, primaryArn);
+                // Wait for global cluster to reflect the removal
+                this.auroraUtil.waitUntilGlobalClusterAvailable(globalClusterId, 10);
+              }
+            } catch (Exception ex) {
+              LOGGER.warning("Failed to remove primary from global cluster: " + ex.getMessage());
+            }
+          }
+          // Delete global cluster
+          if (!StringUtils.isNullOrEmpty(globalClusterId)) {
+            this.auroraUtil.deleteGlobalCluster(globalClusterId);
+          }
+          // Delete primary cluster
+          try {
+            deleteDbCluster(false);
+          } catch (Exception ex) {
+            if (firstException == null) firstException = ex;
+          }
+        }
+        // De-authorize IP in secondary region
+        String secondaryRegionCleanup = this.info.getSecondaryRegion();
+        if (!StringUtils.isNullOrEmpty(secondaryRegionCleanup)) {
+          try {
+            AuroraTestUtility secondaryUtil = new AuroraTestUtility(secondaryRegionCleanup, null);
+            String runnerIP = secondaryUtil.getPublicIPAddress();
+            secondaryUtil.ec2DeauthorizesIP(runnerIP);
+            LOGGER.finer("De-authorized runner IP in secondary region " + secondaryRegionCleanup);
+          } catch (Exception ex) {
+            LOGGER.warning("Failed to de-authorize IP in secondary region: " + ex.getMessage());
+          }
+        }
+        deAuthorizeIP(this);
         break;
       default:
         throw new NotImplementedException(this.info.getRequest().getDatabaseEngineDeployment().toString());

@@ -27,5 +27,6 @@ module Integration
     TELEMETRY_TRACES_ENABLED = :telemetry_traces_enabled
     TELEMETRY_METRICS_ENABLED = :telemetry_metrics_enabled
     BLUE_GREEN_DEPLOYMENT = :blue_green_deployment
+    GLOBAL_DATABASE = :global_database
   end
 end

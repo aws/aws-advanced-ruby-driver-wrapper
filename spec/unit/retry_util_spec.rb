@@ -56,14 +56,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
            refresh_host_list: nil)
   end
 
+  let(:connection_service) { double('connection_service', driver_props: props) }
+
   let(:service_container) do
     double('service_container',
            host_service: host_service,
            plugin_manager: plugin_manager,
-           dialect_service: dialect_service)
+           dialect_service: dialect_service,
+           connection_service: connection_service)
   end
 
-  let(:retry_util) { described_class.new(service_container, props) }
+  let(:retry_util) { described_class.new(service_container) }
 
   describe '#connect_to_writer' do
     context 'when writer is available and role is confirmed' do
