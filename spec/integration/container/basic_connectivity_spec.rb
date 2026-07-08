@@ -134,7 +134,7 @@ RSpec.describe 'BasicConnectivity', :integration,
     it 'connects to primary cluster endpoint' do
       config = Integration::DriverHelper.native_config(
         drv,
-        host: writer.host,
+        host: info.cluster_endpoint,
         port: writer.port,
         user: info.username,
         password: info.password,
