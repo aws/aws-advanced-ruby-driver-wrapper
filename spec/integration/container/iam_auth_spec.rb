@@ -60,14 +60,12 @@ RSpec.describe 'AwsIamAuthentication', :integration,
 
   it 'connects with valid IAM credentials' do
     target_host = writer.host
-    target_port = writer.port
-    resolved_ip = begin
+    writer.port
+    begin
       Resolv.getaddress(target_host)
     rescue StandardError => e
       "resolution_failed: #{e.message}"
     end
-    $stdout.puts "[IAM Diag] host=#{target_host}, port=#{target_port}, resolved_ip=#{resolved_ip}, " \
-                 "user=#{env.iam_user_name}, driver=#{drv}"
 
     conn = Integration::DriverHelper.wrapper_connect(drv, **iam_config, **iam_props)
     result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
