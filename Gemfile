@@ -28,6 +28,7 @@ group :development do
   gem 'rdoc'
   gem 'rubocop'
   gem 'rubocop-performance'
+  gem 'solargraph'
   gem 'yard', '>= 0.9.44'
 end
 

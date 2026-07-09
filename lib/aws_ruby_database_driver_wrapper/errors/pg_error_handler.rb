@@ -31,6 +31,12 @@ module AwsRubyDatabaseDriverWrapper
         @driver_dialect = driver_dialect
       end
 
+      def network_error?(error)
+        return true if super
+
+        check_cause_chain(error) { |_, current| connection_bad_network_error?(current) }
+      end
+
       def network_error_by_sql_state?(sql_state)
         return false if sql_state.nil?
 
@@ -58,6 +64,29 @@ module AwsRubyDatabaseDriverWrapper
 
       def read_only_error_by_sql_state?(sql_state, _error_code = nil)
         sql_state == READ_ONLY_SQL_STATE
+      end
+
+      NETWORK_ERROR_MESSAGES = [
+        'unexpected eof',
+        'closed the connection unexpectedly',
+        'reset by peer',
+        'could not receive data',
+        'could not send data',
+        'connection not open',
+        'no connection to the server',
+        'connection is closed',
+        'broken pipe'
+      ].freeze
+
+      private
+
+      def connection_bad_network_error?(error)
+        return false unless defined?(PG::ConnectionBad) && error.is_a?(PG::ConnectionBad)
+
+        msg = error.message&.downcase
+        return false if msg.nil?
+
+        NETWORK_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) }
       end
     end
   end

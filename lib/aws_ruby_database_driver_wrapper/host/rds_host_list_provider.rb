@@ -112,11 +112,24 @@ module AwsRubyDatabaseDriverWrapper
       def build_instance_template(props)
         pattern = PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.get(props)
         if pattern
-          port = initial_host_info.port
-          HostInfo.new(host: pattern, port:)
+          host, port = parse_host_port_pattern(pattern)
+          port ||= initial_host_info.port
+          HostInfo.new(host: host, port: port)
         else
           auto_pattern = Utils::RdsUtils.rds_instance_host_pattern(initial_host_info.host)
           HostInfo.new(host: auto_pattern, port: initial_host_info.port)
+        end
+      end
+
+      def parse_host_port_pattern(pattern)
+        last_colon = pattern.rindex(':')
+        return [pattern, nil] if last_colon.nil?
+
+        possible_port = pattern[(last_colon + 1)..]
+        if possible_port.match?(/\A\d+\z/)
+          [pattern[0...last_colon], possible_port]
+        else
+          [pattern, nil]
         end
       end
 

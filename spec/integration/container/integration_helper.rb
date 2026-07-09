@@ -29,6 +29,10 @@ require_relative 'utils/test_environment_features'
 
 module Integration
   module IntegrationHelper
+    AwsRubyDatabaseDriverWrapper.logger.level = Logger::DEBUG
+    $stderr.sync = true
+    $stdout.sync = true
+
     LOGGER = Logger.new($stdout, progname: 'Integration::IntegrationHelper')
 
     # Runs before each example. Call from a before(:each) hook in integration specs.

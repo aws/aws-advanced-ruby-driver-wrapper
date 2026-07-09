@@ -40,6 +40,7 @@ RSpec.describe 'Failover', :integration,
   let(:failover_props) do
     {
       AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
+      AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
       AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
         "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
       connect_timeout: 10
