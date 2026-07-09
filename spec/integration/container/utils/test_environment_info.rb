@@ -35,7 +35,13 @@ module Integration
                 :database_info,
                 :proxy_database_info,
                 :traces_telemetry_info,
-                :metrics_telemetry_info
+                :metrics_telemetry_info,
+                :global_cluster_endpoint,
+                :global_cluster_identifier,
+                :primary_region,
+                :secondary_region,
+                :secondary_cluster_endpoint,
+                :secondary_cluster_identifier
 
     def initialize(test_info)
       return if test_info.nil?
@@ -55,6 +61,12 @@ module Integration
       @proxy_database_info = TestProxyDatabaseInfo.new(test_info['proxyDatabaseInfo']) if test_info['proxyDatabaseInfo']
       @traces_telemetry_info = TestTelemetryInfo.new(test_info['tracesTelemetryInfo']) if test_info['tracesTelemetryInfo']
       @metrics_telemetry_info = TestTelemetryInfo.new(test_info['metricsTelemetryInfo']) if test_info['metricsTelemetryInfo']
+      @global_cluster_endpoint = test_info['globalClusterEndpoint']
+      @global_cluster_identifier = test_info['globalClusterIdentifier']
+      @primary_region = test_info['primaryRegion']
+      @secondary_region = test_info['secondaryRegion']
+      @secondary_cluster_endpoint = test_info['secondaryClusterEndpoint']
+      @secondary_cluster_identifier = test_info['secondaryClusterIdentifier']
     end
   end
 end

@@ -17,6 +17,7 @@
 require 'uri'
 require_relative 'rds_utils'
 require_relative 'rds_url_type'
+require_relative '../property_definition'
 
 module AwsRubyDatabaseDriverWrapper
   module Utils
@@ -47,7 +48,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def region_for(host:, props:, rds_type:, credentials_provider:, rds_client_func: nil)
-        explicit = props[:iam_region]
+        explicit = PropertyDefinition::IAM_REGION.get(props)
         return explicit if explicit && !explicit.empty?
 
         return RdsUtils.rds_region(host) unless rds_type == RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER

@@ -52,7 +52,7 @@ module AwsRubyDatabaseDriverWrapper
       def initialize(service_container, props = ::Concurrent::Map.new)
         ensure_sdk!
         @service_container = service_container
-        @props = props
+        @wrapper_props = props
         @credentials_provider = PropertyDefinition::SECRET_CREDENTIALS_PROVIDER.get(props) ||
                                 Aws::CredentialProviderChain.new.resolve
         @secret_id = PropertyDefinition::SECRET_ID.get(props)
@@ -75,19 +75,19 @@ module AwsRubyDatabaseDriverWrapper
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
-      def connect(_host_info, props, _is_initial_connection, pipeline_callable)
-        secrets_connect(props, pipeline_callable)
+      def connect(_host_info, driver_props, _is_initial_connection, pipeline_callable)
+        secrets_connect(driver_props, pipeline_callable)
       end
 
-      def internal_connect(_host_info, props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
-        secrets_connect(props, pipeline_callable)
+      def internal_connect(_host_info, driver_props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
+        secrets_connect(driver_props, pipeline_callable)
       end
 
       private
 
-      def secrets_connect(props, pipeline_callable)
+      def secrets_connect(driver_props, pipeline_callable)
         secret_is_fresh = fetch_secret_and_report_if_fresh?(force: false)
-        apply_secret(props)
+        apply_secret(driver_props)
 
         begin
           return pipeline_callable.call
@@ -97,20 +97,20 @@ module AwsRubyDatabaseDriverWrapper
 
         # First forced refetch + retry
         fetch_secret_and_report_if_fresh?(force: true)
-        apply_secret(props)
+        apply_secret(driver_props)
 
         begin
           pipeline_callable.call
         rescue StandardError => e
           raise unless @rotation_retry_timeout_sec.positive? && @service_container.dialect_service.login_error?(e)
 
-          rotation_retry(props, pipeline_callable, e)
+          rotation_retry(driver_props, pipeline_callable, e)
         end
       end
 
       # Retry loop for rotation window: poll GetSecretValue with exponential backoff
       # until AWSCURRENT is promoted or timeout expires.
-      def rotation_retry(props, pipeline_callable, last_error)
+      def rotation_retry(driver_props, pipeline_callable, last_error)
         deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @rotation_retry_timeout_sec
         delay_sec = @rotation_retry_base_delay_sec
 
@@ -124,7 +124,7 @@ module AwsRubyDatabaseDriverWrapper
           sleep(sleep_sec)
 
           fetch_secret_and_report_if_fresh?(force: true)
-          apply_secret(props)
+          apply_secret(driver_props)
 
           begin
             return pipeline_callable.call
@@ -203,18 +203,18 @@ module AwsRubyDatabaseDriverWrapper
         entry
       end
 
-      def apply_secret(props)
+      def apply_secret(driver_props)
         raise Errors::SecretsManagerAuthError, 'Failed to fetch database credentials from AWS Secrets Manager' unless @secret
 
         user_key = @service_container.dialect_service.driver_dialect.user_property_key
-        props[user_key] = @secret.username
-        props[:password] = @secret.password
+        driver_props[user_key] = @secret.username
+        driver_props[:password] = @secret.password
       end
 
       def secrets_client
         @secrets_client ||= begin
           opts = { region: @region, credentials: @credentials_provider }
-          endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@props)
+          endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
           opts[:endpoint] = endpoint if endpoint
           Aws::SecretsManager::Client.new(**opts)
         end

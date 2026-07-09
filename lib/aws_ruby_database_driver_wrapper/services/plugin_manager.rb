@@ -16,6 +16,7 @@
 
 require 'logger'
 require_relative '../errors'
+require_relative '../property_definition'
 require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
@@ -26,9 +27,8 @@ module AwsRubyDatabaseDriverWrapper
   module Services
     class PluginManager
       WEIGHT_RELATIVE_TO_PRIOR_PLUGIN = -1
-      DEFAULT_PLUGINS = 'failover'
       NOOP_CALLABLE = -> {}.freeze
-      private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :DEFAULT_PLUGINS, :NOOP_CALLABLE
+      private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :NOOP_CALLABLE
 
       @plugin_classes = {
         'failover' => Plugins::FailoverPlugin,
@@ -60,22 +60,22 @@ module AwsRubyDatabaseDriverWrapper
         @pipeline_cache = {}
       end
 
-      def connect(host_info, props, is_initial_connection, plugin_to_skip: nil)
+      def connect(host_info, driver_props, is_initial_connection, plugin_to_skip: nil)
         execute_with_subscribed_plugins(
           'connect',
           lambda do |plugin, next_plugin_callable|
-            plugin.connect(host_info, props, is_initial_connection, next_plugin_callable)
+            plugin.connect(host_info, driver_props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
           plugin_to_skip:
         )
       end
 
-      def internal_connect(host_info, props, wrapper_override_props, is_initial_connection, plugin_to_skip: nil)
+      def internal_connect(host_info, driver_props, wrapper_override_props, is_initial_connection, plugin_to_skip: nil)
         execute_with_subscribed_plugins(
           'internal_connect',
           lambda do |plugin, next_plugin_callable|
-            plugin.internal_connect(host_info, props, wrapper_override_props, is_initial_connection, next_plugin_callable)
+            plugin.internal_connect(host_info, driver_props, wrapper_override_props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
           plugin_to_skip:
@@ -117,7 +117,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def load_plugins(service_container)
         wrapper_props = service_container.connection_service.wrapper_props
-        plugin_codes = wrapper_props[:wrapper_plugins] || DEFAULT_PLUGINS
+        plugin_codes = PropertyDefinition::PLUGINS.get(wrapper_props)
         codes_list = plugin_codes.split(',').map(&:strip)
         raise Errors::AwsError, 'Duplicate plugins detected' if codes_list.length != codes_list.uniq.length
 

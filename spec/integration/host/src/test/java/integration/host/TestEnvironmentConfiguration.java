@@ -101,4 +101,10 @@ public class TestEnvironmentConfiguration {
   public String kmsKeyId = System.getenv("KMS_KEY_ID");
   public String iamUser = System.getenv("IAM_USER");
 
+  // Global Database
+  public boolean noGlobalDatabase =
+      Boolean.parseBoolean(System.getProperty("exclude-global-database", "true"));
+  public String gdbSecondaryRegion = System.getenv("GDB_SECONDARY_REGION");
+  public String gdbGlobalClusterIdentifier = System.getenv("GDB_GLOBAL_CLUSTER_IDENTIFIER");
+
 }
