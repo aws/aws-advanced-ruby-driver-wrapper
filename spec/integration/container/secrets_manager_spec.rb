@@ -72,9 +72,23 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     conn1 = create_sm_wrapper_connection(secret_id: @secret_id)
     Integration::DriverHelper.execute(drv, conn1, 'SELECT 1')
 
+    # Verify the cache is populated after first connection
+    sc = conn1.instance_variable_get(:@service_container)
+    storage = sc.storage_service
+    cache_key = "#{@secret_id}:#{region}"
+    cached_entry = storage.get(:secrets_manager, cache_key)
+    expect(cached_entry).not_to be_nil
+    expect(cached_entry.expired?).to be false
+
+    # Second connection should reuse the cached entry (no pending refresh triggered)
     conn2 = create_sm_wrapper_connection(secret_id: @secret_id)
     result = Integration::DriverHelper.execute(drv, conn2, 'SELECT 1 AS val')
     expect(result.first['val'].to_i).to eq(1)
+
+    # Cache entry should be the same object (not re-fetched)
+    cached_entry_after = storage.get(:secrets_manager, cache_key)
+    expect(cached_entry_after.expires_at).to eq(cached_entry.expires_at)
+    expect(AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes).to be_empty
   ensure
     Integration::DriverHelper.close(drv, conn1) if conn1
     Integration::DriverHelper.close(drv, conn2) if conn2
@@ -103,7 +117,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     end.to raise_error(StandardError)
   end
 
-  it 'serves stale credentials immediately and refreshes in background (SWR)' do
+  it 'serves stale credentials and immediately refreshes in background (SWR)' do
     conn1 = create_sm_wrapper_connection(secret_id: @secret_id)
     Integration::DriverHelper.execute(drv, conn1, 'SELECT 1')
 
@@ -140,19 +154,32 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
   end
 
   it 'concurrent connections share single in-flight fetch (dedup)' do
+    barrier = Concurrent::CountDownLatch.new(1)
     threads = Array.new(5) do
       Thread.new do
+        barrier.wait # ensure all threads start simultaneously
         c = create_sm_wrapper_connection(secret_id: @secret_id)
         r = Integration::DriverHelper.execute(drv, c, 'SELECT 1 AS val')
         [c, r.first['val'].to_i]
       end
     end
 
+    # Release all threads at once
+    barrier.count_down
+
     results = threads.map(&:value)
     conns = results.map(&:first)
     values = results.map(&:last)
 
     expect(values).to all(eq(1))
+
+    # All connections should share the same cached entry (same expires_at proves single fetch)
+    entries = conns.map do |c|
+      sc = c.instance_variable_get(:@service_container)
+      sc.storage_service.get(:secrets_manager, "#{@secret_id}:#{region}")
+    end
+    expires_at_values = entries.compact.map(&:expires_at).uniq
+    expect(expires_at_values.size).to eq(1)
 
     # Verify pending_refreshes is clean (all futures resolved)
     pending = AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes
