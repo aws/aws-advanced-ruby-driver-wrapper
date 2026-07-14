@@ -17,17 +17,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby-version: [ '3.3', '4.0' ]
         environment: [ 'mysql', 'pg' ]
 
     steps:
       - name: 'Clone repository'
         uses: actions/checkout@v7
 
-      - name: 'Set up Ruby ${{ matrix.ruby-version }}'
+      - name: 'Set up Ruby 3.3'
         uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
         with:
-          ruby-version: ${{ matrix.ruby-version }}
+          ruby-version: '3.3'
           bundler-cache: true
 
       - name: 'Set up JDK 8'
@@ -45,18 +44,18 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: 'Run LTS Integration Tests'
-        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-${{ matrix.ruby-version }}-${{ matrix.environment }} --info
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-${{ matrix.environment }} --info
         env:
           RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           AURORA_MYSQL_DB_ENGINE_VERSION: lts
           AURORA_PG_ENGINE_VERSION: lts
 
-      - name: 'Archive Latest results'
+      - name: 'Archive LTS results'
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: rspec-integration-report-${{ matrix.ruby-version }}-${{ matrix.environment }}-lts
+          name: rspec-integration-report-3.3-${{ matrix.environment }}-lts
           path: ./spec/integration/host/build/reports/tests/test/
           if-no-files-found: ignore
           retention-days: 5
@@ -68,17 +67,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ruby-version: [ '3.3', '4.0' ]
         environment: [ 'mysql', 'pg' ]
 
     steps:
       - name: 'Clone repository'
         uses: actions/checkout@v7
 
-      - name: 'Set up Ruby ${{ matrix.ruby-version }}'
+      - name: 'Set up Ruby 4.0'
         uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
         with:
-          ruby-version: ${{ matrix.ruby-version }}
+          ruby-version: '4.0'
           bundler-cache: true
 
       - name: 'Set up JDK 8'
@@ -96,7 +94,7 @@ jobs:
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: 'Run Latest Integration Tests'
-        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-${{ matrix.ruby-version }}-${{ matrix.environment }} --info
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-4.0-${{ matrix.environment }} --info
         env:
           RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
@@ -107,7 +105,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: rspec-integration-report-${{ matrix.ruby-version }}-${{ matrix.environment }}-latest
+          name: rspec-integration-report-4.0-${{ matrix.environment }}-latest
           path: ./spec/integration/host/build/reports/tests/test/
           if-no-files-found: ignore
           retention-days: 5
