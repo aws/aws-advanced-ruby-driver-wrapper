@@ -227,8 +227,8 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         begin
-          result = reader_failover_connection(failover_deadline)
           was_in_transaction = @service_container.session_state_service.in_transaction?
+          result = reader_failover_connection(failover_deadline)
           connection_service.update_current_connection(result.connection, result.host_info)
         rescue Timeout::Error
           raise Errors::FailoverFailedError, 'Unable to connect to a reader instance'
@@ -252,10 +252,10 @@ module AwsRubyDatabaseDriverWrapper
             raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
           end
 
+          was_in_transaction = @service_container.session_state_service.in_transaction?
           result = @retry_util.connect_to_writer(self, deadline: failover_deadline)
           if result&.connection && result.host_info
             success = true
-            was_in_transaction = @service_container.session_state_service.in_transaction?
             connection_service.update_current_connection(result.connection, result.host_info)
             raise_failover_success_error(was_in_transaction)
           end

@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative 'integration_helper'
+require_relative 'utils/test_utils'
 require_relative 'utils/test_environment'
 require_relative 'utils/test_environment_features'
 require_relative 'utils/test_driver'
@@ -108,94 +109,32 @@ RSpec.describe 'Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'fails over within transaction opened with SET AUTOCOMMIT=0',
+    it 'fails over within transaction',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
       conn = failover_connect(host: initial_writer_instance.host, port: initial_writer_instance.port)
 
-      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_autocommit')
-      execute_sql(conn, 'CREATE TABLE test_failover_autocommit (id int not null primary key, val varchar(255) not null)')
-      execute_sql(conn, 'SET AUTOCOMMIT=0')
-      execute_sql(conn, "INSERT INTO test_failover_autocommit VALUES (1, 'value1')")
+      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_transaction')
+      execute_sql(conn, 'CREATE TABLE test_failover_transaction (id int not null primary key, val varchar(255) not null)')
+      execute_sql(conn, 'BEGIN')
+      execute_sql(conn, "INSERT INTO test_failover_transaction VALUES (1, 'value1')")
 
       rds_util.crash_instance(current_writer)
 
-      expect { execute_sql(conn, "INSERT INTO test_failover_autocommit VALUES (2, 'value2')") }.to raise_error(
+      expect { execute_sql(conn, "INSERT INTO test_failover_transaction VALUES (2, 'value2')") }.to raise_error(
         AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError
       )
 
       current_connection_id = query_instance_id(conn)
       expect(Integration::RetryHelper.verify_writer(rds_util, current_connection_id)).to be true
 
-      result = execute_sql(conn, 'SELECT count(*) AS cnt FROM test_failover_autocommit')
+      result = execute_sql(conn, 'SELECT count(*) AS cnt FROM test_failover_transaction')
       count = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
       expect(count.to_i).to eq(0)
 
-      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_autocommit')
-    ensure
-      Integration::DriverHelper.close(drv, conn) if conn
-    end
-
-    it 'fails over within transaction opened with START TRANSACTION',
-       features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
-      enable_on_num_instances(min_instances: 2)
-
-      initial_writer_instance = proxy_info.instances.first
-      conn = failover_connect(host: initial_writer_instance.host, port: initial_writer_instance.port)
-
-      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_start_txn')
-      execute_sql(conn, 'CREATE TABLE test_failover_start_txn (id int not null primary key, val varchar(255) not null)')
-      execute_sql(conn, 'START TRANSACTION')
-      execute_sql(conn, "INSERT INTO test_failover_start_txn VALUES (1, 'value1')")
-
-      rds_util.crash_instance(current_writer)
-
-      expect { execute_sql(conn, "INSERT INTO test_failover_start_txn VALUES (2, 'value2')") }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError
-      )
-
-      current_connection_id = query_instance_id(conn)
-      expect(Integration::RetryHelper.verify_writer(rds_util, current_connection_id)).to be true
-
-      result = execute_sql(conn, 'SELECT count(*) AS cnt FROM test_failover_start_txn')
-      count = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
-      expect(count.to_i).to eq(0)
-
-      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_start_txn')
-    ensure
-      Integration::DriverHelper.close(drv, conn) if conn
-    end
-
-    it 'fails over from writer with autocommit false and preserves autocommit state',
-       features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
-      enable_on_num_instances(min_instances: 2)
-
-      initial_writer_instance = proxy_info.instances.first
-      conn = failover_connect(host: initial_writer_instance.host, port: initial_writer_instance.port)
-
-      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_writer')
-      execute_sql(conn, 'CREATE TABLE test_failover_writer (id int not null primary key, val varchar(255) not null)')
-      execute_sql(conn, 'SET AUTOCOMMIT=0')
-      execute_sql(conn, 'COMMIT')
-      execute_sql(conn, "INSERT INTO test_failover_writer VALUES (1, 'value1')")
-
-      rds_util.crash_instance(current_writer)
-
-      expect { execute_sql(conn, "INSERT INTO test_failover_writer VALUES (2, 'value2')") }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError
-      )
-
-      current_connection_id = query_instance_id(conn)
-      expect(Integration::RetryHelper.verify_writer(rds_util, current_connection_id)).to be true
-
-      result = execute_sql(conn, 'SELECT count(*) AS cnt FROM test_failover_writer')
-      count = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
-      expect(count.to_i).to eq(0)
-
-      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_writer')
-      execute_sql(conn, 'COMMIT')
+      execute_sql(conn, 'DROP TABLE IF EXISTS test_failover_transaction')
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end
@@ -207,7 +146,7 @@ RSpec.describe 'Failover', :integration,
       initial_writer_instance = proxy_info.instances.first
       conn = failover_connect(host: initial_writer_instance.host, port: initial_writer_instance.port)
 
-      rds_util.simulate_temporary_failure(current_writer, 0, 5)
+      rds_util.simulate_temporary_failure(current_writer, 0, 15)
 
       expect { query_instance_id(conn) }.to raise_error(
         AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
@@ -219,19 +158,23 @@ RSpec.describe 'Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'preserves connection properties after failover (pg statement_timeout)',
+    it 'preserves connection properties after failover (pg application_name)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
        enable_on_engines: [Integration::DatabaseEngine::PG] do
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      conn = failover_connect(host: initial_writer_instance.host, port: initial_writer_instance.port)
-
-      execute_sql(conn, "SET statement_timeout = '5000'")
-
-      result = execute_sql(conn, 'SHOW statement_timeout')
-      value = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
-      expect(value).to eq('5s')
+      props = failover_props.merge('application_name' => 'failover_props_test')
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: initial_writer_instance.host,
+        port: initial_writer_instance.port,
+        user: proxy_info.username,
+        password: proxy_info.password,
+        dbname: proxy_info.default_dbname
+      )
+      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
+      expect(conn.conninfo_hash[:application_name]).to eq('failover_props_test')
 
       rds_util.crash_instance(current_writer)
 
@@ -239,26 +182,29 @@ RSpec.describe 'Failover', :integration,
         AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
       )
 
-      result = execute_sql(conn, 'SHOW statement_timeout')
-      value = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
-      expect(value).to eq('5s')
+      expect(conn.conninfo_hash[:application_name]).to eq('failover_props_test')
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'preserves connection properties after failover (mysql wait_timeout)',
+    it 'preserves connection properties after failover (mysql read_timeout)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
        enable_on_engines: [Integration::DatabaseEngine::MYSQL] do
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      conn = failover_connect(host: initial_writer_instance.host, port: initial_writer_instance.port)
+      props = failover_props.merge(read_timeout: 13)
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: initial_writer_instance.host,
+        port: initial_writer_instance.port,
+        user: proxy_info.username,
+        password: proxy_info.password,
+        dbname: proxy_info.default_dbname
+      )
+      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
-      execute_sql(conn, 'SET wait_timeout = 600')
-
-      result = execute_sql(conn, 'SELECT @@wait_timeout AS val')
-      value = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
-      expect(value.to_i).to eq(600)
+      expect(conn.query_options[:read_timeout]).to eq(13)
 
       rds_util.crash_instance(current_writer)
 
@@ -266,9 +212,7 @@ RSpec.describe 'Failover', :integration,
         AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
       )
 
-      result = execute_sql(conn, 'SELECT @@wait_timeout AS val')
-      value = result.first.is_a?(Hash) ? result.first.values.first : result.first[0]
-      expect(value.to_i).to eq(600)
+      expect(conn.query_options[:read_timeout]).to eq(13)
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end

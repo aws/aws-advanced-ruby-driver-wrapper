@@ -45,7 +45,7 @@ RSpec.shared_context 'integration setup' do
   end
 
   let(:base_config) do
-    Integration::DriverHelper.native_config(
+    config = Integration::DriverHelper.native_config(
       drv,
       host: writer.host,
       port: writer.port,
@@ -53,6 +53,16 @@ RSpec.shared_context 'integration setup' do
       password: info.password,
       dbname: info.default_dbname
     )
+    case drv
+    when Integration::TestDriver::PG
+      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { sslmode: 'require' } : {}
+      config.merge(connect_timeout: 3, **ssl)
+    when Integration::TestDriver::MYSQL
+      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { ssl_mode: :required } : {}
+      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3, **ssl)
+    else
+      config
+    end
   end
   let(:proxy_config) do
     proxy_instance = env.proxy_database_info.instances.first
@@ -69,7 +79,8 @@ RSpec.shared_context 'integration setup' do
       ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { sslmode: 'require' } : {}
       config.merge(connect_timeout: 3, **ssl)
     when Integration::TestDriver::MYSQL
-      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3)
+      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { ssl_mode: :required } : {}
+      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3, **ssl)
     else
       config
     end

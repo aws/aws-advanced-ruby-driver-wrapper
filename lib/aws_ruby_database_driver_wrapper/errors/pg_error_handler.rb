@@ -24,8 +24,18 @@ module AwsRubyDatabaseDriverWrapper
       NETWORK_SQL_STATE_PREFIXES = %w[57P01 57P02 57P03 58 08 99 F0].freeze
       ACCESS_ERROR_SQL_STATES = Set['08004', '28P01', '28000'].freeze
       READ_ONLY_SQL_STATE = '25006'
-
       LOGIN_ERROR_MESSAGE = 'authentication failed'
+      NETWORK_ERROR_MESSAGES = [
+        'unexpected eof',
+        'closed the connection unexpectedly',
+        'reset by peer',
+        'could not receive data',
+        'could not send data',
+        'connection not open',
+        'no connection to the server',
+        'connection is closed',
+        'broken pipe'
+      ].freeze
 
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
@@ -66,18 +76,6 @@ module AwsRubyDatabaseDriverWrapper
         sql_state == READ_ONLY_SQL_STATE
       end
 
-      NETWORK_ERROR_MESSAGES = [
-        'unexpected eof',
-        'closed the connection unexpectedly',
-        'reset by peer',
-        'could not receive data',
-        'could not send data',
-        'connection not open',
-        'no connection to the server',
-        'connection is closed',
-        'broken pipe'
-      ].freeze
-
       private
 
       def connection_bad_network_error?(error)
@@ -85,6 +83,7 @@ module AwsRubyDatabaseDriverWrapper
 
         msg = error.message&.downcase
         return false if msg.nil?
+        return false if msg.include?(LOGIN_ERROR_MESSAGE)
 
         NETWORK_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) }
       end

@@ -36,9 +36,11 @@ module Integration
       case driver
       when TestDriver::PG
         require 'pg'
+        params[:sslmode] ||= 'require'
         AwsRubyDatabaseDriverWrapper::WrapperPgConnection.connect(**params)
       when TestDriver::MYSQL
         require 'mysql2'
+        params[:ssl_mode] ||= :required
         AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient.new(**params)
       else
         raise "wrapper_connect not implemented for driver: #{driver}"

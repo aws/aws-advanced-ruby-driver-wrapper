@@ -23,9 +23,27 @@ module AwsRubyDatabaseDriverWrapper
 
       ACCESS_ERROR_SQL_STATE = '28000'
       READ_ONLY_ERROR_CODES = Set[1290, 1836].freeze
+      LOGIN_ERROR_MESSAGE = 'access denied'
+      NETWORK_ERROR_MESSAGES = [
+        'unexpected eof',
+        'closed the connection unexpectedly',
+        'reset by peer',
+        'broken pipe',
+        'lost connection',
+        'server has gone away',
+        'connection was killed',
+        'not connected'
+      ].freeze
+
 
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
+      end
+
+      def network_error?(error)
+        return true if super
+
+        check_cause_chain(error) { |_, current| connection_error_network?(current) }
       end
 
       def network_error_by_sql_state?(sql_state)
@@ -49,6 +67,18 @@ module AwsRubyDatabaseDriverWrapper
 
       def read_only_error_by_sql_state?(sql_state, error_code = nil)
         sql_state == 'HY000' && !error_code.nil? && READ_ONLY_ERROR_CODES.include?(error_code)
+      end
+
+      private
+
+      def connection_error_network?(error)
+        return false unless defined?(Mysql2::Error::ConnectionError) && error.is_a?(Mysql2::Error::ConnectionError)
+
+        msg = error.message&.downcase
+        return false if msg.nil?
+        return false if msg.include?(LOGIN_ERROR_MESSAGE)
+
+        NETWORK_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) }
       end
     end
   end
