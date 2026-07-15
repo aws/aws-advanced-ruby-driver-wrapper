@@ -21,6 +21,7 @@ require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
+require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/secrets_manager_plugin'
 
 module AwsRubyDatabaseDriverWrapper
@@ -33,6 +34,7 @@ module AwsRubyDatabaseDriverWrapper
       @plugin_classes = {
         'failover' => Plugins::FailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
+        'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
         'secretsManager' => Plugins::SecretsManagerPlugin
       }
 
@@ -40,6 +42,7 @@ module AwsRubyDatabaseDriverWrapper
       # the highest values. The first plugin of the list will have the lowest weight, and the
       # last one will have the highest weight.
       @plugin_weights = {
+        Plugins::InitialConnectionStrategyPlugin => 300,
         Plugins::FailoverPlugin => 400,
         Plugins::IamAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900
