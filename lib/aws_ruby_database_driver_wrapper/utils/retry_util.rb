@@ -58,7 +58,7 @@ module AwsRubyDatabaseDriverWrapper
           while Time.now < deadline
             begin
               candidate_conn = plugin_manager.connect(writer_candidate, @connection_service.driver_props, false,
-                                                     plugin_to_skip: plugin_to_skip)
+                                                      plugin_to_skip: plugin_to_skip)
               role = @dialect_service.db_dialect.host_role(candidate_conn)
               if role == Host::HostRole::WRITER
                 result = WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })

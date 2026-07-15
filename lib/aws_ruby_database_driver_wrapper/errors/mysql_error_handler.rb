@@ -35,7 +35,6 @@ module AwsRubyDatabaseDriverWrapper
         'not connected'
       ].freeze
 
-
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
       end

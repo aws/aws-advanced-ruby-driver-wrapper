@@ -166,7 +166,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::MysqlErrorHandler do
       attr_reader :sql_state, :error_number
 
       def initialize(msg)
-        super(msg)
+        super
         @sql_state = nil
         @error_number = nil
       end

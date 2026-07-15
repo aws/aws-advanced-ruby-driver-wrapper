@@ -102,7 +102,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param verify_writer [Boolean]
       # @param timeout_sec [Float]
       # @return [Boolean] whether the refresh was successful
-      def force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
+      def force_refresh_host_list?(verify_writer: false, timeout_sec: 5.0)
         updated_hosts = @host_list_provider&.force_refresh(verify_writer, timeout_sec)
         return false if updated_hosts.nil?
 
