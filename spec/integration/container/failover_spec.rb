@@ -29,10 +29,7 @@ require 'aws_ruby_database_driver_wrapper'
 
 RSpec.describe 'Failover', :integration,
                features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED],
-               deployments: [
-                 Integration::DatabaseEngineDeployment::AURORA,
-                 Integration::DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
-               ],
+               deployments: [Integration::DatabaseEngineDeployment::AURORA], # TODO: add multi-AZ cluster
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   let(:rds_util) { Integration::RdsTestUtility.utility }
   let(:proxy_info) { env.proxy_database_info }

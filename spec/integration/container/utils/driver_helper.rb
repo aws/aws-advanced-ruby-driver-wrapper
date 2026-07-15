@@ -36,11 +36,9 @@ module Integration
       case driver
       when TestDriver::PG
         require 'pg'
-        params[:sslmode] ||= 'require'
         AwsRubyDatabaseDriverWrapper::WrapperPgConnection.connect(**params)
       when TestDriver::MYSQL
         require 'mysql2'
-        params[:ssl_mode] ||= :required
         AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient.new(**params)
       else
         raise "wrapper_connect not implemented for driver: #{driver}"
@@ -66,11 +64,11 @@ module Integration
     def self.native_config(driver, host:, port:, user:, password:, dbname:)
       case driver
       when TestDriver::PG
-        params = { host: host, dbname: dbname, user: user, password: password }
+        params = { host: host, dbname: dbname, user: user, password: password, sslmode: 'prefer' }
         params[:port] = port if port
         params
       when TestDriver::MYSQL
-        params = { host: host, database: dbname, username: user, password: password }
+        params = { host: host, database: dbname, username: user, password: password, ssl_mode: :preferred }
         params[:port] = port.to_i if port
         params
       else

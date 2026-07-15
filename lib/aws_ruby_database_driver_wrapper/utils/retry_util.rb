@@ -29,12 +29,11 @@ module AwsRubyDatabaseDriverWrapper
 
       def initialize(service_container)
         @host_service = service_container.host_service
-        @plugin_manager = service_container.plugin_manager
         @dialect_service = service_container.dialect_service
         @connection_service = service_container.connection_service
       end
 
-      def connect_to_writer(plugin_to_skip, deadline:)
+      def connect_to_writer(plugin_to_skip, plugin_manager, deadline:)
         loop do
           break if Time.now >= deadline
 
@@ -58,8 +57,8 @@ module AwsRubyDatabaseDriverWrapper
           success = false
           while Time.now < deadline
             begin
-              candidate_conn = @plugin_manager.connect(writer_candidate, @connection_service.driver_props, false,
-                                                       plugin_to_skip: plugin_to_skip)
+              candidate_conn = plugin_manager.connect(writer_candidate, @connection_service.driver_props, false,
+                                                     plugin_to_skip: plugin_to_skip)
               role = @dialect_service.db_dialect.host_role(candidate_conn)
               if role == Host::HostRole::WRITER
                 result = WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })

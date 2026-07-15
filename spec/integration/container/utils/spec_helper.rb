@@ -55,11 +55,9 @@ RSpec.shared_context 'integration setup' do
     )
     case drv
     when Integration::TestDriver::PG
-      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { sslmode: 'require' } : {}
-      config.merge(connect_timeout: 3, **ssl)
+      config.merge(connect_timeout: 3)
     when Integration::TestDriver::MYSQL
-      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { ssl_mode: :required } : {}
-      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3, **ssl)
+      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3)
     else
       config
     end
@@ -76,11 +74,9 @@ RSpec.shared_context 'integration setup' do
     )
     case drv
     when Integration::TestDriver::PG
-      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { sslmode: 'require' } : {}
-      config.merge(connect_timeout: 3, **ssl)
+      config.merge(connect_timeout: 3)
     when Integration::TestDriver::MYSQL
-      ssl = env.deployment == Integration::DatabaseEngineDeployment::AURORA ? { ssl_mode: :required } : {}
-      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3, **ssl)
+      config.merge(connect_timeout: 3, read_timeout: 3, write_timeout: 3)
     else
       config
     end

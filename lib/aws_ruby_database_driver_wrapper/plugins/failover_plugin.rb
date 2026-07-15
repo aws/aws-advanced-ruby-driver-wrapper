@@ -253,7 +253,7 @@ module AwsRubyDatabaseDriverWrapper
           end
 
           was_in_transaction = @service_container.session_state_service.in_transaction?
-          result = @retry_util.connect_to_writer(self, deadline: failover_deadline)
+          result = @retry_util.connect_to_writer(self, @service_container.plugin_manager, deadline: failover_deadline)
           if result&.connection && result.host_info
             success = true
             connection_service.update_current_connection(result.connection, result.host_info)

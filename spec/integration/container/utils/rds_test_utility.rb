@@ -365,12 +365,7 @@ module Integration
         password: env.database_info.password,
         dbname: env.database_info.default_dbname
       )
-      ssl = case driver
-            when Integration::TestDriver::PG then { sslmode: 'require' }
-            when Integration::TestDriver::MYSQL then { ssl_mode: :required }
-            else {}
-            end
-      Integration::DriverHelper.native_connect(driver, **params, connect_timeout: 10, **ssl)
+      Integration::DriverHelper.native_connect(driver, **params, connect_timeout: 10)
     end
 
     def aurora_instance_ids(host)

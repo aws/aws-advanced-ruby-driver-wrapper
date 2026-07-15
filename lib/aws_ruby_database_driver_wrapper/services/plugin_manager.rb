@@ -55,7 +55,6 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def initialize(service_container)
-        service_container.plugin_manager = self # TODO: is this okay to do?
         @plugins = load_plugins(service_container)
         @pipeline_cache = {}
       end
