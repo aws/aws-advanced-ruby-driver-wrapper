@@ -77,7 +77,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
            all_hosts: [writer_host, reader_host],
            hosts: [writer_host, reader_host],
            refresh_host_list: nil,
-           'force_refresh_host_list?': true,
+           force_refresh_host_list?: true,
            set_availability: nil,
            select_host: reader_host)
   end
