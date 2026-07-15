@@ -26,8 +26,8 @@ group :development do
   gem 'bundler'
   gem 'bundler-audit'
   gem 'rdoc'
-  gem 'rubocop'
-  gem 'rubocop-performance'
+  gem 'rubocop', '~> 1.86'
+  gem 'rubocop-performance', '~> 1.26'
   gem 'solargraph'
   gem 'yard', '>= 0.9.44'
 end

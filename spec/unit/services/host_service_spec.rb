@@ -163,7 +163,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
   end
 
-  describe '#force_refresh_host_list' do
+  describe '#force_refresh_host_list?' do
     let(:host_list_provider) { instance_double('HostListProvider') }
 
     before do
@@ -173,19 +173,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
 
     it 'updates the host list when the provider returns new hosts' do
       allow(host_list_provider).to receive(:force_refresh).with(false, 5.0).and_return(hosts)
-      service.force_refresh_host_list
+      service.force_refresh_host_list?
       expect(service.all_hosts).to eq(hosts)
     end
 
     it 'passes verify_writer and timeout_sec to the provider' do
       allow(host_list_provider).to receive(:force_refresh).with(true, 3.0).and_return(hosts)
-      service.force_refresh_host_list(verify_writer: true, timeout_sec: 3.0)
+      service.force_refresh_host_list?(verify_writer: true, timeout_sec: 3.0)
       expect(service.all_hosts).to eq(hosts)
     end
 
     it 'does nothing when the provider returns nil' do
       allow(host_list_provider).to receive(:force_refresh).with(false, 5.0).and_return(nil)
-      service.force_refresh_host_list
+      service.force_refresh_host_list?
       expect(service.all_hosts).to eq([writer])
     end
   end
