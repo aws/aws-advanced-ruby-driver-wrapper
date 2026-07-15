@@ -77,7 +77,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
            all_hosts: [writer_host, reader_host],
            hosts: [writer_host, reader_host],
            refresh_host_list: nil,
-           force_refresh_host_list: true,
+           'force_refresh_host_list?': true,
            set_availability: nil,
            select_host: reader_host)
   end
@@ -166,14 +166,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       before do
         allow(driver_dialect).to receive(:closed?).and_return(true)
         allow(host_service).to receive(:all_hosts).and_return([writer_host, reader_host])
-        allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
         allow(connection_service).to receive(:update_current_connection)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
       end
 
       it 'triggers failover' do
-        expect(host_service).to receive(:force_refresh_host_list)
+        expect(host_service).to receive(:force_refresh_host_list?)
         expect do
           plugin.execute('connection.exec', pipeline_callable)
         end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
@@ -190,7 +190,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         plugin.connect(writer_host, props, true, -> { connection })
 
         allow(dialect_service).to receive(:network_error?).with(network_error).and_return(true)
-        allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:update_current_connection)
         writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
@@ -231,7 +231,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
         allow(dialect_service).to receive(:network_error?).and_return(false)
         allow(dialect_service).to receive(:read_only_error?).with(read_only_error).and_return(true)
-        allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:update_current_connection)
         writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
@@ -263,7 +263,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         props[:enable_connect_failover] = true
         allow(reader_host).to receive(:availability).and_return(host_availability::UNAVAILABLE)
         allow(host_service).to receive(:hosts).and_return([reader_host])
-        allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
         writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
@@ -293,7 +293,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         props[:enable_connect_failover] = true
         allow(connection_service).to receive(:initial_host_info).and_return(non_cluster_host)
         allow(dialect_service).to receive(:network_error?).with(network_error).and_return(true)
-        allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
         writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
@@ -351,7 +351,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       before do
         allow(connection_service).to receive(:initial_host_info).and_return(writer_cluster_host)
         allow(db_dialect).to receive(:host_role).with(connection).and_return(host_role::READER)
-        allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(host_service).to receive(:all_hosts).and_return([writer_host, reader_host])
         allow(plugin_manager).to receive(:connect).and_return(new_connection)
       end
@@ -369,7 +369,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
     before do
       props[:failover_timeout_sec] = 5
       props[:failover_mode] = 'reader_or_writer'
-      allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+      allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
       allow(plugin_manager).to receive(:connect).and_return(new_connection)
       allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
       allow(connection_service).to receive(:update_current_connection)
@@ -388,7 +388,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
     before do
       props[:failover_timeout_sec] = 5
       props[:failover_mode] = 'strict_writer'
-      allow(host_service).to receive(:force_refresh_host_list).and_return(true)
+      allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
       writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
       allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       allow(connection_service).to receive(:update_current_connection)
