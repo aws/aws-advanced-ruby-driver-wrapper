@@ -222,7 +222,7 @@ module AwsRubyDatabaseDriverWrapper
 
         logger.info { 'Starting reader failover' }
 
-        unless host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 0)
+        unless host_service.force_refresh_host_list?(verify_writer: false, timeout_sec: 0)
           raise Errors::FailoverFailedError, 'The request to discover the new topology was unsuccessful'
         end
 
@@ -248,7 +248,7 @@ module AwsRubyDatabaseDriverWrapper
         logger.info { 'Starting writer failover' }
 
         begin
-          unless host_service.force_refresh_host_list(verify_writer: true, timeout_sec: @failover_timeout)
+          unless host_service.force_refresh_host_list?(verify_writer: true, timeout_sec: @failover_timeout)
             raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
           end
 
@@ -405,7 +405,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # The writer cluster URL resolved to a reader. We will try to redirect to the writer instance.
-        host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
+        host_service.force_refresh_host_list?(verify_writer: false, timeout_sec: 5.0)
         writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
         if writer.nil? || Utils::RdsUtils.rds_cluster_dns?(writer.host)
           # Writer instance endpoint not found - unable to redirect.
