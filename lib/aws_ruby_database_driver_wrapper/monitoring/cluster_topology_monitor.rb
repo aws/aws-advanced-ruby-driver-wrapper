@@ -390,6 +390,8 @@ module AwsRubyDatabaseDriverWrapper
         return fetch_topology_and_update_cache(existing_conn) if existing_conn
 
         conn = internal_connect(initial_host_info)
+        return nil if conn.nil?
+
         unless @monitoring_connection.compare_and_set(nil, conn)
           safe_close_connection(conn)
           return fetch_topology_and_update_cache(@monitoring_connection.get)

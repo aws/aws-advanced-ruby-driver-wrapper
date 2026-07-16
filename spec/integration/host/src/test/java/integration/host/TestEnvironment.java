@@ -79,6 +79,7 @@ public class TestEnvironment implements AutoCloseable {
   private static final String TELEMETRY_XRAY_CONTAINER_NAME = "xray-daemon";
   private static final String TELEMETRY_OTLP_CONTAINER_NAME = "otlp-daemon";
   private static final String PROXIED_DOMAIN_NAME_SUFFIX = ".proxied";
+  private static final String DEFAULT_AWS_REGION = "us-east-2";
   protected static final int PROXY_CONTROL_PORT = 8474;
   protected static final int PROXY_PORT = 8666;
 
@@ -968,7 +969,7 @@ public class TestEnvironment implements AutoCloseable {
     env.info.setRegion(
         !StringUtils.isNullOrEmpty(config.rdsDbRegion)
             ? config.rdsDbRegion
-            : "us-east-2");
+            : DEFAULT_AWS_REGION);
 
     env.reuseDb = config.reuseRdsDb;
     env.rdsDbName = config.rdsDbName; // "cluster-mysql"
@@ -1413,7 +1414,7 @@ public class TestEnvironment implements AutoCloseable {
     String xrayAwsRegion =
         !StringUtils.isNullOrEmpty(System.getenv("XRAY_AWS_REGION"))
             ? System.getenv("XRAY_AWS_REGION")
-            : "us-east-2";
+            : DEFAULT_AWS_REGION;
 
     LOGGER.finest("Creating XRay telemetry container");
     final ContainerHelper containerHelper = new ContainerHelper();
@@ -1458,7 +1459,7 @@ public class TestEnvironment implements AutoCloseable {
 
     String otlpRegion = !StringUtils.isNullOrEmpty(System.getenv("OTLP_AWS_REGION"))
         ? System.getenv("OTLP_AWS_REGION")
-        : "us-east-2";
+        : DEFAULT_AWS_REGION;
 
     env.telemetryOtlpContainer
         .withEnv("AWS_ACCESS_KEY_ID", env.awsAccessKeyId)
