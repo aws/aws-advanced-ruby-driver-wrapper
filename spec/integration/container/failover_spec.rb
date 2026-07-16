@@ -236,6 +236,7 @@ RSpec.describe 'Failover', :integration,
 
     it 'fails over concurrent connections when writer dies',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
+      connections = nil
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
@@ -264,7 +265,7 @@ RSpec.describe 'Failover', :integration,
         expect(Integration::RetryHelper.verify_writer(rds_util, current_connection_id)).to be true
       end
     ensure
-      connections.each { |conn| Integration::DriverHelper.close(drv, conn) if conn }
+      connections&.each { |conn| Integration::DriverHelper.close(drv, conn) if conn }
     end
   end
 
@@ -318,7 +319,7 @@ RSpec.describe 'Failover', :integration,
 
     it 'fails over with strict_reader mode to a reader instance',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
-      enable_on_num_instances(min_instances: 2)
+      enable_on_num_instances(min_instances: 3)
 
       props = failover_props.merge(
         AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'strict_reader',
@@ -334,16 +335,16 @@ RSpec.describe 'Failover', :integration,
       )
       conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
-      rds_util.crash_instance(current_writer)
+      connected_reader_id = rds_util.query_instance_id(conn)
+      Integration::ProxyHelper.disable_connectivity(connected_reader_id)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
         AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
-      expect(
-        Integration::RetryHelper.retry_until { !rds_util.db_instance_writer?(current_connection_id) }
-      ).to be(true), "Instance #{current_connection_id} is still a writer (API)"
+      expect(current_connection_id).not_to eq(connected_reader_id)
+      expect(rds_util.db_instance_writer?(current_connection_id)).to be false
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end
