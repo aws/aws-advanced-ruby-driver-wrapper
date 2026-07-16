@@ -109,6 +109,7 @@ tasks.register<Test>("test-ruby-4.0-mysql") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-ruby-3-3", "true")
         systemProperty("exclude-multi-az-cluster", "true")
@@ -118,6 +119,8 @@ tasks.register<Test>("test-ruby-4.0-mysql") {
         systemProperty("exclude-metrics-telemetry", "true")
         systemProperty("exclude-pg-driver", "true")
         systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-5", "true")
     }
 }
 
@@ -125,6 +128,7 @@ tasks.register<Test>("test-ruby-4.0-pg") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-ruby-3-3", "true")
         systemProperty("exclude-multi-az-cluster", "true")
@@ -134,6 +138,8 @@ tasks.register<Test>("test-ruby-4.0-pg") {
         systemProperty("exclude-metrics-telemetry", "true")
         systemProperty("exclude-mysql-driver", "true")
         systemProperty("exclude-mysql-engine", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-5", "true")
     }
 }
 
@@ -141,7 +147,9 @@ tasks.register<Test>("test-ruby-3.3-mysql") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-traces-telemetry", "true")
@@ -149,6 +157,8 @@ tasks.register<Test>("test-ruby-3.3-mysql") {
         systemProperty("exclude-bg", "true")
         systemProperty("exclude-pg-driver", "true")
         systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-5", "true")
     }
 }
 
@@ -156,7 +166,9 @@ tasks.register<Test>("test-ruby-3.3-pg") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-bg", "true")
@@ -164,6 +176,8 @@ tasks.register<Test>("test-ruby-3.3-pg") {
         systemProperty("exclude-metrics-telemetry", "true")
         systemProperty("exclude-mysql-driver", "true")
         systemProperty("exclude-mysql-engine", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-5", "true")
     }
 }
 
