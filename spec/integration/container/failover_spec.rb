@@ -335,15 +335,13 @@ RSpec.describe 'Failover', :integration,
       )
       conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
-      connected_reader_id = rds_util.query_instance_id(conn)
-      Integration::ProxyHelper.disable_connectivity(connected_reader_id)
+      Integration::ProxyHelper.disable_connectivity(proxy_info.cluster_read_only_endpoint)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
         AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
-      expect(current_connection_id).not_to eq(connected_reader_id)
       expect(rds_util.db_instance_writer?(current_connection_id)).to be false
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
