@@ -60,6 +60,7 @@ module AwsRubyDatabaseDriverWrapper
 
         if is_initial_connection
           @service_container.dialect_service.update_dialect(conn)
+          @service_container.host_service.refresh_host_list
 
           if connection_service.pg? && connection_service.multi_host_url?
             connection_service.config.initial_host_info = Host::HostInfo.new(

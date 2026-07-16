@@ -102,12 +102,16 @@ module AwsRubyDatabaseDriverWrapper
       # @param verify_writer [Boolean]
       # @param timeout_sec [Float]
       # @return [Boolean] whether the refresh was successful
-      def force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
+      def force_refresh_host_list?(verify_writer: false, timeout_sec: 5.0)
         updated_hosts = @host_list_provider&.force_refresh(verify_writer, timeout_sec)
-        return if updated_hosts.nil? || updated_hosts == @all_hosts
+        return false if updated_hosts.nil?
 
-        apply_cached_availability(updated_hosts)
-        @all_hosts = updated_hosts
+        if updated_hosts != @all_hosts
+          apply_cached_availability(updated_hosts)
+          @all_hosts = updated_hosts
+        end
+
+        true
       end
 
       # Identify which host in the topology a given connection belongs to.

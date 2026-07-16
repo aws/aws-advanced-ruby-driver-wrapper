@@ -109,6 +109,30 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
       error = StandardError.new('no sql state')
       expect(handler.network_error?(error)).to be false
     end
+
+    it 'returns true for PG::ConnectionBad with unexpected eof' do
+      error = PG::ConnectionBad.new('PQconsumeInput() SSL error: unexpected eof while reading')
+      allow(error).to receive(:result).and_return(nil)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns true for PG::ConnectionBad with connection closed unexpectedly' do
+      error = PG::ConnectionBad.new('server closed the connection unexpectedly')
+      allow(error).to receive(:result).and_return(nil)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns true for PG::ConnectionBad with reset by peer' do
+      error = PG::ConnectionBad.new('could not receive data from server: Connection reset by peer')
+      allow(error).to receive(:result).and_return(nil)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns false for PG::ConnectionBad with non-network message' do
+      error = PG::ConnectionBad.new('database "nonexistent" does not exist')
+      allow(error).to receive(:result).and_return(nil)
+      expect(handler.network_error?(error)).to be false
+    end
   end
 
   describe '#login_error?' do

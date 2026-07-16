@@ -21,46 +21,67 @@ require_relative 'test_utils'
 
 module Integration
   class ProxyHelper
-    def self.disable_all_connectivity
-      TestEnvironment.current.proxy_infos.each { |p| disable_proxy_connectivity(p) }
-    end
-
-    def self.disable_connectivity(instance_name)
-      disable_proxy_connectivity(TestEnvironment.current.proxy_info(instance_name))
-    end
-
-    def self.enable_all_connectivity
-      TestEnvironment.current.proxy_infos.each { |p| enable_proxy_connectivity(p) }
-    end
-
-    def self.enable_connectivity(instance_name)
-      enable_proxy_connectivity(TestEnvironment.current.proxy_info(instance_name))
-    end
-
-    def self.disable_proxy_connectivity(proxy_info)
-      Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
-      add_toxic(proxy_info, 'DOWN-STREAM', 'downstream')
-      add_toxic(proxy_info, 'UP-STREAM', 'upstream')
-      TestUtils.logger.debug("Testing.DisabledConnectivity: #{proxy_info.proxy.name}")
-    end
-    private_class_method :disable_proxy_connectivity
-
-    def self.add_toxic(proxy_info, name, stream)
-      uri = URI("http://#{proxy_info.control_host}:#{proxy_info.control_port}/proxies/#{URI.encode_www_form_component(proxy_info.proxy.name)}/toxics")
-      body = JSON.generate(type: 'bandwidth', name: name, stream: stream, toxicity: 1.0, attributes: { rate: 0 })
-      req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
-      req.body = body
-      Net::HTTP.start(uri.host, uri.port) { |http| http.request(req) }
-    end
-    private_class_method :add_toxic
-
-    def self.enable_proxy_connectivity(proxy_info)
-      Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
-      proxy_info.proxy.toxics.each do |toxic|
-        toxic.destroy if %w[DOWN-STREAM UP-STREAM].include?(toxic.name)
+    class << self
+      def disable_all_connectivity
+        TestEnvironment.current.proxy_infos.each { |p| disable_proxy_instance(p) }
       end
-      TestUtils.logger.debug("Testing.EnabledConnectivity: #{proxy_info.proxy.name}")
+
+      def disable_connectivity(instance_name)
+        disable_proxy(instance_name)
+      end
+
+      def enable_all_connectivity
+        TestEnvironment.current.proxy_infos.each { |p| enable_proxy_instance(p) }
+      end
+
+      def enable_connectivity(instance_name)
+        enable_proxy(instance_name)
+      end
+
+      def disable_proxy(instance_name)
+        disable_proxy_instance(TestEnvironment.current.proxy_info(instance_name))
+      end
+
+      def enable_proxy(instance_name)
+        enable_proxy_instance(TestEnvironment.current.proxy_info(instance_name))
+      end
+
+      private
+
+      def disable_proxy_instance(proxy_info)
+        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        proxy_info.proxy.disable
+        TestUtils.logger.debug("Testing.DisabledProxy: #{proxy_info.proxy.name}")
+      end
+
+      def enable_proxy_instance(proxy_info)
+        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        proxy_info.proxy.enable
+        TestUtils.logger.debug("Testing.EnabledProxy: #{proxy_info.proxy.name}")
+      end
+
+      def disable_proxy_connectivity(proxy_info)
+        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        add_toxic(proxy_info, 'DOWN-STREAM', 'downstream')
+        add_toxic(proxy_info, 'UP-STREAM', 'upstream')
+        TestUtils.logger.debug("Testing.DisabledConnectivity: #{proxy_info.proxy.name}")
+      end
+
+      def add_toxic(proxy_info, name, stream)
+        uri = URI("http://#{proxy_info.control_host}:#{proxy_info.control_port}/proxies/#{URI.encode_www_form_component(proxy_info.proxy.name)}/toxics")
+        body = JSON.generate(type: 'bandwidth', name: name, stream: stream, toxicity: 1.0, attributes: { rate: 0 })
+        req = Net::HTTP::Post.new(uri, 'Content-Type' => 'application/json')
+        req.body = body
+        Net::HTTP.start(uri.host, uri.port) { |http| http.request(req) }
+      end
+
+      def enable_proxy_connectivity(proxy_info)
+        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        proxy_info.proxy.toxics.each do |toxic|
+          toxic.destroy if %w[DOWN-STREAM UP-STREAM].include?(toxic.name)
+        end
+        TestUtils.logger.debug("Testing.EnabledConnectivity: #{proxy_info.proxy.name}")
+      end
     end
-    private_class_method :enable_proxy_connectivity
   end
 end

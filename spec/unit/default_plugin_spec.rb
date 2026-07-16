@@ -27,7 +27,7 @@ require 'aws_ruby_database_driver_wrapper/utils/connection_config'
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::DefaultPlugin do
   let(:mock_connection) { double('Connection', host: 'test-instance.us-east-1.rds.example.com', port: '5432') }
   let(:driver_dialect) { double('DriverDialect') }
-  let(:host_service) { instance_double(AwsRubyDatabaseDriverWrapper::Services::HostService, set_availability: nil) }
+  let(:host_service) { instance_double(AwsRubyDatabaseDriverWrapper::Services::HostService, set_availability: nil, refresh_host_list: nil) }
   let(:db_dialect) { double('DbDialect', create_host_list_provider: nil) }
   let(:dialect_service) do
     instance_double(AwsRubyDatabaseDriverWrapper::Services::DialectService,
