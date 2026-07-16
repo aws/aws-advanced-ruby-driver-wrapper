@@ -129,7 +129,7 @@ RSpec.describe 'Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'writer is re-elected after temporary failure',
+    it 'reconnects to the same writer when original writer retains writer role after temporary failure',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2)
 
@@ -348,12 +348,11 @@ RSpec.describe 'Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'writer is re-elected with reader_or_writer mode after temporary failure',
+    it 'reconnects to any instance in reader_or_writer mode when original writer retains writer role after temporary failure',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      initial_id = initial_writer_instance.instance_id
       props = failover_props.merge(
         AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer'
       )
@@ -373,9 +372,7 @@ RSpec.describe 'Failover', :integration,
         AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
       )
 
-      current_connection_id = rds_util.query_instance_id(conn)
-      expect(Integration::RetryHelper.verify_writer(rds_util, current_connection_id)).to be true
-      expect(current_connection_id).to eq(initial_id)
+      expect { rds_util.query_instance_id(conn) }.not_to raise_error
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end
