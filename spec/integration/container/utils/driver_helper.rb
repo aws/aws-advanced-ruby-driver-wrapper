@@ -64,7 +64,7 @@ module Integration
     def self.native_config(driver, host:, port:, user:, password:, dbname:)
       case driver
       when TestDriver::PG
-        params = { host: host, dbname: dbname, user: user, password: password, sslmode: 'prefer' }
+        params = { host: host, dbname: dbname, user: user, password: password }
         params[:port] = port if port
         params
       when TestDriver::MYSQL
