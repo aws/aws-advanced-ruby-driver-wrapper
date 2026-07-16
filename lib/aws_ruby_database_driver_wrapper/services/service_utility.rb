@@ -59,6 +59,8 @@ module AwsRubyDatabaseDriverWrapper
         container.session_state_service = SessionStateService.new
         container.storage_service = CoreServices.storage_service
         container.monitor_service = CoreServices.monitor_service
+        # PluginManager must be assigned last: plugins are instantiated during its constructor
+        # and must not eagerly access container.plugin_manager (it will be nil at that point).
         container.plugin_manager = PluginManager.new(container)
         container.dialect_service.setup_initial_provider(container)
         container

@@ -49,6 +49,10 @@ require 'active_record'
 require 'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
 require 'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
 
+AwsRubyDatabaseDriverWrapper.logger.level = Logger::DEBUG
+$stderr.sync = true
+$stdout.sync = true
+
 # Load environment variables for tests
 Dotenv.load
 

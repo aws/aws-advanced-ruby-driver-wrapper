@@ -7,6 +7,7 @@
 /spec/examples.txt
 /spec/integration/host/build
 /tmp/
+**/logs
 **/bin
 
 /doc
@@ -25,6 +26,3 @@
 
 .DS_Store
 Thumbs.db
-
-gemfiles/*.gemfile.lock
-Gemfile.lock

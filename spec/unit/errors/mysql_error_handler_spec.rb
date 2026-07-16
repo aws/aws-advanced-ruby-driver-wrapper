@@ -92,6 +92,26 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::MysqlErrorHandler do
       error = StandardError.new('no sql state')
       expect(handler.network_error?(error)).to be false
     end
+
+    it 'returns true for ConnectionError with CR_SERVER_GONE_ERROR (2006)' do
+      error = build_connection_error('MySQL server has gone away', error_number: 2006)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns true for ConnectionError with CR_SERVER_LOST (2013)' do
+      error = build_connection_error('Lost connection to MySQL server during query', error_number: 2013)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns true for ConnectionError with CR_SSL_CONNECTION_ERROR (2026)' do
+      error = build_connection_error('TLS/SSL error: unexpected eof while reading', error_number: 2026)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns false for ConnectionError with unrecognized error number' do
+      error = build_connection_error('some error', error_number: 9999)
+      expect(handler.network_error?(error)).to be false
+    end
   end
 
   describe '#login_error?' do
@@ -139,6 +159,20 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::MysqlErrorHandler do
       end
     end
     klass.new('test error', sql_state, error_number)
+  end
+
+  def build_connection_error(message, error_number: nil)
+    klass = Class.new(StandardError) do
+      attr_reader :sql_state, :error_number
+
+      def initialize(msg, error_number)
+        super(msg)
+        @sql_state = nil
+        @error_number = error_number
+      end
+    end
+    stub_const('Mysql2::Error::ConnectionError', klass)
+    klass.new(message, error_number)
   end
 
   def build_error_with_cause(cause)

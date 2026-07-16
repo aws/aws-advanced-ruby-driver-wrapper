@@ -119,6 +119,8 @@ public class ContainerHelper {
     commands.add("bundle");
     commands.add("exec");
     commands.add("rspec");
+    commands.add("--format");
+    commands.add("documentation");
     commands.add(StringUtils.isNullOrEmpty(filter) ? "spec/integration/container" : filter);
     if (!StringUtils.isNullOrEmpty(includeTags)) {
       commands.add("--tag");

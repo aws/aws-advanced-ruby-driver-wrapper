@@ -222,13 +222,13 @@ module AwsRubyDatabaseDriverWrapper
 
         logger.info { 'Starting reader failover' }
 
-        unless host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 0)
+        unless host_service.force_refresh_host_list?(verify_writer: false, timeout_sec: 0)
           raise Errors::FailoverFailedError, 'The request to discover the new topology was unsuccessful'
         end
 
         begin
-          result = reader_failover_connection(failover_deadline)
           was_in_transaction = @service_container.session_state_service.in_transaction?
+          result = reader_failover_connection(failover_deadline)
           connection_service.update_current_connection(result.connection, result.host_info)
         rescue Timeout::Error
           raise Errors::FailoverFailedError, 'Unable to connect to a reader instance'
@@ -248,14 +248,14 @@ module AwsRubyDatabaseDriverWrapper
         logger.info { 'Starting writer failover' }
 
         begin
-          unless host_service.force_refresh_host_list(verify_writer: true, timeout_sec: @failover_timeout)
+          unless host_service.force_refresh_host_list?(verify_writer: true, timeout_sec: @failover_timeout)
             raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
           end
 
-          result = @retry_util.connect_to_writer(self, deadline: failover_deadline)
+          was_in_transaction = @service_container.session_state_service.in_transaction?
+          result = @retry_util.connect_to_writer(self, @service_container.plugin_manager, deadline: failover_deadline)
           if result&.connection && result.host_info
             success = true
-            was_in_transaction = @service_container.session_state_service.in_transaction?
             connection_service.update_current_connection(result.connection, result.host_info)
             raise_failover_success_error(was_in_transaction)
           end
@@ -405,7 +405,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # The writer cluster URL resolved to a reader. We will try to redirect to the writer instance.
-        host_service.force_refresh_host_list(verify_writer: false, timeout_sec: 5.0)
+        host_service.force_refresh_host_list?(verify_writer: false, timeout_sec: 5.0)
         writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
         if writer.nil? || Utils::RdsUtils.rds_cluster_dns?(writer.host)
           # Writer instance endpoint not found - unable to redirect.
