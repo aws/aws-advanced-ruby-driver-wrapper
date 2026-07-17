@@ -30,6 +30,7 @@ require_relative 'status_builder'
 require_relative 'status_monitor'
 require_relative 'switchover_state'
 require_relative 'switchover_timer'
+require_relative '../../plugins/iam_auth_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Plugins
@@ -124,6 +125,8 @@ module AwsRubyDatabaseDriverWrapper
           @monitor_generation += 1
           @monitors = { Role::SOURCE => nil, Role::TARGET => nil }
           old_monitors.each_value { |m| m&.stop }
+
+          Plugins::IamAuthPlugin.clear_cache(@storage_service) if iam_enabled?
 
           @rollback              = false
           @summary_status        = nil
@@ -283,6 +286,10 @@ module AwsRubyDatabaseDriverWrapper
           completed = (!@rollback && @summary_status.current_phase == Phase::COMPLETED) ||
                       (@rollback && @summary_status.current_phase == Phase::CREATED)
           completed && @event_log.any? { |_, v| v.phase&.active_switchover_or_completed? }
+        end
+
+        def iam_enabled?
+          @service_container.plugin_manager&.plugin_in_use?(Plugins::IamAuthPlugin) || false
         end
 
         def context_hash

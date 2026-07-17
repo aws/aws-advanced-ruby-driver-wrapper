@@ -105,13 +105,8 @@ module AwsRubyDatabaseDriverWrapper
       def process_event(event)
         return unless event.is_a?(Utils::Events::MonitorResetEvent)
         return unless event.cluster_id == @cluster_id
-        return unless event.endpoints&.include?(initial_host_info.host.downcase)
 
-        if event.endpoints.any? { |ep| Utils::RdsUtils.rds_cluster_dns?(ep) }
-          soft_reset!
-        else
-          reset!
-        end
+        reset!
       end
 
       def close
@@ -497,16 +492,6 @@ module AwsRubyDatabaseDriverWrapper
       # --- Reset ---
 
       def reset!
-        reset_connection_state(clear_cache: true)
-      end
-
-      # Soft reset for Blue/Green events: drops the connection but keeps the topology
-      # cache so the monitor can reconnect via known instance endpoints.
-      def soft_reset!
-        reset_connection_state(clear_cache: false)
-      end
-
-      def reset_connection_state(clear_cache:)
         logger.debug("[#{@cluster_id}] Monitor reset")
         @stop_instance_monitors = true
         close_instance_monitors
@@ -515,7 +500,7 @@ module AwsRubyDatabaseDriverWrapper
         @verified_writer = false
         @writer_info = nil
         @high_refresh_end_time = 0
-        clear_topology_cache if clear_cache
+        clear_topology_cache
 
         @topology_mutex.synchronize do
           @update_requested = true
