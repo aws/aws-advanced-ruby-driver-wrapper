@@ -73,7 +73,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
   let(:pipeline_callable) { -> { mock_connection } }
 
   before do
-    allow(mock_host_service).to receive(:force_refresh_host_list)
+    allow(mock_host_service).to receive(:force_refresh_host_list?)
     allow(mock_host_service).to receive(:set_availability)
     allow(mock_host_service).to receive(:select_host).and_return(reader_host_info)
     allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
@@ -167,7 +167,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
         call_count >= 2 ? host_role::WRITER : host_role::READER
       end
 
-      expect(mock_host_service).to receive(:force_refresh_host_list).at_least(:once)
+      expect(mock_host_service).to receive(:force_refresh_host_list?).at_least(:once)
 
       result = plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
       expect(result).to eq(mock_connection)
@@ -217,7 +217,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
         call_count >= 2 ? host_role::READER : host_role::WRITER
       end
 
-      expect(mock_host_service).to receive(:force_refresh_host_list).at_least(:once)
+      expect(mock_host_service).to receive(:force_refresh_host_list?).at_least(:once)
 
       result = plugin.connect(make_host_info(reader_cluster_host), {}, true, pipeline_callable)
       expect(result).to eq(mock_connection)
@@ -377,7 +377,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
         topology_call_count >= 2 ? [writer_host_info, reader_host_info] : []
       end
       allow(mock_host_service).to receive(:hosts).and_return([writer_host_info, reader_host_info])
-      allow(mock_host_service).to receive(:force_refresh_host_list)
+      allow(mock_host_service).to receive(:force_refresh_host_list?)
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
 
       result = plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)

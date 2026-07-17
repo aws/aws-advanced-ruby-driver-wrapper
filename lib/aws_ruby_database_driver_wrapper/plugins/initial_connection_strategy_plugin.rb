@@ -101,7 +101,7 @@ module AwsRubyDatabaseDriverWrapper
                 return conn
               end
 
-              host_service.force_refresh_host_list
+              host_service.force_refresh_host_list?
               if role_to_verify == Host::HostRole::READER && !readers_in_topology?(host_service.all_hosts)
                 logger.warn('Reader verification expected but no readers exist in topology; accepting connection with writer role')
                 success = true
@@ -146,7 +146,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # Topology not available — try waiting if configured
         if @wait_for_topology_sec.positive? && host_service.all_hosts.empty?
-          host_service.force_refresh_host_list(timeout_sec: @wait_for_topology_sec)
+          host_service.force_refresh_host_list?(timeout_sec: @wait_for_topology_sec)
           candidate = select_candidate_host(original_host_info, url_type, substitution_strategy)
           return candidate if candidate && Utils::RdsUtils.rds_instance?(candidate.host)
         end
@@ -161,7 +161,7 @@ module AwsRubyDatabaseDriverWrapper
         if substitution_strategy == :none || candidate_host == original_host_info
           conn = pipeline_callable.call
           # Refresh topology in background when connecting via cluster endpoint
-          host_service.force_refresh_host_list if substitution_strategy != :none
+          host_service.force_refresh_host_list? if substitution_strategy != :none
           return conn
         end
 
