@@ -48,9 +48,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
 
   let(:mock_connection) { double('Connection', close: nil) }
   let(:mock_db_dialect) { double('DbDialect') }
+  let(:mock_driver_dialect) { double('DriverDialect', close_connection: nil) }
   let(:mock_dialect_service) do
     double('DialectService',
            db_dialect: mock_db_dialect,
+           driver_dialect: mock_driver_dialect,
            login_error?: false,
            network_error?: false,
            read_only_error?: false)
@@ -257,7 +259,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::READER)
 
-      expect(mock_connection).to receive(:close).at_least(:once)
+      expect(mock_driver_dialect).to receive(:close_connection).with(mock_connection).at_least(:once)
 
       expect do
         plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
@@ -356,7 +358,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_raise(RuntimeError, 'unexpected')
 
-      expect(mock_connection).to receive(:close)
+      expect(mock_driver_dialect).to receive(:close_connection).with(mock_connection)
 
       expect do
         plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)

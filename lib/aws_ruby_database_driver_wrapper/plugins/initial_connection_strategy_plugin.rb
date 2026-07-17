@@ -74,6 +74,7 @@ module AwsRubyDatabaseDriverWrapper
       def connect_with_retry(host_info, url_type, substitution_strategy, role_to_verify, driver_props, pipeline_callable)
         deadline = monotonic_time + @retry_timeout_sec
         conn = nil
+        success = false
 
         begin
           while monotonic_time < deadline
@@ -90,24 +91,21 @@ module AwsRubyDatabaseDriverWrapper
               end
 
               if role_to_verify.nil?
-                result = conn
-                conn = nil
-                return result
+                success = true
+                return conn
               end
 
               conn_role = dialect_service.db_dialect.host_role(conn)
               if conn_role == role_to_verify
-                result = conn
-                conn = nil
-                return result
+                success = true
+                return conn
               end
 
               host_service.force_refresh_host_list
               if role_to_verify == Host::HostRole::READER && !readers_in_topology?(host_service.all_hosts)
                 logger.warn('Reader verification expected but no readers exist in topology; accepting connection with writer role')
-                result = conn
-                conn = nil
-                return result
+                success = true
+                return conn
               end
 
               logger.debug("Connection to #{candidate_host&.host} has role #{conn_role}, expected #{role_to_verify}; retrying")
@@ -131,7 +129,7 @@ module AwsRubyDatabaseDriverWrapper
             end
           end
         ensure
-          close_connection(conn)
+          close_connection(conn) unless success
         end
 
         raise Errors::AwsError,
@@ -154,6 +152,8 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # Fall back to original host
+        logger.debug("Unable to resolve candidate host for substitution strategy '#{substitution_strategy}'; \
+          falling back to original host '#{original_host_info&.host}'")
         original_host_info
       end
 
@@ -219,9 +219,7 @@ module AwsRubyDatabaseDriverWrapper
           return filtered.find { |h| h.role == Host::HostRole::WRITER }
         end
 
-        target_role = case substitution_strategy
-                      when :substitute_reader then Host::HostRole::READER
-                      end
+        target_role = substitution_strategy == :substitute_reader ? Host::HostRole::READER : nil
 
         available_hosts = Utils::AccessibleRegions.filter_by_region(host_service.hosts, @accessible_regions)
 
@@ -346,11 +344,7 @@ module AwsRubyDatabaseDriverWrapper
       def close_connection(conn)
         return if conn.nil?
 
-        if conn.respond_to?(:close)
-          conn.close
-        elsif conn.respond_to?(:finish)
-          conn.finish
-        end
+        dialect_service.driver_dialect.close_connection(conn)
       rescue StandardError
         # Ignore errors when closing a connection during cleanup
       end
