@@ -23,6 +23,7 @@ require_relative '../plugins/failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/secrets_manager_plugin'
+require_relative '../plugins/blue_green/blue_green_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -32,6 +33,7 @@ module AwsRubyDatabaseDriverWrapper
       private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :NOOP_CALLABLE
 
       @plugin_classes = {
+        'bg' => Plugins::BlueGreen::BlueGreenPlugin,
         'failover' => Plugins::FailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
@@ -42,6 +44,7 @@ module AwsRubyDatabaseDriverWrapper
       # the highest values. The first plugin of the list will have the lowest weight, and the
       # last one will have the highest weight.
       @plugin_weights = {
+        Plugins::BlueGreen::BlueGreenPlugin => 200,
         Plugins::InitialConnectionStrategyPlugin => 300,
         Plugins::FailoverPlugin => 400,
         Plugins::IamAuthPlugin => 1800,
@@ -73,11 +76,11 @@ module AwsRubyDatabaseDriverWrapper
         )
       end
 
-      def internal_connect(host_info, driver_props, wrapper_override_props, is_initial_connection, plugin_to_skip: nil)
+      def internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, plugin_to_skip: nil)
         execute_with_subscribed_plugins(
           'internal_connect',
           lambda do |plugin, next_plugin_callable|
-            plugin.internal_connect(host_info, driver_props, wrapper_override_props, is_initial_connection, next_plugin_callable)
+            plugin.internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, next_plugin_callable)
           end,
           NOOP_CALLABLE,
           plugin_to_skip:

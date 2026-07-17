@@ -40,19 +40,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
     }
   end
   let(:driver_props) { { user: 'admin', password: 'secret', dbname: 'test' } }
-  let(:prefixed_props) { {} }
+  let(:prefixed_wrapper_config) { {} }
+  let(:prefixed_driver_config) { {} }
   let(:connection_config) do
     instance_double('ConnectionConfig',
                     wrapper_props: wrapper_props,
                     driver_props: driver_props,
-                    prefixed_props: prefixed_props,
+                    prefixed_wrapper_config: prefixed_wrapper_config,
+                    prefixed_driver_config: prefixed_driver_config,
                     initial_host_info: initial_host_info)
   end
   let(:connection_service) do
     instance_double('ConnectionService', config: connection_config,
                                          wrapper_props: wrapper_props,
                                          driver_props: driver_props,
-                                         prefixed_props: prefixed_props,
+                                         prefixed_wrapper_config: prefixed_wrapper_config,
+                                         prefixed_driver_config: prefixed_driver_config,
                                          initial_host_info: initial_host_info)
   end
   let(:driver_dialect) { instance_double('DriverDialect', connect: nil) }

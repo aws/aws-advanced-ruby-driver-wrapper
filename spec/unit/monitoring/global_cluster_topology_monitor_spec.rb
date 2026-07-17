@@ -70,7 +70,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
     instance_double('ConnectionConfig', wrapper_props: {
                       cluster_topology_refresh_rate_ms: 100,
                       cluster_topology_high_refresh_rate_ms: 50,
-                      cluster_topology_max_node_threads: 16
+                      cluster_topology_max_host_threads: 16
                     }, initial_host_info: initial_host_info)
   end
   let(:connection_service) do

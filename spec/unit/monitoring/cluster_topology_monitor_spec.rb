@@ -236,7 +236,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
       event = AwsRubyDatabaseDriverWrapper::Utils::Events::MonitorResetEvent.new(
         cluster_id: cluster_id,
-        endpoints: Set.new
+        endpoints: Set[instance_template.host]
       )
       monitor.process_event(event)
 
@@ -249,7 +249,20 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
       event = AwsRubyDatabaseDriverWrapper::Utils::Events::MonitorResetEvent.new(
         cluster_id: 'other-cluster',
-        endpoints: Set.new
+        endpoints: Set[instance_template.host]
+      )
+      monitor.process_event(event)
+
+      expect(monitor.send(:panic_mode?)).to be false
+    end
+
+    it 'ignores events whose endpoints do not include the initial host' do
+      monitor.instance_variable_get(:@monitoring_connection).set(mock_connection, close_old: false)
+      monitor.instance_variable_set(:@verified_writer, true)
+
+      event = AwsRubyDatabaseDriverWrapper::Utils::Events::MonitorResetEvent.new(
+        cluster_id: cluster_id,
+        endpoints: Set['unrelated.host.example.com']
       )
       monitor.process_event(event)
 

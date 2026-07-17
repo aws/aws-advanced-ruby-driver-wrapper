@@ -1,0 +1,38 @@
+# frozen_string_literal: true
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  You may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+module AwsRubyDatabaseDriverWrapper
+  module Plugins
+    module BlueGreen
+      module Role
+        SOURCE = :source
+        TARGET = :target
+
+        ROLE_MAPPING_1_0 = {
+          'BLUE_GREEN_DEPLOYMENT_SOURCE' => SOURCE,
+          'BLUE_GREEN_DEPLOYMENT_TARGET' => TARGET
+        }.freeze
+
+        def self.parse_role(value, version)
+          raise ArgumentError, "Unknown Blue/Green version: #{version}" unless version == '1.0'
+          raise ArgumentError, 'Blue/Green role value is blank' if value.nil? || value.strip.empty?
+
+          ROLE_MAPPING_1_0.fetch(value.upcase) { raise ArgumentError, "Unknown Blue/Green role: #{value}" }
+        end
+      end
+    end
+  end
+end

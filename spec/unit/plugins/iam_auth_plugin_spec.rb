@@ -152,6 +152,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
+  def wrapper_props_map(hash)
+    map = Concurrent::Map.new
+    hash.each { |k, v| map[k] = v }
+    map
+  end
+
   describe '#connect with invalid iam_port and host port set' do
     it 'falls back to the host port' do
       port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
@@ -159,7 +165,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
-      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '0' }), host_info: pg_host_info(port: 1234), props:)
+      token = connect_and_capture_token(plugin: build_plugin(wrapper_props_map(iam_port: '0')), host_info: pg_host_info(port: 1234), props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -172,7 +178,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
-      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '0' }), host_info: pg_host_info, props:)
+      token = connect_and_capture_token(plugin: build_plugin(wrapper_props_map(iam_port: '0')), host_info: pg_host_info, props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -197,7 +203,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
-      token = connect_and_capture_token(plugin: build_plugin({ iam_port: '9999' }), host_info: pg_host_info(port: 1234), props:)
+      token = connect_and_capture_token(plugin: build_plugin(wrapper_props_map(iam_port: '9999')), host_info: pg_host_info(port: 1234),
+                                        props:)
 
       expect(token).to eq(TEST_TOKEN)
     end
@@ -211,7 +218,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
-      token = connect_and_capture_token(plugin: build_plugin({ iam_region: 'us-west-1' }), host_info: arbitrary_host_info(us_west_host),
+      token = connect_and_capture_token(plugin: build_plugin(wrapper_props_map(iam_region: 'us-west-1')),
+                                        host_info: arbitrary_host_info(us_west_host),
                                         props:)
 
       expect(token).to eq(TEST_TOKEN)
@@ -260,8 +268,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, override_cache_key).and_return(nil)
 
       props = base_pg_props
-      connect_and_capture_token(plugin: build_plugin({ iam_host: PG_HOST, iam_region: 'us-east-2' }),
-                                host_info: arbitrary_host_info('8.8.8.8'), props:)
+      connect_and_capture_token(
+        plugin: build_plugin(wrapper_props_map(iam_host: PG_HOST, iam_region: 'us-east-2')),
+        host_info: arbitrary_host_info('8.8.8.8'), props:
+      )
 
       expect(mock_token_generator).to have_received(:auth_token).with(hash_including(endpoint: "#{PG_HOST}:#{DEFAULT_PG_PORT}"))
     end
@@ -460,7 +470,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
                                                   .and_return(valid_token_entry)
 
       props = base_pg_props
-      token = connect_and_capture_token(plugin: build_plugin({ iam_region: 'eu-west-1' }), host_info: gdb_host_info, props:)
+      token = connect_and_capture_token(plugin: build_plugin(wrapper_props_map(iam_region: 'eu-west-1')), host_info: gdb_host_info, props:)
 
       expect(token).to eq(TEST_TOKEN)
       expect(IAM_AUTH_UTILS).not_to have_received(:region_from_global_cluster)
@@ -474,7 +484,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
       props = base_pg_props
       begin
-        build_plugin.internal_connect(pg_host_info, props, {}, true,
+        build_plugin.internal_connect(pg_host_info, props, nil, true,
                                       -> { raise StandardError, 'simulated' })
       rescue StandardError
         nil
@@ -483,12 +493,47 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       expect(props[:password]).to eq(TEST_TOKEN)
     end
 
-    it 'accepts wrapper_override_props and is_initial_connection without error' do
+    it 'accepts nil wrapper_props and is_initial_connection without error' do
       props = base_pg_props
       expect do
-        build_plugin.internal_connect(pg_host_info, props, { some: :override }, false,
+        build_plugin.internal_connect(pg_host_info, props, nil, false,
                                       -> { raise StandardError, 'simulated' })
       end.to raise_error(StandardError, 'simulated')
+    end
+
+    it 'uses wrapper_props iam_host for token generation when provided' do
+      override_host = 'override.testdb.us-east-2.rds.amazonaws.com'
+      override_cache_key = "us-east-2:#{override_host}:#{DEFAULT_PG_PORT}:postgresqlUser"
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, override_cache_key)
+                                                  .and_return(nil)
+
+      wrapper_props_override = wrapper_props_map(iam_host: override_host)
+      props = base_pg_props
+      begin
+        build_plugin.internal_connect(pg_host_info, props, wrapper_props_override, false,
+                                      -> { raise StandardError, 'simulated' })
+      rescue StandardError
+        nil
+      end
+
+      expect(mock_token_generator).to have_received(:auth_token).with(
+        hash_including(endpoint: "#{override_host}:#{DEFAULT_PG_PORT}")
+      )
+    end
+
+    it 'falls back to host_info when wrapper_props has no iam_host' do
+      captured_key = nil
+      allow(mock_storage_service).to receive(:set) { |_name, key, _value| captured_key = key }
+
+      props = base_pg_props
+      begin
+        build_plugin.internal_connect(pg_host_info, props, nil, false,
+                                      -> { raise StandardError, 'simulated' })
+      rescue StandardError
+        nil
+      end
+
+      expect(captured_key).to eq(PG_CACHE_KEY)
     end
   end
 

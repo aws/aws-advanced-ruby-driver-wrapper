@@ -35,7 +35,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
       AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
       initial_host_info: host_info,
       wrapper_props: wrapper_props,
-      prefixed_props: {},
+      prefixed_wrapper_config: {},
+      prefixed_driver_config: {},
       driver_props: { host: host, port: '5432' }
     )
   end

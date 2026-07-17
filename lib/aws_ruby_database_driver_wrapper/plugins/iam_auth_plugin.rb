@@ -45,8 +45,8 @@ module AwsRubyDatabaseDriverWrapper
         iam_connect(host_info, driver_props, pipeline_callable)
       end
 
-      def internal_connect(host_info, driver_props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
-        iam_connect(host_info, driver_props, pipeline_callable)
+      def internal_connect(host_info, driver_props, wrapper_props_override, _is_initial_connection, pipeline_callable)
+        iam_connect(host_info, driver_props, pipeline_callable, wrapper_props_override || @wrapper_props)
       end
 
       def self.clear_cache(storage_service)
@@ -55,15 +55,19 @@ module AwsRubyDatabaseDriverWrapper
 
       private
 
-      def iam_connect(host_info, driver_props, pipeline_callable)
+      def iam_connect(host_info, driver_props, pipeline_callable, wrapper_props_override = nil)
+        wrapper_props_override ||= @wrapper_props
+
         user = driver_props[:user] || driver_props[:username]
         raise Errors::IamAuthError, 'IamAuthPlugin: :user is required' if user.nil? || user.empty?
 
-        host = Utils::IamAuthUtils.resolve_host(PropertyDefinition::IAM_HOST.get(@wrapper_props), host_info)
+        host = Utils::IamAuthUtils.resolve_host(
+          PropertyDefinition::IAM_HOST.get(wrapper_props_override), host_info
+        )
         rds_type = Utils::RdsUtils.identify_rds_type(host)
         begin
           region = Utils::IamAuthUtils.region_for(
-            host:, props: @wrapper_props, rds_type:, credentials_provider: @credentials_provider,
+            host:, props: wrapper_props_override, rds_type:, credentials_provider: @credentials_provider,
             rds_client_func: -> { rds_client }
           )
         rescue Aws::Errors::MissingRegionError
@@ -77,17 +81,17 @@ module AwsRubyDatabaseDriverWrapper
                 "If you are using a non-standard RDS URL, please set the 'iam_region' property."
         end
 
-        token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(@wrapper_props).to_sym
+        token_prop = PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(wrapper_props_override).to_sym
 
         port = Utils::IamAuthUtils.resolve_port(
-          PropertyDefinition::IAM_PORT.get(@wrapper_props),
+          PropertyDefinition::IAM_PORT.get(wrapper_props_override),
           host_info,
           @service_container.dialect_service.db_dialect.default_port
         )
 
         cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
         entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
-        expiration = PropertyDefinition::IAM_EXPIRATION.get_int(@wrapper_props)
+        expiration = PropertyDefinition::IAM_EXPIRATION.get_int(wrapper_props_override)
 
         if Utils::IamAuthUtils.valid_entry?(entry)
           driver_props[token_prop] = entry.token
