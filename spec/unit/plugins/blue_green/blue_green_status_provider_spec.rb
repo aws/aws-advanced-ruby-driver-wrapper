@@ -58,10 +58,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::StatusProvider,
                           dup: double('config_dup', initial_host_info: nil, 'initial_host_info=': nil, wrapper_props: {},
                                                     'wrapper_props=': nil)))
   end
+  let(:plugin_manager) { double('plugin_manager', plugin_in_use?: false) }
   let(:service_container) do
     AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
       connection_service, dialect_service, event_publisher,
-      nil, nil, nil, storage_service, nil
+      nil, plugin_manager, nil, storage_service, nil
     )
   end
   let(:props) { Concurrent::Map.new }
