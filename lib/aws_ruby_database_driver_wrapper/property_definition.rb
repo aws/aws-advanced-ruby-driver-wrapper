@@ -93,6 +93,56 @@ module AwsRubyDatabaseDriverWrapper
                                                    'AWS credentials provider for IAM token generation',
                                                    default_value: nil)
 
+    # -- Initial Connection Strategy --
+    INITIAL_CONNECTION_SUBSTITUTE_HOST = WrapperProperty.new(
+      :initial_connection_substitute_host,
+      'Role to substitute the endpoint with: writer, reader, any, or none. Auto-detects from endpoint type when not set.',
+      default_value: nil, type: String
+    )
+    INITIAL_CONNECTION_VERIFY_ROLE = WrapperProperty.new(
+      :initial_connection_verify_role,
+      'Role to verify after connecting: writer, reader, or none. Auto-detects from endpoint type when not set.',
+      default_value: nil, type: String
+    )
+    INITIAL_CONNECTION_HOST_SELECTOR_STRATEGY = WrapperProperty.new(
+      :initial_connection_host_selector_strategy,
+      'Strategy name for selecting a host when multiple match the substitution role.',
+      default_value: 'random', type: String
+    )
+    INITIAL_CONNECTION_RETRY_TIMEOUT_MS = WrapperProperty.new(
+      :initial_connection_retry_timeout_ms,
+      'Maximum time in milliseconds to retry opening a connection.',
+      default_value: 30_000, type: Integer
+    )
+    INITIAL_CONNECTION_RETRY_INTERVAL_MS = WrapperProperty.new(
+      :initial_connection_retry_interval_ms,
+      'Time in milliseconds between retries when opening a connection.',
+      default_value: 1000, type: Integer
+    )
+    INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS = WrapperProperty.new(
+      :initial_connection_wait_for_topology_ms,
+      'Maximum allowed time, in milliseconds, to wait for the cluster topology to be fetched before opening a new ' \
+      'connection. When set to a value greater than 0 and the topology is not yet available, the plugin ' \
+      'will block until the topology has been discovered (or this timeout is reached) instead of falling ' \
+      'back to connecting via the initial endpoint in the connection string.',
+      default_value: 0, type: Integer
+    )
+    INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST = WrapperProperty.new(
+      :initial_connection_inactive_substitute_host,
+      'GDB-only: substitution role for inactive cluster writer endpoints.',
+      default_value: 'writer', type: String
+    )
+    INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE = WrapperProperty.new(
+      :initial_connection_inactive_verify_role,
+      'GDB-only: verification role for inactive cluster writer endpoints.',
+      default_value: 'writer', type: String
+    )
+    ACCESSIBLE_REGIONS = WrapperProperty.new(
+      :accessible_regions,
+      'Comma-separated list of AWS regions accessible by the application. All regions allowed when not set.',
+      default_value: nil, type: String
+    )
+
     # -- Secrets Manager --
     SECRET_ID = WrapperProperty.new(
       :secret_id, 'The name or ARN of the secret to retrieve', default_value: nil, type: String
