@@ -32,7 +32,7 @@ group :development do
 end
 
 group :test do
-  gem 'aws-sdk-rds'
+  gem 'aws-sdk-rds', '~> 1.315.0'
   gem 'aws-sdk-secretsmanager'
   gem 'debug'
   gem 'dotenv'
