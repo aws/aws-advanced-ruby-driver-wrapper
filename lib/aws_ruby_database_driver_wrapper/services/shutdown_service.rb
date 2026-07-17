@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'singleton'
+require_relative '../plugins/blue_green/blue_green_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -30,6 +31,8 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def shutdown(grace_period_sec = 10)
+        Plugins::BlueGreen::BlueGreenPlugin.clean_up_providers
+
         deadline = Time.now + grace_period_sec
 
         @shutdown_targets.each do |shutdown_target|

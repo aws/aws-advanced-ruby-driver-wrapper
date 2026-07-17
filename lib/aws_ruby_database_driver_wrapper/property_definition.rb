@@ -81,6 +81,20 @@ module AwsRubyDatabaseDriverWrapper
       type: Integer
     )
 
+    # -- Blue/Green --
+    BGD_ID = WrapperProperty.new(:bgd_id, 'Blue/Green Deployment identifier that helps the driver to distinguish different deployments.',
+                                 default_value: '1', type: String)
+    BG_CONNECT_TIMEOUT_MS = WrapperProperty.new(:bg_connect_timeout_ms, 'Blue/Green connect timeout in milliseconds',
+                                                default_value: 30_000, type: Integer)
+    BG_INTERVAL_BASELINE_MS = WrapperProperty.new(:bg_baseline_ms, 'Baseline Blue/Green Deployment status checking interval (in msec).',
+                                                  default_value: 60_000, type: Integer)
+    BG_INTERVAL_INCREASED_MS = WrapperProperty.new(:bg_increased_ms, 'Increased Blue/Green Deployment status checking interval (in msec).',
+                                                   default_value: 1_000, type: Integer)
+    BG_INTERVAL_HIGH_MS = WrapperProperty.new(:bg_high_ms, 'High Blue/Green Deployment status checking interval (in msec).',
+                                              default_value: 100, type: Integer)
+    BG_SWITCHOVER_TIMEOUT_MS = WrapperProperty.new(:bg_switchover_timeout_ms, 'Blue/Green Deployment switchover timeout (in msec).',
+                                                   default_value: 180_000, type: Integer)
+
     # -- IAM Authentication --
     IAM_HOST = WrapperProperty.new(:iam_host, 'Overrides the host used to generate the IAM token', default_value: nil, type: String)
     IAM_PORT = WrapperProperty.new(:iam_port, 'Overrides the port used to generate the IAM token', default_value: nil, type: Integer)
@@ -187,12 +201,17 @@ module AwsRubyDatabaseDriverWrapper
                        .freeze
 
     # Known prefixes for internal connection overrides. Each prefix maps to a key
-    # used in ConnectionConfig#prefixed_props. Plugins define their own prefix here.
+    # used in ConnectionConfig#prefixed_wrapper_config and ConnectionConfig#prefixed_driver_config.
+    # Plugins define their own prefix here.
     TOPOLOGY_MONITORING_PREFIX = 'topology_monitoring_'
+    BG_MONITORING_PROPERTY_PREFIX = 'bg-monitoring-'
 
     KNOWN_PREFIXES = [
-      TOPOLOGY_MONITORING_PREFIX
+      TOPOLOGY_MONITORING_PREFIX,
+      BG_MONITORING_PROPERTY_PREFIX
     ].freeze
+
+    BG_STORAGE_NAMESPACE = '941d00a8-8238-4f7d-bf59-771bff783a8e'
 
     def self.wrapper_property?(key)
       KNOWN_PROPERTIES.key?(key.to_sym)

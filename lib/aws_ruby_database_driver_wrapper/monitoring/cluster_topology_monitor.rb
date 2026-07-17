@@ -19,6 +19,7 @@ require_relative 'monitor_connection'
 require_relative '../host/host_role'
 require_relative '../host/host_availability'
 require_relative '../utils/events/monitor_reset_event'
+require_relative '../utils/rds_utils'
 require_relative '../property_definition'
 require 'timeout'
 
@@ -104,10 +105,13 @@ module AwsRubyDatabaseDriverWrapper
       def process_event(event)
         return unless event.is_a?(Utils::Events::MonitorResetEvent)
         return unless event.cluster_id == @cluster_id
+        return unless event.endpoints&.include?(initial_host_info.host.downcase)
 
-        # TODO(blue-green): When Blue/Green is implemented, check event.endpoints
-        #   and only reset if this monitor's hosts overlap with the blue endpoints.
-        reset!
+        if event.endpoints.any? { |ep| Utils::RdsUtils.rds_cluster_dns?(ep) }
+          soft_reset!
+        else
+          reset!
+        end
       end
 
       def close
@@ -331,9 +335,10 @@ module AwsRubyDatabaseDriverWrapper
       def attempt_host_connection(host_info, attempts)
         internal_connect(host_info)
       rescue StandardError => e
+        raise if @service_container.dialect_service.login_error?(e)
+
         logger.debug("[#{@cluster_id}] Connection to #{host_info.host} failed: #{e.message}")
-        backoff = calculate_backoff(attempts)
-        sleep(backoff)
+        sleep(calculate_backoff(attempts))
         nil
       end
 
@@ -492,14 +497,25 @@ module AwsRubyDatabaseDriverWrapper
       # --- Reset ---
 
       def reset!
+        reset_connection_state(clear_cache: true)
+      end
+
+      # Soft reset for Blue/Green events: drops the connection but keeps the topology
+      # cache so the monitor can reconnect via known instance endpoints.
+      def soft_reset!
+        reset_connection_state(clear_cache: false)
+      end
+
+      def reset_connection_state(clear_cache:)
         logger.debug("[#{@cluster_id}] Monitor reset")
         @stop_instance_monitors = true
         close_instance_monitors
+        @stop_instance_monitors = false
         @monitoring_connection.set(nil)
         @verified_writer = false
         @writer_info = nil
         @high_refresh_end_time = 0
-        clear_topology_cache
+        clear_topology_cache if clear_cache
 
         @topology_mutex.synchronize do
           @update_requested = true
@@ -574,7 +590,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def internal_connect(host_info)
-        @service_container.plugin_manager.internal_connect(host_info, @monitoring_driver_props, @monitoring_wrapper_props, false)
+        @service_container.plugin_manager.internal_connect(host_info, @monitoring_driver_props.dup, @monitoring_wrapper_props, false)
       end
     end
   end

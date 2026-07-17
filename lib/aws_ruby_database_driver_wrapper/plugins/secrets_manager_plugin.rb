@@ -79,7 +79,7 @@ module AwsRubyDatabaseDriverWrapper
         secrets_connect(driver_props, pipeline_callable)
       end
 
-      def internal_connect(_host_info, driver_props, _wrapper_override_props, _is_initial_connection, pipeline_callable)
+      def internal_connect(_host_info, driver_props, _, _is_initial_connection, pipeline_callable)
         secrets_connect(driver_props, pipeline_callable)
       end
 

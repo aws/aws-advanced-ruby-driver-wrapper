@@ -76,7 +76,7 @@ module AwsRubyDatabaseDriverWrapper
         conn
       end
 
-      def internal_connect(host_info, driver_props, _, _is_initial_connection, _pipeline_callable)
+      def internal_connect(host_info, driver_props, _wrapper_props, _is_initial_connection, _pipeline_callable)
         driver_dialect = @service_container.dialect_service.driver_dialect
         driver_dialect.connect(host_info, driver_props)
       end

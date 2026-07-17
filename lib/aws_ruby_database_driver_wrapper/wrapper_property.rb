@@ -48,5 +48,9 @@ module AwsRubyDatabaseDriverWrapper
       val = get(props, override)
       val&.to_s
     end
+
+    def set(props, value)
+      props.put(@name, value)
+    end
   end
 end

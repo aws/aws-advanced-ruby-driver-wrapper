@@ -16,6 +16,7 @@
 
 require_relative 'monitor_state'
 require_relative '../logging'
+require 'concurrent'
 
 module AwsRubyDatabaseDriverWrapper
   module Monitoring
@@ -24,12 +25,16 @@ module AwsRubyDatabaseDriverWrapper
     class Monitor
       include Logging
 
-      attr_reader :state, :last_activity_sec
+      attr_reader :last_activity_sec
+
+      def state
+        @state.value
+      end
 
       def initialize(termination_timeout_sec: 30.0)
         @termination_timeout_sec = termination_timeout_sec
-        @state = nil
-        @stop_flag = false
+        @state = Concurrent::AtomicReference.new(nil)
+        @stop_flag = Concurrent::AtomicBoolean.new(false)
         update_activity
         @thread = nil
         @lock = Mutex.new
@@ -37,10 +42,10 @@ module AwsRubyDatabaseDriverWrapper
 
       def start
         @lock.synchronize do
-          return if @state == MonitorState::RUNNING
+          return if @state.value == MonitorState::RUNNING
 
-          @stop_flag = false
-          @state = MonitorState::RUNNING
+          @stop_flag.make_false
+          @state.set(MonitorState::RUNNING)
           @thread = Thread.new { run }
           @thread.name = "monitor-#{monitor_thread_suffix}"
           logger.debug("Started monitoring thread: #{@thread.name}")
@@ -48,22 +53,22 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def stop
-        @stop_flag = true
+        @stop_flag.make_true
 
         thread = @thread
-        if thread&.alive?
+        if thread&.alive? && thread != Thread.current
           thread.join(@termination_timeout_sec)
           thread.kill if thread.alive?
         end
         @thread = nil
 
-        @state = MonitorState::STOPPED
+        @state.set(MonitorState::STOPPED)
         close
         logger.debug("Stopped monitoring thread: monitor-#{monitor_thread_suffix}")
       end
 
       def stopped?
-        @stop_flag
+        @stop_flag.true?
       end
 
       def close; end
@@ -74,9 +79,9 @@ module AwsRubyDatabaseDriverWrapper
         monitor
       rescue StandardError => e
         logger.error("Exception in monitoring thread monitor-#{monitor_thread_suffix}: #{e.message}")
-        @state = MonitorState::ERROR
+        @state.set(MonitorState::ERROR)
       ensure
-        @lock.synchronize { @state = MonitorState::STOPPED if @state == MonitorState::RUNNING }
+        @state.compare_and_set(MonitorState::RUNNING, MonitorState::STOPPED)
       end
 
       def monitor_thread_suffix

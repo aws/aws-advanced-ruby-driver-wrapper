@@ -75,7 +75,7 @@ module AwsRubyDatabaseDriverWrapper
         overrides.transform_keys(&:to_sym).each { |k, v| all_props[k] = v }
 
         # eg {}, {sslmode: "require"}, {}
-        wrapper_config, extra_driver, prefixed_config = split_props(all_props)
+        wrapper_config, extra_driver, prefixed_wrapper_config, prefixed_driver_config = split_props(all_props)
         extra_driver.each { |k, v| driver_config[k] = v }
 
         initial_host_info = string_to_host_info(host_section)
@@ -86,7 +86,8 @@ module AwsRubyDatabaseDriverWrapper
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
-          prefixed_props: prefixed_config,
+          prefixed_wrapper_config: prefixed_wrapper_config,
+          prefixed_driver_config: prefixed_driver_config,
           initial_host_info:,
           original_host: host,
           original_port: port,
@@ -108,7 +109,7 @@ module AwsRubyDatabaseDriverWrapper
       #   parse_hash(:postgresql, { host: "myhost", port: 5432, dbname: "mydb", wrapper_plugins: "failover" })
       def parse_hash(driver_name, params)
         params = params.transform_keys(&:to_sym)
-        wrapper_config, driver_config, prefixed_config = split_props(params)
+        wrapper_config, driver_config, prefixed_wrapper_config, prefixed_driver_config = split_props(params)
         driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
         initial_host_info = hash_to_host_info(driver_config)
 
@@ -118,7 +119,8 @@ module AwsRubyDatabaseDriverWrapper
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
-          prefixed_props: prefixed_config,
+          prefixed_wrapper_config: prefixed_wrapper_config,
+          prefixed_driver_config: prefixed_driver_config,
           initial_host_info:,
           original_host:,
           original_port:,
@@ -134,7 +136,7 @@ module AwsRubyDatabaseDriverWrapper
         positional = keys.zip(args).to_h.compact
         all_props = positional.merge(kwargs.transform_keys(&:to_sym))
 
-        wrapper_config, driver_config, prefixed_config = split_props(all_props)
+        wrapper_config, driver_config, prefixed_wrapper_config, prefixed_driver_config = split_props(all_props)
         driver_config[:port] = driver_config[:port].to_s if driver_config.key?(:port)
         initial_host_info = hash_to_host_info(driver_config)
 
@@ -144,7 +146,8 @@ module AwsRubyDatabaseDriverWrapper
         ConnectionConfig.new(
           wrapper_props: wrapper_config,
           driver_props: driver_config,
-          prefixed_props: prefixed_config,
+          prefixed_wrapper_config: prefixed_wrapper_config,
+          prefixed_driver_config: prefixed_driver_config,
           initial_host_info:,
           original_host:,
           original_port:,
@@ -159,13 +162,19 @@ module AwsRubyDatabaseDriverWrapper
       def split_props(props)
         wrapper_config = ::Concurrent::Map.new
         driver_config = ::Concurrent::Map.new
-        prefixed_config = ::Concurrent::Map.new
+        prefixed_wrapper_config = ::Concurrent::Map.new
+        prefixed_driver_config = ::Concurrent::Map.new
 
         props.each do |key, value|
           key_s = key.to_s
           prefix = PropertyDefinition::KNOWN_PREFIXES.find { |p| key_s.start_with?(p) }
           if prefix
-            (prefixed_config[prefix] ||= ::Concurrent::Map.new)[key_s.delete_prefix(prefix).to_sym] = value
+            prefix_key_sym = key_s.delete_prefix(prefix).to_sym
+            if PropertyDefinition.wrapper_property?(prefix_key_sym)
+              (prefixed_wrapper_config[prefix] ||= ::Concurrent::Map.new)[prefix_key_sym] = value
+            else
+              (prefixed_driver_config[prefix] ||= ::Concurrent::Map.new)[prefix_key_sym] = value
+            end
           elsif PropertyDefinition.wrapper_property?(key)
             wrapper_config[key.to_sym] = value
           else
@@ -174,9 +183,9 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         validate_props!(wrapper_config)
-        prefixed_config.each_value { |prefixed| validate_props!(prefixed) }
+        prefixed_wrapper_config.each_value { |prefixed| validate_props!(prefixed) }
 
-        [wrapper_config, driver_config, prefixed_config]
+        [wrapper_config, driver_config, prefixed_wrapper_config, prefixed_driver_config]
       end
 
       # Validates that values in a config hash match the expected type of their corresponding WrapperProperty.
