@@ -163,7 +163,7 @@ PLATFORMS
 DEPENDENCIES
   activerecord (>= 7.2)
   aws-ruby-database-driver-wrapper!
-  aws-sdk-rds
+  aws-sdk-rds (~> 1.315.0)
   aws-sdk-secretsmanager
   bundler
   bundler-audit
