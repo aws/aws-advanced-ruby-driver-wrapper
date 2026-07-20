@@ -67,11 +67,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
 
   describe '#abort_connection' do
     it 'calls close' do
+      allow(connection).to receive(:finished?).and_return(false)
       expect(connection).to receive(:close)
       dialect.close_connection(connection)
     end
 
     it 'suppresses PG::Error' do
+      allow(connection).to receive(:finished?).and_return(false)
       allow(connection).to receive(:close).and_raise(PG::Error)
       expect { dialect.close_connection(connection) }.not_to raise_error
     end

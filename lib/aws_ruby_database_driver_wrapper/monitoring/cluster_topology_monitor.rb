@@ -59,12 +59,16 @@ module AwsRubyDatabaseDriverWrapper
         @monitoring_driver_props = monitoring_driver_props
         @monitoring_wrapper_props = monitoring_wrapper_props
 
+        # Apply default socket/connect timeouts for monitoring connections if not set by user.
+        service_container.dialect_service.driver_dialect.apply_monitoring_defaults(@monitoring_driver_props)
+
         props = service_container.connection_service.wrapper_props
         @refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_REFRESH_RATE_MS.get_int(props) / 1000.0
         @high_refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_MS.get_int(props) / 1000.0
         @max_instance_monitors = PropertyDefinition::CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS.get_int(props)
 
-        @monitoring_connection = MonitorConnection.new
+        @monitoring_connection = MonitorConnection.new(service_container.dialect_service.driver_dialect)
+        @monitoring_conn_lock = Mutex.new
         @writer_info = nil
         @verified_writer = false
         @high_refresh_end_time = 0
@@ -75,7 +79,7 @@ module AwsRubyDatabaseDriverWrapper
 
         @instance_monitors = {} # { host_string => Thread }
         @stop_instance_monitors = false
-        @instance_monitors_writer_conn = MonitorConnection.new
+        @instance_monitors_writer_conn = MonitorConnection.new(service_container.dialect_service.driver_dialect)
         @panic_mutex = Mutex.new
         @instance_monitors_writer_info = nil
         @instance_monitor_topologies = {}
@@ -93,7 +97,18 @@ module AwsRubyDatabaseDriverWrapper
       # @raise [Timeout::Error] if the topology is not updated within timeout_sec.
       def force_refresh(verify_writer, timeout_sec)
         if verify_writer
-          @monitoring_connection.set(nil)
+          if @monitoring_conn_lock.try_lock
+            # Monitoring thread is not mid-query; safe to close the connection.
+            begin
+              @monitoring_connection.set(nil)
+            ensure
+              @monitoring_conn_lock.unlock
+            end
+          else
+            # Monitoring thread is mid-query. Detach without closing — the monitoring thread will close the
+            # connection after its query completes (via read_timeout for MySQL or keepalives for PG).
+            @monitoring_connection.set(nil, close_old: false)
+          end
           @verified_writer = false
         end
 
@@ -151,10 +166,30 @@ module AwsRubyDatabaseDriverWrapper
       def run_regular_mode_iteration
         close_instance_monitors unless @instance_monitors.empty?
 
-        hosts = fetch_topology_and_update_cache(@monitoring_connection.get)
+        conn = @monitoring_connection.get
+        hosts = nil
+
+        # Hold the lock while querying so force_refresh knows not to close this connection.
+        @monitoring_conn_lock.synchronize do
+          hosts = fetch_topology_and_update_cache(conn)
+        end
+
+        # After releasing the lock, check if force_refresh detached this connection while
+        # we were querying (set it to nil with close_old: false). If so, we must close it
+        # since we're the only thread that held a reference during the query.
+        if conn && @monitoring_connection.get != conn
+          safe_close_connection(conn)
+          @verified_writer = false
+          @writer_info = nil
+          return
+        end
+
         if hosts.nil?
-          # Unable to fetch topology. Enter panic mode to find a reliable connection.
-          @monitoring_connection.set(nil)
+          # Unable to fetch topology. Enter panic mode.
+          if conn
+            @monitoring_connection.compare_and_set(conn, nil)
+            safe_close_connection(conn)
+          end
           @verified_writer = false
           @writer_info = nil
           return
@@ -418,6 +453,12 @@ module AwsRubyDatabaseDriverWrapper
       def fetch_topology_and_update_cache(conn)
         return nil if conn.nil?
 
+        driver_dialect = @service_container.dialect_service.driver_dialect
+        if driver_dialect.closed?(conn)
+          logger.debug("[#{@cluster_id}] Monitoring connection is closed; skipping topology fetch")
+          return nil
+        end
+
         hosts = query_topology(conn)
         update_topology_cache(hosts) if hosts && !hosts.empty?
         hosts
@@ -581,7 +622,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def safe_close_connection(conn)
-        conn&.close
+        @service_container.dialect_service.driver_dialect.close_connection(conn) if conn
       rescue StandardError
         nil
       end

@@ -104,6 +104,15 @@ module Integration
         end
         TestUtils.logger.debug("Testing.EnabledConnectivity: #{proxy_info.proxy.name}")
       end
+
+      def assign_toxiproxy_host(proxy_info)
+        target = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        # Only reset the HTTP client if the host has actually changed.
+        # Toxiproxy.host= closes the persistent Net::HTTP connection on every call,
+        # which can cause IOError if a prior response is still being read.
+        current = Toxiproxy.instance_variable_get(:@uri)
+        Toxiproxy.host = target unless current&.to_s == target
+      end
     end
   end
 end

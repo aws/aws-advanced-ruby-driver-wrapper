@@ -19,8 +19,10 @@ module AwsRubyDatabaseDriverWrapper
     # Thread-safe connection wrapper with compare-and-set semantics.
     # Automatically closes the old connection when replaced.
     class MonitorConnection
-      def initialize
+      # @param driver_dialect [DriverDialects::DriverDialect] the driver dialect used to safely close connections.
+      def initialize(driver_dialect)
         @connection = Concurrent::AtomicReference.new(nil)
+        @driver_dialect = driver_dialect
       end
 
       # Returns the current connection, or nil.
@@ -33,7 +35,9 @@ module AwsRubyDatabaseDriverWrapper
       # @param close_old [Boolean] whether to close the previous connection.
       def set(new_conn, close_old: true)
         old = @connection.get_and_set(new_conn)
-        safe_close(old) if close_old && old && !old.equal?(new_conn)
+        return unless close_old && old && !old.equal?(new_conn)
+
+        @driver_dialect.close_connection(old)
       end
 
       # Atomically sets the connection only if the current value is `expected` (identity check).
@@ -47,14 +51,6 @@ module AwsRubyDatabaseDriverWrapper
       # Closes and nils the connection.
       def close
         set(nil)
-      end
-
-      private
-
-      def safe_close(conn)
-        conn.close
-      rescue StandardError
-        nil
       end
     end
   end

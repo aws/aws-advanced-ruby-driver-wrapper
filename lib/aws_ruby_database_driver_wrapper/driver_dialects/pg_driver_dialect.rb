@@ -77,8 +77,10 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def close_connection(connection)
+        return if connection.finished?
+
         connection.close
-      rescue ::PG::Error => e
+      rescue StandardError => e
         logger.error("Failed to close PostgreSQL connection: #{e.message}")
       end
 
@@ -99,6 +101,10 @@ module AwsRubyDatabaseDriverWrapper
         cfg[:port] = host_info.port if host_info.port_specified?
         cfg[:dbname] = cfg.delete(:database) if !cfg.key?(:dbname) && cfg.key?(:database)
         cfg
+      end
+
+      def apply_monitoring_defaults(driver_props)
+        driver_props[:connect_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
       end
     end
   end

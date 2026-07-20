@@ -68,7 +68,7 @@ module AwsRubyDatabaseDriverWrapper
           @current_phase = Phase::NOT_CREATED
           @version = LATEST_KNOWN_VERSION
           @port = -1
-          @connection = Monitoring::MonitorConnection.new
+          @connection = Monitoring::MonitorConnection.new(service_container.dialect_service.driver_dialect)
           @use_ip_address = Concurrent::AtomicBoolean.new(false)
           @panic_mode = Concurrent::AtomicBoolean.new(true)
           @correct_connection_host = Concurrent::AtomicBoolean.new(false)
@@ -185,7 +185,7 @@ module AwsRubyDatabaseDriverWrapper
               conn = try_connect_single_ip_address(ip, host_info)
               if conn && !winner.compare_and_set(nil, conn)
                 begin
-                  conn.close
+                  @service_container.dialect_service.driver_dialect.close_connection(conn)
                 rescue StandardError
                   nil
                 end
