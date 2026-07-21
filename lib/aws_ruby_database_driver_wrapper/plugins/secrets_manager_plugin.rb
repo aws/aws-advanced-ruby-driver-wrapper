@@ -28,7 +28,8 @@ module AwsRubyDatabaseDriverWrapper
       SECRETS_MANAGER_CACHE_NAME = :secrets_manager
       MIN_EXPIRATION_SEC = 300
       SYNC_FETCH_TIMEOUT_SEC = 60
-      SECRETS_ARN_PATTERN = %r{\Aarn:aws:secretsmanager:(?<region>[^:\n]+):[^:\n]*:(?:[^:/\n]*[:/])?}
+      # The partition segment of an ARN varies across AWS partitions, so match any of them.
+      SECRETS_ARN_PATTERN = %r{\Aarn:aws(?:-[a-z]+)*:secretsmanager:(?<region>[^:\n]+):[^:\n]*:(?:[^:/\n]*[:/])?}
       MAX_RETRY_DELAY_SEC = 8
 
       SecretEntry = Data.define(:username, :password, :expires_at) do

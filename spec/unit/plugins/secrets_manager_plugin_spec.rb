@@ -80,11 +80,28 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin do
       )
     end
 
-    it 'parses region from ARN when no explicit region' do
+    # Drives through #connect and asserts the resolved region via the cache key
+    # ("<secret_id>:<region>"), which is the observable signal that ARN parsing worked.
+    def expect_region_parsed_from_arn(arn, expected_region)
       props = Concurrent::Map.new
-      props[:secret_id] = 'arn:aws:secretsmanager:eu-west-1:123456789:secret:my-secret'
+      props[:secret_id] = arn
       plugin = build_plugin(props)
-      expect(plugin.subscribed_methods).to include('connect')
+      plugin.connect(host_info, Concurrent::Map.new, true, -> {})
+      expect(mock_storage_service).to have_received(:get).with(
+        described_class::SECRETS_MANAGER_CACHE_NAME, "#{arn}:#{expected_region}"
+      )
+    end
+
+    it 'parses region from ARN when no explicit region' do
+      expect_region_parsed_from_arn('arn:aws:secretsmanager:eu-west-1:123456789:secret:my-secret', 'eu-west-1')
+    end
+
+    it 'parses region from an aws-cn (China) ARN' do
+      expect_region_parsed_from_arn('arn:aws-cn:secretsmanager:cn-north-1:123456789:secret:my-secret', 'cn-north-1')
+    end
+
+    it 'parses region from an aws-us-gov (GovCloud) ARN' do
+      expect_region_parsed_from_arn('arn:aws-us-gov:secretsmanager:us-gov-west-1:123456789:secret:my-secret', 'us-gov-west-1')
     end
 
     it 'clamps expiration below minimum to 300' do

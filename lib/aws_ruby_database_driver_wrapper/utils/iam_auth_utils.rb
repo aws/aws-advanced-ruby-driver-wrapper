@@ -64,7 +64,8 @@ module AwsRubyDatabaseDriverWrapper
                     .flat_map(&:global_cluster_members)
                     .find(&:is_writer)
                     &.db_cluster_arn
-        arn&.match(/\Aarn:aws:rds:(?<region>[^:]+)/)&.[](:region)
+        # The partition segment of an ARN varies across AWS partitions, so match any of them.
+        arn&.match(/\Aarn:aws(?:-[a-z]+)*:rds:(?<region>[^:]+)/)&.[](:region)
       end
 
       def generate_token(region:, hostname:, port:, user:, credentials_provider:)
