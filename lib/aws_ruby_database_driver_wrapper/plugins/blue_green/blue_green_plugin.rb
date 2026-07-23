@@ -32,6 +32,10 @@ module AwsRubyDatabaseDriverWrapper
 
         BLUE_GREEN_NAME = :blue_green
 
+        # When present in wrapper_props, internal_connect calls bypass BG routing.
+        # Used by BG monitoring connections to avoid being intercepted by their own plugin.
+        BG_SKIP_ROUTING_KEY = :'bg.skip_routing'
+
         CLOSING_METHODS = Set[
           RubyMethod::CONNECTION_CLOSE.name,
           RubyMethod::STATEMENT_CLOSE.name
@@ -51,12 +55,19 @@ module AwsRubyDatabaseDriverWrapper
           service_container.storage_service.register(BLUE_GREEN_NAME, ttl: 3600)
 
           network_methods = service_container.dialect_service.driver_dialect.network_bound_methods
-          @subscribed_methods = (Set['connect'] | network_methods).freeze
+          @subscribed_methods = (Set['connect', 'internal_connect'] | network_methods).freeze
         end
 
         attr_reader :subscribed_methods
 
         def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
+          route_connect(host_info, driver_props, is_initial_connection, pipeline_callable)
+        end
+
+        def internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, pipeline_callable)
+          # BG monitoring connections set BG_SKIP_ROUTING_KEY to bypass routing.
+          return pipeline_callable.call if wrapper_props[BG_SKIP_ROUTING_KEY]
+
           route_connect(host_info, driver_props, is_initial_connection, pipeline_callable)
         end
 
