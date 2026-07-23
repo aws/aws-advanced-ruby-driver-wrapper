@@ -64,7 +64,9 @@ module AwsRubyDatabaseDriverWrapper
         host = host_info&.host
         url_type = Utils::RdsUtils.identify_rds_type(host)
         substitution_strategy = determine_substitution_strategy(host, url_type)
+        puts 'asdf subtitution strategy: ' + substitution_strategy.to_s
         role_to_verify = determine_role_to_verify(host, url_type)
+        puts 'asdf role to verify: ' + role_to_verify.to_s
 
         connect_with_retry(host_info, url_type, substitution_strategy, role_to_verify, driver_props, pipeline_callable)
       end
@@ -79,6 +81,7 @@ module AwsRubyDatabaseDriverWrapper
         begin
           while monotonic_time < deadline
             candidate_host = resolve_candidate_host(host_info, url_type, substitution_strategy)
+            puts 'asdf candidate host: ' + candidate_host.to_s
 
             begin
               conn = open_connection_to(
@@ -95,6 +98,7 @@ module AwsRubyDatabaseDriverWrapper
                 return conn
               end
 
+              puts 'asdf verifying role...'
               conn_role = dialect_service.db_dialect.host_role(conn)
               if conn_role == role_to_verify
                 success = true
@@ -144,9 +148,11 @@ module AwsRubyDatabaseDriverWrapper
 
         return candidate if candidate && Utils::RdsUtils.rds_instance?(candidate.host)
 
-        # Topology not available — try waiting if configured
-        if @wait_for_topology_sec.positive? && host_service.all_hosts.empty?
+        # Unable to find an instance URL — try waiting if configured
+        if @wait_for_topology_sec.positive?
+          start = Time.now
           host_service.force_refresh_host_list?(timeout_sec: @wait_for_topology_sec)
+          puts "asdf topology wait took #{Time.now - start} seconds"
           candidate = select_candidate_host(original_host_info, url_type, substitution_strategy)
           return candidate if candidate && Utils::RdsUtils.rds_instance?(candidate.host)
         end
@@ -165,7 +171,7 @@ module AwsRubyDatabaseDriverWrapper
           return conn
         end
 
-        plugin_manager.internal_connect(candidate_host, driver_props, {}, false)
+        plugin_manager.connect(candidate_host, driver_props, true, plugin_to_skip: self)
       end
 
       def determine_substitution_strategy(host, url_type)
@@ -237,7 +243,9 @@ module AwsRubyDatabaseDriverWrapper
 
       def resolve_writer_cluster_substitution(host)
         writer = find_writer_in_topology
-        return :none if writer.nil? || !Utils::RdsUtils.rds_instance?(writer.host)
+        # When no writer instance URL is available yet, default to substitute_writer. resolve_candidate_host then
+        # decides to wait for an instance URL or fall back to connecting via the initial endpoint.
+        return :substitute_writer if writer.nil? || !Utils::RdsUtils.rds_instance?(writer.host)
 
         if Utils::RdsUtils.same_region?(writer.host, host)
           :substitute_writer
@@ -250,7 +258,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def resolve_writer_cluster_verification(host)
         writer = find_writer_in_topology
-        if writer && Utils::RdsUtils.rds_instance?(writer.host) && Utils::RdsUtils.same_region?(writer.host, host)
+        if writer.nil? || Utils::RdsUtils.same_region?(writer.host, host)
           return Host::HostRole::WRITER
         end
 

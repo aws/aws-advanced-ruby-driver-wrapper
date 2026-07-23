@@ -70,12 +70,15 @@ module AwsRubyDatabaseDriverWrapper
         @error_handler = AwsRubyDatabaseDriverWrapper.config.custom_error_handler ||
                          DriverDialects::DriverDialectManager.get_error_handler(driver_name)
         @db_dialect = init_dialect
-        @dialect_confirmed = false
       end
 
-      # @return [Boolean] whether the dialect has been confirmed via a live connection query
-      def dialect_confirmed?
-        @dialect_confirmed
+      # @return [Boolean] whether the dialect is known for certain and will not be swapped. This
+      #   is the true when the dialect can no longer be updated, either because it was set
+      #   explicitly / resolved from an unambiguous URL (such as a global writer cluster endpoint)
+      #   or because it has already been confirmed via live connection queries. When true, topology
+      #   fetches may proceed.
+      def dialect_final?
+        !@can_update
       end
 
       # Lazily instantiates and caches a dialect by code.
@@ -133,9 +136,8 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
-        @dialect_confirmed = true
         swap_host_list_provider if @dialect_code != original_dialect_code
-        @all_hosts = @service_container.host_service.host_list_provider.refresh
+        @service_container.host_service.refresh_host_list
         @db_dialect
       end
 

@@ -58,15 +58,19 @@ module AwsRubyDatabaseDriverWrapper
         register_topology_cache
       end
 
-      # Returns cached topology or fetches from monitor. Falls back to initial_host_list.
+      # Returns cached topology, otherwise starts the topology monitor in the background and
+      # returns immediately without waiting for a fetch. Initial connections must not block on
+      # topology being available; the monitor warms the cache for subsequent connections. Callers
+      # that explicitly want to wait use force_refresh with a positive timeout.
+      #
       # @return [Array<HostInfo>]
       def refresh
         stored = stored_topology
         return stored unless stored.nil? || stored.empty?
 
-        return initial_host_list unless @service_container.dialect_service.dialect_confirmed?
+        return initial_host_list unless @service_container.dialect_service.dialect_final?
 
-        hosts = force_refresh(false, DEFAULT_TOPOLOGY_QUERY_TIMEOUT_SEC)
+        hosts = force_refresh(false, 0.0)
         return hosts unless hosts.nil? || hosts.empty?
 
         stored_topology || initial_host_list
@@ -77,7 +81,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param timeout_sec [Float]
       # @return [Array<HostInfo>, nil]
       def force_refresh(verify_writer, timeout_sec)
-        return initial_host_list unless @service_container.dialect_service.dialect_confirmed?
+        return initial_host_list unless @service_container.dialect_service.dialect_final?
 
         monitor = @service_container.monitor_service.run_if_absent(:cluster_topology, @cluster_id, @service_container) do |_sc|
           Monitoring::ClusterTopologyMonitor.new(
