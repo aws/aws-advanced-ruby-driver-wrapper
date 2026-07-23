@@ -34,7 +34,10 @@ module AwsRubyDatabaseDriverWrapper
         'connection not open',
         'no connection to the server',
         'connection is closed',
-        'broken pipe'
+        'broken pipe',
+        'terminating connection due to administrator command',
+        "can't get socket descriptor",
+        'ssl connection has been closed unexpectedly'
       ].freeze
 
       def initialize(driver_dialect)
