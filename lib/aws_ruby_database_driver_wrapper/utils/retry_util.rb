@@ -54,23 +54,26 @@ module AwsRubyDatabaseDriverWrapper
             next
           end
 
-          success = false
-          while Time.now < deadline
-            begin
-              candidate_conn = plugin_manager.connect(writer_candidate, @connection_service.driver_props, false,
-                                                      plugin_to_skip: plugin_to_skip)
-              role = @dialect_service.db_dialect.host_role(candidate_conn)
-              if role == Host::HostRole::WRITER
-                result = WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })
-                success = true
-                return result
-              end
-            rescue StandardError => e
-              logger.debug { "Exception connecting to writer #{writer_candidate.host}: #{e.message}" }
+          candidate_conn = nil
+          begin
+            candidate_conn = plugin_manager.connect(writer_candidate, @connection_service.driver_props, false,
+                                                    plugin_to_skip: plugin_to_skip)
+            role = @dialect_service.db_dialect.host_role(candidate_conn)
+            if role == Host::HostRole::WRITER
+              return WriterResult.new(candidate_conn, writer_candidate.deep_dup.tap { |h| h.role = role })
             end
 
-            close_quietly(candidate_conn) unless success
+            # The candidate is no longer the writer. This happens when the topology is stale right after
+            # failover (e.g. Aurora MySQL's replica_host_status still reports the demoted writer as writer).
+            # Close the connection and let the outer loop refresh the topology and re-select the writer
+            # candidate so we pick up the newly promoted writer once the topology catches up.
+            close_quietly(candidate_conn)
+          rescue StandardError => e
+            logger.debug { "Exception connecting to writer #{writer_candidate.host}: #{e.message}" }
+            close_quietly(candidate_conn)
           end
+
+          sleep(SHORT_DELAY_SEC)
         end
 
         raise Timeout::Error, 'Timed out waiting for a writer connection'
