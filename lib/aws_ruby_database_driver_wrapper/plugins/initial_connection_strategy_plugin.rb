@@ -63,10 +63,18 @@ module AwsRubyDatabaseDriverWrapper
 
         host = host_info&.host
         url_type = Utils::RdsUtils.identify_rds_type(host)
-        substitution_strategy = determine_substitution_strategy(host, url_type)
-        puts 'asdf subtitution strategy: ' + substitution_strategy.to_s
-        role_to_verify = determine_role_to_verify(host, url_type)
-        puts 'asdf role to verify: ' + role_to_verify.to_s
+
+        # Wait for the cluster topology to be discovered before deciding, if the caller opted in.
+        wait_for_topology_if_configured if cluster_url?(url_type)
+
+        # Classify a plain writer cluster URL as single-region, global-active, global-inactive, or unresolved.
+        classification = url_type == Utils::RdsUrlType::RDS_WRITER_CLUSTER ? classify_writer_cluster(host) : nil
+        substitution_strategy = determine_substitution_strategy(url_type, classification)
+        role_to_verify = determine_role_to_verify(url_type, classification, substitution_strategy)
+
+        # Only cluster-type endpoints are candidates for substitution/verification. Anything else
+        # (instance, proxy, IP, custom domain, ...) connects directly to the provided URL.
+        return pipeline_callable.call unless cluster_url?(url_type)
 
         connect_with_retry(host_info, url_type, substitution_strategy, role_to_verify, driver_props, pipeline_callable)
       end
@@ -81,7 +89,6 @@ module AwsRubyDatabaseDriverWrapper
         begin
           while monotonic_time < deadline
             candidate_host = resolve_candidate_host(host_info, url_type, substitution_strategy)
-            puts 'asdf candidate host: ' + candidate_host.to_s
 
             begin
               conn = open_connection_to(
@@ -98,7 +105,6 @@ module AwsRubyDatabaseDriverWrapper
                 return conn
               end
 
-              puts 'asdf verifying role...'
               conn_role = dialect_service.db_dialect.host_role(conn)
               if conn_role == role_to_verify
                 success = true
@@ -145,22 +151,39 @@ module AwsRubyDatabaseDriverWrapper
         return original_host_info if substitution_strategy == :none
 
         candidate = select_candidate_host(original_host_info, url_type, substitution_strategy)
-
         return candidate if candidate && Utils::RdsUtils.rds_instance?(candidate.host)
 
-        # Unable to find an instance URL — try waiting if configured
-        if @wait_for_topology_sec.positive?
-          start = Time.now
-          host_service.force_refresh_host_list?(timeout_sec: @wait_for_topology_sec)
-          puts "asdf topology wait took #{Time.now - start} seconds"
-          candidate = select_candidate_host(original_host_info, url_type, substitution_strategy)
-          return candidate if candidate && Utils::RdsUtils.rds_instance?(candidate.host)
-        end
-
-        # Fall back to original host
-        logger.debug("Unable to resolve candidate host for substitution strategy '#{substitution_strategy}'; \
-          falling back to original host '#{original_host_info&.host}'")
+        # No instance URL available to substitute. This happens when topology hasn't been successfully queried yet.
+        # Fall back to connecting via the initial endpoint.
+        # Callers that want to wait for topology first opt in via INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS (handled in #connect).
+        logger.debug("Unable to resolve a substitute instance host for strategy '#{substitution_strategy}'; \
+          connecting via the original endpoint '#{original_host_info&.host}'")
         original_host_info
+      end
+
+      # When INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS is positive and only the initial (non-instance)
+      # endpoint is known, block up to the configured timeout for the topology monitor to discover
+      # instance URLs before we make any substitution/verification decisions.
+      def wait_for_topology_if_configured
+        return unless @wait_for_topology_sec.positive?
+        return unless only_initial_endpoint_known?
+
+        host_service.force_refresh_host_list?(timeout_sec: @wait_for_topology_sec)
+      end
+
+      # True when the topology contains a single host that is not an instance URL, i.e. we only have
+      # the initial connection endpoint and the topology has not been queried yet.
+      def only_initial_endpoint_known?
+        hosts = host_service.all_hosts
+        hosts.size <= 1 && hosts.none? { |h| Utils::RdsUtils.rds_instance?(h.host) }
+      end
+
+      # True once real topology has been discovered: more than one host, or a single instance URL.
+      def topology_available?
+        hosts = host_service.all_hosts
+        return false if hosts.empty?
+
+        hosts.size > 1 || Utils::RdsUtils.rds_instance?(hosts.first.host)
       end
 
       def open_connection_to(candidate_host, original_host_info, substitution_strategy, driver_props, pipeline_callable)
@@ -174,7 +197,26 @@ module AwsRubyDatabaseDriverWrapper
         plugin_manager.connect(candidate_host, driver_props, true, plugin_to_skip: self)
       end
 
-      def determine_substitution_strategy(host, url_type)
+      # A writer cluster URL falls into one of these buckets, decided by the dialect first
+      # (authoritative) and topology second (only to split active vs inactive within a global cluster):
+      #   :single_region - dialect is final and not global -> connected to the writer's own cluster
+      #   :global_active - global dialect, topology shows the writer is in this endpoint's region
+      #   :global_inactive - global dialect, topology shows the writer is in another region
+      #   :unresolved - dialect not final, or global but topology can't tell us which cluster this is
+      def classify_writer_cluster(host)
+        return :unresolved unless dialect_service.dialect_final?
+        return :single_region unless dialect_service.db_dialect.global?
+
+        # Global cluster: use the confirmed cross-region topology to locate the writer.
+        return :unresolved unless topology_available?
+
+        writer = find_writer_in_topology
+        return :unresolved if writer.nil? || !Utils::RdsUtils.rds_instance?(writer.host)
+
+        Utils::RdsUtils.same_region?(writer.host, host) ? :global_active : :global_inactive
+      end
+
+      def determine_substitution_strategy(url_type, classification)
         explicit_value = PropertyDefinition::INITIAL_CONNECTION_SUBSTITUTE_HOST.get(@props)
 
         if explicit_value
@@ -187,7 +229,7 @@ module AwsRubyDatabaseDriverWrapper
         when Utils::RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER
           :substitute_writer
         when Utils::RdsUrlType::RDS_WRITER_CLUSTER
-          resolve_writer_cluster_substitution(host)
+          writer_cluster_substitution(classification)
         when Utils::RdsUrlType::RDS_READER_CLUSTER
           :substitute_reader
         else
@@ -195,7 +237,7 @@ module AwsRubyDatabaseDriverWrapper
         end
       end
 
-      def determine_role_to_verify(host, url_type)
+      def determine_role_to_verify(url_type, classification, substitution_strategy)
         explicit_value = PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.get(@props)
 
         if explicit_value
@@ -208,10 +250,39 @@ module AwsRubyDatabaseDriverWrapper
         when Utils::RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER
           Host::HostRole::WRITER
         when Utils::RdsUrlType::RDS_WRITER_CLUSTER
-          resolve_writer_cluster_verification(host)
+          writer_cluster_verification(classification, substitution_strategy)
         when Utils::RdsUrlType::RDS_READER_CLUSTER
           Host::HostRole::READER
         end
+      end
+
+      def writer_cluster_substitution(classification)
+        case classification
+        when :single_region, :global_active
+          :substitute_writer
+        when :global_inactive
+          # INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST governs inactive cluster endpoints,
+          # defaulting to writer when unset.
+          parse_substitution_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.get(@props))
+        else
+          # :unresolved - we don't know enough to substitute safely; connect via the original endpoint.
+          :none
+        end
+      end
+
+      def writer_cluster_verification(classification, substitution_strategy)
+        case classification
+        when :single_region, :global_active
+          Host::HostRole::WRITER
+        when :global_inactive
+          if @props.key?(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.name)
+            parse_verify_role_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.get(@props))
+          elsif substitution_strategy == :substitute_writer
+            # Inactive verify role unset: verify writer only if we substituted a writer.
+            Host::HostRole::WRITER
+          end
+        end
+        # :unresolved -> nil (no verification)
       end
 
       def select_candidate_host(original_host_info, url_type, substitution_strategy)
@@ -241,33 +312,18 @@ module AwsRubyDatabaseDriverWrapper
         nil
       end
 
-      def resolve_writer_cluster_substitution(host)
-        writer = find_writer_in_topology
-        # When no writer instance URL is available yet, default to substitute_writer. resolve_candidate_host then
-        # decides to wait for an instance URL or fall back to connecting via the initial endpoint.
-        return :substitute_writer if writer.nil? || !Utils::RdsUtils.rds_instance?(writer.host)
-
-        if Utils::RdsUtils.same_region?(writer.host, host)
-          :substitute_writer
-        else
-          parse_substitution_value(
-            PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.get(@props)
-          )
-        end
-      end
-
-      def resolve_writer_cluster_verification(host)
-        writer = find_writer_in_topology
-        if writer.nil? || Utils::RdsUtils.same_region?(writer.host, host)
-          return Host::HostRole::WRITER
-        end
-
-        inactive_value = PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.get(@props)
-        parse_verify_role_value(inactive_value)
-      end
-
       def find_writer_in_topology
         host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
+      end
+
+      # Cluster-type endpoints are the only ones eligible for substitution/verification.
+      def cluster_url?(url_type)
+        [
+          Utils::RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER,
+          Utils::RdsUrlType::RDS_WRITER_CLUSTER,
+          Utils::RdsUrlType::RDS_READER_CLUSTER,
+          Utils::RdsUrlType::RDS_CUSTOM_CLUSTER
+        ].include?(url_type)
       end
 
       def parse_substitution_value(value)

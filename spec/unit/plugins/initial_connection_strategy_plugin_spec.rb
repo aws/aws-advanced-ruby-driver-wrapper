@@ -53,6 +53,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     double('DialectService',
            db_dialect: mock_db_dialect,
            driver_dialect: mock_driver_dialect,
+           dialect_final?: true,
            login_error?: false,
            network_error?: false,
            read_only_error?: false)
@@ -78,6 +79,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     allow(mock_host_service).to receive(:select_host).and_return(reader_host_info)
     allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
     allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
+    allow(mock_db_dialect).to receive(:global?).and_return(false)
   end
 
   def build_plugin(props = {})
@@ -478,6 +480,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     before do
       allow(mock_host_service).to receive(:all_hosts).and_return([writer_in_different_region, reader_host_info])
       allow(mock_host_service).to receive(:hosts).and_return([writer_in_different_region, reader_host_info])
+      # Inactive cluster detection only applies to a confirmed Global Aurora Database whose
+      # cross-region topology shows the writer living in a different region than the endpoint.
+      allow(mock_db_dialect).to receive(:global?).and_return(true)
     end
 
     it 'uses inactive_substitute_host setting when cluster is inactive' do

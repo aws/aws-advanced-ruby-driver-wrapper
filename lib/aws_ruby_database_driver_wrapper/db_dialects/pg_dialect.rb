@@ -63,6 +63,12 @@ module AwsRubyDatabaseDriverWrapper
         @default_port ||= 5432
       end
 
+      # @return [Boolean] whether this dialect represents an Aurora Global Database.
+      #   Overridden to true by the global dialects.
+      def global?
+        false
+      end
+
       def dialect_update_candidates
         DIALECT_UPDATE_CANDIDATES
       end

@@ -63,6 +63,10 @@ module AwsRubyDatabaseDriverWrapper
         false
       end
 
+      def global?
+        true
+      end
+
       def dialect_update_candidates
         []
       end
