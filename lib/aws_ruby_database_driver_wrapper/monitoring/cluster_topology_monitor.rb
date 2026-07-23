@@ -97,7 +97,7 @@ module AwsRubyDatabaseDriverWrapper
           @verified_writer = false
         end
 
-        wait_for_topology_update(timeout_sec)
+        wait_for_topology_update(timeout_sec, verify_writer)
       end
 
       # Event subscriber callback.
@@ -461,7 +461,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # --- force_refresh support ---
 
-      def wait_for_topology_update(timeout_sec)
+      def wait_for_topology_update(timeout_sec, verify_writer = false)
         current_hosts = stored_hosts
 
         @topology_mutex.synchronize do
@@ -475,7 +475,12 @@ module AwsRubyDatabaseDriverWrapper
         @topology_mutex.synchronize do
           # We are checking reference equality instead of value equality. We will break out of the loop if there is a
           # new entry in the topology cache, even if current_hosts contains the same hosts as stored_hosts.
-          while stored_hosts.equal?(current_hosts) && monotonic_time < deadline && !stopped?
+          #
+          # When verify_writer is set, a fresh cache entry is not enough: right after failover the topology query can
+          # still report the demoted writer as the writer (e.g. Aurora MySQL's replica_host_status is eventually
+          # consistent), so we keep waiting until the cached writer matches the writer this monitor has independently
+          # verified by probing instances directly, or the timeout is hit.
+          while wait_for_topology?(current_hosts, verify_writer) && monotonic_time < deadline && !stopped?
             remaining = deadline - monotonic_time
             break if remaining <= 0
 
@@ -484,9 +489,32 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         latest = stored_hosts
-        raise Timeout::Error, "Topology not updated within #{timeout_sec}s for cluster #{@cluster_id}" if latest.equal?(current_hosts)
+        if latest.equal?(current_hosts) || (verify_writer && !cached_writer_verified?(latest))
+          raise Timeout::Error, "Topology not updated within #{timeout_sec}s for cluster #{@cluster_id}"
+        end
 
         latest
+      end
+
+      # Returns true while force_refresh should keep waiting for a topology update.
+      def wait_for_topology?(current_hosts, verify_writer)
+        return true if stored_hosts.equal?(current_hosts)
+
+        # A new cache entry arrived. When verifying the writer, keep waiting until the topology writer matches the
+        # writer the monitor has verified directly.
+        verify_writer && !cached_writer_verified?(stored_hosts)
+      end
+
+      # Returns true when the writer in the given topology matches the writer this monitor has verified by probing
+      # instances directly. Returns false when either is missing so the caller keeps waiting.
+      def cached_writer_verified?(hosts)
+        return false unless @verified_writer
+
+        verified_writer = @writer_info
+        return false if verified_writer.nil? || hosts.nil?
+
+        cached_writer = hosts.find { |h| h.role == Host::HostRole::WRITER }
+        !cached_writer.nil? && cached_writer.host == verified_writer.host
       end
 
       # --- Reset ---
