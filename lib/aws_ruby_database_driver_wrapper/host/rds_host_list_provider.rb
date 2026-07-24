@@ -81,7 +81,11 @@ module AwsRubyDatabaseDriverWrapper
       # @param timeout_sec [Float]
       # @return [Array<HostInfo>, nil]
       def force_refresh(verify_writer, timeout_sec)
-        return initial_host_list unless @service_container.dialect_service.dialect_final?
+        unless @service_container.dialect_service.dialect_final?
+          logger.debug('force_refresh was called but the dialect must be finalized before starting a topology monitor. ' \
+                       'Returning initial host list.')
+          return initial_host_list
+        end
 
         monitor = @service_container.monitor_service.run_if_absent(:cluster_topology, @cluster_id, @service_container) do |_sc|
           Monitoring::ClusterTopologyMonitor.new(
