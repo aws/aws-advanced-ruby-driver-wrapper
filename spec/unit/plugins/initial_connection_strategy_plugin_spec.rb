@@ -420,11 +420,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       end.to raise_error(errors::AwsError, /cannot be set when connecting to an instance/)
     end
 
-    it 'raises for invalid substitution value' do
-      plugin = build_plugin(initial_connection_substitute_host: 'invalid')
-
+    it 'raises at init for invalid substitution value' do
       expect do
-        plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+        build_plugin(initial_connection_substitute_host: 'invalid')
       end.to raise_error(errors::AwsError, /Invalid initial_connection_substitute_host/)
     end
 
@@ -453,11 +451,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       end.to raise_error(errors::AwsError, /invalid for reader/)
     end
 
-    it 'raises for invalid verify role value' do
-      plugin = build_plugin(initial_connection_verify_role: 'invalid')
-
+    it 'raises at init for invalid verify role value' do
       expect do
-        plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+        build_plugin(initial_connection_verify_role: 'invalid')
       end.to raise_error(errors::AwsError, /Invalid initial_connection_verify_role/)
     end
 
@@ -523,6 +519,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       expect(mock_db_dialect).not_to receive(:host_role)
 
       plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+    end
+
+    it 'raises at init when inactive_substitute_host is reader' do
+      expect do
+        build_plugin(initial_connection_inactive_substitute_host: 'reader')
+      end.to raise_error(errors::AwsError, /initial_connection_inactive_substitute_host.*not valid.*'writer' or 'none'/)
+    end
+
+    it 'raises at init when inactive_verify_role is reader' do
+      expect do
+        build_plugin(initial_connection_inactive_verify_role: 'reader')
+      end.to raise_error(errors::AwsError, /initial_connection_inactive_verify_role.*not valid.*'writer' or 'none'/)
     end
   end
 

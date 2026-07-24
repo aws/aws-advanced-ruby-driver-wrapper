@@ -41,14 +41,13 @@ module AwsRubyDatabaseDriverWrapper
       VERIFY_ROLES = {
         'writer' => :writer,
         'reader' => :reader,
-        'none' => nil
+        'none' => :none
       }.freeze
 
       attr_reader :subscribed_methods
 
       def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
-        @props = props
 
         @retry_timeout_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_TIMEOUT_MS.get_int(props) / 1000.0
         @retry_interval_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_INTERVAL_MS.get_int(props) / 1000.0
@@ -56,6 +55,8 @@ module AwsRubyDatabaseDriverWrapper
         @host_selector_strategy = PropertyDefinition::INITIAL_CONNECTION_HOST_SELECTOR_STRATEGY.get(props)
         @accessible_regions = Utils::AccessibleRegions.parse(props)
         @subscribed_methods = SUBSCRIBED_METHODS
+
+        parse_role_props(props)
       end
 
       def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
@@ -217,12 +218,10 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def determine_substitution_strategy(url_type, classification)
-        explicit_value = PropertyDefinition::INITIAL_CONNECTION_SUBSTITUTE_HOST.get(@props)
-
-        if explicit_value
-          strategy = parse_substitution_value(explicit_value)
-          validate_substitution_strategy(strategy, url_type)
-          return strategy
+        # @explicit_substitution was parsed at init; only the URL-dependent validity is checked here.
+        if @explicit_substitution
+          validate_substitution_strategy(@explicit_substitution, url_type)
+          return @explicit_substitution
         end
 
         case url_type
@@ -238,12 +237,18 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def determine_role_to_verify(url_type, classification, substitution_strategy)
-        explicit_value = PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.get(@props)
+        role = resolve_verify_role(url_type, classification, substitution_strategy)
 
-        if explicit_value
-          role = parse_verify_role_value(explicit_value)
-          validate_verify_role(role, url_type)
-          return role
+        # :none is the explicit "skip verification" sentinel; normalize it to nil, which
+        # connect_with_retry treats as "no role to verify".
+        role == :none ? nil : role
+      end
+
+      def resolve_verify_role(url_type, classification, substitution_strategy)
+        # @explicit_verify_role was parsed at init; only the URL-dependent validity is checked here.
+        if @explicit_verify_role
+          validate_verify_role(@explicit_verify_role, url_type)
+          return @explicit_verify_role
         end
 
         case url_type
@@ -263,11 +268,7 @@ module AwsRubyDatabaseDriverWrapper
         when :global_inactive
           # INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST governs inactive cluster endpoints. When unset,
           # pass the endpoint through untouched. Users who want cross-region writer substitution must opt in explicitly.
-          if @props.key?(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.name)
-            parse_substitution_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.get(@props))
-          else
-            :none
-          end
+          @inactive_substitution || :none
         else
           # :unresolved - we don't know enough to substitute safely; connect via the original endpoint.
           :none
@@ -282,8 +283,8 @@ module AwsRubyDatabaseDriverWrapper
           # INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE takes priority when set. When unset, verify writer only if we substituted
           # a writer, which only happens when the user opted into substitution explicitly via INITIAL_CONNECTION_SUBSTITUTE_HOST
           # or INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST. Otherwise, do not verify role.
-          if @props.key?(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.name)
-            parse_verify_role_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.get(@props))
+          if @inactive_verify_role
+            @inactive_verify_role
           elsif substitution_strategy == :substitute_writer
             Host::HostRole::WRITER
           end
@@ -330,6 +331,41 @@ module AwsRubyDatabaseDriverWrapper
           Utils::RdsUrlType::RDS_READER_CLUSTER,
           Utils::RdsUrlType::RDS_CUSTOM_CLUSTER
         ].include?(url_type)
+      end
+
+      # Parse the substitution/verification props up front so a malformed value  fails fast at wrapper construction.
+      # URL-dependent validity (e.g. 'writer' on a reader cluster) will checked in #connect.
+      # An unset prop parses to nil, an explicit 'none' parses to :none.
+      def parse_role_props(props)
+        raw_substitution = PropertyDefinition::INITIAL_CONNECTION_SUBSTITUTE_HOST.get(props)
+        @explicit_substitution = raw_substitution && parse_substitution_value(raw_substitution)
+
+        raw_verify_role = PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.get(props)
+        @explicit_verify_role = raw_verify_role && parse_verify_role_value(raw_verify_role)
+
+        raw_inactive_substitution = PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.get(props)
+        @inactive_substitution = raw_inactive_substitution && parse_inactive_substitution_value(raw_inactive_substitution)
+
+        raw_inactive_verify_role = PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.get(props)
+        @inactive_verify_role = raw_inactive_verify_role && parse_inactive_verify_role_value(raw_inactive_verify_role)
+      end
+
+      def parse_inactive_substitution_value(value)
+        strategy = parse_substitution_value(value)
+        return strategy if %i[substitute_writer none].include?(strategy)
+
+        raise Errors::AwsError,
+              "#{PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.name}: '#{value}' is not valid. " \
+              "Valid values are 'writer' or 'none'."
+      end
+
+      def parse_inactive_verify_role_value(value)
+        role = parse_verify_role_value(value)
+        return role if [Host::HostRole::WRITER, :none].include?(role)
+
+        raise Errors::AwsError,
+              "#{PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.name}: '#{value}' is not valid. " \
+              "Valid values are 'writer' or 'none'."
       end
 
       def parse_substitution_value(value)
@@ -380,7 +416,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def validate_verify_role(role, url_type)
-        return if role.nil?
+        return if role.nil? || role == :none
 
         if role == Host::HostRole::READER &&
            [Utils::RdsUrlType::RDS_WRITER_CLUSTER, Utils::RdsUrlType::RDS_GLOBAL_WRITER_CLUSTER].include?(url_type)

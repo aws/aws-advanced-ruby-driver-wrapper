@@ -143,14 +143,14 @@ module AwsRubyDatabaseDriverWrapper
     )
     INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST = WrapperProperty.new(
       :initial_connection_inactive_substitute_host,
-      'GDB-only: substitution role for inactive cluster writer endpoints. When unset, the endpoint is ' \
-      'passed through without substitution.',
+      'GDB-only: substitution role for inactive cluster writer endpoints. Valid values are writer or ' \
+      'none. When unset, the endpoint is passed through without substitution.',
       default_value: nil, type: String
     )
     INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE = WrapperProperty.new(
       :initial_connection_inactive_verify_role,
-      'GDB-only: verification role for inactive cluster writer endpoints. When unset, no role ' \
-      'verification is performed unless a writer was substituted.',
+      'GDB-only: verification role for inactive cluster writer endpoints. Valid values are writer or ' \
+      'none. When unset, no role verification is performed unless a writer was substituted.',
       default_value: nil, type: String
     )
     ACCESSIBLE_REGIONS = WrapperProperty.new(
