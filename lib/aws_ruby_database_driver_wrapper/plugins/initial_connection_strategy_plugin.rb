@@ -163,8 +163,9 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       # When INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS is positive and only the initial (non-instance)
-      # endpoint is known, block up to the configured timeout for the topology monitor to discover
-      # instance URLs before we make any substitution/verification decisions.
+      # endpoint is known, block up to the timeout for the topology monitor to discover instance URLs
+      # before making substitution/verification decisions. Limitation: force_refresh_host_list returns
+      # the initial host list when the dialect is not final, so topology may still be unavailable after waiting.
       def wait_for_topology_if_configured
         return unless @wait_for_topology_sec.positive?
         return unless only_initial_endpoint_known?

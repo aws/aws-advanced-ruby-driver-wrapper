@@ -92,11 +92,6 @@ module AwsRubyDatabaseDriverWrapper
         end
       end
 
-      # @api private
-      def can_update?
-        @can_update
-      end
-
       # Refines the dialect after a connection is established by querying the server
       # (e.g. checking for Aurora-specific functions/tables).
       #

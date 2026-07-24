@@ -489,8 +489,10 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         latest = stored_hosts
-        if latest.equal?(current_hosts) || (verify_writer && !cached_writer_verified?(latest))
+        if latest.equal?(current_hosts)
           raise Timeout::Error, "Topology not updated within #{timeout_sec}s for cluster #{@cluster_id}"
+        elsif verify_writer && !cached_writer_verified?(latest)
+          raise Timeout::Error, "Topology writer did not match the verified writer within #{timeout_sec}s for cluster #{@cluster_id}"
         end
 
         latest

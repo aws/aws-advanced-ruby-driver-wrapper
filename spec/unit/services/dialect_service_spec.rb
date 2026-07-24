@@ -213,25 +213,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
     context 'state reset' do
       it 'sets can_update to false for non-updatable dialects' do
         service = build_service(:postgresql, host: 'my-global.global-xyz.global.rds.amazonaws.com')
-        expect(service.can_update?).to be false
+        expect(service.dialect_final?).to be true
       end
 
       it 'sets can_update to true for updatable dialects' do
         service = build_service(:postgresql, host: 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.can_update?).to be true
+        expect(service.dialect_final?).to be false
       end
     end
 
     context 'dialect_final?' do
       it 'is true before any connection when the dialect is not updatable' do
         service = build_service(:postgresql, host: 'my-global.global-xyz.global.rds.amazonaws.com')
-        expect(service.can_update?).to be false
         expect(service.dialect_final?).to be true
       end
 
       it 'is false before any connection when the dialect is still updatable' do
         service = build_service(:postgresql, host: 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.can_update?).to be true
         expect(service.dialect_final?).to be false
       end
     end
@@ -322,7 +320,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
         allow(connection).to receive(:exec).and_raise(StandardError)
 
         service.update_dialect(connection)
-        expect(service.can_update?).to be false
+        expect(service.dialect_final?).to be true
       end
 
       it 'keeps current dialect when no candidate matches but dialect is not UNKNOWN' do
