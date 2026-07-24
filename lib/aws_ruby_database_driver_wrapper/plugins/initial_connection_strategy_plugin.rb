@@ -261,9 +261,13 @@ module AwsRubyDatabaseDriverWrapper
         when :single_region, :global_active
           :substitute_writer
         when :global_inactive
-          # INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST governs inactive cluster endpoints,
-          # defaulting to writer when unset.
-          parse_substitution_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.get(@props))
+          # INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST governs inactive cluster endpoints. When unset,
+          # pass the endpoint through untouched. Users who want cross-region writer substitution must opt in explicitly.
+          if @props.key?(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.name)
+            parse_substitution_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST.get(@props))
+          else
+            :none
+          end
         else
           # :unresolved - we don't know enough to substitute safely; connect via the original endpoint.
           :none
@@ -275,10 +279,12 @@ module AwsRubyDatabaseDriverWrapper
         when :single_region, :global_active
           Host::HostRole::WRITER
         when :global_inactive
+          # INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE takes priority when set. When unset, verify writer only if we substituted
+          # a writer, which only happens when the user opted into substitution explicitly via INITIAL_CONNECTION_SUBSTITUTE_HOST
+          # or INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST. Otherwise, do not verify role.
           if @props.key?(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.name)
             parse_verify_role_value(PropertyDefinition::INITIAL_CONNECTION_INACTIVE_VERIFY_ROLE.get(@props))
           elsif substitution_strategy == :substitute_writer
-            # Inactive verify role unset: verify writer only if we substituted a writer.
             Host::HostRole::WRITER
           end
         end

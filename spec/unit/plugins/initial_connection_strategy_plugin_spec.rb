@@ -504,6 +504,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       expect(result).to eq(mock_connection)
     end
 
+    it 'passes through without substitution or verification when no inactive props are set' do
+      plugin = build_plugin
+
+      # Neither cross-region writer substitution nor role verification should occur by default;
+      # the inactive endpoint is passed through untouched.
+      expect(mock_plugin_manager).not_to receive(:connect)
+      expect(mock_db_dialect).not_to receive(:host_role)
+
+      result = plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+      expect(result).to eq(mock_connection)
+    end
+
     it 'uses inactive_verify_role setting for verification' do
       plugin = build_plugin(initial_connection_inactive_verify_role: 'none')
       allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
