@@ -65,6 +65,10 @@ module AwsRubyDatabaseDriverWrapper
       # @param host_info [Host::HostInfo] host info for the new connection
       def update_current_connection(connection, host_info)
         @connection_switch_lock.synchronize do
+          # Close the connection being replaced so it does not leak.
+          previous = @current_connection
+          close_quietly(previous) unless previous.nil? || previous.equal?(connection)
+
           @current_connection = connection
           @current_host_info = host_info
           @service_container.session_state_service.reset
@@ -115,6 +119,15 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Boolean] whether the driver is PostgreSQL
       def pg?
         driver_name == :postgresql
+      end
+
+      private
+
+      # Closes a connection, ignoring any error. Used to release a connection that is being replaced.
+      def close_quietly(conn)
+        @service_container.dialect_service.driver_dialect.close_connection(conn)
+      rescue StandardError
+        nil
       end
     end
   end
