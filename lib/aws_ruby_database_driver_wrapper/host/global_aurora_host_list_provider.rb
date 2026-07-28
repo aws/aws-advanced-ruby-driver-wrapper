@@ -53,7 +53,10 @@ module AwsRubyDatabaseDriverWrapper
       def build_instance_templates_by_region
         props = @service_container.connection_service.wrapper_props
         patterns_str = PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.get(props)
-        raise Errors::AwsError, 'globalClusterInstanceHostPatterns is required for Global Aurora Databases' unless patterns_str
+        unless patterns_str
+          raise Errors::AwsError,
+                "#{PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name} is required for Global Aurora Databases"
+        end
 
         @topology_utils.parse_instance_templates(patterns_str, method(:validate_host_pattern!))
       end
