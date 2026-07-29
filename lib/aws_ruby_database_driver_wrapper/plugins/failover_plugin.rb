@@ -136,12 +136,7 @@ module AwsRubyDatabaseDriverWrapper
         initial_host = connection_service.initial_host_info
 
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host&.host)
-        if @rds_url_type == Utils::RdsUrlType::RDS_PROXY ||
-           @rds_url_type == Utils::RdsUrlType::RDS_PROXY_ENDPOINT
-          raise Errors::AwsError,
-                'The failover plugin is not compatible with RDS Proxy endpoints. ' \
-                'RDS Proxy handles failover internally - please remove the failover plugin from your configuration.'
-        end
+        reject_rds_proxy_endpoint
 
         if @failover_mode.nil?
           @failover_mode = if @rds_url_type == Utils::RdsUrlType::RDS_READER_CLUSTER
@@ -152,6 +147,17 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         logger.debug { "failover_mode=#{@failover_mode}" }
+      end
+
+      # RDS Proxy handles failover internally, so a failover plugin must not be layered on top of it.
+      #
+      # @raise [Errors::AwsError] if the initial endpoint is an RDS Proxy endpoint
+      def reject_rds_proxy_endpoint
+        return unless [Utils::RdsUrlType::RDS_PROXY, Utils::RdsUrlType::RDS_PROXY_ENDPOINT].include?(@rds_url_type)
+
+        raise Errors::AwsError,
+              'The failover plugin is not compatible with RDS Proxy endpoints. ' \
+              'RDS Proxy handles failover internally - please remove the failover plugin from your configuration.'
       end
 
       def can_direct_execute?(method_name)
@@ -185,7 +191,15 @@ module AwsRubyDatabaseDriverWrapper
         return true if dialect_service.network_error?(error)
 
         # initiate failover by returning true if failover mode is STRICT_WRITER and we got a read-only error.
-        @failover_mode == FailoverMode::STRICT_WRITER && dialect_service.read_only_error?(error)
+        strict_writer_failover_mode? && dialect_service.read_only_error?(error)
+      end
+
+      # Whether the failover process should target a writer host. Subclasses may resolve this
+      # differently, e.g. based on the region of the host that is currently connected to.
+      #
+      # @return [Boolean]
+      def strict_writer_failover_mode?
+        @failover_mode == FailoverMode::STRICT_WRITER
       end
 
       def invalidate_current_connection

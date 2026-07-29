@@ -20,6 +20,7 @@ require_relative '../property_definition'
 require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
+require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/secrets_manager_plugin'
@@ -35,6 +36,7 @@ module AwsRubyDatabaseDriverWrapper
       @plugin_classes = {
         'bg' => Plugins::BlueGreen::BlueGreenPlugin,
         'failover' => Plugins::FailoverPlugin,
+        'gdbFailover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
         'secretsManager' => Plugins::SecretsManagerPlugin
@@ -47,6 +49,7 @@ module AwsRubyDatabaseDriverWrapper
         Plugins::BlueGreen::BlueGreenPlugin => 200,
         Plugins::InitialConnectionStrategyPlugin => 300,
         Plugins::FailoverPlugin => 400,
+        Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900
       }

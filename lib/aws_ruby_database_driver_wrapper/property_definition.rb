@@ -49,6 +49,29 @@ module AwsRubyDatabaseDriverWrapper
       type: :boolean
     )
 
+    # -- GDB Failover --
+    ACTIVE_HOME_FAILOVER_MODE = WrapperProperty.new(
+      :active_home_failover_mode,
+      'GDB-only: the host role to target during failover while the GDB primary region is the home region. ' \
+      'Valid values are strict-writer, strict-home-reader, strict-out-of-home-reader, strict-any-reader, ' \
+      'home-reader-or-writer, out-of-home-reader-or-writer, and any-reader-or-writer.',
+      default_value: nil,
+      type: String
+    )
+    INACTIVE_HOME_FAILOVER_MODE = WrapperProperty.new(
+      :inactive_home_failover_mode,
+      'GDB-only: the host role to target during failover while the GDB primary region is not the home region. ' \
+      'Accepts the same values as active_home_failover_mode.',
+      default_value: nil,
+      type: String
+    )
+    FAILOVER_HOME_REGION = WrapperProperty.new(
+      :failover_home_region,
+      'GDB-only: the home region for failover. Derived from the connection endpoint when not set.',
+      default_value: nil,
+      type: String
+    )
+
     # -- Topology Monitoring --
     CLUSTER_INSTANCE_HOST_PATTERN = WrapperProperty.new(
       :cluster_instance_host_pattern,
