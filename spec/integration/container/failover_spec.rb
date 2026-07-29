@@ -29,7 +29,7 @@ require 'aws_ruby_database_driver_wrapper'
 
 RSpec.describe 'Failover', :integration,
                features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED],
-               deployments: [Integration::DatabaseEngineDeployment::AURORA], # TODO: add multi-AZ cluster
+               deployments: [Integration::DatabaseEngineDeployment::AURORA, Integration::DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   let(:rds_util) { Integration::RdsTestUtility.utility }
   let(:proxy_info) { env.proxy_database_info }
@@ -45,7 +45,7 @@ RSpec.describe 'Failover', :integration,
     }
   end
 
-  def failover_connect(host:, port:)
+  def failover_connect(host:, port:, props: {})
     config = Integration::DriverHelper.native_config(
       drv,
       host: host,
@@ -54,7 +54,23 @@ RSpec.describe 'Failover', :integration,
       password: proxy_info.password,
       dbname: proxy_info.default_dbname
     )
-    Integration::DriverHelper.wrapper_connect(drv, **config, **failover_props)
+    conn = Integration::DriverHelper.wrapper_connect(drv, **config, **failover_props.merge(props))
+    expect(wait_for_full_topology).to be(true), 'Topology was not fully discovered after establishing a connection'
+    conn
+  end
+
+  # Waits until the topology cache holds an entry for every instance in the cluster, which indicates the
+  # topology monitor has completed a full discovery through the cluster endpoint.
+  def wait_for_full_topology(timeout_secs: 30, delay_secs: 0.5)
+    expected_count = proxy_info.instances.size
+    Integration::RetryHelper.retry_until(timeout_secs: timeout_secs, delay_secs: delay_secs) do
+      hosts = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service.get(
+        :topology,
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value,
+        register_access: false
+      )
+      !hosts.nil? && hosts.size >= expected_count
+    end
   end
 
   describe 'writer failover' do
@@ -64,6 +80,10 @@ RSpec.describe 'Failover', :integration,
 
       conn = failover_connect(host: proxy_info.cluster_endpoint, port: proxy_info.cluster_endpoint_port)
 
+      # This connection was established through the cluster endpoint proxy, which forwards to the writer
+      # independently of the writer's instance proxy. Disabling only the instance proxy would leave this
+      # path intact, so the connection would stay healthy and no failover would be triggered.
+      Integration::ProxyHelper.disable_proxy(proxy_info.cluster_endpoint)
       rds_util.crash_instance(current_writer)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
@@ -156,16 +176,11 @@ RSpec.describe 'Failover', :integration,
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      props = failover_props.merge('application_name' => 'failover_props_test')
-      config = Integration::DriverHelper.native_config(
-        drv,
+      conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        user: proxy_info.username,
-        password: proxy_info.password,
-        dbname: proxy_info.default_dbname
+        props: { 'application_name' => 'failover_props_test' }
       )
-      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
       expect(conn.conninfo_hash[:application_name]).to eq('failover_props_test')
 
       rds_util.crash_instance(current_writer)
@@ -185,16 +200,11 @@ RSpec.describe 'Failover', :integration,
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      props = failover_props.merge(read_timeout: 13)
-      config = Integration::DriverHelper.native_config(
-        drv,
+      conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        user: proxy_info.username,
-        password: proxy_info.password,
-        dbname: proxy_info.default_dbname
+        props: { read_timeout: 13 }
       )
-      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
       expect(conn.query_options[:read_timeout]).to eq(13)
 
@@ -214,18 +224,11 @@ RSpec.describe 'Failover', :integration,
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      props = failover_props.merge(
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 30
-      )
-      config = Integration::DriverHelper.native_config(
-        drv,
+      conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        user: proxy_info.username,
-        password: proxy_info.password,
-        dbname: proxy_info.default_dbname
+        props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 30 }
       )
-      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
       Integration::ProxyHelper.disable_all_connectivity
 
@@ -236,7 +239,6 @@ RSpec.describe 'Failover', :integration,
 
     it 'fails over concurrent connections when writer dies',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
-      connections = nil
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
@@ -265,7 +267,7 @@ RSpec.describe 'Failover', :integration,
         expect(Integration::RetryHelper.verify_writer(rds_util, current_connection_id)).to be true
       end
     ensure
-      connections&.each { |conn| Integration::DriverHelper.close(drv, conn) if conn }
+      connections.each { |conn| Integration::DriverHelper.close(drv, conn) if conn }
     end
   end
 
@@ -295,18 +297,11 @@ RSpec.describe 'Failover', :integration,
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      props = failover_props.merge(
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer'
-      )
-      config = Integration::DriverHelper.native_config(
-        drv,
+      conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        user: proxy_info.username,
-        password: proxy_info.password,
-        dbname: proxy_info.default_dbname
+        props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer' }
       )
-      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
       Integration::ProxyHelper.disable_connectivity(current_writer)
 
@@ -321,19 +316,14 @@ RSpec.describe 'Failover', :integration,
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 3)
 
-      props = failover_props.merge(
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'strict_reader',
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 600
-      )
-      config = Integration::DriverHelper.native_config(
-        drv,
+      conn = failover_connect(
         host: proxy_info.cluster_read_only_endpoint,
         port: proxy_info.cluster_read_only_endpoint_port,
-        user: proxy_info.username,
-        password: proxy_info.password,
-        dbname: proxy_info.default_dbname
+        props: {
+          AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'strict_reader',
+          AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 600
+        }
       )
-      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
       Integration::ProxyHelper.disable_connectivity(proxy_info.cluster_read_only_endpoint)
 
@@ -352,18 +342,11 @@ RSpec.describe 'Failover', :integration,
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
-      props = failover_props.merge(
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer'
-      )
-      config = Integration::DriverHelper.native_config(
-        drv,
+      conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        user: proxy_info.username,
-        password: proxy_info.password,
-        dbname: proxy_info.default_dbname
+        props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer' }
       )
-      conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
 
       rds_util.simulate_temporary_failure(current_writer, 0, 5)
 
