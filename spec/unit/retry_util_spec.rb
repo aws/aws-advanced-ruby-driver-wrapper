@@ -86,11 +86,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
         allow(db_dialect).to receive(:host_role).with(connection).and_return(host_role::WRITER)
       end
 
-      it 'returns a WriterResult with the connection and host info' do
+      it 'returns a Result with the connection and host info' do
         deadline = Time.now + 5
         result = retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: deadline)
 
-        expect(result).to be_a(described_class::WriterResult)
+        expect(result).to be_a(described_class::Result)
         expect(result.connection).to eq(connection)
         expect(result.host_info.role).to eq(host_role::WRITER)
       end

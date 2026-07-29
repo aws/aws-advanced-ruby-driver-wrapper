@@ -28,9 +28,6 @@ module AwsRubyDatabaseDriverWrapper
 
       Result = Data.define(:connection, :host_info)
 
-      # Retained as an alias so existing callers of {#connect_to_writer} keep working.
-      WriterResult = Result
-
       def initialize(service_container)
         @host_service = service_container.host_service
         @dialect_service = service_container.dialect_service
