@@ -138,7 +138,7 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
                   if (config.noBlueGreen && !config.testBlueGreenOnly) {
                     continue;
                   }
-                  // Run BlueGreen test only for MultiAz Instances with 1 node or for Aurora
+                  // Run BlueGreen test only for MultiAz Instances with 1 host or for Aurora
                   if (deployment != DatabaseEngineDeployment.RDS_MULTI_AZ_INSTANCE
                       && deployment != DatabaseEngineDeployment.AURORA) {
                     continue;
