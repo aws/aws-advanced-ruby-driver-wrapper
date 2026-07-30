@@ -163,14 +163,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
     context 'with a writer cluster endpoint' do
       let(:initial_host) { host_info('mycluster.cluster-xyz.us-east-1.rds.amazonaws.com', host_role::WRITER) }
 
-      it 'defaults both modes to strict-writer' do
+      it 'defaults both modes to strict_writer' do
         init
         expect(plugin.instance_variable_get(:@active_home_failover_mode)).to eq(mode::STRICT_WRITER)
         expect(plugin.instance_variable_get(:@inactive_home_failover_mode)).to eq(mode::STRICT_WRITER)
       end
     end
 
-    it 'defaults both modes to home-reader-or-writer for an instance endpoint' do
+    it 'defaults both modes to home_reader_or_writer for an instance endpoint' do
       init
       expect(plugin.instance_variable_get(:@active_home_failover_mode)).to eq(mode::HOME_READER_OR_WRITER)
       expect(plugin.instance_variable_get(:@inactive_home_failover_mode)).to eq(mode::HOME_READER_OR_WRITER)
@@ -179,7 +179,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
     context 'with a global writer cluster endpoint' do
       let(:initial_host) { global_endpoint }
 
-      it 'defaults both modes to strict-writer' do
+      it 'defaults both modes to strict_writer' do
         props[:failover_home_region] = 'us-east-1'
         init
         expect(plugin.instance_variable_get(:@active_home_failover_mode)).to eq(mode::STRICT_WRITER)
@@ -190,7 +190,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
     context 'with a reader cluster endpoint' do
       let(:initial_host) { host_info('mycluster.cluster-ro-xyz.us-east-1.rds.amazonaws.com', host_role::READER) }
 
-      it 'defaults both modes to home-reader-or-writer' do
+      it 'defaults both modes to home_reader_or_writer' do
         init
         expect(plugin.instance_variable_get(:@active_home_failover_mode)).to eq(mode::HOME_READER_OR_WRITER)
         expect(plugin.instance_variable_get(:@inactive_home_failover_mode)).to eq(mode::HOME_READER_OR_WRITER)
@@ -198,15 +198,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
     end
 
     it 'honors explicitly configured modes' do
-      props[:active_home_failover_mode] = 'strict-home-reader'
-      props[:inactive_home_failover_mode] = 'any-reader-or-writer'
+      props[:active_home_failover_mode] = 'strict_home_reader'
+      props[:inactive_home_failover_mode] = 'any_reader_or_writer'
       init
       expect(plugin.instance_variable_get(:@active_home_failover_mode)).to eq(mode::STRICT_HOME_READER)
       expect(plugin.instance_variable_get(:@inactive_home_failover_mode)).to eq(mode::ANY_READER_OR_WRITER)
     end
 
     it 'raises for an invalid configured mode' do
-      props[:active_home_failover_mode] = 'strict-nonsense'
+      props[:active_home_failover_mode] = 'strict_nonsense'
       expect { init }.to raise_error(ArgumentError, /Invalid global database failover mode/)
     end
 
@@ -228,8 +228,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
 
   describe '#strict_writer_failover_mode?' do
     before do
-      props[:active_home_failover_mode] = 'strict-writer'
-      props[:inactive_home_failover_mode] = 'strict-any-reader'
+      props[:active_home_failover_mode] = 'strict_writer'
+      props[:inactive_home_failover_mode] = 'strict_any_reader'
       init
     end
 
@@ -280,30 +280,30 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       init
     end
 
-    it 'selects only home-region readers for strict-home-reader' do
+    it 'selects only home-region readers for strict_home_reader' do
       expect(plugin.send(:allowed_hosts_for, mode::STRICT_HOME_READER)).to contain_exactly(home_reader)
     end
 
-    it 'selects only out-of-home readers for strict-out-of-home-reader' do
+    it 'selects only out-of-home readers for strict_out_of_home_reader' do
       expect(plugin.send(:allowed_hosts_for, mode::STRICT_OUT_OF_HOME_READER)).to contain_exactly(remote_reader)
     end
 
-    it 'selects readers in any region for strict-any-reader' do
+    it 'selects readers in any region for strict_any_reader' do
       expect(plugin.send(:allowed_hosts_for, mode::STRICT_ANY_READER))
         .to contain_exactly(home_reader, remote_reader, regionless_reader)
     end
 
-    it 'selects writers and home-region readers for home-reader-or-writer' do
+    it 'selects writers and home-region readers for home_reader_or_writer' do
       expect(plugin.send(:allowed_hosts_for, mode::HOME_READER_OR_WRITER))
         .to contain_exactly(home_writer, remote_writer, home_reader)
     end
 
-    it 'selects writers and out-of-home readers for out-of-home-reader-or-writer' do
+    it 'selects writers and out-of-home readers for out_of_home_reader_or_writer' do
       expect(plugin.send(:allowed_hosts_for, mode::OUT_OF_HOME_READER_OR_WRITER))
         .to contain_exactly(home_writer, remote_writer, remote_reader)
     end
 
-    it 'selects every host for any-reader-or-writer' do
+    it 'selects every host for any_reader_or_writer' do
       expect(plugin.send(:allowed_hosts_for, mode::ANY_READER_OR_WRITER)).to match_array(topology)
     end
 
@@ -330,7 +330,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       end
     end
 
-    it 'requires no particular role for the reader-or-writer modes' do
+    it 'requires no particular role for the reader_or_writer modes' do
       [mode::HOME_READER_OR_WRITER, mode::OUT_OF_HOME_READER_OR_WRITER, mode::ANY_READER_OR_WRITER].each do |m|
         expect(plugin.send(:verify_role_for, m)).to be_nil
       end
@@ -340,10 +340,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
   describe '#failover' do
     let(:result) { AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, home_writer) }
 
-    context 'in strict-writer mode' do
+    context 'in strict_writer mode' do
       before do
-        props[:active_home_failover_mode] = 'strict-writer'
-        props[:inactive_home_failover_mode] = 'strict-writer'
+        props[:active_home_failover_mode] = 'strict_writer'
+        props[:inactive_home_failover_mode] = 'strict_writer'
         init
       end
 
@@ -380,8 +380,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
 
       before do
         props[:accessible_regions] = 'us-east-1'
-        props[:active_home_failover_mode] = 'strict-writer'
-        props[:inactive_home_failover_mode] = 'strict-writer'
+        props[:active_home_failover_mode] = 'strict_writer'
+        props[:inactive_home_failover_mode] = 'strict_writer'
         init
       end
 
@@ -396,8 +396,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       let(:topology) { [home_writer, home_reader, remote_reader] }
 
       before do
-        props[:active_home_failover_mode] = 'strict-home-reader'
-        props[:inactive_home_failover_mode] = 'strict-out-of-home-reader'
+        props[:active_home_failover_mode] = 'strict_home_reader'
+        props[:inactive_home_failover_mode] = 'strict_out_of_home_reader'
         init
       end
 
@@ -415,8 +415,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       let(:topology) { [remote_writer, home_reader, remote_reader] }
 
       before do
-        props[:active_home_failover_mode] = 'strict-home-reader'
-        props[:inactive_home_failover_mode] = 'strict-out-of-home-reader'
+        props[:active_home_failover_mode] = 'strict_home_reader'
+        props[:inactive_home_failover_mode] = 'strict_out_of_home_reader'
         init
       end
 

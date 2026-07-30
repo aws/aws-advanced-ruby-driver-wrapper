@@ -48,8 +48,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverMode do
     end
 
     it 'is case insensitive' do
-      expect(described_class.from_value('STRICT-WRITER')).to eq(described_class::STRICT_WRITER)
-      expect(described_class.from_value('Home-Reader-Or-Writer')).to eq(described_class::HOME_READER_OR_WRITER)
+      expect(described_class.from_value('STRICT_WRITER')).to eq(described_class::STRICT_WRITER)
+      expect(described_class.from_value('Home_Reader_Or_Writer')).to eq(described_class::HOME_READER_OR_WRITER)
     end
 
     it 'accepts symbols' do
@@ -57,8 +57,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverMode do
     end
 
     it 'raises for an unknown value' do
-      expect { described_class.from_value('strict-nonsense') }
-        .to raise_error(ArgumentError, /Invalid global database failover mode: 'strict-nonsense'/)
+      expect { described_class.from_value('strict_nonsense') }
+        .to raise_error(ArgumentError, /Invalid global database failover mode: 'strict_nonsense'/)
     end
 
     it 'round-trips every mode constant' do

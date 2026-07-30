@@ -53,8 +53,8 @@ module AwsRubyDatabaseDriverWrapper
     ACTIVE_HOME_FAILOVER_MODE = WrapperProperty.new(
       :active_home_failover_mode,
       'GDB-only: the host role to target during failover while the GDB primary region is the home region. ' \
-      'Valid values are strict-writer, strict-home-reader, strict-out-of-home-reader, strict-any-reader, ' \
-      'home-reader-or-writer, out-of-home-reader-or-writer, and any-reader-or-writer.',
+      'Valid values are strict_writer, strict_home_reader, strict_out_of_home_reader, strict_any_reader, ' \
+      'home_reader_or_writer, out_of_home_reader_or_writer, and any_reader_or_writer.',
       default_value: nil,
       type: String
     )
