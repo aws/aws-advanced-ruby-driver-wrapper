@@ -61,7 +61,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
   let(:driver_dialect) { instance_double('DriverDialect', connect: nil) }
   let(:db_dialect) { instance_double('DbDialect') }
   let(:dialect_service) do
-    instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_confirmed?: true)
+    instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_final?: true)
   end
   let(:event_publisher) do
     AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
@@ -126,7 +126,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
       it 'raises an error' do
         expect { provider }.to raise_error(
           AwsRubyDatabaseDriverWrapper::Errors::AwsError,
-          /globalClusterInstanceHostPatterns is required/
+          /global_cluster_instance_host_patterns is required/
         )
       end
     end

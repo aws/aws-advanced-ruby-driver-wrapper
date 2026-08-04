@@ -35,6 +35,7 @@ module AwsRubyDatabaseDriverWrapper
     def initialize(*, **)
       config = Utils::ConnectionConfigParser.parse(:postgresql, *, **)
       @service_container = Services::ServiceUtility.create_standard_container(config)
+      @service_container.host_service.refresh_host_list
       @prepared_on = {}
       @async_conn = nil
       @copy_conn = nil

@@ -53,6 +53,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     double('DialectService',
            db_dialect: mock_db_dialect,
            driver_dialect: mock_driver_dialect,
+           dialect_final?: true,
            login_error?: false,
            network_error?: false,
            read_only_error?: false)
@@ -76,8 +77,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     allow(mock_host_service).to receive(:force_refresh_host_list?)
     allow(mock_host_service).to receive(:set_availability)
     allow(mock_host_service).to receive(:select_host).and_return(reader_host_info)
-    allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+    allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
     allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
+    allow(mock_db_dialect).to receive(:global?).and_return(false)
   end
 
   def build_plugin(props = {})
@@ -121,9 +123,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       expect(result).to eq(mock_connection)
     end
 
-    it 'does not call internal_connect on non-initial connection' do
+    it 'does not call connect on non-initial connection' do
       plugin = build_plugin
-      expect(mock_plugin_manager).not_to receive(:internal_connect)
+      expect(mock_plugin_manager).not_to receive(:connect)
       plugin.connect(make_host_info(writer_cluster_host), {}, false, pipeline_callable)
     end
   end
@@ -137,9 +139,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       expect(result).to eq(mock_connection)
     end
 
-    it 'does not call internal_connect for instance endpoints' do
+    it 'does not call connect for instance endpoints' do
       plugin = build_plugin
-      expect(mock_plugin_manager).not_to receive(:internal_connect)
+      expect(mock_plugin_manager).not_to receive(:connect)
       plugin.connect(make_host_info(instance_host), {}, true, pipeline_callable)
     end
   end
@@ -149,8 +151,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin = build_plugin
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
 
-      expect(mock_plugin_manager).to receive(:internal_connect)
-        .with(writer_host_info, anything, anything, false)
+      expect(mock_plugin_manager).to receive(:connect)
+        .with(writer_host_info, anything, true, plugin_to_skip: anything)
         .and_return(mock_connection)
 
       result = plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
@@ -161,7 +163,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin = build_plugin(initial_connection_retry_timeout_ms: 100, initial_connection_retry_interval_ms: 10)
 
       call_count = 0
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role) do
         call_count += 1
         call_count >= 2 ? host_role::WRITER : host_role::READER
@@ -184,8 +186,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
         .with(anything, host_role::READER, 'random')
         .and_return(reader_host_info)
 
-      expect(mock_plugin_manager).to receive(:internal_connect)
-        .with(reader_host_info, anything, anything, false)
+      expect(mock_plugin_manager).to receive(:connect)
+        .with(reader_host_info, anything, true, plugin_to_skip: anything)
         .and_return(mock_connection)
 
       result = plugin.connect(make_host_info(reader_cluster_host), {}, true, pipeline_callable)
@@ -211,7 +213,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
 
       call_count = 0
       allow(mock_host_service).to receive(:select_host).and_return(reader_host_info)
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role) do
         call_count += 1
         call_count >= 2 ? host_role::READER : host_role::WRITER
@@ -231,7 +233,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       allow(mock_host_service).to receive(:select_host)
         .with(anything, nil, 'random')
         .and_return(writer_host_info)
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
 
       result = plugin.connect(make_host_info(custom_cluster_host), {}, true, pipeline_callable)
       expect(result).to eq(mock_connection)
@@ -243,8 +245,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin = build_plugin
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
 
-      expect(mock_plugin_manager).to receive(:internal_connect)
-        .with(writer_host_info, anything, anything, false)
+      expect(mock_plugin_manager).to receive(:connect)
+        .with(writer_host_info, anything, true, plugin_to_skip: anything)
         .and_return(mock_connection)
 
       result = plugin.connect(make_host_info(global_writer_host), {}, true, pipeline_callable)
@@ -256,7 +258,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     it 'raises an error when retry timeout is exceeded' do
       plugin = build_plugin(initial_connection_retry_timeout_ms: 50, initial_connection_retry_interval_ms: 10)
 
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::READER)
 
       expect(mock_driver_dialect).to receive(:close_connection).with(mock_connection).at_least(:once)
@@ -272,7 +274,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin = build_plugin(initial_connection_retry_timeout_ms: 500)
       login_error = StandardError.new('login failed')
 
-      allow(mock_plugin_manager).to receive(:internal_connect).and_raise(login_error)
+      allow(mock_plugin_manager).to receive(:connect).and_raise(login_error)
       allow(mock_dialect_service).to receive(:login_error?).with(login_error).and_return(true)
 
       expect do
@@ -285,7 +287,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       network_error = StandardError.new('connection refused')
 
       call_count = 0
-      allow(mock_plugin_manager).to receive(:internal_connect) do
+      allow(mock_plugin_manager).to receive(:connect) do
         call_count += 1
         raise network_error if call_count == 1
 
@@ -304,7 +306,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       network_error = StandardError.new('connection refused')
 
       call_count = 0
-      allow(mock_plugin_manager).to receive(:internal_connect) do
+      allow(mock_plugin_manager).to receive(:connect) do
         call_count += 1
         raise network_error if call_count == 1
 
@@ -324,7 +326,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       readonly_error = StandardError.new('read only')
 
       call_count = 0
-      allow(mock_plugin_manager).to receive(:internal_connect) do
+      allow(mock_plugin_manager).to receive(:connect) do
         call_count += 1
         raise readonly_error if call_count == 1
 
@@ -341,7 +343,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin = build_plugin(initial_connection_retry_timeout_ms: 500)
       unknown_error = StandardError.new('something unexpected')
 
-      allow(mock_plugin_manager).to receive(:internal_connect).and_raise(unknown_error)
+      allow(mock_plugin_manager).to receive(:connect).and_raise(unknown_error)
       allow(mock_dialect_service).to receive(:login_error?).with(unknown_error).and_return(false)
       allow(mock_dialect_service).to receive(:network_error?).with(unknown_error).and_return(false)
       allow(mock_dialect_service).to receive(:read_only_error?).with(unknown_error).and_return(false)
@@ -355,7 +357,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
   describe '#connect connection cleanup' do
     it 'closes connection on unexpected error' do
       plugin = build_plugin(initial_connection_retry_timeout_ms: 500)
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_raise(RuntimeError, 'unexpected')
 
       expect(mock_driver_dialect).to receive(:close_connection).with(mock_connection)
@@ -418,11 +420,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       end.to raise_error(errors::AwsError, /cannot be set when connecting to an instance/)
     end
 
-    it 'raises for invalid substitution value' do
-      plugin = build_plugin(initial_connection_substitute_host: 'invalid')
-
+    it 'raises at init for invalid substitution value' do
       expect do
-        plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+        build_plugin(initial_connection_substitute_host: 'invalid')
       end.to raise_error(errors::AwsError, /Invalid initial_connection_substitute_host/)
     end
 
@@ -451,17 +451,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       end.to raise_error(errors::AwsError, /invalid for reader/)
     end
 
-    it 'raises for invalid verify role value' do
-      plugin = build_plugin(initial_connection_verify_role: 'invalid')
-
+    it 'raises at init for invalid verify role value' do
       expect do
-        plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+        build_plugin(initial_connection_verify_role: 'invalid')
       end.to raise_error(errors::AwsError, /Invalid initial_connection_verify_role/)
     end
 
     it 'allows none verification to skip role check' do
       plugin = build_plugin(initial_connection_verify_role: 'none')
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
 
       expect(mock_db_dialect).not_to receive(:host_role)
 
@@ -478,15 +476,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
     before do
       allow(mock_host_service).to receive(:all_hosts).and_return([writer_in_different_region, reader_host_info])
       allow(mock_host_service).to receive(:hosts).and_return([writer_in_different_region, reader_host_info])
+      # Inactive cluster detection only applies to a confirmed Global Aurora Database whose
+      # cross-region topology shows the writer living in a different region than the endpoint.
+      allow(mock_db_dialect).to receive(:global?).and_return(true)
     end
 
     it 'uses inactive_substitute_host setting when cluster is inactive' do
       plugin = build_plugin(initial_connection_inactive_substitute_host: 'writer')
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
 
-      expect(mock_plugin_manager).to receive(:internal_connect)
-        .with(writer_in_different_region, anything, anything, false)
+      expect(mock_plugin_manager).to receive(:connect)
+        .with(writer_in_different_region, anything, true, plugin_to_skip: anything)
         .and_return(mock_connection)
 
       plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
@@ -499,13 +500,37 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       expect(result).to eq(mock_connection)
     end
 
+    it 'passes through without substitution or verification when no inactive props are set' do
+      plugin = build_plugin
+
+      # Neither cross-region writer substitution nor role verification should occur by default;
+      # the inactive endpoint is passed through untouched.
+      expect(mock_plugin_manager).not_to receive(:connect)
+      expect(mock_db_dialect).not_to receive(:host_role)
+
+      result = plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+      expect(result).to eq(mock_connection)
+    end
+
     it 'uses inactive_verify_role setting for verification' do
       plugin = build_plugin(initial_connection_inactive_verify_role: 'none')
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
 
       expect(mock_db_dialect).not_to receive(:host_role)
 
       plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+    end
+
+    it 'raises at init when inactive_substitute_host is reader' do
+      expect do
+        build_plugin(initial_connection_inactive_substitute_host: 'reader')
+      end.to raise_error(errors::AwsError, /initial_connection_inactive_substitute_host.*not valid.*'writer' or 'none'/)
+    end
+
+    it 'raises at init when inactive_verify_role is reader' do
+      expect do
+        build_plugin(initial_connection_inactive_verify_role: 'reader')
+      end.to raise_error(errors::AwsError, /initial_connection_inactive_verify_role.*not valid.*'writer' or 'none'/)
     end
   end
 
@@ -518,12 +543,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin = build_plugin(accessible_regions: 'us-west-2')
 
       allow(mock_host_service).to receive(:all_hosts).and_return([writer_host_info, host_west])
-      allow(mock_plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+      allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
 
       # Should connect to us-west-2 writer since us-east-1 is filtered out
-      expect(mock_plugin_manager).to receive(:internal_connect)
-        .with(host_west, anything, anything, false)
+      expect(mock_plugin_manager).to receive(:connect)
+        .with(host_west, anything, true, plugin_to_skip: anything)
         .and_return(mock_connection)
 
       plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)

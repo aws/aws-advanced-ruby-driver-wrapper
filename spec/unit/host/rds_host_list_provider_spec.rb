@@ -53,7 +53,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
   let(:driver_dialect) { instance_double('DriverDialect', connect: nil) }
   let(:db_dialect) { instance_double('DbDialect') }
   let(:dialect_service) do
-    instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_confirmed?: true)
+    instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_final?: true)
   end
   let(:event_publisher) do
     AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
@@ -165,6 +165,24 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
       it 'falls back to initial_host_list' do
         result = provider.refresh
         expect(result).to eq([initial_host_info])
+      end
+    end
+
+    context 'when cache is empty and dialect is final' do
+      it 'starts the monitor without blocking (force_refresh with a zero timeout)' do
+        expect(provider).to receive(:force_refresh).with(false, 0).and_return(nil)
+        provider.refresh
+      end
+    end
+
+    context 'when dialect is not final' do
+      before do
+        allow(dialect_service).to receive(:dialect_final?).and_return(false)
+      end
+
+      it 'returns initial_host_list without starting the monitor' do
+        expect(provider).not_to receive(:force_refresh)
+        expect(provider.refresh).to eq([initial_host_info])
       end
     end
   end

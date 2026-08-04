@@ -232,6 +232,8 @@ RSpec.describe 'Failover', :integration,
       expect { rds_util.query_instance_id(conn) }.to raise_error(
         AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError
       )
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
     end
 
     it 'fails over concurrent connections when writer dies',

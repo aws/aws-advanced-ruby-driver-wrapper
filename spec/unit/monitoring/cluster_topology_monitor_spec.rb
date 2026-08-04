@@ -158,6 +158,70 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
         expect(result).to eq(topology)
       end
     end
+
+    # These exercise wait_for_topology_update directly (force_refresh delegates to it). force_refresh resets
+    # @verified_writer to false and relies on the running monitor thread to re-verify the writer, so we set up the
+    # verified-writer state and drive the wait loop directly to keep the tests deterministic.
+    context 'when verify_writer is true and the cached writer is stale' do
+      let(:new_writer_host) do
+        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+          host: 'new-writer.cluster.us-east-1.rds.amazonaws.com',
+          port: 5432,
+          role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER,
+          id: 'new-writer-instance'
+        )
+      end
+
+      it 'keeps waiting until the cached writer matches the verified writer' do
+        # The monitor has verified the new writer directly, but the cache still reports the old writer.
+        monitor.instance_variable_set(:@verified_writer, true)
+        monitor.instance_variable_set(:@writer_info, new_writer_host)
+        storage_service.set(:topology, cluster_id, [writer_host, reader_host])
+
+        # A background writer updates the cache with the correct writer partway through the wait.
+        updater = Thread.new do
+          sleep(0.1)
+          monitor.send(:update_topology_cache, [new_writer_host, reader_host])
+        end
+
+        result = monitor.send(:wait_for_topology_update, 2.0, true)
+        updater.join
+        expect(result.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }.host)
+          .to eq(new_writer_host.host)
+      end
+
+      it 'raises Timeout::Error when the cached writer never matches the verified writer' do
+        monitor.instance_variable_set(:@verified_writer, true)
+        monitor.instance_variable_set(:@writer_info, new_writer_host)
+        storage_service.set(:topology, cluster_id, [writer_host, reader_host])
+
+        # A new cache entry arrives, but the writer is still stale, so waiting must continue until timeout.
+        updater = Thread.new do
+          sleep(0.05)
+          monitor.send(:update_topology_cache, [writer_host.deep_dup, reader_host])
+        end
+
+        expect { monitor.send(:wait_for_topology_update, 0.2, true) }.to raise_error(Timeout::Error)
+        updater.join
+      end
+
+      it 'does not wait on a matching writer when verify_writer is false' do
+        # Even though the cached writer is stale, a plain refresh returns as soon as a new entry is cached.
+        monitor.instance_variable_set(:@verified_writer, true)
+        monitor.instance_variable_set(:@writer_info, new_writer_host)
+        storage_service.set(:topology, cluster_id, [writer_host, reader_host])
+
+        updater = Thread.new do
+          sleep(0.05)
+          monitor.send(:update_topology_cache, [writer_host.deep_dup, reader_host])
+        end
+
+        result = monitor.send(:wait_for_topology_update, 2.0, false)
+        updater.join
+        expect(result.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }.host)
+          .to eq(writer_host.host)
+      end
+    end
   end
 
   describe 'regular mode' do
