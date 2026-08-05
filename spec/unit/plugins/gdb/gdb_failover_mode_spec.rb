@@ -27,7 +27,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverMode do
       expect(described_class.from_value('')).to be_nil
     end
 
-    it 'parses kebab-case values, matching the JDBC wrapper configuration' do
+    it 'parses kebab-case values' do
       expect(described_class.from_value('strict-writer')).to eq(described_class::STRICT_WRITER)
       expect(described_class.from_value('strict-home-reader')).to eq(described_class::STRICT_HOME_READER)
       expect(described_class.from_value('strict-out-of-home-reader')).to eq(described_class::STRICT_OUT_OF_HOME_READER)
