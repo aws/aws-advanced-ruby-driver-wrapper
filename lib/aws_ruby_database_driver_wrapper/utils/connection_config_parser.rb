@@ -194,11 +194,15 @@ module AwsRubyDatabaseDriverWrapper
       def validate_props!(config)
         config.each do |key, value|
           prop = PropertyDefinition::KNOWN_PROPERTIES[key]
-          next if prop&.type.nil? || value.nil?
-          next if value.is_a?(prop.type)
-          next if prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/)
+          next unless prop
+          next if value.nil?
 
-          raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}"
+          unless prop.type.nil? || value.is_a?(prop.type) ||
+                 (prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/))
+            raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}"
+          end
+
+          prop.validate!(value)
         end
       end
 

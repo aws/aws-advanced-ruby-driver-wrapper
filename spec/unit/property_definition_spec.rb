@@ -90,4 +90,40 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::PropertyDefinition do
       expect(result).to eq(300)
     end
   end
+
+  describe 'WrapperProperty#validate!' do
+    context 'POSITIVE_INTEGER validator' do
+      it 'raises for a negative value' do
+        expect { described_class::FAILOVER_TIMEOUT_SEC.validate!(-1) }.to raise_error(ArgumentError, /failover_timeout_sec.*-1/)
+      end
+
+      it 'raises for zero' do
+        expect { described_class::FAILOVER_TIMEOUT_SEC.validate!(0) }.to raise_error(ArgumentError, /failover_timeout_sec.*0/)
+      end
+
+      it 'does not raise for a positive value' do
+        expect { described_class::FAILOVER_TIMEOUT_SEC.validate!(100) }.not_to raise_error
+      end
+    end
+
+    context 'NON_NEGATIVE_INTEGER validator' do
+      it 'raises for a negative value' do
+        expect do
+          described_class::SECRET_ROTATION_RETRY_TIMEOUT_MS.validate!(-1)
+        end.to raise_error(ArgumentError, /secret_rotation_retry_timeout_ms.*-1/)
+      end
+
+      it 'does not raise for zero' do
+        expect { described_class::SECRET_ROTATION_RETRY_TIMEOUT_MS.validate!(0) }.not_to raise_error
+      end
+
+      it 'does not raise for a positive value' do
+        expect { described_class::SECRET_ROTATION_RETRY_TIMEOUT_MS.validate!(100) }.not_to raise_error
+      end
+    end
+
+    it 'does not raise when the property has no validator' do
+      expect { described_class::CLUSTER_ID.validate!('anything') }.not_to raise_error
+    end
+  end
 end

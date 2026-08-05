@@ -21,14 +21,14 @@ module AwsRubyDatabaseDriverWrapper
   module DbDialects
     class RdsPgDialect < PgDialect
       EXTENSIONS_EXIST_SQL = <<~SQL
-        SELECT (setting LIKE '%rds_tools%') AS rds_tools,
-        (setting LIKE '%aurora_stat_utils%') AS aurora_stat_utils
+        SELECT (setting OPERATOR(pg_catalog.~~) '%rds_tools%') AS rds_tools,
+        (setting OPERATOR(pg_catalog.~~) '%aurora_stat_utils%') AS aurora_stat_utils
         FROM pg_catalog.pg_settings
         WHERE name OPERATOR(pg_catalog.=) 'rds.extensions'
       SQL
 
       TOPOLOGY_TABLE_EXISTS_QUERY = <<~SQL
-        SELECT 'rds_tools.show_topology'::regproc
+        SELECT 'rds_tools.show_topology'::pg_catalog.regproc
       SQL
 
       INSTANCE_IDENTITY_QUERY = <<~SQL

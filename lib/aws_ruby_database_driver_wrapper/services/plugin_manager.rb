@@ -36,7 +36,7 @@ module AwsRubyDatabaseDriverWrapper
       @plugin_classes = {
         'bg' => Plugins::BlueGreen::BlueGreenPlugin,
         'failover' => Plugins::FailoverPlugin,
-        'gdbFailover' => Plugins::Gdb::GdbFailoverPlugin,
+        'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
         'secretsManager' => Plugins::SecretsManagerPlugin
