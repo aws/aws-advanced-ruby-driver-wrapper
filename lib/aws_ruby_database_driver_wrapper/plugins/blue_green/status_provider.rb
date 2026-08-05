@@ -67,6 +67,8 @@ module AwsRubyDatabaseDriverWrapper
             IntervalRate::HIGH => PropertyDefinition::BG_INTERVAL_HIGH_MS.get(wrapper_props)
           }
 
+          @green_topology_recognized_logged = false
+
           @timer           = SwitchoverTimer.new(PropertyDefinition::BG_SWITCHOVER_TIMEOUT_MS.get(wrapper_props) * 1_000_000)
           @event_log       = PhaseEventLog.new
           @host_mapper     = HostMapper.new
@@ -105,6 +107,62 @@ module AwsRubyDatabaseDriverWrapper
           logger.debug { "\n   latestStatusPhase: #{@latest_status_phase}\n#{@switchover_state.to_debug_s(@iam_tracker)}" }
         end
 
+        def log_green_topology_recognized
+          return if @green_topology_recognized_logged
+          return unless green_topology_ready?
+
+          @green_topology_recognized_logged = true
+
+          source_status = @interim_statuses[Role::SOURCE]
+          target_status = @interim_statuses[Role::TARGET]
+          source_host_count = source_status.host_names.size
+          target_host_count = target_status.host_names.size
+          corresponding_host_count = @host_mapper.corresponding_hosts.count { |_, v| v[1] }
+
+          mapping_str = format_host_mapping
+          ip_str = format_ip_mapping
+
+          logger.info do
+            "[bgdId: '#{@bgd_id}'] Blue/Green target topology recognized\n   " \
+              "phase: #{@latest_status_phase}\n   " \
+              "sourceHosts: #{source_host_count}\n   " \
+              "targetHosts: #{target_host_count}\n   " \
+              "correspondingHosts: #{corresponding_host_count}\n   " \
+              "ready: true\n " \
+              "Blue -> Green Mapping:\n   " \
+              "#{mapping_str}\n " \
+              "Host -> IP Mapping:\n   " \
+              "#{ip_str}"
+          end
+        end
+
+        def green_topology_ready?
+          source_status = @interim_statuses[Role::SOURCE]
+          target_status = @interim_statuses[Role::TARGET]
+
+          source_status &&
+            target_status &&
+            source_status.start_topology&.any? &&
+            target_status.start_topology&.any? &&
+            source_status.host_names&.any? &&
+            target_status.host_names&.any? &&
+            @host_mapper.corresponding_hosts.any?
+        end
+
+        def format_host_mapping
+          rows = @host_mapper.corresponding_hosts.sort_by { |k, _| k }.map do |blue, pair|
+            "#{blue} -> #{pair[1]&.host_and_port || '<null>'}"
+          end
+          rows.any? ? rows.join("\n   ") : '-'
+        end
+
+        def format_ip_mapping
+          rows = @host_mapper.host_ip_addresses.sort_by { |k, _| k }.map do |host, ip|
+            "#{host} -> #{ip || '<null>'}"
+          end
+          rows.any? ? rows.join("\n   ") : '-'
+        end
+
         def check_switchover_timer_expiry
           return unless @timer.expired?
           return unless [Phase::IN_PROGRESS, Phase::POST, Phase::PREPARATION].include?(@latest_status_phase)
@@ -128,7 +186,8 @@ module AwsRubyDatabaseDriverWrapper
 
           Plugins::IamAuthPlugin.clear_cache(@storage_service) if iam_enabled?
 
-          @rollback              = false
+          @rollback = false
+          @green_topology_recognized_logged = false
           @summary_status        = nil
           @latest_status_phase   = Phase::NOT_CREATED
           @interim_status_hashes = { Role::SOURCE => 0, Role::TARGET => 0 }
@@ -250,6 +309,7 @@ module AwsRubyDatabaseDriverWrapper
             update_monitors
             update_status_cache
             log_current_context
+            log_green_topology_recognized
             log_switchover_final_summary
             reset_context_when_completed
           end
@@ -323,6 +383,9 @@ module AwsRubyDatabaseDriverWrapper
           prefixed_wrapper_config.each do |key, value|
             monitoring_wrapper_props[key] = value
           end
+
+          # Ensure BG monitoring connections bypass BG routing.
+          monitoring_wrapper_props[BlueGreenPlugin::BG_SKIP_ROUTING_KEY] = true
 
           monitoring_wrapper_props
         end

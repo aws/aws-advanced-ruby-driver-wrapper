@@ -45,10 +45,10 @@ module AwsRubyDatabaseDriverWrapper
              hostNames:
                #{blank?(host_names_str) ? '-' : host_names_str}
              Start #{blank?(start_topo_str) ? '-' : start_topo_str}
-             start IP map:
+             Start IP map:
                #{blank?(start_ip_map) ? '-' : start_ip_map}
              Current #{blank?(current_topo_str) ? '-' : current_topo_str}
-             current IP map:
+             Current IP map:
                #{blank?(current_ip_map) ? '-' : current_ip_map}
              allStartTopologyIpChanged: #{all_start_topology_ip_changed}
              allStartTopologyEndpointsRemoved: #{all_start_topology_endpoints_removed}
