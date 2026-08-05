@@ -108,32 +108,30 @@ module AwsRubyDatabaseDriverWrapper
           end
         end
 
-        # Whether strict_writer failover mode is currently active.
+        # Whether a read-only error should trigger failover, i.e. whether strict_writer is the mode
+        # that currently applies.
         #
-        # Which of the two configured modes applies depends on the region of the GDB primary. The new
-        # primary is not known yet at this point, so the region of the primary in the latest known
-        # topology is used instead.
+        # Which of the two configured modes applies depends on the region of the GDB primary, which is
+        # not known yet: a read-only error is a sign that the primary has changed, so the latest known
+        # topology may no longer say where it is. When only one of the modes is +strict_writer+ that mode
+        # is assumed, so that a connection that has become read-only is not left as is. {#failover}
+        # resolves the mode again once the new primary is known.
         #
         # @return [Boolean]
-        def strict_writer_failover_mode?
-          writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
-          writer_region = Utils::RdsUtils.rds_region(writer&.host)
+        def failover_on_read_only_error?
+          in_home_strict_writer = @in_home_failover_mode == GdbFailoverMode::STRICT_WRITER
+          out_of_home_strict_writer = @out_of_home_failover_mode == GdbFailoverMode::STRICT_WRITER
+          return in_home_strict_writer if in_home_strict_writer == out_of_home_strict_writer
 
-          mode = if writer_region.nil? || writer_region.empty?
-                   # Either the topology holds no writer, or its region could not be parsed. The primary
-                   # usually stays in the region it was in, so the in-home mode is the better guess.
-                   logger.debug do
-                     primary = writer.nil? ? 'the GDB primary' : "the GDB primary #{writer.host}"
-                     "Unable to determine whether #{primary} is in the home region '#{@home_region}', so " \
-                       "in_home_failover_mode=#{@in_home_failover_mode} is assumed when deciding whether a " \
-                       'read-only error should trigger failover.'
-                   end
-                   @in_home_failover_mode
-                 else
-                   current_failover_mode(writer_region)
-                 end
+          logger.debug do
+            configured = in_home_strict_writer ? 'in_home_failover_mode' : 'out_of_home_failover_mode'
+            'A read-only error was encountered. Whether it triggers failover depends on whether the GDB primary is in ' \
+              "the home region '#{@home_region}', which is not known yet because the error suggests the primary has " \
+              "changed. #{configured}=#{GdbFailoverMode::STRICT_WRITER} is assumed so that the read-only connection is " \
+              'not left as is, meaning failover will be triggered.'
+          end
 
-          mode == GdbFailoverMode::STRICT_WRITER
+          true
         end
 
         # The mode that applies given the region of the current GDB primary.
@@ -366,6 +364,10 @@ module AwsRubyDatabaseDriverWrapper
             # This scenario is not expected: topology hosts are built from the region-prefixed instance patterns in
             # global_cluster_instance_host_patterns, so they should always carry a parseable region. Without one the
             # configured mode cannot be honoured for this host, so it is skipped.
+            logger.debug do
+              "Unable to determine the region of #{host.host}, so it will not be considered an allowed host for the " \
+                'configured failover mode.'
+            end
             return nil
           end
 

@@ -226,52 +226,84 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
     end
   end
 
-  describe '#strict_writer_failover_mode?' do
-    before do
-      props[:in_home_failover_mode] = 'strict_writer'
-      props[:out_of_home_failover_mode] = 'strict_any_reader'
-      init
-    end
+  describe '#failover_on_read_only_error?' do
+    context 'when both modes are strict_writer' do
+      before do
+        props[:in_home_failover_mode] = 'strict_writer'
+        props[:out_of_home_failover_mode] = 'strict_writer'
+        init
+      end
 
-    it 'uses the in-home mode when the known primary is in the home region' do
-      expect(plugin.send(:strict_writer_failover_mode?)).to be true
-    end
+      it 'triggers failover regardless of where the primary is' do
+        expect(plugin.send(:failover_on_read_only_error?)).to be true
+      end
 
-    context 'when the known primary is outside the home region' do
-      let(:topology) { [remote_writer, home_reader, remote_reader] }
-
-      it 'uses the out-of-home mode' do
-        expect(plugin.send(:strict_writer_failover_mode?)).to be false
+      it 'does not log, since the region of the primary does not matter' do
+        expect(plugin.send(:logger)).not_to receive(:debug)
+        plugin.send(:failover_on_read_only_error?)
       end
     end
 
-    it 'ignores the region of the host that is currently connected to' do
-      # A read-only error means the current connection is a reader, so its region says nothing
-      # about where the primary is.
-      allow(connection_service).to receive(:current_host_info).and_return(remote_reader)
-      expect(plugin.send(:strict_writer_failover_mode?)).to be true
-    end
-
-    context 'when the region of the known primary cannot be determined' do
-      let(:topology) { [host_info('writer-3.example.com', host_role::WRITER), home_reader] }
-
-      it 'falls back to the in-home mode, since #failover resolves the mode again' do
-        expect(plugin.send(:strict_writer_failover_mode?)).to be true
+    context 'when neither mode is strict_writer' do
+      before do
+        props[:in_home_failover_mode] = 'strict_any_reader'
+        props[:out_of_home_failover_mode] = 'home_reader_or_writer'
+        init
       end
 
-      it 'logs the endpoint whose region could not be determined' do
+      it 'does not trigger failover regardless of where the primary is' do
+        expect(plugin.send(:failover_on_read_only_error?)).to be false
+      end
+
+      it 'does not log, since the region of the primary does not matter' do
+        expect(plugin.send(:logger)).not_to receive(:debug)
+        plugin.send(:failover_on_read_only_error?)
+      end
+    end
+
+    context 'when only the in-home mode is strict_writer' do
+      before do
+        props[:in_home_failover_mode] = 'strict_writer'
+        props[:out_of_home_failover_mode] = 'strict_any_reader'
+        init
+      end
+
+      it 'assumes strict_writer and triggers failover' do
+        expect(plugin.send(:failover_on_read_only_error?)).to be true
+      end
+
+      it 'logs the assumption and its outcome' do
         expect(plugin.send(:logger)).to receive(:debug) do |&message|
-          expect(message.call).to include('writer-3.example.com', 'in_home_failover_mode=strict_writer')
+          expect(message.call).to include('in_home_failover_mode=strict_writer', 'failover will be triggered')
         end
-        plugin.send(:strict_writer_failover_mode?)
+        plugin.send(:failover_on_read_only_error?)
+      end
+
+      it 'ignores the topology and the host that is currently connected to' do
+        # The primary in the latest known topology may be stale, and a read-only error means the
+        # current connection is a reader, so neither region says where the new primary is.
+        allow(host_service).to receive(:all_hosts).and_return([remote_writer, remote_reader])
+        allow(connection_service).to receive(:current_host_info).and_return(remote_reader)
+        expect(plugin.send(:failover_on_read_only_error?)).to be true
       end
     end
 
-    context 'when the topology holds no writer' do
-      let(:topology) { [home_reader, remote_reader] }
+    context 'when only the out-of-home mode is strict_writer' do
+      before do
+        props[:in_home_failover_mode] = 'strict_any_reader'
+        props[:out_of_home_failover_mode] = 'strict_writer'
+        init
+      end
 
-      it 'falls back to the in-home mode' do
-        expect(plugin.send(:strict_writer_failover_mode?)).to be true
+      it 'assumes strict_writer and triggers failover' do
+        expect(plugin.send(:failover_on_read_only_error?)).to be true
+      end
+
+      it 'logs the assumption and its outcome' do
+        expect(plugin.send(:logger)).to receive(:debug) do |&message|
+          expect(message.call).to include('out_of_home_failover_mode=strict_writer', 'failover will be triggered')
+        end
+        plugin.send(:failover_on_read_only_error?)
       end
     end
   end
