@@ -47,6 +47,8 @@ module AwsRubyDatabaseDriverWrapper
           @out_of_home_failover_mode = nil
           @home_region = nil
           @accessible_regions = nil
+          # Hosts whose region could not be determined, so that each is only logged once per failover.
+          @regionless_hosts = Set.new
         end
 
         private
@@ -172,6 +174,7 @@ module AwsRubyDatabaseDriverWrapper
 
           failover_start = Time.now
           failover_deadline = failover_start + @failover_timeout
+          @regionless_hosts.clear
 
           logger.info do
             "Starting global database failover from #{connection_service.current_host_info&.url || 'an unknown host'}. " \
@@ -363,10 +366,13 @@ module AwsRubyDatabaseDriverWrapper
           if region.nil? || region.empty?
             # This scenario is not expected: topology hosts are built from the region-prefixed instance patterns in
             # global_cluster_instance_host_patterns, so they should always carry a parseable region. Without one the
-            # configured mode cannot be honoured for this host, so it is skipped.
-            logger.debug do
-              "Unable to determine the region of #{host.host}, so it will not be considered an allowed host for the " \
-                'configured failover mode.'
+            # configured mode cannot be honoured for this host, so it is skipped. Only the first occurrence is logged,
+            # since this method is called on every failover retry and the reason for the failure does not change.
+            if @regionless_hosts.add?(host.host)
+              logger.debug do
+                "Unable to determine the region of #{host.host}, so it will not be considered an allowed host for the " \
+                  'configured failover mode.'
+              end
             end
             return nil
           end

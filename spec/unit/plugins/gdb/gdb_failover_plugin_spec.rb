@@ -407,6 +407,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
         plugin.send(:allowed_hosts_for, mode::STRICT_HOME_READER, topology)
       end
 
+      it 'only logs the host once, since it is called on every failover retry' do
+        expect(plugin.send(:logger)).to receive(:debug).once
+        3.times { plugin.send(:allowed_hosts_for, mode::STRICT_HOME_READER, topology) }
+      end
+
       it 'does not log for the modes that ignore regions' do
         expect(plugin.send(:logger)).not_to receive(:debug)
         plugin.send(:allowed_hosts_for, mode::STRICT_ANY_READER, topology)
