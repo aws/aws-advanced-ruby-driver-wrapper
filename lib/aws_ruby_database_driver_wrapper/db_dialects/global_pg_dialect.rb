@@ -21,11 +21,11 @@ module AwsRubyDatabaseDriverWrapper
   module DbDialects
     class GlobalPgDialect < AuroraPgDialect
       GLOBAL_STATUS_FUNC_EXISTS_QUERY = <<~SQL
-        SELECT 'aurora_global_db_status'::pg_catalog.regproc
+        SELECT 'pg_catalog.aurora_global_db_status'::pg_catalog.regproc
       SQL
 
       GLOBAL_INSTANCE_STATUS_FUNC_EXISTS_QUERY = <<~SQL
-        SELECT 'aurora_global_db_instance_status'::pg_catalog.regproc
+        SELECT 'pg_catalog.aurora_global_db_instance_status'::pg_catalog.regproc
       SQL
 
       GLOBAL_TOPOLOGY_QUERY = <<~SQL
@@ -33,15 +33,15 @@ module AwsRubyDatabaseDriverWrapper
         CASE WHEN SESSION_ID OPERATOR(pg_catalog.=) 'MASTER_SESSION_ID' THEN TRUE ELSE FALSE END AS is_writer,
         VISIBILITY_LAG_IN_MSEC AS instance_lag,
         AWS_REGION AS aws_region
-        FROM aurora_global_db_instance_status()
+        FROM pg_catalog.aurora_global_db_instance_status()
       SQL
 
       REGION_COUNT_QUERY = <<~SQL
-        SELECT pg_catalog.count(1) FROM aurora_global_db_status()
+        SELECT pg_catalog.count(1) FROM pg_catalog.aurora_global_db_status()
       SQL
 
       REGION_BY_INSTANCE_ID_QUERY = <<~SQL
-        SELECT AWS_REGION FROM aurora_global_db_instance_status() WHERE SERVER_ID OPERATOR(pg_catalog.=) $1
+        SELECT AWS_REGION FROM pg_catalog.aurora_global_db_instance_status() WHERE SERVER_ID OPERATOR(pg_catalog.=) $1
       SQL
 
       def dialect?(connection)
