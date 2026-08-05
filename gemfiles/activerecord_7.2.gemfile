@@ -20,6 +20,7 @@ gemspec path: '..'
 gem 'activerecord', '~> 7.2.0'
 gem 'mysql2', '>= 0.5.7'
 gem 'pg', '>= 1.6.3'
+gem 'pg_query', '>= 5.1'
 
 group :development do
   gem 'bundler'
