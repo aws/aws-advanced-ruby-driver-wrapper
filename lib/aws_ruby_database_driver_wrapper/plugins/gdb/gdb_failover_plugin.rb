@@ -126,11 +126,8 @@ module AwsRubyDatabaseDriverWrapper
           return in_home_strict_writer if in_home_strict_writer == out_of_home_strict_writer
 
           logger.debug do
-            configured = in_home_strict_writer ? 'in_home_failover_mode' : 'out_of_home_failover_mode'
-            'A read-only error was encountered. Whether it triggers failover depends on whether the GDB primary is in ' \
-              "the home region '#{@home_region}', which is not known yet because the error suggests the primary has " \
-              "changed. #{configured}=#{GdbFailoverMode::STRICT_WRITER} is assumed so that the read-only connection is " \
-              'not left as is, meaning failover will be triggered.'
+            'A read-only error was encountered. The region of the GDB primary is not known yet, but the error suggests ' \
+              'the primary may have changed, so driver failover will be triggered.'
           end
 
           true

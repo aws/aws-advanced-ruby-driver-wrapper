@@ -274,7 +274,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
 
       it 'logs the assumption and its outcome' do
         expect(plugin.send(:logger)).to receive(:debug) do |&message|
-          expect(message.call).to include('in_home_failover_mode=strict_writer', 'failover will be triggered')
+          expect(message.call).to include('driver failover will be triggered')
         end
         plugin.send(:failover_on_read_only_error?)
       end
@@ -301,7 +301,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
 
       it 'logs the assumption and its outcome' do
         expect(plugin.send(:logger)).to receive(:debug) do |&message|
-          expect(message.call).to include('out_of_home_failover_mode=strict_writer', 'failover will be triggered')
+          expect(message.call).to include('driver failover will be triggered')
         end
         plugin.send(:failover_on_read_only_error?)
       end
