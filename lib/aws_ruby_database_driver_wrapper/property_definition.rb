@@ -18,6 +18,14 @@ require_relative 'wrapper_property'
 
 module AwsRubyDatabaseDriverWrapper
   module PropertyDefinition
+    POSITIVE_INTEGER = lambda do |val, name|
+      raise ArgumentError, "#{name} must be a positive integer, got: #{val.inspect}" unless val&.to_i&.positive?
+    end
+
+    NON_NEGATIVE_INTEGER = lambda do |val, name|
+      raise ArgumentError, "#{name} must be a non-negative integer, got: #{val.inspect}" if val&.to_i&.negative?
+    end
+
     # -- General --
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover', type: String)
@@ -28,7 +36,8 @@ module AwsRubyDatabaseDriverWrapper
       :failover_timeout_sec,
       'Maximum allowed time in seconds for the failover process.',
       default_value: 300,
-      type: Integer
+      type: Integer,
+      validator: POSITIVE_INTEGER
     )
     FAILOVER_MODE = WrapperProperty.new(
       :failover_mode,
@@ -66,13 +75,15 @@ module AwsRubyDatabaseDriverWrapper
       :cluster_topology_refresh_rate_ms,
       'Cluster topology refresh rate in milliseconds',
       default_value: 5000,
-      type: Integer
+      type: Integer,
+      validator: POSITIVE_INTEGER
     )
     CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_MS = WrapperProperty.new(
       :cluster_topology_high_refresh_rate_ms,
       'Cluster topology high refresh rate in milliseconds (used post-failover)',
       default_value: 100,
-      type: Integer
+      type: Integer,
+      validator: POSITIVE_INTEGER
     )
     CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS = WrapperProperty.new(
       :cluster_topology_max_instance_monitors,
@@ -85,22 +96,23 @@ module AwsRubyDatabaseDriverWrapper
     BGD_ID = WrapperProperty.new(:bgd_id, 'Blue/Green Deployment identifier that helps the driver to distinguish different deployments.',
                                  default_value: '1', type: String)
     BG_CONNECT_TIMEOUT_MS = WrapperProperty.new(:bg_connect_timeout_ms, 'Blue/Green connect timeout in milliseconds',
-                                                default_value: 30_000, type: Integer)
+                                                default_value: 30_000, type: Integer, validator: POSITIVE_INTEGER)
     BG_INTERVAL_BASELINE_MS = WrapperProperty.new(:bg_baseline_ms, 'Baseline Blue/Green Deployment status checking interval (in msec).',
-                                                  default_value: 60_000, type: Integer)
+                                                  default_value: 60_000, type: Integer, validator: POSITIVE_INTEGER)
     BG_INTERVAL_INCREASED_MS = WrapperProperty.new(:bg_increased_ms, 'Increased Blue/Green Deployment status checking interval (in msec).',
-                                                   default_value: 1_000, type: Integer)
+                                                   default_value: 1_000, type: Integer, validator: POSITIVE_INTEGER)
     BG_INTERVAL_HIGH_MS = WrapperProperty.new(:bg_high_ms, 'High Blue/Green Deployment status checking interval (in msec).',
-                                              default_value: 100, type: Integer)
+                                              default_value: 100, type: Integer, validator: POSITIVE_INTEGER)
     BG_SWITCHOVER_TIMEOUT_MS = WrapperProperty.new(:bg_switchover_timeout_ms, 'Blue/Green Deployment switchover timeout (in msec).',
-                                                   default_value: 180_000, type: Integer)
+                                                   default_value: 180_000, type: Integer, validator: POSITIVE_INTEGER)
 
     # -- IAM Authentication --
     IAM_HOST = WrapperProperty.new(:iam_host, 'Overrides the host used to generate the IAM token', default_value: nil, type: String)
     IAM_PORT = WrapperProperty.new(:iam_port, 'Overrides the port used to generate the IAM token', default_value: nil, type: Integer)
     IAM_REGION = WrapperProperty.new(:iam_region, 'Overrides the AWS region used to generate the IAM token', default_value: nil,
                                                                                                              type: String)
-    IAM_EXPIRATION = WrapperProperty.new(:iam_expiration, 'IAM token cache expiration in seconds', default_value: 870, type: Integer)
+    IAM_EXPIRATION = WrapperProperty.new(:iam_expiration, 'IAM token cache expiration in seconds', default_value: 870, type: Integer,
+                                                                                                   validator: POSITIVE_INTEGER)
     IAM_ACCESS_TOKEN_PROPERTY_NAME = WrapperProperty.new(:iam_access_token_property_name, 'Property name used to pass the IAM token',
                                                          default_value: :password, type: Symbol)
     IAM_CREDENTIALS_PROVIDER = WrapperProperty.new(:iam_credentials_provider,
@@ -126,12 +138,12 @@ module AwsRubyDatabaseDriverWrapper
     INITIAL_CONNECTION_RETRY_TIMEOUT_MS = WrapperProperty.new(
       :initial_connection_retry_timeout_ms,
       'Maximum time in milliseconds to retry opening a connection.',
-      default_value: 30_000, type: Integer
+      default_value: 30_000, type: Integer, validator: POSITIVE_INTEGER
     )
     INITIAL_CONNECTION_RETRY_INTERVAL_MS = WrapperProperty.new(
       :initial_connection_retry_interval_ms,
       'Time in milliseconds between retries when opening a connection.',
-      default_value: 1000, type: Integer
+      default_value: 1000, type: Integer, validator: POSITIVE_INTEGER
     )
     INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS = WrapperProperty.new(
       :initial_connection_wait_for_topology_ms,
@@ -139,7 +151,7 @@ module AwsRubyDatabaseDriverWrapper
       'connection. When set to a value greater than 0 and the topology is not yet available, the plugin ' \
       'will block until the topology has been discovered (or this timeout is reached) instead of falling ' \
       'back to connecting via the initial endpoint in the connection string.',
-      default_value: 0, type: Integer
+      default_value: 0, type: Integer, validator: NON_NEGATIVE_INTEGER
     )
     INITIAL_CONNECTION_INACTIVE_SUBSTITUTE_HOST = WrapperProperty.new(
       :initial_connection_inactive_substitute_host,
@@ -188,12 +200,12 @@ module AwsRubyDatabaseDriverWrapper
     SECRET_ROTATION_RETRY_TIMEOUT_MS = WrapperProperty.new(
       :secret_rotation_retry_timeout_ms,
       'Max time in milliseconds to retry connecting during a secret rotation window (0 = disabled)',
-      default_value: 0, type: Integer
+      default_value: 0, type: Integer, validator: NON_NEGATIVE_INTEGER
     )
     SECRET_ROTATION_RETRY_BASE_DELAY_MS = WrapperProperty.new(
       :secret_rotation_retry_base_delay_ms,
       'Base delay in milliseconds for exponential backoff during rotation retry',
-      default_value: 500, type: Integer
+      default_value: 500, type: Integer, validator: POSITIVE_INTEGER
     )
 
     # Built once at load time from constants — used by parser to split props

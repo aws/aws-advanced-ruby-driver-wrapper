@@ -435,6 +435,41 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::ConnectionConfigParser do
     end
   end
 
+  describe 'validator enforcement at parse time' do
+    it 'raises ArgumentError for a negative POSITIVE_INTEGER prop' do
+      expect do
+        parser.parse(:postgresql, host: 'h', failover_timeout_sec: -1)
+      end.to raise_error(ArgumentError, /failover_timeout_sec.*-1/)
+    end
+
+    it 'raises ArgumentError for zero on a POSITIVE_INTEGER prop' do
+      expect do
+        parser.parse(:postgresql, host: 'h', failover_timeout_sec: 0)
+      end.to raise_error(ArgumentError, /failover_timeout_sec.*0/)
+    end
+
+    it 'raises ArgumentError for a negative NON_NEGATIVE_INTEGER prop' do
+      expect do
+        parser.parse(:postgresql, host: 'h', secret_rotation_retry_timeout_ms: -1)
+      end.to raise_error(ArgumentError, /secret_rotation_retry_timeout_ms.*-1/)
+    end
+
+    it 'does not raise for zero on a NON_NEGATIVE_INTEGER prop' do
+      expect { parser.parse(:postgresql, host: 'h', secret_rotation_retry_timeout_ms: 0) }.not_to raise_error
+    end
+
+    it 'raises ArgumentError for a negative prefixed POSITIVE_INTEGER prop' do
+      expect do
+        parser.parse(:postgresql, host: 'h', topology_monitoring_failover_timeout_sec: -5)
+      end.to raise_error(ArgumentError, /failover_timeout_sec.*-5/)
+    end
+
+    it 'does not run the validator on get after a valid parse' do
+      config = parser.parse(:postgresql, host: 'h', failover_timeout_sec: 60)
+      expect { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.get(config.wrapper_props) }.not_to raise_error
+    end
+  end
+
   describe 'multi_host?' do
     it 'returns true for multi-host URI' do
       config = parser.parse(:postgresql, 'postgresql://host1,host2:5433/mydb')
