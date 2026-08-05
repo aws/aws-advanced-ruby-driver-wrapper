@@ -18,18 +18,17 @@ module AwsRubyDatabaseDriverWrapper
   class WrapperProperty
     attr_reader :name, :default_value, :description, :type
 
-    def initialize(name, description, default_value: nil, type: nil)
+    def initialize(name, description, default_value: nil, type: nil, validator: nil)
       @name = name.to_sym
       @description = description
       @default_value = default_value
       @type = type
+      @validator = validator
     end
 
     # @return [String, Boolean, Integer, nil] the value from props, or the property's default
     def get(props, override = nil)
-      return override.fetch(@name, @default_value) if override&.key?(@name)
-
-      props.fetch(@name, @default_value)
+      override&.key?(@name) ? override.fetch(@name, @default_value) : props.fetch(@name, @default_value)
     end
 
     def get_bool(props, override = nil)
@@ -47,6 +46,10 @@ module AwsRubyDatabaseDriverWrapper
     def get_string(props, override = nil)
       val = get(props, override)
       val&.to_s
+    end
+
+    def validate!(value)
+      @validator&.call(value, @name)
     end
 
     def set(props, value)
