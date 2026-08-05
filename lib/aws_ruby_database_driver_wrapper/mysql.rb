@@ -30,6 +30,7 @@ module AwsRubyDatabaseDriverWrapper
     def initialize(**)
       config = Utils::ConnectionConfigParser.parse(:mysql2, **)
       @service_container = Services::ServiceUtility.create_standard_container(config)
+      @service_container.host_service.refresh_host_list
       @async_conn = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)

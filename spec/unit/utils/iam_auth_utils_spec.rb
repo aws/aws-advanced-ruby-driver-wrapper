@@ -201,6 +201,26 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
       expect(result).to eq 'us-west-2'
     end
 
+    it 'parses the region from an aws-cn (China) writer ARN' do
+      cn_writer = double('cn_writer', is_writer: true,
+                                      db_cluster_arn: 'arn:aws-cn:rds:cn-north-1:123456789012:cluster:my-cluster')
+      cn_cluster = double('cn_cluster', global_cluster_members: [cn_writer])
+      allow(rds_client).to receive(:describe_global_clusters)
+        .and_return(double('cn_response', global_clusters: [cn_cluster]))
+
+      expect(utils.region_from_global_cluster(host, credentials_provider)).to eq 'cn-north-1'
+    end
+
+    it 'parses the region from an aws-us-gov (GovCloud) writer ARN' do
+      gov_writer = double('gov_writer', is_writer: true,
+                                        db_cluster_arn: 'arn:aws-us-gov:rds:us-gov-west-1:123456789012:cluster:my-cluster')
+      gov_cluster = double('gov_cluster', global_cluster_members: [gov_writer])
+      allow(rds_client).to receive(:describe_global_clusters)
+        .and_return(double('gov_response', global_clusters: [gov_cluster]))
+
+      expect(utils.region_from_global_cluster(host, credentials_provider)).to eq 'us-gov-west-1'
+    end
+
     it 'returns nil when no writer member is found' do
       no_writer_cluster = double('no_writer_cluster', global_cluster_members: [reader_member])
       no_writer_response = double('no_writer_response', global_clusters: [no_writer_cluster])

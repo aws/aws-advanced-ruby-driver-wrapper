@@ -1550,7 +1550,7 @@ public class AuroraTestUtility {
 
       failoverClusterToTarget(
           clusterId,
-          // TAZ cluster doesn't support target node
+          // TAZ cluster doesn't support target host
           deployment != DatabaseEngineDeployment.RDS_MULTI_AZ_CLUSTER ? targetWriterId : null);
 
       long waitTillNanoTime = System.nanoTime() + TimeUnit.MINUTES.toNanos(writerChangeTimeoutMinutes);

@@ -127,6 +127,35 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
       expect(service.current_connection).to eq(connection)
       expect(service.current_host_info).to eq(reader_host)
     end
+
+    context 'when replacing an existing connection' do
+      let(:driver_dialect) { instance_double('DriverDialect', close_connection: nil) }
+      let(:dialect_service) { instance_double('DialectService', driver_dialect: driver_dialect) }
+      let(:service_container) do
+        instance_double('ServiceContainer',
+                        host_service: host_service,
+                        session_state_service: session_state_service,
+                        dialect_service: dialect_service)
+      end
+
+      it 'closes the previous connection so it does not leak' do
+        old_connection = instance_double('Connection')
+        new_connection = instance_double('Connection')
+        service.update_current_connection(old_connection, writer_host)
+
+        expect(driver_dialect).to receive(:close_connection).with(old_connection)
+        service.update_current_connection(new_connection, reader_host)
+        expect(service.current_connection).to eq(new_connection)
+      end
+
+      it 'does not close the connection when it is the same object' do
+        connection = instance_double('Connection')
+        service.update_current_connection(connection, writer_host)
+
+        expect(driver_dialect).not_to receive(:close_connection)
+        service.update_current_connection(connection, reader_host)
+      end
+    end
   end
 
   describe '#driver_name' do

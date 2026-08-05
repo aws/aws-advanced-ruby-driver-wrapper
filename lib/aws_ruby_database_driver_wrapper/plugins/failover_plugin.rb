@@ -188,19 +188,25 @@ module AwsRubyDatabaseDriverWrapper
         @failover_mode == FailoverMode::STRICT_WRITER && dialect_service.read_only_error?(error)
       end
 
+      # Rolls back an open transaction on the current connection so it does not linger server-side.
+      #
+      # The broken connection is intentionally left open rather than closed here. A real pg/mysql2
+      # connection is left broken-but-open on network failure; its owner (ActiveRecord via
+      # disconnect!/discard!, or a raw-driver caller) is responsible for closing it. Closing it eagerly
+      # mid-error-handling would leave the facade pointing at a freed object on a failed failover, so
+      # introspection calls AR makes during its error path (e.g. transaction_status, ping) would raise
+      # instead of reporting a broken state. On a successful failover the old connection is closed when
+      # the new one is swapped in via ConnectionService#update_current_connection.
       def invalidate_current_connection
         conn = connection_service.current_connection
         return if conn.nil?
+        return unless @service_container.session_state_service.in_transaction?
 
-        if @service_container.session_state_service.in_transaction?
-          begin
-            driver_dialect.execute('ROLLBACK')
-          rescue StandardError
-            nil
-          end
+        begin
+          driver_dialect.execute(conn, 'ROLLBACK')
+        rescue StandardError
+          nil
         end
-
-        close_quietly(conn)
       end
 
       def failover
