@@ -19,6 +19,7 @@ require 'aws_ruby_database_driver_wrapper/utils/retry_util'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 require 'aws_ruby_database_driver_wrapper/host/host_role'
 require 'aws_ruby_database_driver_wrapper/host/host_availability'
+require 'aws_ruby_database_driver_wrapper/host/random_host_selector'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
   let(:host_role) { AwsRubyDatabaseDriverWrapper::Host::HostRole }
@@ -49,11 +50,21 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
   let(:dialect_service) { double('dialect_service', db_dialect: db_dialect, driver_dialect: driver_dialect) }
   let(:plugin_manager) { double('plugin_manager') }
 
+  # RetryUtil delegates candidate selection to the host service, which applies the configured
+  # strategy. The real selector picks from the candidates it is given, so mirror that here.
+  let(:host_selector) { AwsRubyDatabaseDriverWrapper::Host::RandomHostSelector.new }
+
   let(:host_service) do
     double('host_service',
            all_hosts: [writer_host, reader_host],
            hosts: [writer_host, reader_host],
            refresh_host_list: nil)
+  end
+
+  before do
+    allow(host_service).to receive(:select_host) do |hosts, role, _strategy|
+      host_selector.select_host(hosts, role)
+    end
   end
 
   let(:connection_service) { double('connection_service', driver_props: props) }
@@ -75,11 +86,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
         allow(db_dialect).to receive(:host_role).with(connection).and_return(host_role::WRITER)
       end
 
-      it 'returns a WriterResult with the connection and host info' do
+      it 'returns a Result with the connection and host info' do
         deadline = Time.now + 5
         result = retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: deadline)
 
-        expect(result).to be_a(described_class::WriterResult)
+        expect(result).to be_a(described_class::Result)
         expect(result.connection).to eq(connection)
         expect(result.host_info.role).to eq(host_role::WRITER)
       end
@@ -175,6 +186,116 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
         result = retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: deadline)
         expect(result.connection).to eq(connection)
       end
+    end
+  end
+
+  describe '#connect_to_allowed_host' do
+    before do
+      allow(plugin_manager).to receive(:connect).and_return(connection)
+      allow(db_dialect).to receive(:host_role).with(connection).and_return(host_role::READER)
+    end
+
+    it 'connects to a host yielded by the block' do
+      result = retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                                  verify_role: host_role::READER,
+                                                  deadline: Time.now + 5) { [reader_host] }
+
+      expect(result).to be_a(described_class::Result)
+      expect(result.connection).to eq(connection)
+      expect(result.host_info.host).to eq(reader_host.host)
+      expect(result.host_info.role).to eq(host_role::READER)
+    end
+
+    it 'passes the current allowed hosts to the block' do
+      yielded = nil
+      retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                         verify_role: host_role::READER,
+                                         deadline: Time.now + 5) do |allowed_hosts|
+        yielded = allowed_hosts
+        [reader_host]
+      end
+
+      expect(yielded).to eq([writer_host, reader_host])
+    end
+
+    it 'skips role verification when verify_role is nil' do
+      expect(db_dialect).not_to receive(:host_role)
+      result = retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                                  deadline: Time.now + 5) { [writer_host] }
+      expect(result.connection).to eq(connection)
+    end
+
+    it 'uses the requested selection strategy' do
+      expect(host_service).to receive(:select_host).with(anything, host_role::READER, 'leastConnections').and_return(reader_host)
+      retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                         verify_role: host_role::READER,
+                                         strategy: 'leastConnections',
+                                         deadline: Time.now + 5) { [reader_host] }
+    end
+
+    it 'defaults to the random strategy when none is given' do
+      expect(host_service).to receive(:select_host).with(anything, host_role::READER, 'random').and_return(reader_host)
+      retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                         verify_role: host_role::READER,
+                                         deadline: Time.now + 5) { [reader_host] }
+    end
+
+    it 'marks candidates available so that unavailable hosts are still considered' do
+      unavailable = reader_host.deep_dup.tap { |h| h.availability = host_availability::UNAVAILABLE }
+      result = retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                                  verify_role: host_role::READER,
+                                                  deadline: Time.now + 5) { [unavailable] }
+      expect(result.connection).to eq(connection)
+    end
+
+    it 'retries when the block yields no candidates, then succeeds' do
+      calls = 0
+      result = retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                                  verify_role: host_role::READER,
+                                                  deadline: Time.now + 5) do
+        calls += 1
+        calls < 3 ? [] : [reader_host]
+      end
+
+      expect(calls).to eq(3)
+      expect(result.connection).to eq(connection)
+    end
+
+    it 'times out when the block never yields a candidate' do
+      expect do
+        retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                           verify_role: host_role::READER,
+                                           deadline: Time.now + 0.15) { [] }
+      end.to raise_error(Timeout::Error)
+    end
+
+    it 'closes the connection and moves on when the role does not match' do
+      allow(db_dialect).to receive(:host_role).with(connection).and_return(host_role::WRITER)
+      expect(driver_dialect).to receive(:close_connection).with(connection).at_least(:once)
+
+      expect do
+        retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                           verify_role: host_role::READER,
+                                           deadline: Time.now + 0.15) { [reader_host] }
+      end.to raise_error(Timeout::Error)
+    end
+
+    it 'tries the next candidate when a connection attempt raises' do
+      allow(plugin_manager).to receive(:connect) do |host, *|
+        raise StandardError, 'connection refused' if host.host == writer_host.host
+
+        connection
+      end
+
+      result = retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
+                                                  deadline: Time.now + 5) { [writer_host, reader_host] }
+      expect(result.host_info.host).to eq(reader_host.host)
+    end
+
+    it 'raises Timeout::Error immediately when the deadline has passed' do
+      expect do
+        retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager, deadline: Time.now - 1) { [reader_host] }
+      end.to raise_error(Timeout::Error)
     end
   end
 end

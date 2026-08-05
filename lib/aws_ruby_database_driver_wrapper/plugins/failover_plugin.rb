@@ -136,12 +136,7 @@ module AwsRubyDatabaseDriverWrapper
         initial_host = connection_service.initial_host_info
 
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host&.host)
-        if @rds_url_type == Utils::RdsUrlType::RDS_PROXY ||
-           @rds_url_type == Utils::RdsUrlType::RDS_PROXY_ENDPOINT
-          raise Errors::AwsError,
-                'The failover plugin is not compatible with RDS Proxy endpoints. ' \
-                'RDS Proxy handles failover internally - please remove the failover plugin from your configuration.'
-        end
+        reject_rds_proxy_endpoint
 
         if @failover_mode.nil?
           @failover_mode = if @rds_url_type == Utils::RdsUrlType::RDS_READER_CLUSTER
@@ -152,6 +147,17 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         logger.debug { "failover_mode=#{@failover_mode}" }
+      end
+
+      # RDS Proxy handles failover internally, so a failover plugin must not be layered on top of it.
+      #
+      # @raise [Errors::AwsError] if the initial endpoint is an RDS Proxy endpoint
+      def reject_rds_proxy_endpoint
+        return unless [Utils::RdsUrlType::RDS_PROXY, Utils::RdsUrlType::RDS_PROXY_ENDPOINT].include?(@rds_url_type)
+
+        raise Errors::AwsError,
+              'The failover plugin is not compatible with RDS Proxy endpoints. ' \
+              'RDS Proxy handles failover internally - please remove the failover plugin from your configuration.'
       end
 
       def can_direct_execute?(method_name)
@@ -184,8 +190,15 @@ module AwsRubyDatabaseDriverWrapper
 
         return true if dialect_service.network_error?(error)
 
-        # initiate failover by returning true if failover mode is STRICT_WRITER and we got a read-only error.
-        @failover_mode == FailoverMode::STRICT_WRITER && dialect_service.read_only_error?(error)
+        dialect_service.read_only_error?(error) && failover_on_read_only_error?
+      end
+
+      # Whether a read-only error should trigger failover. It should only do so when failover would
+      # target a writer, since a read-only error means the current connection is not one.
+      #
+      # @return [Boolean]
+      def failover_on_read_only_error?
+        @failover_mode == FailoverMode::STRICT_WRITER
       end
 
       # Rolls back an open transaction on the current connection so it does not linger server-side.
