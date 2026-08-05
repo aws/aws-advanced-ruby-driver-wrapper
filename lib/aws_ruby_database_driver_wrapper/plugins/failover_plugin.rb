@@ -191,7 +191,7 @@ module AwsRubyDatabaseDriverWrapper
         return true if dialect_service.network_error?(error)
 
         # initiate failover by returning true if failover mode is STRICT_WRITER and we got a read-only error.
-        strict_writer_failover_mode? && dialect_service.read_only_error?(error)
+        dialect_service.read_only_error?(error) && strict_writer_failover_mode?
       end
 
       # Whether the failover process should target a writer host. Subclasses may resolve this

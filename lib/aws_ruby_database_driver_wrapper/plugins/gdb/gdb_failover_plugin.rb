@@ -123,9 +123,10 @@ module AwsRubyDatabaseDriverWrapper
                    # Either the topology holds no writer, or its region could not be parsed. The primary
                    # usually stays in the region it was in, so the in-home mode is the better guess.
                    logger.debug do
-                     "Unable to determine whether the GDB primary #{writer&.host || 'is in'} the home region " \
-                       "'#{@home_region}', so in_home_failover_mode=#{@in_home_failover_mode} is assumed when " \
-                       'deciding whether a read-only error should trigger failover.'
+                     primary = writer.nil? ? 'the GDB primary' : "the GDB primary #{writer.host}"
+                     "Unable to determine whether #{primary} is in the home region '#{@home_region}', so " \
+                       "in_home_failover_mode=#{@in_home_failover_mode} is assumed when deciding whether a " \
+                       'read-only error should trigger failover.'
                    end
                    @in_home_failover_mode
                  else
