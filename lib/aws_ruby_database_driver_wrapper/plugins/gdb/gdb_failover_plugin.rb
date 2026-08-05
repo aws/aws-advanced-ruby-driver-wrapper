@@ -86,7 +86,7 @@ module AwsRubyDatabaseDriverWrapper
           derived = @rds_url_type&.region? ? Utils::RdsUtils.rds_region(initial_host&.host) : nil
           if derived.nil? || derived.empty?
             raise Errors::AwsError,
-                  "Unable to determine region from endpoint #{host}. If you are connecting via a global database " \
+                  "Unable to determine region from endpoint #{initial_host&.host}. If you are connecting via a global database " \
                   "endpoint or non-standard URL, please set the #{PropertyDefinition::FAILOVER_HOME_REGION.name} property."
           end
 
@@ -110,22 +110,38 @@ module AwsRubyDatabaseDriverWrapper
 
         # Whether strict_writer failover mode is currently active.
         #
+        # Which of the two configured modes applies depends on the region of the GDB primary. The new
+        # primary is not known yet at this point, so the region of the primary in the latest known
+        # topology is used instead.
+        #
         # @return [Boolean]
         def strict_writer_failover_mode?
-          host = connection_service.current_host_info&.host
-          current_region = Utils::RdsUtils.rds_region(host)
-          if current_region.nil? || current_region.empty?
-            logger.debug do
-              "Unable to determine whether the connection is in-home or out-of-home - the region of current host #{host} could not be " \
-                "determined. The in-home failover mode #{@in_home_failover_mode} will be assumed."
-            end
+          writer = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
+          writer_region = Utils::RdsUtils.rds_region(writer&.host)
 
-            return @in_home_failover_mode
-          end
+          mode = if writer_region.nil? || writer_region.empty?
+                   # Either the topology holds no writer, or its region could not be parsed. The primary
+                   # usually stays in the region it was in, so the in-home mode is the better guess.
+                   logger.debug do
+                     "Unable to determine whether the GDB primary #{writer&.host || 'is in'} the home region " \
+                       "'#{@home_region}', so in_home_failover_mode=#{@in_home_failover_mode} is assumed when " \
+                       'deciding whether a read-only error should trigger failover.'
+                   end
+                   @in_home_failover_mode
+                 else
+                   current_failover_mode(writer_region)
+                 end
 
-          # TODO: we are incorrectly deciding in-home or out-of-home based on the current region, but it should be based
-          #  off the new writer region, which we have not obtained yet.
-          home_region?(current_region) ? @in_home_failover_mode : @out_of_home_failover_mode
+          mode == GdbFailoverMode::STRICT_WRITER
+        end
+
+        # The mode that applies given the region of the current GDB primary.
+        #
+        # @param primary_region [String] the region the primary writer is in. Must not be nil - callers are
+        #   responsible for handling endpoints whose region cannot be determined.
+        # @return [Symbol] one of the {GdbFailoverMode} constants
+        def current_failover_mode(primary_region)
+          home_region?(primary_region) ? @in_home_failover_mode : @out_of_home_failover_mode
         end
 
         # Whether the given region is the home region.
@@ -185,7 +201,7 @@ module AwsRubyDatabaseDriverWrapper
             # so we will assume the user connected to the home region and the writer stayed in-home.
             mode = @in_home_failover_mode
           else
-            mode = home_region?(writer_region) ? @in_home_failover_mode : @out_of_home_failover_mode
+            mode = current_failover_mode(writer_region)
           end
 
           log_failover_plan(writer_candidate, writer_region, mode)
@@ -324,13 +340,14 @@ module AwsRubyDatabaseDriverWrapper
 
         def host_allowed?(host, mode)
           reader = host.role == Host::HostRole::READER
+          writer = host.role == Host::HostRole::WRITER
 
           case mode
-          when GdbFailoverMode::STRICT_HOME_READER then reader && region_position(host, mode) == :in_home
-          when GdbFailoverMode::STRICT_OUT_OF_HOME_READER then reader && region_position(host, mode) == :out_of_home
+          when GdbFailoverMode::STRICT_HOME_READER then reader && region_position(host) == :in_home
+          when GdbFailoverMode::STRICT_OUT_OF_HOME_READER then reader && region_position(host) == :out_of_home
           when GdbFailoverMode::STRICT_ANY_READER then reader
-          when GdbFailoverMode::HOME_READER_OR_WRITER then region_position(host, mode) == :in_home
-          when GdbFailoverMode::OUT_OF_HOME_READER_OR_WRITER then region_position(host, mode) == :out_of_home
+          when GdbFailoverMode::HOME_READER_OR_WRITER then writer || (reader && region_position(host) == :in_home)
+          when GdbFailoverMode::OUT_OF_HOME_READER_OR_WRITER then writer || (reader && region_position(host) == :out_of_home)
           when GdbFailoverMode::ANY_READER_OR_WRITER then true
           else raise Errors::AwsError, "Unsupported global database failover mode: #{mode}"
           end

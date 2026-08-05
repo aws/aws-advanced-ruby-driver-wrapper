@@ -233,30 +233,45 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       init
     end
 
-    it 'uses the active-home mode when the current host is in the home region' do
-      allow(connection_service).to receive(:current_host_info).and_return(home_writer)
+    it 'uses the in-home mode when the known primary is in the home region' do
       expect(plugin.send(:strict_writer_failover_mode?)).to be true
     end
 
-    it 'uses the inactive-home mode when the current host is outside the home region' do
-      allow(connection_service).to receive(:current_host_info).and_return(remote_reader)
-      expect(plugin.send(:strict_writer_failover_mode?)).to be false
+    context 'when the known primary is outside the home region' do
+      let(:topology) { [remote_writer, home_reader, remote_reader] }
+
+      it 'uses the out-of-home mode' do
+        expect(plugin.send(:strict_writer_failover_mode?)).to be false
+      end
     end
 
-    context 'when the region of the current host cannot be determined' do
-      before do
-        allow(connection_service).to receive(:current_host_info).and_return(regionless_reader)
-      end
+    it 'ignores the region of the host that is currently connected to' do
+      # A read-only error means the current connection is a reader, so its region says nothing
+      # about where the primary is.
+      allow(connection_service).to receive(:current_host_info).and_return(remote_reader)
+      expect(plugin.send(:strict_writer_failover_mode?)).to be true
+    end
 
-      it 'falls back to the active-home mode, since #failover resolves the mode again' do
+    context 'when the region of the known primary cannot be determined' do
+      let(:topology) { [host_info('writer-3.example.com', host_role::WRITER), home_reader] }
+
+      it 'falls back to the in-home mode, since #failover resolves the mode again' do
         expect(plugin.send(:strict_writer_failover_mode?)).to be true
       end
 
       it 'logs the endpoint whose region could not be determined' do
         expect(plugin.send(:logger)).to receive(:debug) do |&message|
-          expect(message.call).to include(regionless_reader.host, 'Unable to determine region from endpoint')
+          expect(message.call).to include('writer-3.example.com', 'in_home_failover_mode=strict_writer')
         end
         plugin.send(:strict_writer_failover_mode?)
+      end
+    end
+
+    context 'when the topology holds no writer' do
+      let(:topology) { [home_reader, remote_reader] }
+
+      it 'falls back to the in-home mode' do
+        expect(plugin.send(:strict_writer_failover_mode?)).to be true
       end
     end
   end
@@ -492,10 +507,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
         init
       end
 
-      it 'applies the inactive-home mode, since the primary is not confirmed to be in the home region' do
+      it 'applies the in-home mode, since the primary usually stays in the region it was in' do
         expect(retry_util).to receive(:connect_to_allowed_host)
           .with(plugin, plugin_manager, hash_including(verify_role: host_role::READER)) do |*, &candidates|
-            expect(candidates.call(topology)).to contain_exactly(remote_reader)
+            expect(candidates.call(topology)).to contain_exactly(home_reader)
             result
           end
         expect { plugin.send(:failover) }.to raise_error(errors::FailoverSuccessError)
@@ -504,7 +519,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       it 'warns, since a GDB topology host is expected to carry a region' do
         allow(retry_util).to receive(:connect_to_allowed_host).and_return(result)
         expect(plugin.send(:logger)).to receive(:warn) do |&message|
-          expect(message.call).to include('could not be determined', 'inactive_home_failover_mode')
+          expect(message.call).to include(regionless_writer.host, 'strict_home_reader')
         end
         expect { plugin.send(:failover) }.to raise_error(errors::FailoverSuccessError)
       end
