@@ -30,7 +30,9 @@ module AwsRubyDatabaseDriverWrapper
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover', type: String)
     DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.', type: String)
-
+    AWS_CREDENTIALS_PROVIDER = WrapperProperty.new(:aws_credentials_provider,
+                                                   'AWS credentials provider for IAM token generation or Secrets Manager',
+                                                   default_value: nil)
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(
       :failover_timeout_sec,
@@ -115,9 +117,6 @@ module AwsRubyDatabaseDriverWrapper
                                                                                                    validator: POSITIVE_INTEGER)
     IAM_ACCESS_TOKEN_PROPERTY_NAME = WrapperProperty.new(:iam_access_token_property_name, 'Property name used to pass the IAM token',
                                                          default_value: :password, type: Symbol)
-    IAM_CREDENTIALS_PROVIDER = WrapperProperty.new(:iam_credentials_provider,
-                                                   'AWS credentials provider for IAM token generation',
-                                                   default_value: nil)
 
     # -- Initial Connection Strategy --
     INITIAL_CONNECTION_SUBSTITUTE_HOST = WrapperProperty.new(
@@ -192,10 +191,6 @@ module AwsRubyDatabaseDriverWrapper
     SECRET_EXPIRATION_SEC = WrapperProperty.new(
       :secret_expiration_sec, 'Cached secret expiration in seconds (minimum: 300)',
       default_value: 870, type: Integer
-    )
-    SECRET_CREDENTIALS_PROVIDER = WrapperProperty.new(
-      :secret_credentials_provider, 'Custom AWS credentials provider for Secrets Manager',
-      default_value: nil
     )
     SECRET_ROTATION_RETRY_TIMEOUT_MS = WrapperProperty.new(
       :secret_rotation_retry_timeout_ms,

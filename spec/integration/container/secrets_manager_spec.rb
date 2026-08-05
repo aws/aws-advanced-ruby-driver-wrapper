@@ -229,13 +229,13 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     Integration::DriverHelper.close(drv, conn2) if conn2
   end
 
-  it 'connects using explicit secret_credentials_provider' do
+  it 'connects using explicit aws_credentials_provider' do
     explicit_creds = Aws::CredentialProviderChain.new.resolve
 
     conn = create_sm_wrapper_connection(
       secret_id: @secret_id,
       extra_props: {
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::SECRET_CREDENTIALS_PROVIDER.name => explicit_creds
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::AWS_CREDENTIALS_PROVIDER.name => explicit_creds
       }
     )
     result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
