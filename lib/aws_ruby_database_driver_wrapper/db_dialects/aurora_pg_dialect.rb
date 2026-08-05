@@ -21,7 +21,7 @@ module AwsRubyDatabaseDriverWrapper
   module DbDialects
     class AuroraPgDialect < PgDialect
       AURORA_UTILS_EXIST_QUERY = <<~SQL
-        SELECT (setting LIKE '%aurora_stat_utils%') AS aurora_stat_utils
+        SELECT (setting OPERATOR(pg_catalog.~~) '%aurora_stat_utils%') AS aurora_stat_utils
         FROM pg_catalog.pg_settings
         WHERE name OPERATOR(pg_catalog.=) 'rds.extensions'
       SQL
@@ -54,7 +54,7 @@ module AwsRubyDatabaseDriverWrapper
       SQL
 
       BG_TOPOLOGY_EXISTS_QUERY = <<~SQL
-        SELECT 'pg_catalog.get_blue_green_fast_switchover_metadata'::regproc
+        SELECT 'pg_catalog.get_blue_green_fast_switchover_metadata'::pg_catalog.regproc
       SQL
 
       BG_STATUS_QUERY = <<~SQL.freeze
