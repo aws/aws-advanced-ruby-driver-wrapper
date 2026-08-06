@@ -36,9 +36,8 @@ require 'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
 # instead exercise failover through the ActiveRecord adapters, which have their own plugin-specific
 # integration code that is not reachable via the raw driver:
 #   * AwsPostgreSQLAdapter / AwsMySQL2Adapter#translate_exception re-raises FailoverSuccessError so
-#     the calling query still sees it, but marks the connection for reconfiguration; FailoverFailedError
-#     is translated to ActiveRecord::ConnectionFailed.
-#   * #verify! runs configure_connection against the new physical connection once @needs_reconfiguration is set.
+#     the calling query still sees it, but first runs configure_connection against the new physical
+#     connection; FailoverFailedError is translated to ActiveRecord::ConnectionFailed.
 RSpec.describe 'Failover (ActiveRecord)', :integration,
                features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED],
                deployments: [Integration::DatabaseEngineDeployment::AURORA],
@@ -170,7 +169,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
       expect(adapter.select_value(probe[:read_sql])).to eq(probe[:expected])
     end
 
-    it 'rolls back the open transaction when failover happens mid-transaction',
+    it 'raises TransactionStateUnknownError and loses the open transaction when failover happens mid-transaction',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2)
 
@@ -189,10 +188,10 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
           rds_util.crash_instance(current_writer)
           conn.execute("INSERT INTO ar_test_failover_transaction VALUES (2, 'value2')")
         end
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
+      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError)
 
-      # After failover the connection is reconfigured against the new writer; the aborted
-      # transaction must not have committed any rows.
+      # After failover the connection is reconfigured against the new writer. The transaction was
+      # never committed, so the new writer must not have any of its rows.
       new_writer_id = current_instance_id
       expect(Integration::RetryHelper.verify_writer(rds_util, new_writer_id)).to be true
 
