@@ -192,7 +192,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(dialect_service).to receive(:network_error?).with(network_error).and_return(true)
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
+        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -233,7 +233,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(dialect_service).to receive(:read_only_error?).with(read_only_error).and_return(true)
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
+        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -266,7 +266,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
+        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -296,7 +296,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
+        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -389,7 +389,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       props[:failover_timeout_sec] = 5
       props[:failover_mode] = 'strict_writer'
       allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
-      writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::WriterResult.new(new_connection, writer_host)
+      writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
       allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       allow(connection_service).to receive(:update_current_connection)
       allow(connection_service).to receive(:current_connection).and_return(new_connection)
