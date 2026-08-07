@@ -152,7 +152,7 @@ module Integration
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
       value = row.is_a?(Hash) ? row.values.first : row[0]
-      [1, true].include?(value) ? :reader : :writer
+      [true, 1, '1', 'true', 't', 'TRUE', 'T'].include?(value) ? :reader : :writer
     end
 
     def self.sleep_sql(engine = nil)

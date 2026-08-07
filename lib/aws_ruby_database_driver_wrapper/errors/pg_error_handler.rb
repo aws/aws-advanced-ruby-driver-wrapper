@@ -40,6 +40,33 @@ module AwsRubyDatabaseDriverWrapper
         'ssl connection has been closed unexpectedly'
       ].freeze
 
+      # Failures raised while establishing a connection, where the server was never reached and so
+      # never had the chance to accept or reject the login. These are transient and worth retrying
+      # against another host. libpq discards the structured error fields for connect-time failures
+      # (there is no PGresult to attach them to), so the message text is the only signal available.
+      CONNECT_FAILURE_MESSAGES = [
+        'connection refused',
+        'timeout expired',
+        'could not translate host name',
+        'no route to host',
+        'network is unreachable',
+        'host is unreachable',
+        'could not connect to server',
+        'no such file or directory', # unix socket path does not exist
+        'connection timed out'
+      ].freeze
+
+      # Rejections issued by a server that was successfully reached. Retrying these against another
+      # host is futile because the cause is the credentials, the requested database, or server
+      # configuration rather than the network path.
+      SERVER_REJECTION_MESSAGES = [
+        LOGIN_ERROR_MESSAGE,
+        'pg_hba.conf',
+        'does not exist',
+        'is not permitted',
+        'too many clients'
+      ].freeze
+
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
       end
@@ -86,9 +113,14 @@ module AwsRubyDatabaseDriverWrapper
 
         msg = error.message&.downcase
         return false if msg.nil?
-        return false if msg.include?(LOGIN_ERROR_MESSAGE)
+        return false if server_rejection?(msg)
 
-        NETWORK_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) }
+        NETWORK_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) } ||
+          CONNECT_FAILURE_MESSAGES.any? { |pattern| msg.include?(pattern) }
+      end
+
+      def server_rejection?(msg)
+        SERVER_REJECTION_MESSAGES.any? { |pattern| msg.include?(pattern) }
       end
     end
   end

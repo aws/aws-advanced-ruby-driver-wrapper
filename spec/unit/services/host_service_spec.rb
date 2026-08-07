@@ -74,6 +74,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
   end
 
   describe '#register_host_selector' do
+    # The registry is per process, so a strategy registered by one example would leak into the next.
+    after { described_class.reset_host_selectors }
+
     it 'makes a new strategy available for selection' do
       custom_selector = instance_double('CustomSelector')
       allow(custom_selector).to receive(:select_host).and_return(reader)
@@ -82,6 +85,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
       result = service.select_host(hosts, nil, 'custom')
 
       expect(result).to eq(reader)
+    end
+
+    it 'shares the registered strategy with other HostService instances' do
+      custom_selector = instance_double('CustomSelector')
+      allow(custom_selector).to receive(:select_host).and_return(reader)
+
+      service.register_host_selector('custom', custom_selector)
+      other_service = described_class.new(service_container)
+
+      expect(other_service.select_host(hosts, nil, 'custom')).to eq(reader)
     end
 
     it 'raises an error when overriding a default strategy' do

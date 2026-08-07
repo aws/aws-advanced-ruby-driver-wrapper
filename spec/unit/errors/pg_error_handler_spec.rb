@@ -133,6 +133,46 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
       allow(error).to receive(:result).and_return(nil)
       expect(handler.network_error?(error)).to be false
     end
+
+    # libpq discards the structured error fields for failures raised while connecting, so these all
+    # arrive as a PG::ConnectionBad with no SQLSTATE and must be told apart by message alone.
+    context 'when the connection attempt never reached a server' do
+      {
+        'a refused connection' => 'connection to server at "host", port 5432 failed: Connection refused',
+        'a connect timeout' => 'connection to server at "host", port 5432 failed: timeout expired',
+        'an unresolvable host name' => 'could not translate host name "host" to address: nodename nor servname provided, or not known',
+        'an unreachable network' => 'connection to server at "host", port 5432 failed: Network is unreachable',
+        'an unreachable host' => 'connection to server at "host", port 5432 failed: No route to host',
+        'a missing unix socket' => 'connection to server on socket "/tmp/.s.PGSQL.5432" failed: No such file or directory'
+      }.each do |description, message|
+        it "returns true for #{description}" do
+          error = PG::ConnectionBad.new(message)
+          allow(error).to receive(:result).and_return(nil)
+          expect(handler.network_error?(error)).to be true
+        end
+      end
+    end
+
+    # These reached a server that then refused the login. Retrying against another host cannot help,
+    # so they must not be classified as network errors.
+    context 'when a server was reached and rejected the connection' do
+      # rubocop:disable Layout/LineLength
+      {
+        'a failed password' => 'connection to server at "host", port 5432 failed: FATAL:  password authentication failed for user "someone"',
+        'a missing pg_hba entry' => 'connection to server at "host", port 5432 failed: FATAL:  no pg_hba.conf entry for host "1.2.3.4", user "someone"',
+        'a pg_hba rejection' => 'connection to server at "host", port 5432 failed: FATAL:  pg_hba.conf rejects connection for host "1.2.3.4", user "someone"',
+        'a missing database' => 'connection to server at "host", port 5432 failed: FATAL:  database "somedb" does not exist',
+        'a missing role' => 'connection to server at "host", port 5432 failed: FATAL:  role "someone" does not exist',
+        'an exhausted connection limit' => 'connection to server at "host", port 5432 failed: FATAL:  sorry, too many clients already'
+      }.each do |description, message|
+        it "returns false for #{description}" do
+          error = PG::ConnectionBad.new(message)
+          allow(error).to receive(:result).and_return(nil)
+          expect(handler.network_error?(error)).to be false
+        end
+      end
+      # rubocop:enable Layout/LineLength
+    end
   end
 
   describe '#login_error?' do
