@@ -152,6 +152,22 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     Integration::DriverHelper.close(drv, conn2) if conn2
   end
 
+  it 'connects using explicit aws_credentials_provider' do
+    explicit_creds = Aws::CredentialProviderChain.new.resolve
+
+    conn = Integration::DriverHelper.wrapper_connect(
+      drv,
+      **iam_config,
+      **iam_props.merge(
+        AwsRubyDatabaseDriverWrapper::PropertyDefinition::AWS_CREDENTIALS_PROVIDER.name => explicit_creds
+      )
+    )
+    result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
+    expect(result.first['val'].to_i).to eq(1)
+  ensure
+    Integration::DriverHelper.close(drv, conn) if conn
+  end
+
   it 'concurrent connections share cached token' do
     # Open multiple connections in parallel — all should succeed
     threads = Array.new(5) do

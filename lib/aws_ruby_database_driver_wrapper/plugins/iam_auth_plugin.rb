@@ -34,7 +34,7 @@ module AwsRubyDatabaseDriverWrapper
         ensure_aws_sdk!
         @service_container = service_container
         @wrapper_props = props
-        @credentials_provider = PropertyDefinition::IAM_CREDENTIALS_PROVIDER.get(props) ||
+        @credentials_provider = PropertyDefinition::AWS_CREDENTIALS_PROVIDER.get(props) ||
                                 Aws::CredentialProviderChain.new.resolve
         expiration = PropertyDefinition::IAM_EXPIRATION.get_int(props)
         service_container.storage_service.register(IAM_TOKEN_CACHE_NAME, ttl: expiration)
