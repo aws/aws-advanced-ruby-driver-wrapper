@@ -27,15 +27,8 @@ module AwsRubyDatabaseDriverWrapper
       attr_accessor :host_list_provider
 
       @host_id_cache = Concurrent::Map.new
-
-      # Host selectors are registered per process rather than per HostService instance. A HostService is
-      # created for every wrapper connection, so a selector registered on one instance would be invisible
-      # to the next connection, and a selector that keeps state (a rotation counter, response times) would
-      # have that state reset each time. Sharing the registry lets one selector serve every connection.
       @strategies = Concurrent::Map.new
       DEFAULT_HOST_SELECTORS.each { |name, selector| @strategies[name] = selector }
-
-      @host_id_cache = Concurrent::Map.new
 
       def initialize(service_container)
         @service_container = service_container
@@ -51,8 +44,8 @@ module AwsRubyDatabaseDriverWrapper
           @host_id_cache.clear
         end
 
-        # Register a non-default host selector (e.g. fastest_response). The selector is shared by every
-        # HostService in the process, so it must be safe to call from multiple threads.
+        # Register a non-default host selector. The selector is shared by every HostService in the process,
+        # so it must be safe to call from multiple threads.
         #
         # @param name [String] strategy name
         # @param selector [#select_host] any object responding to select_host(hosts, role, props)
@@ -75,11 +68,6 @@ module AwsRubyDatabaseDriverWrapper
           custom_names = @strategies.keys.reject { |name| DEFAULT_HOST_SELECTORS.key?(name) }
           custom_names.each { |name| @strategies.delete(name) }
         end
-      end
-
-      # @see .register_host_selector
-      def register_host_selector(name, selector)
-        self.class.register_host_selector(name, selector)
       end
 
       # @param hosts [Array<Host::HostInfo>]

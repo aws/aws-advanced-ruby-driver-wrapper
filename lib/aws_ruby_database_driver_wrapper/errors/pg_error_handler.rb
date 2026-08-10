@@ -41,9 +41,9 @@ module AwsRubyDatabaseDriverWrapper
       ].freeze
 
       # Failures raised while establishing a connection, where the server was never reached and so
-      # never had the chance to accept or reject the login. These are transient and worth retrying
-      # against another host. libpq discards the structured error fields for connect-time failures
-      # (there is no PGresult to attach them to), so the message text is the only signal available.
+      # never had the chance to accept or reject the login. These are transient and worth retrying.
+      # libpq discards the structured error fields for connect-time failures, so the message text
+      # is the only signal available.
       CONNECT_FAILURE_MESSAGES = [
         'connection refused',
         'timeout expired',
@@ -56,9 +56,8 @@ module AwsRubyDatabaseDriverWrapper
         'connection timed out'
       ].freeze
 
-      # Rejections issued by a server that was successfully reached. Retrying these against another
-      # host is futile because the cause is the credentials, the requested database, or server
-      # configuration rather than the network path.
+      # Rejections issued by a server that was successfully reached. Retrying to connect is futile because
+      # the cause is the credentials, the requested database, or server configuration rather than the network path.
       SERVER_REJECTION_MESSAGES = [
         LOGIN_ERROR_MESSAGE,
         'pg_hba.conf',

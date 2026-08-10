@@ -19,12 +19,7 @@ require 'aws_ruby_database_driver_wrapper/host/host_availability'
 
 module Integration
   # A minimal round robin host selector, for tests only. It exists so that load balancing can be
-  # asserted rather than inferred: the only host selector the wrapper ships is 'random', which gives
-  # no guarantee about which host any single connection lands on.
-  #
-  # Register it with HostService.register_host_selector. It is deliberately not a wrapper-side
-  # selector; a production round robin selector (weighting, per-cluster rotation state, and the rest
-  # of what the other wrappers offer) is a separate piece of work.
+  # verified deterministically. Register it with HostService.register_host_selector.
   class TestRoundRobinHostSelector
     STRATEGY_NAME = 'test_round_robin'
 

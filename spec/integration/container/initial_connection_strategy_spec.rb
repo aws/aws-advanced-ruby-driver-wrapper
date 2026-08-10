@@ -258,13 +258,8 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     end
   end
 
-  # The retry loop only keeps retrying for errors the error handler classifies as network errors, and a
-  # refused connection is classified that way by MysqlErrorHandler (errno 2003) but not by
-  # PgErrorHandler, which sees a PG::ConnectionBad carrying no SQLSTATE. On pg the loop therefore
-  # re-raises the driver error instead of exhausting the timeout, so this is a MySQL-only test.
   describe 'connection retry',
-           features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
-           enable_on_engines: [Integration::DatabaseEngine::MYSQL] do
+           features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
     let(:proxy_info) { env.proxy_database_info }
 
     # Points the plugin at the proxied instance endpoints so that substituted hosts are reachable only
@@ -315,13 +310,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       rds_util.failover_cluster_and_wait_until_writer_changed
       new_writer_id = rds_util.cluster_writer_instance_id
 
-      # The pre-failover topology may still be cached with the old writer, so warm the cache after
-      # the failover to force the plugin to resolve the writer from the current topology.
-      AwsRubyDatabaseDriverWrapper.clear_caches
-      warm_topology_cache(writer_cluster_config)
-
       conn = Integration::DriverHelper.wrapper_connect(drv, **writer_cluster_config, **initial_connection_props)
-
       host = connected_host(conn)
       expect(host).not_to eq(info.cluster_endpoint)
       expect(rds_utils.rds_instance?(host)).to be true

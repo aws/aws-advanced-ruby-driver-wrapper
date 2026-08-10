@@ -73,7 +73,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
   end
 
-  describe '#register_host_selector' do
+  describe '.register_host_selector' do
     # The registry is per process, so a strategy registered by one example would leak into the next.
     after { described_class.reset_host_selectors }
 
@@ -81,7 +81,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
       custom_selector = instance_double('CustomSelector')
       allow(custom_selector).to receive(:select_host).and_return(reader)
 
-      service.register_host_selector('custom', custom_selector)
+      described_class.register_host_selector('custom', custom_selector)
       result = service.select_host(hosts, nil, 'custom')
 
       expect(result).to eq(reader)
@@ -91,7 +91,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
       custom_selector = instance_double('CustomSelector')
       allow(custom_selector).to receive(:select_host).and_return(reader)
 
-      service.register_host_selector('custom', custom_selector)
+      described_class.register_host_selector('custom', custom_selector)
       other_service = described_class.new(service_container)
 
       expect(other_service.select_host(hosts, nil, 'custom')).to eq(reader)
@@ -100,7 +100,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     it 'raises an error when overriding a default strategy' do
       custom_selector = instance_double('CustomSelector')
 
-      expect { service.register_host_selector('random', custom_selector) }
+      expect { described_class.register_host_selector('random', custom_selector) }
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Cannot override default host selection strategy/)
     end
   end
