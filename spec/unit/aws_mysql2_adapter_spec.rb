@@ -41,12 +41,24 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsMysql2Adapter do
     end
 
     context 'when exception is a FailoverSuccessError' do
-      it 'returns the original exception and sets needs_reconfiguration' do
+      it 'returns the original exception and reconfigures the connection' do
         exception = AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError.new
+        allow(adapter).to receive(:configure_connection)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
         expect(result).to eq(exception)
-        expect(adapter.instance_variable_get(:@needs_reconfiguration)).to be true
+        expect(adapter).to have_received(:configure_connection)
+      end
+    end
+
+    context 'when exception is a TransactionStateUnknownError' do
+      it 'returns the original exception and reconfigures the connection' do
+        exception = AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError.new
+        allow(adapter).to receive(:configure_connection)
+
+        result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
+        expect(result).to eq(exception)
+        expect(adapter).to have_received(:configure_connection)
       end
     end
 
@@ -55,19 +67,24 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsMysql2Adapter do
         exception = AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError.new('')
         pool = double('pool')
         adapter.instance_variable_set(:@pool, pool)
+        allow(adapter).to receive(:configure_connection)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
         expect(result).to be_a(ActiveRecord::ConnectionFailed)
         expect(adapter.instance_variable_get(:@connection_broken)).to be true
+        # There is no usable connection to reconfigure when failover failed.
+        expect(adapter).not_to have_received(:configure_connection)
       end
     end
 
     context 'when exception is a generic AwsError' do
       it 'returns the original exception unchanged' do
         exception = AwsRubyDatabaseDriverWrapper::Errors::AwsError.new('generic aws error')
+        allow(adapter).to receive(:configure_connection)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
         expect(result).to eq(exception)
+        expect(adapter).not_to have_received(:configure_connection)
       end
     end
   end
