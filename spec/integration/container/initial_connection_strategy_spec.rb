@@ -284,14 +284,42 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       )
     end
 
-    it 'times out when every substitution candidate is unreachable' do
-      enable_on_num_instances(min_instances: 2)
+    # Cuts connectivity to every proxied instance endpoint, leaving the proxied cluster endpoints up.
+    # ProxyHelper.disable_all_connectivity takes the cluster endpoints down as well.
+    def disable_instance_connectivity
+      env.proxy_instances.each { |instance| Integration::ProxyHelper.disable_connectivity(instance.instance_id) }
+    end
 
-      # Warm the topology through the proxies while they are still up, so that the plugin has instance
-      # hosts to substitute once connectivity is cut.
+    # Warms the topology through the proxies while they are still up, so that the plugin has instance
+    # hosts to substitute once connectivity is cut.
+    def warm_proxied_topology
       warmup = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
       Integration::DriverHelper.close(drv, warmup)
+    end
 
+    it 'falls back to the cluster endpoint when every substitution candidate is unreachable' do
+      enable_on_num_instances(min_instances: 2)
+      warm_proxied_topology
+
+      # Only the instance endpoints go down. The plugin works through the substitution candidates, marks
+      # each one unavailable as its connection fails, and once none are left connects via the endpoint it
+      # was given, which is still reachable.
+      disable_instance_connectivity
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
+
+      expect(connected_host(conn)).to eq(proxy_info.cluster_read_only_endpoint)
+      expect(Integration::RdsTestUtility.query_host_role(conn, env.engine)).to eq(:reader)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'times out when the cluster endpoint is unreachable as well' do
+      enable_on_num_instances(min_instances: 2)
+      warm_proxied_topology
+
+      # With the fallback endpoint down too there is nothing left to connect to, so the plugin retries
+      # until the retry timeout expires.
       Integration::ProxyHelper.disable_all_connectivity
 
       expect do
