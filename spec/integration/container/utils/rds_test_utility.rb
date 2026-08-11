@@ -250,22 +250,38 @@ module Integration
     end
 
     def simulate_temporary_failure(instance_name, delay_secs, failure_duration_secs)
+      sleep(delay_secs) if delay_secs.positive?
+
+      # Disable connectivity synchronously in the caller's thread so that any failure is raised
+      # here instead of being silently swallowed in a background thread.
+      disable_instance_connectivity(instance_name)
+
+      # Re-enable in the background after the failure window so the test can observe failover while
+      # the instance is unreachable. A failure to re-enable is logged rather than swallowed.
       Thread.new do
-        sleep(delay_secs) if delay_secs.positive?
+        sleep(failure_duration_secs)
+      ensure
         begin
-          if instance_name == '*'
-            ProxyHelper.disable_all_connectivity
-          else
-            ProxyHelper.disable_proxy(instance_name)
-          end
-          sleep(failure_duration_secs)
-        ensure
-          if instance_name == '*'
-            ProxyHelper.enable_all_connectivity
-          else
-            ProxyHelper.enable_proxy(instance_name)
-          end
+          enable_instance_connectivity(instance_name)
+        rescue StandardError => e
+          TestUtils.logger.error("Failed to re-enable connectivity for #{instance_name}: #{e.message}")
         end
+      end
+    end
+
+    def disable_instance_connectivity(instance_name)
+      if instance_name == '*'
+        ProxyHelper.disable_all_connectivity
+      else
+        ProxyHelper.disable_proxy(instance_name)
+      end
+    end
+
+    def enable_instance_connectivity(instance_name)
+      if instance_name == '*'
+        ProxyHelper.enable_all_connectivity
+      else
+        ProxyHelper.enable_proxy(instance_name)
       end
     end
 
