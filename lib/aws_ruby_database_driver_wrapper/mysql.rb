@@ -32,6 +32,7 @@ module AwsRubyDatabaseDriverWrapper
       @service_container = Services::ServiceUtility.create_standard_container(config)
       @service_container.host_service.refresh_host_list
       @async_conn = nil
+      @async_sql = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
@@ -39,13 +40,13 @@ module AwsRubyDatabaseDriverWrapper
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
     def query(sql, options = {})
-      result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options)
-      wrap_mysql_result(result)
+      result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options, sql: sql)
+      wrap_mysql_result(result, sql)
     end
 
     def prepare(sql)
-      mysql_stmt = pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, sql)
-      Mysql2WrapperStatement.new(@service_container, current_conn, mysql_stmt)
+      mysql_stmt = pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, sql, sql: sql)
+      Mysql2WrapperStatement.new(@service_container, current_conn, mysql_stmt, sql)
     end
 
     def escape(string)
@@ -63,17 +64,21 @@ module AwsRubyDatabaseDriverWrapper
     # -- Async writer (store @async_conn) --
 
     def query_async(sql, options = {})
-      result = pm.execute(RubyMethod::CONNECTION_QUERY_ASYNC, current_conn, ->(*a) { current_conn.query_async(*a) }, sql, options)
+      result = pm.execute(RubyMethod::CONNECTION_QUERY_ASYNC, current_conn, ->(*a) { current_conn.query_async(*a) }, sql, options, sql: sql)
       @async_conn = current_conn
-      wrap_mysql_result(result)
+      @async_sql = sql
+      wrap_mysql_result(result, sql)
     end
 
     # -- Async readers (check bounded to @async_conn) --
 
     def store_result
-      result = pm.execute(RubyMethod::CONNECTION_STORE_RESULT, current_conn, -> { current_conn.store_result }, bounded_conn: @async_conn)
+      result = pm.execute(RubyMethod::CONNECTION_STORE_RESULT, current_conn, -> { current_conn.store_result },
+                          bounded_conn: @async_conn, sql: @async_sql)
+      sql = @async_sql
       @async_conn = nil
-      wrap_mysql_result(result)
+      @async_sql = nil
+      wrap_mysql_result(result, sql)
     end
 
     def more_results
@@ -116,29 +121,32 @@ module AwsRubyDatabaseDriverWrapper
       @network_bound_methods ||= @service_container.dialect_service.driver_dialect.network_bound_methods
     end
 
-    def wrap_mysql_result(result)
+    def wrap_mysql_result(result, sql = nil)
       return result unless result.is_a?(Mysql2::Result)
 
-      Mysql2WrapperResult.new(result, @service_container, current_conn)
+      Mysql2WrapperResult.new(result, @service_container, current_conn, sql)
     end
   end
 
   class Mysql2WrapperStatement
-    def initialize(service_container, connection, mysql_stmt)
+    # @param sql [String, nil] the SQL the statement was prepared with, kept so that plugins
+    #   which inspect statements still see it when the statement is executed
+    def initialize(service_container, connection, mysql_stmt, sql = nil)
       @service_container = service_container
       @connection = connection
       @mysql_stmt = mysql_stmt
+      @sql = sql
     end
 
     def execute(*params, **)
       result = pm.execute(
         RubyMethod::STATEMENT_EXECUTE, current_conn,
         ->(*p, **o) { @mysql_stmt.execute(*p, **o) },
-        *params, bounded_conn: @connection, **
+        *params, bounded_conn: @connection, sql: @sql, **
       )
       return result unless result.is_a?(Mysql2::Result)
 
-      Mysql2WrapperResult.new(result, @service_container, @connection)
+      Mysql2WrapperResult.new(result, @service_container, @connection, @sql)
     end
 
     def close
@@ -184,22 +192,26 @@ module AwsRubyDatabaseDriverWrapper
   class Mysql2WrapperResult
     include Enumerable
 
-    def initialize(result, service_container, connection)
+    # @param sql [String, nil] the SQL that produced the result, kept so that plugins which
+    #   inspect statements still see it when the rows are read
+    def initialize(result, service_container, connection, sql = nil)
       @result = result
       @service_container = service_container
       @connection = connection
+      @sql = sql
     end
 
     def each(*args, &block)
-      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(*args, &blk) }, bounded_conn: @connection, &block)
+      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(*args, &blk) },
+                 bounded_conn: @connection, sql: @sql, &block)
     end
 
     def to_a
-      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection, sql: @sql)
     end
 
     def [](index)
-      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection, sql: @sql)
     end
 
     # Delegate non-network methods directly

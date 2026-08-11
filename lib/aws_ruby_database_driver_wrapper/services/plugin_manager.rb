@@ -23,15 +23,18 @@ require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
+require_relative '../plugins/kms_encryption_plugin'
 require_relative '../plugins/secrets_manager_plugin'
 require_relative '../plugins/blue_green/blue_green_plugin'
+require_relative 'plugin_call_context'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
     class PluginManager
       WEIGHT_RELATIVE_TO_PRIOR_PLUGIN = -1
       NOOP_CALLABLE = -> {}.freeze
-      private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :NOOP_CALLABLE
+      CURRENT_CALL_CONTEXT_KEY = :aws_ruby_wrapper_plugin_call_context
+      private_constant :WEIGHT_RELATIVE_TO_PRIOR_PLUGIN, :NOOP_CALLABLE, :CURRENT_CALL_CONTEXT_KEY
 
       @plugin_classes = {
         'bg' => Plugins::BlueGreen::BlueGreenPlugin,
@@ -39,6 +42,7 @@ module AwsRubyDatabaseDriverWrapper
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
+        'kmsEncryption' => Plugins::KmsEncryptionPlugin,
         'secretsManager' => Plugins::SecretsManagerPlugin
       }
 
@@ -51,7 +55,8 @@ module AwsRubyDatabaseDriverWrapper
         Plugins::FailoverPlugin => 400,
         Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
-        Plugins::SecretsManagerPlugin => 1900
+        Plugins::SecretsManagerPlugin => 1900,
+        Plugins::KmsEncryptionPlugin => 2050
       }
 
       class << self
@@ -90,7 +95,26 @@ module AwsRubyDatabaseDriverWrapper
         )
       end
 
-      def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, **kwargs, &block)
+      # The context of the call currently being executed, for plugins that need to know more about
+      # it than their own arguments say, or that need to change the arguments the target driver
+      # method is called with. See {PluginCallContext}.
+      #
+      # The context belongs to the calling thread and is restored when the call returns, so nested
+      # calls cannot see one another's.
+      #
+      # @return [PluginCallContext, nil] nil outside of a call
+      def current_call_context
+        Thread.current[CURRENT_CALL_CONTEXT_KEY]
+      end
+
+      # @return [String, nil] the SQL the call currently being executed originated from
+      def current_sql
+        current_call_context&.sql
+      end
+
+      # @param sql [String, nil] the SQL the call originated from, for plugins that inspect
+      #   statements; it is consumed here and never forwarded to the target driver method
+      def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, sql: nil, **kwargs, &block)
         if ruby_method.is_a?(MethodInfo)
           method_name = ruby_method.name
 
@@ -102,13 +126,23 @@ module AwsRubyDatabaseDriverWrapper
           method_name = ruby_method.to_s
         end
 
-        execute_with_subscribed_plugins(
-          method_name,
-          lambda do |plugin, next_plugin_callable|
-            plugin.execute(method_name, next_plugin_callable, *args, **kwargs, &block)
-          end,
-          target_callable
-        )
+        context = PluginCallContext.new(sql, args, block)
+        previous_context = Thread.current[CURRENT_CALL_CONTEXT_KEY]
+        Thread.current[CURRENT_CALL_CONTEXT_KEY] = context
+
+        begin
+          execute_with_subscribed_plugins(
+            method_name,
+            lambda do |plugin, next_plugin_callable|
+              # Read from the context rather than from args and block, so that a plugin which
+              # replaced either is honoured by the plugins after it and by the target method.
+              plugin.execute(method_name, next_plugin_callable, *context.args, **kwargs, &context.block)
+            end,
+            target_callable
+          )
+        ensure
+          Thread.current[CURRENT_CALL_CONTEXT_KEY] = previous_context
+        end
       end
 
       def num_plugins

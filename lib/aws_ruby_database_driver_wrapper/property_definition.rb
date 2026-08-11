@@ -230,6 +230,67 @@ module AwsRubyDatabaseDriverWrapper
       default_value: 500, type: Integer, validator: POSITIVE_INTEGER
     )
 
+    # -- KMS Encryption --
+    ENCRYPTION_KMS_REGION = WrapperProperty.new(
+      :encryption_kms_region,
+      'AWS region for KMS calls made by the encryption plugin. Defaults to the AWS_REGION or ' \
+      'AWS_DEFAULT_REGION environment variable, then to us-east-1.',
+      default_value: nil, type: String
+    )
+    ENCRYPTION_KMS_ENDPOINT = WrapperProperty.new(
+      :encryption_kms_endpoint, 'Custom endpoint URL for KMS', default_value: nil, type: String
+    )
+    ENCRYPTION_METADATA_SCHEMA = WrapperProperty.new(
+      :encryption_metadata_schema,
+      'Schema holding the encryption_metadata and key_storage tables',
+      default_value: 'encrypt', type: String
+    )
+    ENCRYPTION_METADATA_CACHE_ENABLED = WrapperProperty.new(
+      :encryption_metadata_cache_enabled,
+      'Cache the encryption metadata in memory instead of querying it per statement',
+      default_value: true, type: :boolean
+    )
+    ENCRYPTION_METADATA_CACHE_EXPIRATION_SEC = WrapperProperty.new(
+      :encryption_metadata_cache_expiration_sec,
+      'How long cached encryption metadata stays valid, in seconds',
+      default_value: 3600, type: Integer, validator: POSITIVE_INTEGER
+    )
+    ENCRYPTION_METADATA_CACHE_REFRESH_INTERVAL_SEC = WrapperProperty.new(
+      :encryption_metadata_cache_refresh_interval_sec,
+      'How often the encryption metadata is refreshed in the background, in seconds (0 disables background refresh)',
+      default_value: 300, type: Integer, validator: NON_NEGATIVE_INTEGER
+    )
+    ENCRYPTION_KEY_MANAGEMENT_MAX_RETRIES = WrapperProperty.new(
+      :encryption_key_management_max_retries,
+      'Maximum number of retries for throttled or failed KMS calls',
+      default_value: 3, type: Integer, validator: NON_NEGATIVE_INTEGER
+    )
+    ENCRYPTION_KEY_MANAGEMENT_RETRY_BACKOFF_BASE_MS = WrapperProperty.new(
+      :encryption_key_management_retry_backoff_base_ms,
+      'Base delay in milliseconds for the exponential backoff between KMS retries',
+      default_value: 100, type: Integer, validator: POSITIVE_INTEGER
+    )
+    ENCRYPTION_AUDIT_LOGGING_ENABLED = WrapperProperty.new(
+      :encryption_audit_logging_enabled,
+      'Log an audit record for every key management, encryption, and decryption operation',
+      default_value: false, type: :boolean
+    )
+    ENCRYPTION_DATA_KEY_CACHE_ENABLED = WrapperProperty.new(
+      :encryption_data_key_cache_enabled,
+      'Cache decrypted data keys in memory to avoid a KMS Decrypt call per statement',
+      default_value: true, type: :boolean
+    )
+    ENCRYPTION_DATA_KEY_CACHE_MAX_SIZE = WrapperProperty.new(
+      :encryption_data_key_cache_max_size,
+      'Maximum number of decrypted data keys held in memory',
+      default_value: 1000, type: Integer, validator: POSITIVE_INTEGER
+    )
+    ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC = WrapperProperty.new(
+      :encryption_data_key_cache_expiration_sec,
+      'How long a decrypted data key stays cached, in seconds',
+      default_value: 3600, type: Integer, validator: POSITIVE_INTEGER
+    )
+
     # Built once at load time from constants — used by parser to split props
     KNOWN_PROPERTIES = constants
                        .filter_map { |c| const_get(c) if const_get(c).is_a?(WrapperProperty) }
