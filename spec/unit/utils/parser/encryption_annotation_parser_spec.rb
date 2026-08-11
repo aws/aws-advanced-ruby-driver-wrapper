@@ -71,6 +71,40 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::EncryptionAnnotation
       expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn', 3 => 'users.ssn' })
     end
 
+    # pg numbers its placeholders, so the same annotation has to work in front of $n as well.
+    it 'returns a 1-based index map for an annotation on a numbered placeholder' do
+      sql = 'INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    # A numbered placeholder states its own position, so where it appears in the statement does not
+    # have to match the parameter it stands for.
+    it 'takes the index from the numbered placeholder rather than from its position' do
+      sql = 'INSERT INTO users (ssn, name) VALUES (/*@encrypt:users.ssn*/ $2, $1)'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    it 'maps multiple numbered placeholders to their own indices' do
+      sql = 'INSERT INTO users (ssn, credit_card, email) ' \
+            'VALUES (/*@encrypt:users.ssn*/ $1, /*@encrypt:users.credit_card*/ $2, $3)'
+      expect(subject.parse_annotations(sql)).to eq({ 1 => 'users.ssn', 2 => 'users.credit_card' })
+    end
+
+    it 'handles a numbered placeholder with more than one digit' do
+      sql = "INSERT INTO users (#{Array.new(10) { |i| "c#{i}" }.join(', ')}, ssn) " \
+            "VALUES (#{Array.new(10) { |i| "$#{i + 1}" }.join(', ')}, /*@encrypt:users.ssn*/ $11)"
+      expect(subject.parse_annotations(sql)).to eq({ 11 => 'users.ssn' })
+    end
+
+    it 'handles an annotation on a numbered placeholder in an UPDATE SET clause' do
+      sql = 'UPDATE users SET name = $1, ssn = /*@encrypt:users.ssn*/ $2 WHERE id = $3'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    it 'ignores an annotation that precedes neither placeholder style' do
+      expect(subject.parse_annotations("INSERT INTO users (ssn) VALUES (/*@encrypt:users.ssn*/ '123')")).to eq({})
+    end
+
     it 'returns empty hash for nil' do
       expect(subject.parse_annotations(nil)).to eq({})
     end
@@ -96,6 +130,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::EncryptionAnnotation
       expect(subject.strip_annotations(sql)).to eq('INSERT INTO users (ssn) VALUES (?)')
     end
 
+    it 'removes an annotation and preserves the numbered placeholder' do
+      sql = 'INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)'
+      expect(subject.strip_annotations(sql)).to eq('INSERT INTO users (name, ssn) VALUES ($1, $2)')
+    end
+
     it 'returns the sql unchanged when there are no annotations' do
       sql = 'INSERT INTO users (name) VALUES (?)'
       expect(subject.strip_annotations(sql)).to eq(sql)
@@ -118,6 +157,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::EncryptionAnnotation
   describe '.annotations?' do
     it 'returns true when an annotation is present' do
       expect(subject.annotations?('INSERT INTO users (ssn) VALUES (/*@encrypt:users.ssn*/ ?)')).to be true
+    end
+
+    it 'returns true when an annotation is on a numbered placeholder' do
+      expect(subject.annotations?('INSERT INTO users (ssn) VALUES (/*@encrypt:users.ssn*/ $1)')).to be true
     end
 
     it 'returns false when no annotation is present' do

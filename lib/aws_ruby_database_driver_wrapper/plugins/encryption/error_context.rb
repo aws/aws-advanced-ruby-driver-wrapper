@@ -96,14 +96,16 @@ module AwsRubyDatabaseDriverWrapper
         # @param max_attempts [Integer]
         # @return [self]
         def retry_attempt(attempt, max_attempts)
-          put(:retry_attempt, attempt).put(:max_retry_attempts, max_attempts)
+          put(:retry_attempt, attempt)
+          put(:max_retry_attempts, max_attempts)
         end
 
         # @param cache_type [String]
         # @param cache_hit [Boolean]
         # @return [self]
         def cache_info(cache_type, cache_hit)
-          put(:cache_type, cache_type).put(:cache_hit, cache_hit)
+          put(:cache_type, cache_type)
+          put(:cache_hit, cache_hit)
         end
 
         # @return [Hash] a copy of the accumulated context

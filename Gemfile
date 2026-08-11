@@ -33,6 +33,7 @@ group :development do
 end
 
 group :test do
+  gem 'aws-sdk-kms'
   gem 'aws-sdk-rds', '~> 1.315.0'
   gem 'aws-sdk-secretsmanager'
   gem 'debug'

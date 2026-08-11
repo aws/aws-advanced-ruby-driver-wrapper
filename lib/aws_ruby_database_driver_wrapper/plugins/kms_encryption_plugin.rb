@@ -356,7 +356,7 @@ module AwsRubyDatabaseDriverWrapper
         return nil if manager.nil?
 
         yield(manager)
-      rescue Encryption::Errors::MetadataError => e
+      rescue Errors::MetadataError => e
         # A metadata lookup that fails must not take the application's statement down with it: the
         # column is left as the database holds it, which is what the application would have got
         # without the plugin.

@@ -120,4 +120,54 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
       expect(rows).to eq([[1, 'Alice'], [2, 'Bob']])
     end
   end
+
+  # The rows are read after the call that produced them has returned, so a plugin which has to know
+  # which columns a row holds can only learn it from the SQL the result carries.
+  describe 'the SQL it publishes to the plugins' do
+    let(:sql) { 'SELECT ssn FROM users' }
+    let(:mysql_result) { double('Mysql2::Result') }
+    let(:connection) { double('Mysql2::Client') }
+    let(:recorded) { build_recording_container(connection) }
+    let(:container) { recorded.first }
+    let(:plugin) { recorded.last }
+    subject(:wrapper_result) { described_class.new(mysql_result, container, connection, sql) }
+
+    it 'publishes the SQL of the statement when the rows are iterated' do
+      allow(mysql_result).to receive(:each)
+      wrapper_result.each { |row| row }
+
+      expect(plugin.sql_for('result.each')).to eq([sql])
+    end
+
+    it 'publishes the SQL of the statement when the rows are collected' do
+      allow(mysql_result).to receive(:to_a).and_return([])
+      wrapper_result.to_a
+
+      expect(plugin.sql_for('result.to_a')).to eq([sql])
+    end
+
+    it 'publishes the SQL of the statement when a single row is read' do
+      allow(mysql_result).to receive(:[]).and_return({})
+      wrapper_result[0]
+
+      expect(plugin.sql_for('result.[]')).to eq([sql])
+    end
+
+    it 'publishes the SQL of the statement for every read of the same result' do
+      allow(mysql_result).to receive(:to_a).and_return([])
+      wrapper_result.to_a
+      wrapper_result.to_a
+
+      expect(plugin.sql_for('result.to_a')).to eq([sql, sql])
+    end
+
+    # A result built by a call whose SQL the wrapper does not know, such as one that went through
+    # method_missing, publishes nothing rather than the SQL of some other statement.
+    it 'publishes no SQL when it was built without any' do
+      allow(mysql_result).to receive(:to_a).and_return([])
+      described_class.new(mysql_result, container, connection).to_a
+
+      expect(plugin.sql_for('result.to_a')).to eq([nil])
+    end
+  end
 end
