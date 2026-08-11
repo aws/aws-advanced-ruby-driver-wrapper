@@ -38,7 +38,6 @@ module ActiveRecord
         # down to only PG-recognized keys in @connection_parameters.
         super
         @connection_broken = false
-        @needs_reconfiguration = false
         # Store non-AR parameters in @wrapper_config.
         wrapper_config = @config.compact.except(*AR_ONLY_KEYS)
         # Remap ActiveRecord key names to PG gem key names.
@@ -72,20 +71,11 @@ module ActiveRecord
         super
       end
 
-      def verify!
-        super
-
-        return unless @needs_reconfiguration
-
-        configure_connection
-        @needs_reconfiguration = false
-      end
-
       def translate_exception(exception, message:, sql:, binds:)
         return super unless exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
 
-        if exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
-          @needs_reconfiguration = true
+        if exception.needs_reconfiguration
+          configure_connection
           exception
         elsif exception.is_a?(AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError)
           @connection_broken = true
