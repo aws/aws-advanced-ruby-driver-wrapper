@@ -25,7 +25,7 @@ require_relative 'test_instance_info'
 
 module Integration
   class RdsTestUtility
-    READER_ROLE_VALUES = [true, 1, '1', 'true', 't', 'TRUE', 'T'].freeze
+    TRUE_VALUES = [true, 1, '1', 'true', 't', 'TRUE', 'T'].freeze
 
     def initialize(region, endpoint: nil)
       options = { region: region }
@@ -154,7 +154,7 @@ module Integration
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
       value = row.is_a?(Hash) ? row.values.first : row[0]
-      READER_ROLE_VALUES.include?(value) ? :reader : :writer
+      TRUE_VALUES.include?(value) ? :reader : :writer
     end
 
     def self.sleep_sql(engine = nil)
