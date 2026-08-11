@@ -284,12 +284,6 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       )
     end
 
-    # Cuts connectivity to every proxied instance endpoint, leaving the proxied cluster endpoints up.
-    # ProxyHelper.disable_all_connectivity takes the cluster endpoints down as well.
-    def disable_instance_connectivity
-      env.proxy_instances.each { |instance| Integration::ProxyHelper.disable_connectivity(instance.instance_id) }
-    end
-
     # Warms the topology through the proxies while they are still up, so that the plugin has instance
     # hosts to substitute once connectivity is cut.
     def warm_proxied_topology
@@ -304,7 +298,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       # Only the instance endpoints go down. The plugin works through the substitution candidates, marks
       # each one unavailable as its connection fails, and once none are left connects via the endpoint it
       # was given, which is still reachable.
-      disable_instance_connectivity
+      Integration::ProxyHelper.disable_instance_connectivity
 
       conn = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
 

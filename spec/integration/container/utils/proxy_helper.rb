@@ -26,6 +26,12 @@ module Integration
         TestEnvironment.current.proxy_infos.each { |p| disable_proxy_instance(p) }
       end
 
+      # Cuts connectivity to every proxied instance endpoint, leaving the proxied cluster endpoints up.
+      # ProxyHelper.disable_all_connectivity takes the cluster endpoints down as well.
+      def disable_instance_connectivity
+        TestEnvironment.current.proxy_instances.each { |instance| Integration::ProxyHelper.disable_connectivity(instance.instance_id) }
+      end
+
       def disable_connectivity(instance_name)
         disable_proxy(instance_name)
       end
