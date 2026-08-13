@@ -96,7 +96,6 @@ module AwsRubyDatabaseDriverWrapper
         @service_container = service_container
         @encryption_utility = encryption_utility || Encryption::KmsEncryptionUtility.new(service_container, props)
         @subscribed_methods = SUBSCRIBED_METHODS
-        logger.debug('The KMS encryption plugin is loaded')
       end
 
       # The administrative interface, for creating master keys and configuring columns.

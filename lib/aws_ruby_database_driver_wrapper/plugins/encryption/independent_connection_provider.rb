@@ -27,11 +27,8 @@ module AwsRubyDatabaseDriverWrapper
       # The plugin must not read metadata over the application's connection: that connection can
       # be inside a transaction, can be mid-failover, and its session state belongs to the
       # application. Every metadata and key lookup therefore runs on a short lived connection of
-      # its own, opened through the internal connect pipeline so that it still picks up IAM
-      # authentication, Secrets Manager credentials, and the current writer host.
-      #
-      # This is the Ruby counterpart of the JDBC wrapper's IndependentDataSource, including its
-      # request counters and health reporting.
+      # its own, opened through the internal_connect pipeline so that it still picks up IAM
+      # authentication and Secrets Manager credentials.
       class IndependentConnectionProvider
         include Logging
 

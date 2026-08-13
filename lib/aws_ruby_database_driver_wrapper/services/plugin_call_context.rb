@@ -24,8 +24,8 @@ module AwsRubyDatabaseDriverWrapper
     # Likewise {#sql} is not always among the arguments, since a result method has no SQL of its
     # own and a prepared statement only carries the name it was prepared under.
     #
-    # This is the counterpart of the JDBC wrapper's plugin call context. It belongs to a single
-    # call on a single thread, and is reached through {PluginManager#current_call_context}.
+    # This context belongs to a single call on a single thread, and is reached through
+    # {PluginManager#current_call_context}.
     class PluginCallContext
       # @return [String, nil] the SQL the call originated from, nil when the caller could not say
       attr_reader :sql

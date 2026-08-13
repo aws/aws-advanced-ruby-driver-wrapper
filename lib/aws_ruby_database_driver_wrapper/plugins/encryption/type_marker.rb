@@ -22,9 +22,6 @@ module AwsRubyDatabaseDriverWrapper
     module Encryption
       # The single byte written ahead of the ciphertext that records how the plaintext was
       # serialized, so that a decrypted payload can be turned back into a Ruby value.
-      #
-      # The numeric values are part of the on-disk format and are shared with the other AWS
-      # Advanced Wrappers. They must not be changed or reused.
       module TypeMarker
         STRING = 1
         INTEGER = 2
@@ -77,8 +74,7 @@ module AwsRubyDatabaseDriverWrapper
         # {GENERIC}, which is serialized through +to_s+.
         #
         # Ruby has a single unbounded Integer type, so integers are always written as
-        # {LONG}. {INTEGER} is still understood on read for payloads written by the other
-        # AWS Advanced Wrappers.
+        # {LONG}. {INTEGER} is still understood on read for payloads written by the wrapper.
         #
         # @param value [Object]
         # @return [Integer]

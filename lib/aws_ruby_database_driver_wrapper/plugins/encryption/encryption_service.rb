@@ -36,9 +36,6 @@ module AwsRubyDatabaseDriverWrapper
       # has not been tampered with (see the +verify_encrypted_data_hmac+ SQL function) without
       # ever holding the data key. The type marker records how the plaintext was serialized so
       # that the original Ruby type can be recovered on read.
-      #
-      # This format is shared with the other AWS Advanced Wrappers, so a column written by the
-      # JDBC wrapper can be read here and the other way around.
       module EncryptionService
         HMAC_DIGEST = 'SHA256'
         HMAC_TAG_LENGTH = 32

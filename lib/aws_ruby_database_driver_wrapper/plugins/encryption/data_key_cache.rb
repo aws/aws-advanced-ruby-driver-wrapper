@@ -76,7 +76,7 @@ module AwsRubyDatabaseDriverWrapper
           @enabled
         end
 
-        # @param key [String] the cache key, see {KeyManager#data_key_cache_key}
+        # @param key [String] the cached data key, see {KeyManager#data_key_cache_key}
         # @return [String, nil] a copy of the cached data key, or nil on a miss
         def get(key)
           return nil unless @enabled

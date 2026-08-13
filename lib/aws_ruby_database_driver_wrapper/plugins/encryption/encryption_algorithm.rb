@@ -20,8 +20,7 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
       # The symmetric algorithms the plugin can use to encrypt column values. The names are
-      # the ones stored in the +encryption_metadata.encryption_algorithm+ column and are
-      # shared with the other AWS Advanced Wrappers.
+      # the ones stored in the +encryption_metadata.encryption_algorithm+ column.
       module EncryptionAlgorithm
         AES_256_GCM = 'AES-256-GCM'
         AES_128_GCM = 'AES-128-GCM'

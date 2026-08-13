@@ -75,7 +75,7 @@ module AwsRubyDatabaseDriverWrapper
           logger.info("Creating a KMS master key: #{Sanitizer.description(description)}")
 
           request = { description: description, key_usage: 'ENCRYPT_DECRYPT', key_spec: 'SYMMETRIC_DEFAULT' }
-          request[:policy] = key_policy unless key_policy.nil? || key_policy.strip.empty?
+          request[:policy] = key_policy unless key_policy.nil? || key_policy&.strip&.empty?
 
           arn = @kms_client.create_key(**request).key_metadata.arn
           add_alias(arn) if create_alias
