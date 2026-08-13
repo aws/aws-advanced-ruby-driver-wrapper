@@ -42,7 +42,13 @@ module Integration
 
       LOGGER.info("Starting test preparation for: #{test_name}")
 
-      ProxyHelper.enable_all_connectivity if env.features.include?(TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED)
+      if env.features.include?(TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED)
+        # A previous example may have left a simulated failure pending, whose background thread re-enables
+        # connectivity once its window closes. Waiting for it here keeps that re-enable from landing in the
+        # middle of this example, after the outage this example sets up.
+        RdsTestUtility.await_pending_failures
+        ProxyHelper.enable_all_connectivity
+      end
 
       deployment = env.deployment
       return unless [DatabaseEngineDeployment::AURORA, DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER].include?(deployment)
@@ -71,6 +77,7 @@ module Integration
 
     # Re-enables all connectivity on suite teardown.
     def self.teardown_session
+      RdsTestUtility.await_pending_failures
       ProxyHelper.enable_all_connectivity
     end
 
@@ -82,9 +89,15 @@ module Integration
     def self.wait_for_instances(rds_utility, num_instances, cluster_name)
       instances = []
       deadline = Time.now + 300
+      # The SQL topology is read through the instance the previous example left first, which after a failover
+      # can be an instance that is still restarting. The cluster endpoint resolves to whichever instance is
+      # currently the writer, so it is tried as well before giving the attempt up.
+      hosts = [nil, TestEnvironment.current.database_info.cluster_endpoint].uniq
       loop do
-        begin
-          instances = rds_utility.instance_ids
+        instances = []
+        hosts.each do |host|
+          instances = rds_utility.instance_ids(host: host)
+          break unless instances.empty?
         rescue StandardError => e
           LOGGER.warn("ExceptionWhileObtainingInstanceIDs: #{e.message}")
           instances = []

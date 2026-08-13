@@ -27,6 +27,24 @@ module Integration
   class RdsTestUtility
     TRUE_VALUES = [true, 1, '1', 'true', 't', 'TRUE', 'T'].freeze
 
+    # simulate_temporary_failure re-enables connectivity from a background thread once the failure window
+    # closes, which can be after the example that started it has finished. Those threads are tracked here so
+    # that test preparation can wait for them, rather than letting a stale re-enable land in the middle of a
+    # later example.
+    @pending_failures = []
+    @pending_failures_mutex = Mutex.new
+
+    def self.await_pending_failures(timeout_secs: 60)
+      pending = @pending_failures_mutex.synchronize do
+        @pending_failures.dup.tap { @pending_failures.clear }
+      end
+      pending.each { |thread| thread.join(timeout_secs) }
+    end
+
+    def self.track_pending_failure(thread)
+      @pending_failures_mutex.synchronize { @pending_failures << thread }
+    end
+
     def initialize(region, endpoint: nil)
       options = { region: region }
       options[:endpoint] = endpoint if endpoint
@@ -258,7 +276,7 @@ module Integration
 
       # Re-enable in the background after the failure window so the test can observe failover while
       # the instance is unreachable. A failure to re-enable is logged rather than swallowed.
-      Thread.new do
+      thread = Thread.new do
         sleep(failure_duration_secs)
       ensure
         begin
@@ -267,6 +285,8 @@ module Integration
           TestUtils.logger.error("Failed to re-enable connectivity for #{instance_name}: #{e.message}")
         end
       end
+      self.class.track_pending_failure(thread)
+      thread
     end
 
     def disable_instance_connectivity(instance_name)
