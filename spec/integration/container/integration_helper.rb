@@ -89,13 +89,12 @@ module Integration
     def self.wait_for_instances(rds_utility, num_instances, cluster_name)
       instances = []
       deadline = Time.now + 300
-      # The SQL topology is read through the instance the previous example left first, which after a failover
-      # can be an instance that is still restarting. The cluster endpoint resolves to whichever instance is
-      # currently the writer, so it is tried as well before giving the attempt up.
-      hosts = [nil, TestEnvironment.current.database_info.cluster_endpoint].uniq
+      # Try to fetch the topology through the writer instance endpoint first. The instance may be restarting due to
+      # a previous failover test, so try the cluster endpoint if the writer instance endpoint fails.
+      topology_hosts = [TestEnvironment.current.writer, TestEnvironment.current.database_info.cluster_endpoint]
       loop do
         instances = []
-        hosts.each do |host|
+        topology_hosts.each do |host|
           instances = rds_utility.instance_ids(host: host)
           break unless instances.empty?
         rescue StandardError => e
