@@ -91,7 +91,7 @@ module Integration
       deadline = Time.now + 300
       # Try to fetch the topology through the writer instance endpoint first. The instance may be restarting due to
       # a previous failover test, so try the cluster endpoint if the writer instance endpoint fails.
-      topology_hosts = [TestEnvironment.current.writer, TestEnvironment.current.database_info.cluster_endpoint]
+      topology_hosts = [TestEnvironment.current.writer.host, TestEnvironment.current.database_info.cluster_endpoint]
       loop do
         instances = []
         topology_hosts.each do |host|
