@@ -21,6 +21,13 @@ require_relative 'test_utils'
 
 module Integration
   class ProxyHelper
+    # Toxiproxy's client is a memoized class level Net::HTTP object and Toxiproxy.host= closes it, so two
+    # threads driving proxies at once can close the socket out from under an in flight request, surfacing as
+    # 'IOError: stream closed in another thread'. Background threads that re-enable connectivity after a
+    # simulated failure can overlap with the next test's preparation, so every interaction with Toxiproxy is
+    # serialized here.
+    TOXIPROXY_MUTEX = Mutex.new
+
     class << self
       def disable_all_connectivity
         TestEnvironment.current.proxy_infos.each { |p| disable_proxy_instance(p) }
@@ -55,19 +62,26 @@ module Integration
       private
 
       def disable_proxy_instance(proxy_info)
-        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
-        proxy_info.proxy.disable
+        TOXIPROXY_MUTEX.synchronize do
+          Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+          proxy_info.proxy.disable
+        end
         TestUtils.logger.debug("Testing.DisabledProxy: #{proxy_info.proxy.name}")
       end
 
       def enable_proxy_instance(proxy_info)
-        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
-        proxy_info.proxy.enable
+        TOXIPROXY_MUTEX.synchronize do
+          Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+          proxy_info.proxy.enable
+        end
         TestUtils.logger.debug("Testing.EnabledProxy: #{proxy_info.proxy.name}")
       end
 
       def disable_proxy_connectivity(proxy_info)
-        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        # add_toxic uses its own connection rather than the Toxiproxy client, so it stays outside the lock.
+        TOXIPROXY_MUTEX.synchronize do
+          Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+        end
         add_toxic(proxy_info, 'DOWN-STREAM', 'downstream')
         add_toxic(proxy_info, 'UP-STREAM', 'upstream')
         TestUtils.logger.debug("Testing.DisabledConnectivity: #{proxy_info.proxy.name}")
@@ -82,9 +96,11 @@ module Integration
       end
 
       def enable_proxy_connectivity(proxy_info)
-        Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
-        proxy_info.proxy.toxics.each do |toxic|
-          toxic.destroy if %w[DOWN-STREAM UP-STREAM].include?(toxic.name)
+        TOXIPROXY_MUTEX.synchronize do
+          Toxiproxy.host = "http://#{proxy_info.control_host}:#{proxy_info.control_port}"
+          proxy_info.proxy.toxics.each do |toxic|
+            toxic.destroy if %w[DOWN-STREAM UP-STREAM].include?(toxic.name)
+          end
         end
         TestUtils.logger.debug("Testing.EnabledConnectivity: #{proxy_info.proxy.name}")
       end
