@@ -17,6 +17,7 @@
 require_relative '../logging'
 require_relative '../ruby_method'
 require_relative '../utils/parser/encryption_annotation_parser'
+require_relative '../utils/parser/query_type'
 require_relative '../utils/parser/sql_parser'
 require_relative 'encryption/column_cipher'
 require_relative 'encryption/errors'
@@ -55,6 +56,12 @@ module AwsRubyDatabaseDriverWrapper
     # names to match against the configuration: +PG::Result#each_row+, +#values+, +#column_values+
     # and +#tuple+, and mysql2's +as: :array+ option, all return values as they are stored. Read
     # such columns through +#each+, +#to_a+, +#[]+ or +PG::Result#field_values+ instead.
+    #
+    # A read and a write behave differently when the encryption configuration itself cannot be
+    # read. A read is lenient: the column is handed to the application exactly as the database
+    # holds it, which is what the application would have got without the plugin. A write fails
+    # closed and raises, because leaving the column alone there means storing the plaintext in a
+    # column that is configured to be encrypted.
     class KmsEncryptionPlugin
       include Logging
 
@@ -81,6 +88,16 @@ module AwsRubyDatabaseDriverWrapper
 
       # The result method that hands out every value of one named column.
       COLUMN_VALUES_METHOD = RubyMethod::RESULT_FIELD_VALUES.name
+
+      # Statement types whose bind parameters are stored. A configuration lookup that fails while
+      # one of these is being prepared cannot be shrugged off: the plugin would let the plaintext
+      # through to a column that is configured to be encrypted, and since the read path only
+      # decrypts payloads that pass their integrity check, the row would read back cleanly ever
+      # after and nothing would surface the leak. These statements therefore fail closed.
+      WRITE_QUERY_TYPES = Set[
+        Utils::Parser::QueryType::INSERT,
+        Utils::Parser::QueryType::UPDATE
+      ].freeze
 
       SUBSCRIBED_METHODS = (
         Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_VALUES_METHOD] + PARAMETER_METHODS.keys + ROW_METHODS
@@ -273,28 +290,39 @@ module AwsRubyDatabaseDriverWrapper
 
       # The encrypted columns a statement's bind parameters write to.
       #
+      # The statement is parsed before the plugin is made ready, since the parse says whether the
+      # statement stores its parameters and so whether a configuration that cannot be read has to
+      # be raised rather than logged.
+      #
       # @return [Hash{Integer => ColumnEncryptionConfig}] by 1-based parameter index
+      # @raise [Errors::MetadataError] when the statement stores its parameters and the encryption
+      #   configuration cannot be read
       def parameter_columns(sql)
-        return {} unless initialize_for_statement(sql)
-
         annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql)
-        inferred = sql_parser.column_parameter_mapping(stripped_sql(sql))
+        stripped = stripped_sql(sql)
+        inferred = sql_parser.column_parameter_mapping(stripped)
         return {} if annotations.empty? && inferred.empty?
 
-        tables = statement_tables(sql, annotations)
+        analysis = sql_parser.analyze_sql(stripped)
+        strict = WRITE_QUERY_TYPES.include?(analysis.query_type)
+        return {} unless ready_for_statement?(sql, strict: strict)
+
+        tables = statement_tables(analysis, annotations)
         inferred.merge(annotations).each_with_object({}) do |(index, reference), columns|
-          config = resolve_column(reference, tables)
+          config = resolve_column(reference, tables, strict: strict)
           columns[index] = config if config
         end
       end
 
-      # The encrypted columns a statement reads.
+      # The encrypted columns a statement reads. Always lenient: a column whose configuration
+      # cannot be read is simply not decrypted.
       #
       # @return [Hash{String => ColumnEncryptionConfig}] by column name
       def column_configs(sql)
-        return {} unless initialize_for_statement(sql)
+        return {} unless ready_for_statement?(sql)
 
-        tables = statement_tables(sql, Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql))
+        annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql)
+        tables = statement_tables(sql_parser.analyze_sql(stripped_sql(sql)), annotations)
         return {} if tables.empty?
 
         # When two of the statement's tables encrypt a column of the same name, the first of them
@@ -311,9 +339,10 @@ module AwsRubyDatabaseDriverWrapper
       # The tables a statement could be encrypting a column of. An annotation's table qualifier is
       # included as well, since it may name a table the parser did not report.
       #
+      # @param analysis [Utils::Parser::SqlParser::SqlAnalysisResult]
       # @return [Array<String>]
-      def statement_tables(sql, annotations)
-        tables = sql_parser.analyze_sql(stripped_sql(sql)).affected_tables.to_a
+      def statement_tables(analysis, annotations)
+        tables = analysis.affected_tables.to_a
         annotations.each_value do |reference|
           table = reference.to_s.rpartition('.').first
           next if table.empty?
@@ -327,49 +356,68 @@ module AwsRubyDatabaseDriverWrapper
 
       # @param reference [String] either +"column"+ or +"table.column"+
       # @param tables [Array<String>] the tables the statement touches, tried in order
+      # @param strict [Boolean] whether a configuration that cannot be read must be raised
       # @return [ColumnEncryptionConfig, nil] nil when the column is not encrypted
-      def resolve_column(reference, tables)
+      def resolve_column(reference, tables, strict: false)
         table, _, column = reference.to_s.rpartition('.')
         return nil if column.empty?
 
         candidates = table.empty? ? tables : [table.split('.').last]
         candidates.each do |candidate|
-          config = column_config(candidate, column)
+          config = column_config(candidate, column, strict: strict)
           return config if config
         end
 
         nil
       end
 
-      def column_config(table, column)
-        config = metadata_lookup("#{table}.#{column}") { |manager| manager.column_config(table, column) }
-        usable?(config) ? config : nil
+      def column_config(table, column, strict: false)
+        config = metadata_lookup("#{table}.#{column}", strict: strict) do |manager|
+          manager.column_config(table, column)
+        end
+        usable?(config, strict: strict) ? config : nil
       end
 
       def encrypted_columns_of(table)
         metadata_lookup(table) { |manager| manager.table_configs(table) } || []
       end
 
-      def metadata_lookup(described)
+      # @param described [String] what was being looked up, named in the log message
+      # @param strict [Boolean] whether a failed lookup must be raised rather than logged
+      def metadata_lookup(described, strict: false)
         manager = metadata_manager
         return nil if manager.nil?
 
         yield(manager)
       rescue Errors::MetadataError => e
-        # A metadata lookup that fails must not take the application's statement down with it: the
-        # column is left as the database holds it, which is what the application would have got
-        # without the plugin.
+        # On a read, a lookup that fails must not take the application's statement down with it:
+        # the column is left as the database holds it, which is what the application would have
+        # got without the plugin. A statement that stores the value has no such safe fallback,
+        # since leaving the column alone means storing the plaintext.
+        raise if strict
+
         logger.warn("Could not read the encryption configuration of #{described}: #{e.message}")
         nil
       end
 
-      def usable?(config)
+      def usable?(config, strict: false)
         return false if config.nil?
-
         return true if config.usable?
+
+        raise incomplete_config_error(config) if strict
 
         logger.warn("Skipping #{config.column_identifier}: its encryption configuration is incomplete")
         false
+      end
+
+      # A column that is configured for encryption but whose key metadata is unusable is in the
+      # same position as one whose configuration could not be read at all, and must not be stored
+      # in the clear either.
+      def incomplete_config_error(config)
+        Errors::MetadataError
+          .validation_failed("The encryption configuration of #{config.column_identifier} is incomplete")
+          .with_table(config.table_name)
+          .with_column(config.column_name)
       end
 
       def stripped_sql(sql)
@@ -381,17 +429,35 @@ module AwsRubyDatabaseDriverWrapper
       # Builds the parts of the plugin that need a database connection, the first time a statement
       # could touch an encrypted column.
       #
+      # @param strict [Boolean] whether being unable to make the plugin ready must be raised
       # @return [Boolean] whether the plugin is ready to encrypt and decrypt
-      def initialize_for_statement(sql)
+      # @raise [Errors::MetadataError] when strict and the plugin cannot be made ready
+      def ready_for_statement?(sql, strict: false)
         return false if sql.nil? || sql.to_s.strip.empty?
 
-        @encryption_utility.ensure_initialized
-        !@encryption_utility.metadata_manager.nil?
-      rescue StandardError => e
-        # The application's statement is not the place to report that the encryption tables cannot
-        # be read; every column stays as the database holds it until they can.
-        logger.warn("The KMS encryption plugin is not ready, leaving columns as they are: #{e.message}")
+        error = readiness_error
+        return true if error.nil?
+        raise error if strict
+
+        # On a read the application's statement is not the place to report that the encryption
+        # tables cannot be read; every column stays as the database holds it until they can. A
+        # statement that stores its parameters asks for the strict form instead, because there the
+        # plugin cannot tell whether the statement targets an encrypted column, and guessing that
+        # it does not would store the plaintext.
+        logger.warn("The KMS encryption plugin is not ready, leaving columns as they are: #{error.message}")
         false
+      end
+
+      # @return [Errors::MetadataError, nil] nil once the plugin is ready to encrypt and decrypt
+      def readiness_error
+        @encryption_utility.ensure_initialized
+        return nil unless @encryption_utility.metadata_manager.nil?
+
+        Errors::MetadataError.load_failed('The encryption metadata manager could not be built')
+      rescue Errors::MetadataError => e
+        e
+      rescue StandardError => e
+        Errors::MetadataError.load_failed("The KMS encryption plugin is not ready: #{e.message}")
       end
 
       def new_cipher

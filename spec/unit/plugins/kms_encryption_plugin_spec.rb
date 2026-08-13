@@ -231,15 +231,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(encryption_utility).not_to have_received(:ensure_initialized)
     end
 
-    # Encrypting with half a configuration would write a value nothing could read back.
-    it 'skips a column whose configuration has no key material, with a warning' do
+    # Encrypting with half a configuration would write a value nothing could read back, and going
+    # ahead without encrypting would store the plaintext. Neither is a safe fallback, so the
+    # statement fails instead.
+    it 'refuses to store a value in a column whose configuration has no key material' do
       configs['users.ssn'] = column_config('users', 'ssn', nil)
-      allow(plugin.send(:logger)).to receive(:warn)
 
-      call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert)
-
-      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
-      expect(plugin.send(:logger)).to have_received(:warn).with(/Skipping users\.ssn/)
+      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /users\.ssn is incomplete/)
     end
 
     it 'records a failed encryption in the audit trail and lets the failure through' do
@@ -382,8 +381,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
   end
 
+  # A read has a safe fallback and a write does not, so the two behave differently here: a read
+  # hands the column over as the database holds it, while a statement that would store a parameter
+  # raises rather than store the plaintext in a column that is configured to be encrypted.
   describe 'when the encryption tables cannot be read' do
     let(:select) { 'SELECT name, ssn FROM users WHERE name = $1' }
+    let(:insert) { 'INSERT INTO users (name, ssn) VALUES ($1, $2)' }
+    let(:unreadable) do
+      AwsRubyDatabaseDriverWrapper::Errors::MetadataError.lookup_failed('relation does not exist')
+    end
 
     # The application's statement is not the place to report that the plugin's own tables are
     # unreadable, so every column is left as the database holds it.
@@ -400,20 +406,66 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
     it 'leaves the columns alone when the metadata manager was never built' do
       allow(encryption_utility).to receive(:metadata_manager).and_return(nil)
+      allow(plugin.send(:logger)).to receive(:warn)
       rows = [{ 'ssn' => bytea(ciphertext('123-45-6789')) }]
 
       expect(call('result.to_a', sql: select, returns: rows)).to be(rows)
+      expect(plugin.send(:logger)).to have_received(:warn).with(/could not be built/)
     end
 
     it 'leaves the column alone when its configuration cannot be looked up' do
-      allow(metadata_manager).to receive(:table_configs)
-        .and_raise(AwsRubyDatabaseDriverWrapper::Errors::MetadataError.lookup_failed('relation does not exist'))
+      allow(metadata_manager).to receive(:table_configs).and_raise(unreadable)
       allow(plugin.send(:logger)).to receive(:warn)
       rows = [{ 'ssn' => bytea(ciphertext('123-45-6789')) }]
 
       expect(call('result.to_a', sql: select, returns: rows)).to be(rows)
       expect(plugin.send(:logger)).to have_received(:warn)
         .with(/Could not read the encryption configuration of users/)
+    end
+
+    it 'fails an INSERT whose column configuration cannot be looked up' do
+      allow(metadata_manager).to receive(:column_config).and_raise(unreadable)
+
+      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /relation does not exist/)
+    end
+
+    it 'fails an UPDATE whose column configuration cannot be looked up' do
+      sql = 'UPDATE users SET ssn = $1 WHERE name = $2'
+      allow(metadata_manager).to receive(:column_config).and_raise(unreadable)
+
+      expect { call('connection.exec_params', args: [sql, %w[123-45-6789 Jo]], sql: sql) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError)
+    end
+
+    # The plugin cannot tell an INSERT into an encrypted column from any other INSERT without the
+    # configuration, so it cannot let one through either.
+    it 'fails an INSERT when the plugin cannot be initialized' do
+      allow(encryption_utility).to receive(:ensure_initialized)
+        .and_raise(AwsRubyDatabaseDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
+
+      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /relation does not exist/)
+    end
+
+    it 'fails an INSERT when the metadata manager was never built' do
+      allow(encryption_utility).to receive(:metadata_manager).and_return(nil)
+
+      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /could not be built/)
+    end
+
+    # A parameter of a SELECT is compared, not stored, so there is nothing to leak by letting it
+    # through unencrypted: the comparison simply will not match.
+    it 'lets a SELECT through when its parameter cannot be checked' do
+      allow(metadata_manager).to receive(:column_config).and_raise(unreadable)
+      allow(plugin.send(:logger)).to receive(:warn)
+      sql = 'SELECT name FROM users WHERE ssn = $1'
+      args = [sql, ['123-45-6789']]
+
+      call('connection.exec_params', args: args, sql: sql)
+
+      expect(bound_args).to be(args)
     end
   end
 end
