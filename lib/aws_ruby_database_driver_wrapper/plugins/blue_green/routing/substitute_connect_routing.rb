@@ -40,7 +40,7 @@ module AwsRubyDatabaseDriverWrapper
               "#{@host}#{port_str}, " \
               "role: #{@role}, " \
               "substitute: #{@substitute_host&.host_and_port || '<null>'}, " \
-              "iamHosts: #{iam_hosts_str}]"
+              "iam_hosts: #{iam_hosts_str}]"
           end
 
           def apply(_host_info,
@@ -69,7 +69,7 @@ module AwsRubyDatabaseDriverWrapper
             if plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
               if @iam_hosts.nil? || @iam_hosts.empty?
                 raise StandardError,
-                      'Connecting with IP address when IAM authentication is enabled requires an \'iamHost\' parameter.'
+                      'Connecting with IP address when IAM authentication is enabled requires an \'iam_host\' parameter.'
               end
 
               @iam_hosts.each do |iam_host|

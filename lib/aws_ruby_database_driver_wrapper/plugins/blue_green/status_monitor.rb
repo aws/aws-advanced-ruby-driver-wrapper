@@ -518,7 +518,7 @@ module AwsRubyDatabaseDriverWrapper
           return logger.warn { 'Unable to initialize HostListProvider since connection host information is null.' } if host_info.nil?
 
           cluster_id = "#{@bgd_id}::#{@role}::#{BG_CLUSTER}"
-          logger.debug { "[#{@role}] Creating a new HostListProvider, clusterId: #{cluster_id}." }
+          logger.debug { "[#{@role}] Creating a new HostListProvider, cluster_id: #{cluster_id}." }
 
           scoped_wrapper_props = map_merge(@status_monitor_wrapper_props, PropertyDefinition::CLUSTER_ID.name => cluster_id)
           scoped_wrapper_props = map_merge(scoped_wrapper_props, PropertyDefinition::IAM_HOST.name => host_info.host) if iam_enabled?

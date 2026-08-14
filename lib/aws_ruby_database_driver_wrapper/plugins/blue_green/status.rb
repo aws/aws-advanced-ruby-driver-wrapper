@@ -51,13 +51,13 @@ module AwsRubyDatabaseDriverWrapper
 
           <<~STATUS
             #{super} [
-             bgdId: '#{@bgd_id}',
+             bgd_id: '#{@bgd_id}',
              phase: #{@current_phase},
              Connect routing:
                #{connect_str.empty? ? '-' : connect_str}
              Execute routing:
                #{execute_str.empty? ? '-' : execute_str}
-             roleByHost:
+             role_by_host:
                #{role_map.empty? ? '-' : role_map}
             ]
           STATUS
