@@ -35,6 +35,8 @@ module AwsRubyDatabaseDriverWrapper
           super
         end
 
+        # A statement nothing could be established about. Its written columns are reported as not
+        # enumerated, since a statement that could not be read may well be storing values.
         def self.unknown
           new(
             query_type: QueryType::UNKNOWN,
@@ -42,7 +44,8 @@ module AwsRubyDatabaseDriverWrapper
             write_columns: [].freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: false
+            parameterized: false,
+            write_columns_complete: false
           )
         end
       end

@@ -23,6 +23,18 @@ module AwsRubyDatabaseDriverWrapper
 
       PING_SQL = 'SELECT 1'
 
+      # Every pg call that talks to the server. A call that is not listed here is handed straight to
+      # the driver, so a method left out is a method no plugin can see: failover cannot retry it and
+      # the encryption plugin cannot inspect the statement it carries.
+      #
+      # pg gives most of these operations several spellings (+query+ and +async_query+ for +exec+, an
+      # +async_+ and a +sync_+ form for many others, a short +lo*+ form for every large object call).
+      # One entry covers every spelling of an operation, because WrapperPgConnection translates the
+      # alias to the canonical name before the pipeline is entered.
+      #
+      # Not listed, because libpq performs them without talking to the server: enter_pipeline_mode,
+      # exit_pipeline_mode, is_busy, setnonblocking, set_single_row_mode, set_chunked_rows_mode, the
+      # escaping and quoting calls, and the accessors for connection parameters and type maps.
       NETWORK_BOUND_METHODS = (COMMON_NETWORK_BOUND_METHODS | Set[
         RubyMethod::CONNECTION_EXEC.name,
         RubyMethod::CONNECTION_ASYNC_EXEC.name,
@@ -50,7 +62,29 @@ module AwsRubyDatabaseDriverWrapper
         RubyMethod::CONNECTION_LO_OPEN.name,
         RubyMethod::CONNECTION_LO_READ.name,
         RubyMethod::CONNECTION_LO_WRITE.name,
-        RubyMethod::CONNECTION_LO_CLOSE.name
+        RubyMethod::CONNECTION_LO_CLOSE.name,
+        RubyMethod::CONNECTION_CLOSE_PREPARED.name,
+        RubyMethod::CONNECTION_CLOSE_PORTAL.name,
+        RubyMethod::CONNECTION_DISCARD_RESULTS.name,
+        RubyMethod::CONNECTION_SEND_DESCRIBE_PREPARED.name,
+        RubyMethod::CONNECTION_SEND_DESCRIBE_PORTAL.name,
+        RubyMethod::CONNECTION_SEND_FLUSH_REQUEST.name,
+        RubyMethod::CONNECTION_PIPELINE_SYNC.name,
+        RubyMethod::CONNECTION_SEND_PIPELINE_SYNC.name,
+        RubyMethod::CONNECTION_BLOCK.name,
+        RubyMethod::CONNECTION_RESET_START.name,
+        RubyMethod::CONNECTION_RESET_POLL.name,
+        RubyMethod::CONNECTION_ENCRYPT_PASSWORD.name,
+        RubyMethod::CONNECTION_SET_DEFAULT_ENCODING.name,
+        RubyMethod::CONNECTION_INTERNAL_ENCODING_SET.name,
+        RubyMethod::CONNECTION_LO_CREAT.name,
+        RubyMethod::CONNECTION_LO_CREATE.name,
+        RubyMethod::CONNECTION_LO_IMPORT.name,
+        RubyMethod::CONNECTION_LO_EXPORT.name,
+        RubyMethod::CONNECTION_LO_UNLINK.name,
+        RubyMethod::CONNECTION_LO_LSEEK.name,
+        RubyMethod::CONNECTION_LO_TELL.name,
+        RubyMethod::CONNECTION_LO_TRUNCATE.name
       ]).freeze
 
       def connect(host_info, config)

@@ -77,6 +77,13 @@ module AwsRubyDatabaseDriverWrapper
         CREATE_KEYWORD = /\ACREATE\b/
         DROP_KEYWORD   = /\ADROP\b/
 
+        # Whitespace and comments in front of a statement. Query instrumentation and ORMs prepend a
+        # comment routinely, and it says nothing about what the statement does.
+        LEADING_NOISE  = %r{\A(?:\s+|/\*.*?\*/|--[^\n]*|\#[^\n]*)+}m
+        CTE_START      = /\AWITH\s+(?:RECURSIVE\s+)?/i
+        CTE_NAME       = /\A#{IDENTIFIER_NC}\s*/
+        CTE_AS         = /\AAS\s+(?:(?:NOT\s+)?MATERIALIZED\s*)?/i
+
         STRIP_QUOTES   = /\A[`"']|[`"']\z/
 
         module_function
@@ -84,18 +91,75 @@ module AwsRubyDatabaseDriverWrapper
         def analyze(sql)
           return QueryAnalysis.unknown unless sql.is_a?(String) && !sql&.strip&.empty?
 
-          normalized_sql = sql.upcase.lstrip
+          body, preceding_parameters = statement_body(sql)
+          return QueryAnalysis.unknown if body.nil?
 
-          case normalized_sql
+          # A statement that writes is read from its keyword onwards, so that a value list belonging
+          # to a common table expression is not mistaken for its own. A SELECT is read from the whole
+          # text, so that the tables a common table expression reads are reported as well.
+          case body.upcase
           when SELECT_KEYWORD then extract_select(sql)
-          when INSERT_KEYWORD then extract_insert(sql)
-          when UPDATE_KEYWORD then extract_update(sql)
-          when DELETE_KEYWORD then extract_delete(sql)
-          when CREATE_KEYWORD then extract_create(sql)
-          when DROP_KEYWORD   then extract_drop(sql)
+          when INSERT_KEYWORD then extract_insert(body, preceding_parameters + 1)
+          when UPDATE_KEYWORD then extract_update(body, preceding_parameters + 1)
+          when DELETE_KEYWORD then extract_delete(body)
+          when CREATE_KEYWORD then extract_create(body)
+          when DROP_KEYWORD   then extract_drop(body)
           else
             QueryAnalysis.unknown
           end
+        end
+
+        # A statement with whatever precedes its keyword taken off.
+        #
+        # @return [Array(String, Integer)] the statement from its own keyword onwards, and the number
+        #   of bind parameters that come before it; a pair of nils when what precedes the keyword
+        #   cannot be read, since then neither the statement nor its parameter numbering is known
+        def statement_body(sql)
+          body = sql.sub(LEADING_NOISE, '')
+          return [body, 0] unless CTE_START.match?(body)
+
+          rest = cte_tail(body)
+          return [nil, nil] if rest.nil?
+
+          [rest.sub(LEADING_NOISE, ''), placeholder_count(body[0...(body.length - rest.length)])]
+        end
+
+        # Walks a +WITH+ clause, one +name [(columns)] AS (subquery)+ entry at a time.
+        #
+        # @return [String, nil] the text that follows the clause, or nil when an entry could not be
+        #   taken apart
+        def cte_tail(text)
+          rest = text.sub(CTE_START, '')
+
+          loop do
+            rest = rest.sub(LEADING_NOISE, '')
+            name = CTE_NAME.match(rest)
+            return nil unless name
+
+            rest = rest[name.end(0)..]
+            rest = skip_group(rest) if rest.start_with?('(') # the entry names its own columns
+            return nil if rest.nil?
+
+            as_keyword = CTE_AS.match(rest)
+            return nil unless as_keyword
+
+            rest = skip_group(rest[as_keyword.end(0)..])
+            return nil if rest.nil?
+
+            rest = rest.lstrip
+            break unless rest.start_with?(',')
+
+            rest = rest[1..]
+          end
+
+          rest
+        end
+
+        # @return [String, nil] the text that follows a leading +(...)+, or nil when it is not
+        #   balanced
+        def skip_group(text)
+          _group, rest = balanced_group(text)
+          rest&.lstrip
         end
 
         def extract_select(sql)
@@ -111,9 +175,10 @@ module AwsRubyDatabaseDriverWrapper
           )
         end
 
-        def extract_insert(sql)
+        # @param first_index [Integer] the number the statement's first bind parameter has
+        def extract_insert(sql, first_index = 1)
           table = extract_first_capture(INSERT_INTO, sql)
-          bound, unbound, complete = extract_insert_columns(sql, table)
+          bound, unbound, complete = extract_insert_columns(sql, table, first_index)
           QueryAnalysis.new(
             query_type: QueryType::INSERT,
             tables: table ? [table].freeze : [].freeze,
@@ -126,9 +191,10 @@ module AwsRubyDatabaseDriverWrapper
           )
         end
 
-        def extract_update(sql)
+        # @param first_index [Integer] the number the statement's first bind parameter has
+        def extract_update(sql, first_index = 1)
           table = extract_first_capture(UPDATE_TABLE, sql)
-          set_cols, unbound, complete = extract_set_columns(sql, table)
+          set_cols, unbound, complete = extract_set_columns(sql, table, first_index)
           where_cols = extract_where_columns(sql)
           QueryAnalysis.new(
             query_type: QueryType::UPDATE,
@@ -199,11 +265,12 @@ module AwsRubyDatabaseDriverWrapper
         # the statement does not carry, and with a nested SELECT the values never pass through the
         # client at all.
         #
+        # @param first_index [Integer] the number the statement's first bind parameter has
         # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] the columns filled by a bind
         #   parameter, those filled by something else, and whether every written column was found
-        def extract_insert_columns(sql, table_name)
+        def extract_insert_columns(sql, table_name, first_index = 1)
           declared = INSERT_COLUMNS.match(sql)
-          return extract_set_columns(sql, table_name) unless declared
+          return extract_set_columns(sql, table_name, first_index) unless declared
 
           columns = split_top_level(declared[1])&.map { |column_token| strip_quotes(column_token) }
           rows, trailing = value_rows(sql[declared.end(0)..])
@@ -212,7 +279,7 @@ module AwsRubyDatabaseDriverWrapper
           bound = []
           unbound = []
           complete = true
-          index = 1
+          index = first_index
 
           rows.each do |values|
             complete = false unless values.length == columns.length
@@ -234,12 +301,13 @@ module AwsRubyDatabaseDriverWrapper
           [bound + upsert_bound, unbound + upsert_unbound, complete && upsert_complete]
         end
 
+        # @param first_index [Integer] the number the statement's first bind parameter has
         # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] as extract_insert_columns
-        def extract_set_columns(sql, table_name)
+        def extract_set_columns(sql, table_name, first_index = 1)
           match = SET_CLAUSE.match(sql)
           return [[], [], false] unless match
 
-          bound, unbound, complete, = extract_assignments(match[1], table_name, 1)
+          bound, unbound, complete, = extract_assignments(match[1], table_name, first_index)
           [bound, unbound, complete]
         end
 

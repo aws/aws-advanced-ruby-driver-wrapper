@@ -114,10 +114,18 @@ module AwsRubyDatabaseDriverWrapper
         Utils::Parser::QueryType::UPDATE
       ].freeze
 
-      # A statement that stores values, as far as its first keyword goes. The keyword is looked at
-      # as well as the parse, because a statement the parser could not read has no query type, and
-      # that is precisely the case that must not be mistaken for a read.
-      WRITE_KEYWORDS = /\A[\s(]*(?:INSERT|UPDATE|REPLACE|UPSERT|MERGE)\b/i
+      # A statement that stores values, as far as its keywords go. The keywords are looked at as well
+      # as the parse, because a statement the parser could not read has no query type, and that is
+      # precisely the case that must not be mistaken for a read.
+      #
+      # The keyword is not always the first thing in the text. Query instrumentation prepends a
+      # comment routinely, and a common table expression can come in front of a statement that
+      # writes, so both are stepped over before the keyword is looked for.
+      WRITE_KEYWORDS = %r{
+        \A(?:\s|\(|/\*.*?\*/|--[^\n]*|\#[^\n]*)*   # comments and whitespace in front of it
+        (?:WITH\s.*?\s)?                           # a common table expression in front of it
+        (?:INSERT|UPDATE|REPLACE|UPSERT|MERGE)\b
+      }imx
 
       SUBSCRIBED_METHODS = (
         Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_VALUES_METHOD] +

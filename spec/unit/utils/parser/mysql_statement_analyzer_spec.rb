@@ -377,4 +377,81 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       expect(result.unbound_write_columns.map(&:column_name)).to eq(['name'])
     end
   end
+
+  # The keyword that says what a statement does is not always the first thing in the text. Query
+  # instrumentation prepends a comment, and MySQL accepts a WITH clause in front of a statement that
+  # writes as readily as in front of one that reads. Reading either as an unrecognized statement
+  # would leave a write looking like a read, and its parameters would go to the database as they are.
+  describe '.analyze past what precedes the keyword' do
+    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+
+    it 'reads an INSERT behind a block comment' do
+      result = subject.analyze('/* app:checkout,controller:orders */ INSERT INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(result.query_type).to eq(query_type::INSERT)
+      expect(result.tables).to include('users')
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'reads an UPDATE behind a line comment' do
+      result = subject.analyze("-- audit\nUPDATE users SET ssn = ? WHERE id = ?")
+
+      expect(result.query_type).to eq(query_type::UPDATE)
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+    end
+
+    it 'reads an INSERT behind a hash comment' do
+      result = subject.analyze("# audit\nINSERT INTO users SET name = ?, ssn = ?")
+
+      expect(result.query_type).to eq(query_type::INSERT)
+      expect(result.write_columns.map(&:column_name)).to eq(%w[name ssn])
+    end
+
+    it 'reads an INSERT behind a common table expression' do
+      result = subject.analyze('WITH recent AS (SELECT 1) INSERT INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(result.query_type).to eq(query_type::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'reads an UPDATE behind a recursive common table expression that names its columns' do
+      result = subject.analyze('WITH RECURSIVE t (a) AS (SELECT 1) UPDATE users SET ssn = ? WHERE id = ?')
+
+      expect(result.query_type).to eq(query_type::UPDATE)
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+    end
+
+    it 'reads an INSERT behind several common table expressions' do
+      result = subject.analyze('WITH a AS (SELECT 1), b AS (SELECT 2) INSERT INTO users (ssn) VALUES (?)')
+
+      expect(result.query_type).to eq(query_type::INSERT)
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+    end
+
+    # A parameter of the common table expression is bound before the ones the statement writes, so
+    # the numbering the caller sees starts past it.
+    it 'counts the bind parameters of the common table expression before the ones it writes' do
+      result = subject.analyze('WITH t AS (SELECT ? AS a) INSERT INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 2], ['ssn', 3]])
+    end
+
+    it 'still reads the tables a common table expression reads on a SELECT' do
+      result = subject.analyze('WITH t AS (SELECT * FROM audit) SELECT ssn FROM users WHERE id = ?')
+
+      expect(result.query_type).to eq(query_type::SELECT)
+      expect(result.tables).to include('users', 'audit')
+    end
+
+    # Nothing is guessed from a clause that would not come apart: what the statement is, and which
+    # parameter fills which column, both depend on reading the clause through.
+    it 'reports a statement behind a clause it cannot read as unknown' do
+      result = subject.analyze('WITH t AS (SELECT ((( INSERT INTO users (ssn) VALUES (?)')
+
+      expect(result.query_type).to eq(query_type::UNKNOWN)
+      expect(result.tables).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+  end
 end

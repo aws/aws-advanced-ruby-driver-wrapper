@@ -388,6 +388,31 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(call('result.to_a', sql: 'SELECT name, ssn FROM users', returns: [row]))
         .to eq([{ 'name' => 'Jo', 'ssn' => '123-45-6789' }])
     end
+
+    # Query instrumentation prepends a comment to every statement it sees, so a write arriving behind
+    # one is ordinary rather than exotic, and it has to be encrypted like any other.
+    it 'encrypts the parameters of a write behind a comment' do
+      call('statement.execute', args: %w[Jo 123-45-6789],
+                                sql: '/* app:checkout */ INSERT INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(bound_args.first).to eq('Jo')
+      expect(plaintext(bound_args.last)).to eq('123-45-6789')
+    end
+
+    it 'encrypts the parameters of a write behind a common table expression' do
+      call('statement.execute', args: %w[Jo 123-45-6789],
+                                sql: 'WITH t AS (SELECT 1) INSERT INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(plaintext(bound_args.last)).to eq('123-45-6789')
+    end
+
+    it 'refuses a write behind a clause it could not read' do
+      sql = 'WITH t AS (SELECT ((( INSERT INTO users (name, ssn) VALUES (?, ?)'
+
+      expect { call('statement.execute', args: %w[Jo 123-45-6789], sql: sql) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError,
+                        /neither the tables nor the columns it writes/)
+    end
   end
 
   # A read has a safe fallback and a write does not, so the two behave differently here: a read
