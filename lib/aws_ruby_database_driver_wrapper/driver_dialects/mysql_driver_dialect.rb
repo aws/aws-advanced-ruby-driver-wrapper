@@ -46,10 +46,14 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def execute(connection, sql)
+        raise Mysql2::Error, 'MySQL client is not connected' if connection.nil? || connection.closed?
+
         connection.query(sql)
       end
 
       def execute_with_params(connection, sql, params)
+        raise Mysql2::Error, 'MySQL client is not connected' if connection.nil? || connection.closed?
+
         stmt = connection.prepare(sql)
         stmt.execute(*params)
       ensure
@@ -63,11 +67,13 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def closed?(connection)
-        connection.closed?
+        connection.nil? || connection.closed?
+      rescue StandardError
+        true
       end
 
       def close_connection(connection)
-        return if connection.closed?
+        return if connection.nil? || connection.closed?
 
         connection.close
       rescue StandardError => e

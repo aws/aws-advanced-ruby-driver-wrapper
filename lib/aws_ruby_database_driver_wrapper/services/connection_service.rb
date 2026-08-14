@@ -64,6 +64,14 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection [Object] the new connection
       # @param host_info [Host::HostInfo] host info for the new connection
       def update_current_connection(connection, host_info)
+        if connection.nil?
+          AwsRubyDatabaseDriverWrapper.logger.warn do
+            '[ConnectionService] update_current_connection called with nil connection! ' \
+              "host_info=#{host_info&.host}, caller=#{caller(1, 5).join(' <- ')}"
+          end
+          return # preserve existing connection over setting to nil
+        end
+
         @connection_switch_lock.synchronize do
           # Close the connection being replaced so it does not leak.
           previous = @current_connection
@@ -72,6 +80,16 @@ module AwsRubyDatabaseDriverWrapper
           @current_connection = connection
           @current_host_info = host_info
           @service_container.session_state_service.reset
+        end
+      end
+
+      # Updates the current host info without replacing the connection.
+      # Used when the host is renamed (e.g., BG switchover) but the connection remains valid.
+      #
+      # @param host_info [Host::HostInfo] the updated host info
+      def update_host_info(host_info)
+        @connection_switch_lock.synchronize do
+          @current_host_info = host_info
         end
       end
 

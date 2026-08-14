@@ -20,7 +20,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MysqlDialect do
   let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
-  let(:connection) { instance_double('Mysql2::Client') }
+  let(:connection) { instance_double('Mysql2::Client', closed?: false) }
 
   describe '#dialect?' do
     it 'returns true when version_comment contains mysql' do

@@ -20,7 +20,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect do
   let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
-  let(:connection) { instance_double('Mysql2::Client') }
+  let(:connection) { instance_double('Mysql2::Client', closed?: false) }
 
   describe '#dialect?' do
     it 'returns true when aurora_version variable exists' do

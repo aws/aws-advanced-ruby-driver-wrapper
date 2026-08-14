@@ -46,6 +46,11 @@ module AwsRubyDatabaseDriverWrapper
 
         conn = driver_dialect.connect(target_host_info, driver_props)
 
+        if conn.nil?
+          raise Errors::AwsError,
+                "Failed to connect to #{target_host_info&.host}: driver returned nil connection"
+        end
+
         # If host was not specified (Unix socket / localhost), fill in from the live connection.
         if host_info.nil? || !host_info.host_specified?
           host_info = Host::HostInfo.new(

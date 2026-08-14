@@ -47,12 +47,13 @@ module AwsRubyDatabaseDriverWrapper
                     driver_props,
                     wrapper_props,
                     is_initial_connection,
-                    service_container)
+                    service_container,
+                    is_internal: false)
             plugin_manager = service_container.plugin_manager
             dialect_service = service_container.dialect_service
 
             unless Utils::RdsUtils.ip?(@substitute_host.host)
-              return plugin_manager.connect(@substitute_host, driver_props, is_initial_connection)
+              return open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal)
             end
 
             # mysql2 uses :host for both socket connection and TLS CN verification.
@@ -62,7 +63,7 @@ module AwsRubyDatabaseDriverWrapper
             # hostname for TLS regardless of the socket address.
             if driver_props[:sslca] && !plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
               hostname_host = @substitute_host.deep_dup(host: @host)
-              return plugin_manager.connect(hostname_host, driver_props, is_initial_connection)
+              return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal)
             end
 
             if plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
@@ -100,11 +101,25 @@ module AwsRubyDatabaseDriverWrapper
               return nil
             end
 
-            plugin_manager.connect(@substitute_host, driver_props, is_initial_connection)
+            open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal)
           rescue StandardError => e
             raise unless dialect_service.login_error?(e)
 
             nil
+          end
+
+          private
+
+          # Opens a connection through the plugin pipeline. Monitoring connections (is_internal: true)
+          # must use internal_connect so they do NOT mutate the shared current connection — otherwise
+          # one monitor thread's connect would close another monitor thread's live connection via
+          # update_current_connection, causing a use-after-free segfault in the mysql2 C extension.
+          def open_connection(plugin_manager, host, driver_props, wrapper_props, is_initial_connection, is_internal)
+            if is_internal
+              plugin_manager.internal_connect(host, driver_props, wrapper_props, is_initial_connection)
+            else
+              plugin_manager.connect(host, driver_props, is_initial_connection)
+            end
           end
         end
       end

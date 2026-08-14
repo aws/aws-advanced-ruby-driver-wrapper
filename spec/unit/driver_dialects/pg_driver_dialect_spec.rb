@@ -23,7 +23,7 @@ require 'concurrent'
 RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
   subject(:dialect) { described_class.new }
 
-  let(:connection) { instance_double('PG::Connection') }
+  let(:connection) { instance_double('PG::Connection', finished?: false) }
   let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
   let(:config) do
     Concurrent::Map.new.tap do |m|

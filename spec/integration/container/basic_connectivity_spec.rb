@@ -44,6 +44,12 @@ RSpec.describe 'BasicConnectivity', :integration,
     skip 'No allowed drivers for this environment' if drv.nil?
   end
 
+  after(:each) do
+    Integration::ProxyHelper.enable_all_connectivity
+  rescue IOError
+    # Proxy control connection is dead — nothing to re-enable
+  end
+
   it 'direct connection' do
     conn = Integration::DriverHelper.native_connect(drv, **base_config)
     expect(query_one(conn)).to eq(1)

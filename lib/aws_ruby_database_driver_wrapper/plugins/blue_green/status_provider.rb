@@ -185,6 +185,7 @@ module AwsRubyDatabaseDriverWrapper
           old_monitors.each_value { |m| m&.stop }
 
           Plugins::IamAuthPlugin.clear_cache(@storage_service) if iam_enabled?
+          @storage_service.remove(Host::RdsHostListProvider::TOPOLOGY_CACHE_NAME, @cluster_id)
 
           @rollback = false
           @green_topology_recognized_logged = false
@@ -306,6 +307,7 @@ module AwsRubyDatabaseDriverWrapper
             @host_mapper.update(@interim_statuses[Role::SOURCE], @interim_statuses[Role::TARGET])
 
             update_summary_status(role, interim_status)
+            check_switchover_timer_expiry
             update_monitors
             update_status_cache
             log_current_context

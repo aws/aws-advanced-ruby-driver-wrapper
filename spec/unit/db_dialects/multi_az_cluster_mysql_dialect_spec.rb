@@ -20,7 +20,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterMysqlDial
   let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
-  let(:connection) { instance_double('Mysql2::Client') }
+  let(:connection) { instance_double('Mysql2::Client', closed?: false) }
 
   describe '#dialect?' do
     it 'returns true when topology table exists, has data, and report_host is not empty' do

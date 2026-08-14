@@ -41,7 +41,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::StatusProvider,
   let(:green_cluster_ep)  { 'blue-green-xyz.cluster-abc.us-east-1.rds.amazonaws.com' }
   let(:green_cluster_ro)  { 'blue-green-xyz.cluster-ro-abc.us-east-1.rds.amazonaws.com' }
 
-  let(:storage_service) { double('storage_service', get: nil, set: nil) }
+  let(:storage_service) { double('storage_service', get: nil, set: nil, remove: nil) }
   let(:event_publisher) { double('event_publisher', publish: nil) }
   let(:db_dialect)      { double('db_dialect', blue_green_status_available?: true, create_host_list_provider: nil) }
   let(:driver_dialect)  { double('driver_dialect') }

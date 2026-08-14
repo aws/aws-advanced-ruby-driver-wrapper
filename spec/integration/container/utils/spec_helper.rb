@@ -95,6 +95,14 @@ RSpec.configure do |config|
   config.include_context 'integration setup', :integration
   config.include Integration::ConditionChecker, :integration
 
+  # When TEST_BG_ONLY is set, run only blue_green-tagged specs.
+  # When EXCLUDE_BG is set, exclude blue_green-tagged specs.
+  if ENV['TEST_BG_ONLY'] == 'true'
+    config.filter_run_including(blue_green: true)
+  elsif ENV['EXCLUDE_BG'] == 'true'
+    config.filter_run_excluding(blue_green: true)
+  end
+
   config.before(:each, :integration) do |example|
     if (deployments = example.metadata[:deployments])
       enable_on_deployments(*deployments)

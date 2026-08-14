@@ -332,7 +332,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
     end
 
     context 'MySQL driver' do
-      let(:connection) { instance_double('Mysql2::Client') }
+      let(:connection) { instance_double('Mysql2::Client', closed?: false) }
       let(:host) { 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com' }
       let(:global_patterns) { '?.xyz.us-east-2.rds.amazonaws.com,?.abc.us-west-2.rds.amazonaws.com' }
       let(:conn_service) { build_connection_service(host: host) }
