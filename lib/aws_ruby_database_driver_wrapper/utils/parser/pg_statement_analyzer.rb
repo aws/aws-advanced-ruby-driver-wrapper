@@ -36,14 +36,37 @@ module AwsRubyDatabaseDriverWrapper
 
           begin
             result = ::PgQuery.parse(sql)
-            stmt = result.tree.stmts.first&.stmt
+            statements = result.tree.stmts
+            stmt = statements.first&.stmt
             return QueryAnalysis.unknown unless stmt
 
             stmt_hash = stmt.to_h
-            extract_from_stmt(stmt_hash, parameterized?(stmt_hash))
+            analysis = extract_from_stmt(stmt_hash, parameterized?(stmt_hash))
+            statements.length > 1 ? with_trailing_statements(analysis, statements) : analysis
           rescue ::PgQuery::ParseError
             fallback_analysis(sql)
           end
+        end
+
+        # Only the first statement of a multi-statement string is analyzed, so what the rest of them
+        # write is unknown. Their tables are still collected, since a caller that has to decide
+        # whether the string touches an encrypted column needs to know about them.
+        # @return [QueryAnalysis]
+        def with_trailing_statements(analysis, statements)
+          tables = statements.flat_map { |wrapped| statement_tables(wrapped.stmt.to_h) }
+          analysis.with(
+            tables: (analysis.tables | tables).freeze,
+            write_columns_complete: false
+          )
+        end
+
+        # A SELECT names its tables in a FROM clause; the statements that write name the one they
+        # write in a relation of their own.
+        def statement_tables(stmt)
+          return extract_tables_from_clause(Array(stmt.dig(:select_stmt, :from_clause))) if stmt.key?(:select_stmt)
+
+          written = stmt.values_at(:insert_stmt, :update_stmt, :delete_stmt).compact.first
+          written ? [written.dig(:relation, :relname)].compact : []
         end
 
         # Dispatches a parsed statement hash to the appropriate extract_* method.
@@ -79,28 +102,26 @@ module AwsRubyDatabaseDriverWrapper
 
         def extract_insert(stmt, parameterized)
           table = stmt.dig(:relation, :relname)
-          columns = Array(stmt[:cols]).map do |column_entry|
-            ColumnInfo.new(table_name: table, column_name: column_entry[:res_target][:name])
-          end
+          declared = Array(stmt[:cols]).filter_map { |column_entry| column_entry.dig(:res_target, :name) }
+          value_rows = Array(stmt.dig(:select_stmt, :select_stmt, :values_lists))
+          bound, unbound, complete = extract_values(table, declared, value_rows)
+          upsert_bound, upsert_unbound = extract_assignments(table, Array(stmt.dig(:on_conflict_clause, :target_list)))
 
           QueryAnalysis.new(
             query_type: QueryType::INSERT,
             tables: table ? [table].freeze : [].freeze,
-            write_columns: columns.freeze,
+            write_columns: (bound + upsert_bound).freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: parameterized
+            parameterized: parameterized,
+            unbound_write_columns: (unbound + upsert_unbound).freeze,
+            write_columns_complete: complete
           )
         end
 
         def extract_update(stmt, parameterized)
           table = stmt.dig(:relation, :relname)
-          set_cols = Array(stmt[:target_list]).filter_map do |target|
-            res_target = target[:res_target]
-            next unless res_target && param_ref?(res_target[:val])
-
-            ColumnInfo.new(table_name: table, column_name: res_target[:name])
-          end
+          set_cols, unbound = extract_assignments(table, Array(stmt[:target_list]))
           where_cols = parameterized ? extract_where_columns(stmt[:where_clause]) : []
 
           QueryAnalysis.new(
@@ -109,8 +130,68 @@ module AwsRubyDatabaseDriverWrapper
             write_columns: set_cols.freeze,
             where_columns: where_cols.freeze,
             for_update: false,
-            parameterized: parameterized
+            parameterized: parameterized,
+            unbound_write_columns: unbound.freeze
           )
+        end
+
+        # Pairs each declared column of an INSERT with the value expression that fills it, for every
+        # row of the VALUES list, and reports which parameter supplies it.
+        #
+        # An INSERT can only be read column by column when it does both of those things. Without a
+        # column list the values are positional over the table's own column order, which the
+        # statement does not carry; with a nested SELECT the values never pass through the client at
+        # all. Either way the columns it writes cannot be enumerated.
+        #
+        # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] the columns filled by a bind
+        #   parameter, those filled by something else, and whether every written column was found
+        def extract_values(table, declared, value_rows)
+          return [[], [], false] if declared.empty? || value_rows.empty?
+
+          bound = []
+          unbound = []
+          complete = true
+
+          value_rows.each do |row|
+            values = Array(row.dig(:list, :items))
+            complete = false unless values.length == declared.length
+
+            declared.each_with_index do |column_name, position|
+              value = values[position]
+              if param_ref?(value)
+                bound << ColumnInfo.new(table_name: table, column_name: column_name, parameter_index: param_number(value))
+              elsif !null_const?(value)
+                unbound << ColumnInfo.new(table_name: table, column_name: column_name)
+              end
+            end
+          end
+
+          [bound, unbound, complete]
+        end
+
+        # The assignments of an UPDATE's SET clause, or of an +ON CONFLICT DO UPDATE SET+ clause,
+        # which have the same shape.
+        #
+        # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>)] the columns assigned from a bind
+        #   parameter, and those assigned from something else
+        def extract_assignments(table, target_list)
+          bound = []
+          unbound = []
+
+          target_list.each do |target|
+            res_target = target[:res_target]
+            column_name = res_target && res_target[:name]
+            next unless column_name
+
+            value = res_target[:val]
+            if param_ref?(value)
+              bound << ColumnInfo.new(table_name: table, column_name: column_name, parameter_index: param_number(value))
+            elsif !null_const?(value)
+              unbound << ColumnInfo.new(table_name: table, column_name: column_name)
+            end
+          end
+
+          [bound, unbound]
         end
 
         def extract_delete(stmt, parameterized)
@@ -206,11 +287,11 @@ module AwsRubyDatabaseDriverWrapper
           when :AEXPR_IN, :AEXPR_BETWEEN, :AEXPR_BETWEEN_SYM
             # rexpr is a list — emit one entry per param_ref item
             Array(rexpr.dig(:list, :items)).each do |item|
-              cols << ColumnInfo.new(table_name: nil, column_name: col_name) if param_ref?(item)
+              cols << ColumnInfo.new(table_name: nil, column_name: col_name, parameter_index: param_number(item)) if param_ref?(item)
             end
           else
             # AEXPR_OP, AEXPR_OP_ANY, AEXPR_OP_ALL — rexpr is a single node
-            cols << ColumnInfo.new(table_name: nil, column_name: col_name) if param_ref?(rexpr)
+            cols << ColumnInfo.new(table_name: nil, column_name: col_name, parameter_index: param_number(rexpr)) if param_ref?(rexpr)
           end
         end
 
@@ -220,13 +301,25 @@ module AwsRubyDatabaseDriverWrapper
           expr.key?(:param_ref)
         end
 
+        # @return [Integer, nil] which parameter the expression is, 1-based, as written in the SQL
+        def param_number(expr)
+          expr.dig(:param_ref, :number) if expr.is_a?(Hash)
+        end
+
+        # A NULL is the one value that needs no encrypting, so a column filled with one is not a
+        # column written in the clear.
+        def null_const?(expr)
+          expr.is_a?(Hash) && expr.dig(:a_const, :isnull) == true
+        end
+
         def parameterized?(hash)
           return true if hash.key?(:param_ref)
 
           hash.any? { |_, v| (v.is_a?(Hash) && parameterized?(v)) || (v.is_a?(Array) && v.any? { |e| e.is_a?(Hash) && parameterized?(e) }) }
         end
 
-        # Keyword fallback when pg_query raises a parse error.
+        # Keyword fallback when pg_query raises a parse error. Nothing beyond the kind of statement
+        # is known here, so nothing it writes has been enumerated.
         # @param sql [String]
         # @return [QueryAnalysis]
         def fallback_analysis(sql)
@@ -246,7 +339,8 @@ module AwsRubyDatabaseDriverWrapper
             write_columns: [].freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: sql.match?(/\$\d+/) # fallback only; AST unavailable here
+            parameterized: sql.match?(/\$\d+/), # fallback only; AST unavailable here
+            write_columns_complete: false
           )
         end
       end

@@ -263,7 +263,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::SqlParser do
         allow(PgQuery).to receive(:parse).and_return(
           pg_stmt(insert_stmt: { relation: { relname: 'users' },
                                  cols: [{ res_target: { name: 'name' } },
-                                        { res_target: { name: 'email' } }] })
+                                        { res_target: { name: 'email' } }],
+                                 select_stmt: { select_stmt: { values_lists: [
+                                   { list: { items: [{ param_ref: { number: 1 } },
+                                                     { param_ref: { number: 2 } }] } }
+                                 ] } } })
         )
         expect(pg_parser.column_parameter_mapping('INSERT INTO users (name, email) VALUES ($1, $2)')).to eq({ 1 => 'name', 2 => 'email' })
       end

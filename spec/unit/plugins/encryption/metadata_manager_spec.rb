@@ -113,7 +113,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
       manager.refresh
 
       expect(sql_runner).to have_received(:query)
-        .with(connection, /FROM encrypt\.encryption_metadata em JOIN encrypt\.key_storage ks/)
+        .with(connection, /FROM encrypt\.encryption_metadata em LEFT JOIN encrypt\.key_storage ks/)
     end
 
     it 'records the refresh in the audit trail' do

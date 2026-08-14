@@ -143,9 +143,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       expect(result.write_columns.map(&:column_name)).to eq(%w[name email ssn])
     end
 
-    it 'column count matches declared columns, not value rows, for multi-row INSERT' do
+    # Every row is reported, not just the first. A caller that encrypts a column has to know about
+    # the parameters of rows two onwards as well, or it would send them in the clear.
+    it 'reports a column of a multi-row INSERT once per row, with the parameter of that row' do
       result = subject.analyze('INSERT INTO `users` (`name`, `email`) VALUES (?, ?), (?, ?)')
-      expect(result.write_columns.size).to eq(2)
+
+      expect(result.write_columns.map(&:column_name)).to eq(%w[name email name email])
+      expect(result.write_columns.map(&:parameter_index)).to eq([1, 2, 3, 4])
     end
 
     it 'extracts SET columns from UPDATE (only ? params)' do
@@ -300,6 +304,77 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       result = subject.analyze('SELECT `name`, email FROM users WHERE `id` = ?')
       expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
       expect(result.tables).to include('users')
+    end
+  end
+
+  # A caller that substitutes a parameter has to know which parameter fills which column, and has to
+  # know when a column is filled by something it cannot substitute at all.
+  describe '.analyze write columns' do
+    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+
+    it 'pairs a column with the parameter that fills it, not with its position' do
+      result = subject.analyze("INSERT INTO users (name, email, ssn) VALUES (?, 'x@y.z', ?)")
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['email'])
+    end
+
+    it 'reads the SET form of an INSERT' do
+      result = subject.analyze('INSERT INTO users SET name = ?, ssn = ?')
+
+      expect(result.query_type).to eq(query_type::INSERT)
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'reads a REPLACE as an INSERT' do
+      result = subject.analyze('REPLACE INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(result.query_type).to eq(query_type::INSERT)
+      expect(result.write_columns.map(&:column_name)).to eq(%w[name ssn])
+    end
+
+    it 'reports the assignments of an upsert as well as its values' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (?, ?) ON DUPLICATE KEY UPDATE ssn = ?')
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] })
+        .to eq([['name', 1], ['ssn', 2], ['ssn', 3]])
+    end
+
+    it 'reports an INSERT with no column list as not enumerable' do
+      result = subject.analyze('INSERT INTO users VALUES (?, ?)')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+      expect(result.tables).to include('users')
+    end
+
+    it 'reports an INSERT from a SELECT as not enumerable' do
+      result = subject.analyze('INSERT INTO users (name, ssn) SELECT name, ssn FROM imported')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reports an expression around a parameter as a value it cannot substitute' do
+      result = subject.analyze('UPDATE users SET ssn = upper(?) WHERE name = ?')
+
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['ssn'])
+    end
+
+    it 'passes over a column set to NULL' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (?, NULL)')
+
+      expect(result.unbound_write_columns).to be_empty
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    # A comma inside a quoted value is part of the value, not a separator between two of them.
+    it 'does not split a value on a comma inside a string' do
+      result = subject.analyze("INSERT INTO users (name, ssn) VALUES ('Doe, Jo', ?)")
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['name'])
     end
   end
 end

@@ -181,4 +181,88 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(result.where_columns).to be_empty
     end
   end
+
+  # A caller that substitutes a parameter has to know which parameter fills which column, and has to
+  # know when a column is filled by something it cannot substitute at all.
+  describe 'write columns' do
+    it 'pairs a column with the parameter that fills it, not with its position' do
+      result = subject.analyze("INSERT INTO t (a, b, c) VALUES ($1, 'literal', $2)")
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['a', 1], ['c', 2]])
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['b'])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'follows explicit parameter numbers rather than the order the columns are declared in' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($2, $1)')
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['a', 2], ['b', 1]])
+    end
+
+    it 'reports every row of a multi-row INSERT' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, $2), ($3, $4)')
+
+      expect(result.write_columns.map(&:parameter_index)).to eq([1, 2, 3, 4])
+      expect(result.write_columns.map(&:column_name)).to eq(%w[a b a b])
+    end
+
+    it 'reports the assignments of an upsert as well as its values' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, $2) ON CONFLICT (a) DO UPDATE SET b = $3')
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] })
+        .to eq([['a', 1], ['b', 2], ['b', 3]])
+    end
+
+    it 'treats a DEFAULT as a value it cannot substitute' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, DEFAULT)')
+
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['b'])
+    end
+
+    # A NULL is left out: there is nothing to encrypt in one, and a column set to NULL reads back as
+    # NULL whether the plugin saw it or not.
+    it 'passes over a column set to NULL' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, NULL)')
+
+      expect(result.unbound_write_columns).to be_empty
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reports an INSERT with no column list as not enumerable' do
+      result = subject.analyze('INSERT INTO t VALUES ($1, $2)')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+      expect(result.tables).to eq(['t'])
+    end
+
+    it 'reports an INSERT from a SELECT as not enumerable' do
+      result = subject.analyze('INSERT INTO t (a, b) SELECT x, y FROM u')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reports an expression around a parameter as a value it cannot substitute' do
+      result = subject.analyze('UPDATE t SET a = upper($1) WHERE id = $2')
+
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['a'])
+    end
+
+    it 'reports SQL it cannot parse as not enumerable' do
+      result = subject.analyze('INSERT INTO ((( $1')
+
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    # Only the first statement of a multi-statement string is analyzed, so what the rest write is
+    # unknown, and their tables have to be reported for a caller to decide anything about them.
+    it 'collects the tables of a multi-statement string and reports it as not enumerable' do
+      result = subject.analyze('INSERT INTO t (a) VALUES ($1); INSERT INTO u (b) VALUES ($2)')
+
+      expect(result.tables).to include('t', 'u')
+      expect(result.write_columns_complete).to be(false)
+    end
+  end
 end

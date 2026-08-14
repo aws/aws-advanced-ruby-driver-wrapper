@@ -222,12 +222,21 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(encryption_utility).not_to have_received(:ensure_initialized)
     end
 
-    it 'does nothing when the call has no parameters' do
+    # There is nothing to substitute, so the arguments go through untouched. The statement is still
+    # looked at, since one that stores a value the plugin cannot reach has to be refused.
+    it 'binds nothing when the call has no parameters' do
       call('connection.exec', args: [insert], sql: insert)
       expect(bound_args).to eq([insert])
 
       call('connection.exec_params', args: [insert, []], sql: insert)
       expect(bound_args[1]).to eq([])
+    end
+
+    it 'does nothing when the statement cannot store anything and has no parameters' do
+      select = 'SELECT name FROM users'
+      call('connection.exec', args: [select], sql: select)
+
+      expect(bound_args).to eq([select])
       expect(encryption_utility).not_to have_received(:ensure_initialized)
     end
 
@@ -466,6 +475,112 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       call('connection.exec_params', args: args, sql: sql)
 
       expect(bound_args).to be(args)
+    end
+  end
+
+  # The plugin can only encrypt a value that arrives as a bind parameter, and only when it knows
+  # which column that parameter fills. Anything else it can see writing an encrypted column has to
+  # be refused, since a plaintext stored in one reads back as a plaintext ever after and nothing
+  # would surface it.
+  describe 'refusing a write it cannot encrypt' do
+    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+
+    it 'refuses a literal written into an encrypted column' do
+      sql = "INSERT INTO users (name, ssn) VALUES ($1, '123-45-6789')"
+
+      expect { call('connection.exec_params', args: [sql, ['Jo']], sql: sql) }
+        .to raise_error(metadata_error, /ssn is configured for encryption/)
+    end
+
+    it 'refuses an expression wrapped around a parameter of an encrypted column' do
+      sql = 'UPDATE users SET ssn = upper($1) WHERE name = $2'
+
+      expect { call('connection.exec_params', args: [sql, %w[123-45-6789 Jo]], sql: sql) }
+        .to raise_error(metadata_error, /other than a bind parameter/)
+    end
+
+    it 'refuses a statement with no bind parameters at all' do
+      sql = "INSERT INTO users (name, ssn) VALUES ('Jo', '123-45-6789')"
+
+      expect { call('connection.query', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /ssn is configured for encryption/)
+    end
+
+    it 'refuses an INSERT that does not name the columns it writes' do
+      sql = 'INSERT INTO users VALUES ($1, $2)'
+
+      expect { call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql) }
+        .to raise_error(metadata_error, /which of them this statement writes could not be established/)
+    end
+
+    it 'refuses an INSERT whose values come from a nested SELECT' do
+      sql = 'INSERT INTO users (name, ssn) SELECT name, ssn FROM imported'
+
+      expect { call('connection.exec', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /could not be established/)
+    end
+
+    it 'refuses a write it could not parse' do
+      sql = 'INSERT INTO ((( $1'
+      allow(plugin.send(:logger)).to receive(:warn)
+
+      expect { call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql) }
+        .to raise_error(metadata_error, /neither the tables nor the columns it writes/)
+    end
+
+    it 'lets a write of a table with no encrypted column through' do
+      sql = "INSERT INTO audit (event) VALUES ('login')"
+      args = [sql]
+
+      call('connection.query', args: args, sql: sql)
+
+      expect(bound_args).to be(args)
+    end
+
+    it 'lets a literal written into a column that is not encrypted through' do
+      sql = "INSERT INTO users (name, ssn) VALUES ('Jo', $1)"
+
+      call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql)
+
+      expect(plaintext(bound_args[1][0])).to eq('123-45-6789')
+    end
+
+    # An annotation names the column a parameter belongs to, which is exactly what the refusals are
+    # missing, so a statement that carries one is taken at its word.
+    it 'takes an annotated statement at its word' do
+      sql = 'INSERT INTO users VALUES ($1, /*@encrypt:users.ssn*/ $2)'
+
+      call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
+
+      expect(plaintext(bound_args[1][1])).to eq('123-45-6789')
+    end
+
+    it 'reads a statement it refuses to write from' do
+      sql = 'SELECT name FROM users'
+      rows = [{ 'ssn' => bytea(ciphertext('123-45-6789')) }]
+
+      expect(call('result.to_a', sql: sql, returns: rows).first['ssn']).to eq('123-45-6789')
+    end
+  end
+
+  # An encryption_metadata row whose key_storage row is gone comes back with no key material. The
+  # column is still configured for encryption, so it cannot be written in the clear.
+  describe 'when a column has no key material' do
+    let(:configs) { { 'users.ssn' => column_config('users', 'ssn', nil) } }
+
+    it 'refuses to write it' do
+      sql = 'INSERT INTO users (name, ssn) VALUES ($1, $2)'
+
+      expect { call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /configuration of users.ssn is incomplete/)
+    end
+
+    it 'leaves it alone on a read' do
+      allow(plugin.send(:logger)).to receive(:warn)
+      rows = [{ 'ssn' => 'whatever the database holds' }]
+
+      expect(call('result.to_a', sql: 'SELECT ssn FROM users', returns: rows)).to be(rows)
+      expect(plugin.send(:logger)).to have_received(:warn).with(/users.ssn: its encryption configuration is incomplete/)
     end
   end
 end

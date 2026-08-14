@@ -21,42 +21,68 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     module Parser
       class SqlParser
-        SqlAnalysisResult = Data.define(:query_type, :affected_tables)
+        # What a statement was found to be doing: the kind of statement, the tables it touches with
+        # any schema prefix removed, which bind parameter fills which column, and what it writes that
+        # no bind parameter fills. The last two are what a caller needs to tell a column it can put a
+        # value into from one it cannot.
+        SqlAnalysisResult = Data.define(:query_type, :affected_tables, :parameter_column_names,
+                                        :unbound_write_columns, :write_columns_complete) do
+          def initialize(query_type:, affected_tables:, parameter_column_names: {}.freeze,
+                         unbound_write_columns: [].freeze, write_columns_complete: true)
+            super
+          end
+        end
 
         def initialize(driver_dialect)
           @analyzer = resolve_analyzer(driver_dialect)
         end
 
+        # @raise [StandardError] whatever the underlying analyzer raises on SQL it cannot read
         def analyze_sql(sql)
           return empty_result unless sql.is_a?(String) && !sql.strip.empty?
 
           analysis = @analyzer.analyze(sql)
-          tables = analysis.tables.to_set { |table_name| strip_schema_prefix(table_name) }
-          SqlAnalysisResult.new(query_type: analysis.query_type, affected_tables: tables)
+          SqlAnalysisResult.new(
+            query_type: analysis.query_type,
+            affected_tables: analysis.tables.to_set { |table_name| strip_schema_prefix(table_name) },
+            parameter_column_names: mapping_of(analysis),
+            unbound_write_columns: analysis.unbound_write_columns,
+            write_columns_complete: analysis.write_columns_complete
+          )
         end
 
         # Maps 1-based parameter indices to column names.
         # SELECT => WHERE clause columns only. INSERT/UPDATE => SET/column-list columns only.
+        #
+        # A statement the analyzer could not read is reported as an empty mapping, not as a failure:
+        # the callers that must not write a value they cannot place look at the analysis itself.
+        #
         # @param sql [String, nil]
         # @return [Hash{Integer => String}]
         def column_parameter_mapping(sql)
-          return {} unless sql.is_a?(String) && !sql&.strip&.empty?
-
-          analysis = @analyzer.analyze(sql)
-
-          case analysis.query_type
-          when QueryType::SELECT
-            analysis.where_columns.each_with_index.to_h { |column_info, idx| [idx + 1, column_info.column_name] }
-          when QueryType::INSERT, QueryType::UPDATE
-            analysis.write_columns.each_with_index.to_h { |column_info, idx| [idx + 1, column_info.column_name] }
-          else
-            {}
-          end
+          analyze_sql(sql).parameter_column_names
         rescue StandardError
           {}
         end
 
         private
+
+        def mapping_of(analysis)
+          case analysis.query_type
+          when QueryType::SELECT then parameter_mapping(analysis.where_columns)
+          when QueryType::INSERT, QueryType::UPDATE then parameter_mapping(analysis.write_columns)
+          else {}
+          end
+        end
+
+        # Bind parameters are numbered from 1. An analyzer that could work out which parameter fills
+        # which column says so on the ColumnInfo; one that could not leaves it nil, and the columns
+        # are then taken in the order they were reported.
+        def parameter_mapping(column_infos)
+          column_infos.each_with_index.to_h do |column_info, position|
+            [column_info.parameter_index || (position + 1), column_info.column_name]
+          end
+        end
 
         def resolve_analyzer(driver_dialect)
           if pg_dialect?(driver_dialect)

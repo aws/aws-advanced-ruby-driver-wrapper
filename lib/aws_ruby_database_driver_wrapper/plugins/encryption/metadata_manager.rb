@@ -277,6 +277,11 @@ module AwsRubyDatabaseDriverWrapper
         # +ks.key_id+ is aliased because +em.key_id+ already occupies that name in the row: the
         # metadata table's key_id is the integer foreign key into key_storage.id, while the key
         # storage table's own key_id is the external identifier of the key.
+        #
+        # The join is an outer one so that a column whose key row is missing is still reported as
+        # configured for encryption. An inner join would drop it, the column would look like an
+        # ordinary one, and a write would store the plaintext. Kept this way, its key metadata comes
+        # back empty, which fails validation and so fails the write instead.
         def joined_columns_sql
           schema = @config.metadata_schema
           'SELECT em.table_name, em.column_name, em.encryption_algorithm, em.key_id, ' \
@@ -284,7 +289,7 @@ module AwsRubyDatabaseDriverWrapper
             'ks.key_id AS key_uuid, ks.name, ks.master_key_arn, ks.encrypted_data_key, ks.hmac_key, ks.key_spec, ' \
             'ks.created_at AS key_created_at, ks.last_used_at ' \
             "FROM #{schema}.encryption_metadata em " \
-            "JOIN #{schema}.key_storage ks ON em.key_id = ks.id"
+            "LEFT JOIN #{schema}.key_storage ks ON em.key_id = ks.id"
         end
 
         def start_refresh_thread
