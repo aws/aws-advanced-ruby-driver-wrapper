@@ -50,7 +50,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
                                          prefixed_driver_config: prefixed_driver_config,
                                          initial_host_info: initial_host_info)
   end
-  let(:driver_dialect) { instance_double('DriverDialect', connect: nil) }
+  let(:driver_dialect) do
+    instance_double('DriverDialect', connect: nil, close_connection: nil, apply_monitoring_defaults: nil, closed?: false)
+  end
   let(:db_dialect) { instance_double('DbDialect') }
   let(:dialect_service) do
     instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_final?: true)

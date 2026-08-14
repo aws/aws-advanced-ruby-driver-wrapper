@@ -68,11 +68,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
 
   describe '#abort_connection' do
     it 'calls close' do
+      allow(connection).to receive(:closed?).and_return(false)
       expect(connection).to receive(:close)
       dialect.close_connection(connection)
     end
 
     it 'suppresses errors' do
+      allow(connection).to receive(:closed?).and_return(false)
       allow(connection).to receive(:close).and_raise(StandardError)
       expect { dialect.close_connection(connection) }.not_to raise_error
     end

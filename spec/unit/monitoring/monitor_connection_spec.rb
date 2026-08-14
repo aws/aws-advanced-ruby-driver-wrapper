@@ -18,7 +18,8 @@ require_relative '../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/monitoring/monitor_connection'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::MonitorConnection do
-  subject(:monitor_connection) { described_class.new }
+  let(:mock_driver_dialect) { double('DriverDialect', close_connection: nil) }
+  subject(:monitor_connection) { described_class.new(mock_driver_dialect) }
 
   let(:conn1) { instance_double('Connection', close: nil) }
   let(:conn2) { instance_double('Connection', close: nil) }
@@ -43,33 +44,34 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::MonitorConnection do
     it 'closes the old connection when replacing' do
       monitor_connection.set(conn1)
       monitor_connection.set(conn2)
-      expect(conn1).to have_received(:close)
+      expect(mock_driver_dialect).to have_received(:close_connection).with(conn1)
       expect(monitor_connection.get).to eq(conn2)
     end
 
     it 'does not close the old connection when close_old is false' do
       monitor_connection.set(conn1)
       monitor_connection.set(conn2, close_old: false)
-      expect(conn1).not_to have_received(:close)
+      expect(mock_driver_dialect).not_to have_received(:close_connection).with(conn1)
     end
 
     it 'does not close when setting the same connection' do
       monitor_connection.set(conn1)
       monitor_connection.set(conn1)
-      expect(conn1).not_to have_received(:close)
+      expect(mock_driver_dialect).not_to have_received(:close_connection).with(conn1)
     end
 
     it 'handles nil replacement (closes old)' do
       monitor_connection.set(conn1)
       monitor_connection.set(nil)
-      expect(conn1).to have_received(:close)
+      expect(mock_driver_dialect).to have_received(:close_connection).with(conn1)
       expect(monitor_connection.get).to be_nil
     end
 
-    it 'swallows errors on close' do
-      allow(conn1).to receive(:close).and_raise(StandardError, 'close failed')
+    it 'swallows errors on close via driver dialect' do
+      allow(mock_driver_dialect).to receive(:close_connection).with(conn1)
       monitor_connection.set(conn1)
       expect { monitor_connection.set(conn2) }.not_to raise_error
+      expect(mock_driver_dialect).to have_received(:close_connection).with(conn1)
       expect(monitor_connection.get).to eq(conn2)
     end
   end
@@ -113,7 +115,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::MonitorConnection do
     it 'closes the connection and sets to nil' do
       monitor_connection.set(conn1)
       monitor_connection.close
-      expect(conn1).to have_received(:close)
+      expect(mock_driver_dialect).to have_received(:close_connection).with(conn1)
       expect(monitor_connection.get).to be_nil
     end
 

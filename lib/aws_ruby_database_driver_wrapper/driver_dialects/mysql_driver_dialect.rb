@@ -59,6 +59,8 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def close_connection(connection)
+        return if connection.closed?
+
         connection.close
       rescue StandardError => e
         logger.error("Failed to close MySQL connection: #{e.message}")
@@ -84,6 +86,14 @@ module AwsRubyDatabaseDriverWrapper
 
       def user_property_key
         :username
+      end
+
+      def apply_monitoring_defaults(driver_props)
+        # mysql2 read_timeout / write_timeout (in seconds) ensure that queries and closes
+        # on a dead socket raise Mysql2::Error::TimeoutError instead of segfaulting.
+        driver_props[:read_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
+        driver_props[:write_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
+        driver_props[:connect_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
       end
     end
   end
