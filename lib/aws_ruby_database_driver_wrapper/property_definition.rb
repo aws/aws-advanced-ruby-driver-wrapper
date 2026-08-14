@@ -171,6 +171,53 @@ module AwsRubyDatabaseDriverWrapper
       default_value: nil, type: String
     )
 
+    # -- Custom Endpoint --
+    CUSTOM_ENDPOINT_INFO_REFRESH_RATE_MS = WrapperProperty.new(
+      :custom_endpoint_info_refresh_rate_ms,
+      'How frequently custom endpoint monitors fetch custom endpoint info, in milliseconds.',
+      default_value: 30_000,
+      type: Integer
+    )
+    CUSTOM_ENDPOINT_INFO_REFRESH_RATE_BACKOFF_FACTOR = WrapperProperty.new(
+      :custom_endpoint_info_refresh_rate_backoff_factor,
+      'Exponential backoff factor for the custom endpoint monitor on throttling.',
+      default_value: 2,
+      type: Integer
+    )
+    CUSTOM_ENDPOINT_INFO_MAX_REFRESH_RATE_MS = WrapperProperty.new(
+      :custom_endpoint_info_max_refresh_rate_ms,
+      'Maximum wait between custom endpoint info fetches, in milliseconds.',
+      default_value: 300_000,
+      type: Integer
+    )
+    WAIT_FOR_CUSTOM_ENDPOINT_INFO = WrapperProperty.new(
+      :wait_for_custom_endpoint_info,
+      'Controls whether to wait for custom endpoint info to become available before connecting or executing a ' \
+      'method. Waiting is only necessary if a connection to a given custom endpoint has not been opened or used ' \
+      'recently. Note that disabling this may result in occasional connections to instances outside of the ' \
+      'custom endpoint.',
+      default_value: true,
+      type: :boolean
+    )
+    WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_MS = WrapperProperty.new(
+      :wait_for_custom_endpoint_info_timeout_ms,
+      'Maximum time to wait for custom endpoint info, in milliseconds.',
+      default_value: 5_000,
+      type: Integer
+    )
+    CUSTOM_ENDPOINT_MONITOR_EXPIRATION_MS = WrapperProperty.new(
+      :custom_endpoint_monitor_expiration_ms,
+      'How long a monitor runs without use before expiring, in milliseconds.',
+      default_value: 900_000,
+      type: Integer
+    )
+    CUSTOM_ENDPOINT_REGION = WrapperProperty.new(
+      :custom_endpoint_region,
+      'Region of the custom endpoint. Parsed from the URL when not specified.',
+      default_value: nil,
+      type: String
+    )
+
     # -- Secrets Manager --
     SECRET_ID = WrapperProperty.new(
       :secret_id, 'The name or ARN of the secret to retrieve', default_value: nil, type: String
