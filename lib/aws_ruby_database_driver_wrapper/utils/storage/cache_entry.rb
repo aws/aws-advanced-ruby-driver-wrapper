@@ -44,6 +44,12 @@ module AwsRubyDatabaseDriverWrapper
         def ==(other)
           other.is_a?(self.class) && @value == other.value
         end
+
+        alias eql? ==
+
+        def hash
+          value.hash
+        end
       end
     end
   end

@@ -123,7 +123,7 @@ module AwsRubyDatabaseDriverWrapper
         if verify_role.nil?
           return Result.new(conn, candidate)
         elsif verify_role == role
-          return Result.new(conn, candidate.deep_dup.tap { |h| h.role = role })
+          return Result.new(conn, candidate.deep_dup(role: role))
         end
 
         # The role is not the one that was asked for, so the connection is not valid.
