@@ -38,12 +38,13 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- Connection methods (mysql2-specific) --
     CONNECTION_QUERY               = define('connection.query', check_bounded_connection: false)
-    CONNECTION_QUERY_ASYNC         = define('connection.query_async', check_bounded_connection: false)
+    CONNECTION_ASYNC_RESULT        = define('connection.async_result', check_bounded_connection: true)
     CONNECTION_SELECT_DB           = define('connection.select_db', check_bounded_connection: false)
-    CONNECTION_MORE_RESULTS        = define('connection.more_results', check_bounded_connection: true)
+    CONNECTION_MORE_RESULTS        = define('connection.more_results?', check_bounded_connection: true)
     CONNECTION_NEXT_RESULT         = define('connection.next_result', check_bounded_connection: true)
     CONNECTION_STORE_RESULT        = define('connection.store_result', check_bounded_connection: true)
-    CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: false)
+    CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: true)
+    CONNECTION_SET_SERVER_OPTION   = define('connection.set_server_option', check_bounded_connection: false)
 
     # -- Connection methods (pg-specific) --
     CONNECTION_EXEC                = define('connection.exec', check_bounded_connection: false)
@@ -74,6 +75,36 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_LO_WRITE            = define('connection.lo_write', check_bounded_connection: true)
     CONNECTION_LO_CLOSE            = define('connection.lo_close', check_bounded_connection: true)
 
+    # -- Connection methods (pg-specific, reached through WrapperPgConnection#method_missing) --
+    #
+    # These are the remaining pg calls that talk to the server. They are named here rather than
+    # entered into the pipeline as bare strings, since only a named method can have the connection it
+    # is bound to checked, and most of them are bound to one: a prepared statement or a portal only
+    # exists on the connection it was made on, a pending exchange can only be continued on the
+    # connection it was started on, and a large object descriptor is only open on that connection.
+    CONNECTION_CLOSE_PREPARED         = define('connection.close_prepared', check_bounded_connection: true)
+    CONNECTION_CLOSE_PORTAL           = define('connection.close_portal', check_bounded_connection: true)
+    CONNECTION_DISCARD_RESULTS        = define('connection.discard_results', check_bounded_connection: true)
+    CONNECTION_SEND_DESCRIBE_PREPARED = define('connection.send_describe_prepared', check_bounded_connection: true)
+    CONNECTION_SEND_DESCRIBE_PORTAL   = define('connection.send_describe_portal', check_bounded_connection: true)
+    CONNECTION_SEND_FLUSH_REQUEST     = define('connection.send_flush_request', check_bounded_connection: true)
+    CONNECTION_PIPELINE_SYNC          = define('connection.pipeline_sync', check_bounded_connection: true)
+    CONNECTION_SEND_PIPELINE_SYNC     = define('connection.send_pipeline_sync', check_bounded_connection: true)
+    CONNECTION_BLOCK                  = define('connection.block', check_bounded_connection: true)
+    CONNECTION_RESET_START            = define('connection.reset_start', check_bounded_connection: false)
+    CONNECTION_RESET_POLL             = define('connection.reset_poll', check_bounded_connection: false)
+    CONNECTION_ENCRYPT_PASSWORD       = define('connection.encrypt_password', check_bounded_connection: false)
+    CONNECTION_SET_DEFAULT_ENCODING   = define('connection.set_default_encoding', check_bounded_connection: false)
+    CONNECTION_INTERNAL_ENCODING_SET  = define('connection.internal_encoding=', check_bounded_connection: false)
+    CONNECTION_LO_CREAT               = define('connection.lo_creat', check_bounded_connection: false)
+    CONNECTION_LO_CREATE              = define('connection.lo_create', check_bounded_connection: false)
+    CONNECTION_LO_IMPORT              = define('connection.lo_import', check_bounded_connection: false)
+    CONNECTION_LO_EXPORT              = define('connection.lo_export', check_bounded_connection: false)
+    CONNECTION_LO_UNLINK              = define('connection.lo_unlink', check_bounded_connection: false)
+    CONNECTION_LO_LSEEK               = define('connection.lo_lseek', check_bounded_connection: true)
+    CONNECTION_LO_TELL                = define('connection.lo_tell', check_bounded_connection: true)
+    CONNECTION_LO_TRUNCATE            = define('connection.lo_truncate', check_bounded_connection: true)
+
     # -- Statement methods --
     STATEMENT_EXECUTE              = define('statement.execute', check_bounded_connection: true)
     STATEMENT_CLOSE                = define('statement.close', check_bounded_connection: false)
@@ -87,5 +118,8 @@ module AwsRubyDatabaseDriverWrapper
     RESULT_COLUMN_VALUES           = define('result.column_values', check_bounded_connection: true)
     RESULT_FIELD_VALUES            = define('result.field_values', check_bounded_connection: true)
     RESULT_TUPLE                   = define('result.tuple', check_bounded_connection: true)
+    # Freeing an unbuffered result has to read whatever rows are still on the wire before it can let
+    # the result go, so it is a call to the server on the connection the statement was sent on.
+    RESULT_FREE                    = define('result.free', check_bounded_connection: true)
   end
 end
