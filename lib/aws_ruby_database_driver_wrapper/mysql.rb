@@ -33,14 +33,24 @@ module AwsRubyDatabaseDriverWrapper
       @service_container.host_service.refresh_host_list
       @async_conn = nil
       @async_sql = nil
+      @last_sql = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
+    # This is how mysql2 sends a statement asynchronously as well: +query(sql, async: true)+ returns
+    # nothing and the result is read afterwards by +async_result+. The connection the statement was
+    # sent on is remembered for that read, and so is its SQL, since the read is a call of its own and
+    # carries neither.
     def query(sql, options = {})
       result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options, sql: sql)
+      @last_sql = sql
+      if options[:async]
+        @async_conn = current_conn
+        @async_sql = sql
+      end
       wrap_mysql_result(result, sql)
     end
 
@@ -61,16 +71,19 @@ module AwsRubyDatabaseDriverWrapper
       pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
     end
 
-    # -- Async writer (store @async_conn) --
+    # -- Async readers (check bounded to @async_conn) --
 
-    def query_async(sql, options = {})
-      result = pm.execute(RubyMethod::CONNECTION_QUERY_ASYNC, current_conn, ->(*a) { current_conn.query_async(*a) }, sql, options, sql: sql)
-      @async_conn = current_conn
-      @async_sql = sql
+    # The result of a statement that was sent with +async: true+. It is read by a call of its own, so
+    # it is handed the SQL of the statement it belongs to, and it is refused on any connection other
+    # than the one that statement was sent on.
+    def async_result
+      result = pm.execute(RubyMethod::CONNECTION_ASYNC_RESULT, current_conn, -> { current_conn.async_result },
+                          bounded_conn: @async_conn, sql: @async_sql)
+      sql = @async_sql
+      @async_conn = nil
+      @async_sql = nil
       wrap_mysql_result(result, sql)
     end
-
-    # -- Async readers (check bounded to @async_conn) --
 
     def store_result
       result = pm.execute(RubyMethod::CONNECTION_STORE_RESULT, current_conn, -> { current_conn.store_result },
@@ -81,26 +94,51 @@ module AwsRubyDatabaseDriverWrapper
       wrap_mysql_result(result, sql)
     end
 
-    def more_results
-      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results }, bounded_conn: @async_conn)
+    def more_results?
+      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results? },
+                 bounded_conn: @async_conn)
     end
 
+    # A statement that leaves more than one result set is read by moving to each in turn and storing
+    # it. Every one of those results belongs to the statement that was sent, so its SQL is put back
+    # for the read that follows, and dropped once there is nothing left to read.
     def next_result
-      pm.execute(RubyMethod::CONNECTION_NEXT_RESULT, current_conn, -> { current_conn.next_result }, bounded_conn: @async_conn)
+      result = pm.execute(RubyMethod::CONNECTION_NEXT_RESULT, current_conn, -> { current_conn.next_result },
+                          bounded_conn: @async_conn)
+      if result
+        @async_conn = current_conn
+        @async_sql = @last_sql
+      else
+        @async_conn = nil
+        @async_sql = nil
+      end
+      result
     end
 
-    # -- method_missing: non-network bypasses pipeline --
+    # -- method_missing: rarely used network calls, non-network bypasses pipeline --
 
-    def method_missing(method_name, ...)
+    # The network calls that are rare enough not to be worth a method of their own. They are entered
+    # into the pipeline under the name the pipeline knows them by rather than as a bare string, so
+    # that the connection each is bound to is checked. mysql2 gives none of its calls a second
+    # spelling, so unlike pg there is nothing here to translate.
+    DYNAMIC_METHODS = {
+      abandon_results!: RubyMethod::CONNECTION_ABANDON_RESULTS,
+      select_db: RubyMethod::CONNECTION_SELECT_DB,
+      set_server_option: RubyMethod::CONNECTION_SET_SERVER_OPTION
+    }.freeze
+
+    # Draining what is left of a statement can only be done on the connection it was sent on.
+    BOUNDED_TO_ASYNC = Set[:abandon_results!].freeze
+
+    def method_missing(method_name, *args, **kwargs, &)
       conn = current_conn
       raise NoMethodError, 'Connection not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"
-      return conn.send(method_name, ...) unless network_bound_methods.include?(method_key)
+      return conn.send(method_name, *args, **kwargs, &) unless network_bound_methods.include?(method_key)
 
-      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, ...)
-      wrap_mysql_result(result)
+      execute_dynamic(method_name, method_key, args, kwargs, &)
     end
 
     def respond_to_missing?(method, include_private = false)
@@ -108,6 +146,22 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     private
+
+    # Runs a call that reached method_missing through the pipeline, telling the plugins the connection
+    # it is bound to, which is known here rather than from the arguments of the call.
+    def execute_dynamic(method_name, method_key, args, kwargs, &)
+      bounded_conn = BOUNDED_TO_ASYNC.include?(method_name) ? @async_conn : nil
+      result = pm.execute(
+        DYNAMIC_METHODS[method_name] || method_key, current_conn,
+        ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) },
+        *args, **kwargs, bounded_conn: bounded_conn, &
+      )
+      if method_name == :abandon_results!
+        @async_conn = nil
+        @async_sql = nil
+      end
+      wrap_mysql_result(result)
+    end
 
     def current_conn
       @service_container.connection_service.current_connection

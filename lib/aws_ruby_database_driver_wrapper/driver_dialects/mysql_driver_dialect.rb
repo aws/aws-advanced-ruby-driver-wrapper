@@ -22,14 +22,23 @@ module AwsRubyDatabaseDriverWrapper
     class MysqlDriverDialect
       include DriverDialect
 
+      # Every mysql2 call that talks to the server. A call that is not listed here is handed straight
+      # to the driver, so a method left out is a method no plugin can see: failover cannot retry it
+      # and the encryption plugin can neither inspect the statement it carries nor decrypt the rows it
+      # returns.
+      #
+      # Not listed, because libmysql answers them without talking to the server: escape, the row and
+      # column counts, last_id, affected_rows, info, warning_count, thread_id, server_info,
+      # session_track, and the connection's own settings.
       NETWORK_BOUND_METHODS = (COMMON_NETWORK_BOUND_METHODS | Set[
         RubyMethod::CONNECTION_QUERY.name,
-        RubyMethod::CONNECTION_QUERY_ASYNC.name,
+        RubyMethod::CONNECTION_ASYNC_RESULT.name,
         RubyMethod::CONNECTION_SELECT_DB.name,
         RubyMethod::CONNECTION_MORE_RESULTS.name,
         RubyMethod::CONNECTION_NEXT_RESULT.name,
         RubyMethod::CONNECTION_STORE_RESULT.name,
         RubyMethod::CONNECTION_ABANDON_RESULTS.name,
+        RubyMethod::CONNECTION_SET_SERVER_OPTION.name,
         RubyMethod::RESULT_EACH.name
       ]).freeze
 

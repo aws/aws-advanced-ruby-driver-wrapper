@@ -172,5 +172,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
 
       expect(uncovered).to be_empty
     end
+
+    # A name pg does not answer to is a call the wrapper cannot make and an entry nothing can ever
+    # match. The names inherited from every dialect are left out: pg has no instance ping and no
+    # prepared statement object of its own, and connect is not a call on a connection at all.
+    it 'names a method pg defines for every call it lists of its own' do
+      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      defined_by_pg = [PG::Connection, PG::Result].flat_map(&:instance_methods).to_set
+
+      unanswerable = (dialect.network_bound_methods - common).reject do |entry|
+        defined_by_pg.include?(entry.split('.', 2).last.to_sym)
+      end
+
+      expect(unanswerable).to be_empty
+    end
   end
 end

@@ -88,8 +88,12 @@ module AwsRubyDatabaseDriverWrapper
 
     alias finish close
 
+    # pg has no ping of its own: PG::Connection.ping is a class method that opens a connection of its
+    # own to try a set of options out, and there is no instance method behind it. Asking the dialect
+    # keeps the answer the same as everywhere else in the wrapper, which is whether a trivial
+    # statement comes back.
     def ping
-      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
+      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { driver_dialect.ping(current_conn) })
     end
 
     def reset
@@ -384,8 +388,12 @@ module AwsRubyDatabaseDriverWrapper
       @service_container.plugin_manager
     end
 
+    def driver_dialect
+      @service_container.dialect_service.driver_dialect
+    end
+
     def network_bound_methods
-      @network_bound_methods ||= @service_container.dialect_service.driver_dialect.network_bound_methods
+      @network_bound_methods ||= driver_dialect.network_bound_methods
     end
 
     def wrap_pg_result(result, sql = nil)

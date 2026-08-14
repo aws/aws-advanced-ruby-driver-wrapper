@@ -37,13 +37,20 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_ESCAPE              = define('connection.escape', check_bounded_connection: false)
 
     # -- Connection methods (mysql2-specific) --
+    #
+    # mysql2 has no asynchronous query method of its own: a statement is sent asynchronously by
+    # passing +async: true+ to +query+, and its result is read by +async_result+. The names here are
+    # the ones mysql2 actually defines, including the question mark on +more_results?+, since a name
+    # the driver does not answer to is a call the wrapper cannot make and an entry in a dialect's
+    # network bound methods that nothing can ever match.
     CONNECTION_QUERY               = define('connection.query', check_bounded_connection: false)
-    CONNECTION_QUERY_ASYNC         = define('connection.query_async', check_bounded_connection: false)
+    CONNECTION_ASYNC_RESULT        = define('connection.async_result', check_bounded_connection: true)
     CONNECTION_SELECT_DB           = define('connection.select_db', check_bounded_connection: false)
-    CONNECTION_MORE_RESULTS        = define('connection.more_results', check_bounded_connection: true)
+    CONNECTION_MORE_RESULTS        = define('connection.more_results?', check_bounded_connection: true)
     CONNECTION_NEXT_RESULT         = define('connection.next_result', check_bounded_connection: true)
     CONNECTION_STORE_RESULT        = define('connection.store_result', check_bounded_connection: true)
-    CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: false)
+    CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: true)
+    CONNECTION_SET_SERVER_OPTION   = define('connection.set_server_option', check_bounded_connection: false)
 
     # -- Connection methods (pg-specific) --
     CONNECTION_EXEC                = define('connection.exec', check_bounded_connection: false)

@@ -26,7 +26,9 @@ require 'aws_ruby_database_driver_wrapper/services/service_container'
 # to inspect the statement can still read it.
 RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
   let(:pg_result) { driver_result(PG::Result, 'PgResult') }
-  let(:connection) { double('PgConnection') }
+  # A verifying double, so that a call the wrapper makes on a method pg does not define fails here
+  # rather than against a real server.
+  let(:connection) { instance_double(PG::Connection) }
   let(:recorded) { build_recording_container(connection) }
   let(:container) { recorded.first }
   let(:plugin) { recorded.last }
@@ -306,7 +308,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     # The statement only exists on the connection it was prepared on, which is the whole reason the
     # call is entered under a name the pipeline knows rather than as a bare string.
     it 'is refused when the statement it names belongs to another connection' do
-      wrapper.instance_variable_set(:@prepared_on, { 'insert_user' => double('OldConnection') })
+      wrapper.instance_variable_set(:@prepared_on, { 'insert_user' => instance_double(PG::Connection) })
       allow(connection).to receive(:close_prepared)
 
       expect { wrapper.close_prepared('insert_user') }
@@ -314,7 +316,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     end
 
     it 'is refused when a large object was opened on another connection' do
-      wrapper.instance_variable_set(:@lo_conn, double('OldConnection'))
+      wrapper.instance_variable_set(:@lo_conn, instance_double(PG::Connection))
       allow(connection).to receive(:lo_read)
 
       expect { wrapper.loread(0, 4) }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
@@ -353,10 +355,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
   # Nothing else in the call chain has any SQL to publish, and a plugin that inspects statements
   # must not be handed the SQL of a statement that is already finished.
   describe 'a call that has no SQL of its own' do
+    # pg has no instance ping, so the dialect answers it with a trivial statement of its own.
     it 'publishes no SQL' do
-      allow(connection).to receive(:ping).and_return(true)
-      wrapper.ping
+      container.dialect_service = instance_double(
+        AwsRubyDatabaseDriverWrapper::Services::DialectService,
+        driver_dialect: AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new
+      )
+      allow(connection).to receive(:exec).and_return(driver_result(PG::Result, 'PingResult'))
 
+      expect(wrapper.ping).to be(true)
       expect(plugin.sql_for('connection.ping')).to eq([nil])
     end
   end

@@ -16,6 +16,7 @@
 
 require_relative '../spec_helper'
 require 'aws_ruby_database_driver_wrapper/mysql'
+require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
 require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
 require 'aws_ruby_database_driver_wrapper/services/service_container'
 
@@ -25,7 +26,9 @@ require 'aws_ruby_database_driver_wrapper/services/service_container'
 # statement can still read it.
 RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient do
   let(:mysql_result) { driver_result(Mysql2::Result, 'Mysql2::Result') }
-  let(:connection) { double('Mysql2::Client') }
+  # A verifying double, so that a call the wrapper makes on a method mysql2 does not define fails
+  # here rather than against a real server.
+  let(:connection) { instance_double(Mysql2::Client) }
   let(:recorded) { build_recording_container(connection) }
   let(:container) { recorded.first }
   let(:plugin) { recorded.last }
@@ -34,6 +37,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient do
     client.instance_variable_set(:@service_container, container)
     client.instance_variable_set(:@async_conn, nil)
     client.instance_variable_set(:@async_sql, nil)
+    client.instance_variable_set(:@last_sql, nil)
+    # Which methods go through the pipeline is the dialect's answer, and it is memoized here, so it is
+    # set rather than reached for through a service container that is not connected to anything.
+    client.instance_variable_set(
+      :@network_bound_methods, AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect::NETWORK_BOUND_METHODS
+    )
     client
   end
 
@@ -59,7 +68,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient do
 
   describe '#prepare' do
     it 'publishes the SQL it was called with' do
-      allow(connection).to receive(:prepare).and_return(double('Mysql2::Statement'))
+      allow(connection).to receive(:prepare).and_return(instance_double(Mysql2::Statement))
       client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)')
 
       expect(plugin.sql_for('connection.prepare')).to eq(['INSERT INTO users (name, ssn) VALUES (?, ?)'])
@@ -67,7 +76,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient do
 
     # This is the whole reason the SQL is remembered: execute is called with parameters alone.
     it 'hands the SQL to the statement it returns' do
-      mysql_stmt = double('Mysql2::Statement')
+      mysql_stmt = instance_double(Mysql2::Statement)
       allow(connection).to receive(:prepare).and_return(mysql_stmt)
       allow(mysql_stmt).to receive(:execute).and_return(mysql_result)
 
@@ -77,43 +86,139 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient do
     end
   end
 
+  # mysql2 has no query_async: a statement is sent asynchronously by passing async: true to query,
+  # and its result is read afterwards by async_result.
   describe 'an asynchronous statement' do
     before do
-      allow(connection).to receive(:query_async).and_return(nil)
-      allow(connection).to receive(:store_result).and_return(mysql_result)
+      allow(connection).to receive(:query).and_return(nil)
+      allow(connection).to receive(:async_result).and_return(mysql_result)
     end
 
     it 'publishes the SQL it was sent with' do
-      client.query_async('SELECT ssn FROM users')
+      client.query('SELECT ssn FROM users', async: true)
 
-      expect(plugin.sql_for('connection.query_async')).to eq(['SELECT ssn FROM users'])
+      expect(plugin.sql_for('connection.query')).to eq(['SELECT ssn FROM users'])
     end
 
-    # store_result is a call of its own, made after the statement was sent.
-    it 'publishes the SQL that was sent when the result is stored' do
-      client.query_async('SELECT ssn FROM users')
-      client.store_result
+    # async_result is a call of its own, made after the statement was sent.
+    it 'publishes the SQL that was sent when the result is read' do
+      client.query('SELECT ssn FROM users', async: true)
+      client.async_result
 
-      expect(plugin.sql_for('connection.store_result')).to eq(['SELECT ssn FROM users'])
+      expect(plugin.sql_for('connection.async_result')).to eq(['SELECT ssn FROM users'])
     end
 
-    it 'hands the SQL that was sent to the result it stores' do
+    it 'hands the SQL that was sent to the result it reads' do
       allow(mysql_result).to receive(:to_a).and_return([])
 
-      client.query_async('SELECT ssn FROM users')
-      client.store_result.to_a
+      client.query('SELECT ssn FROM users', async: true)
+      client.async_result.to_a
 
       expect(plugin.sql_for('result.to_a')).to eq(['SELECT ssn FROM users'])
     end
 
-    # The SQL of a statement that is already finished must not be published for whatever is read
-    # next.
-    it 'forgets the SQL once the result has been stored' do
-      client.query_async('SELECT ssn FROM users')
-      client.store_result
+    # The SQL of a statement that is already finished must not be published for whatever is read next.
+    it 'forgets the SQL once the result has been read' do
+      client.query('SELECT ssn FROM users', async: true)
+      client.async_result
+      client.async_result
+
+      expect(plugin.sql_for('connection.async_result')).to eq(['SELECT ssn FROM users', nil])
+    end
+
+    # The result is only waiting on the connection the statement was sent on.
+    it 'is refused on any other connection' do
+      client.instance_variable_set(:@async_conn, instance_double(Mysql2::Client))
+
+      expect { client.async_result }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+    end
+
+    it 'publishes no SQL for a synchronous statement, which is read when it is made' do
+      allow(connection).to receive(:query).and_return(mysql_result)
+      allow(connection).to receive(:store_result).and_return(mysql_result)
+
+      client.query('SELECT ssn FROM users')
       client.store_result
 
-      expect(plugin.sql_for('connection.store_result')).to eq(['SELECT ssn FROM users', nil])
+      expect(plugin.sql_for('connection.store_result')).to eq([nil])
+    end
+  end
+
+  describe 'a statement that leaves more than one result set' do
+    before do
+      allow(connection).to receive(:query).and_return(mysql_result)
+      allow(connection).to receive(:store_result).and_return(mysql_result)
+    end
+
+    it 'publishes its SQL for every result set that is read' do
+      allow(connection).to receive(:next_result).and_return(true, true, false)
+
+      client.query('CALL two_selects()')
+      client.next_result
+      client.store_result
+      client.next_result
+      client.store_result
+
+      expect(plugin.sql_for('connection.store_result')).to eq(['CALL two_selects()', 'CALL two_selects()'])
+    end
+
+    it 'forgets the SQL once there is nothing left to read' do
+      allow(connection).to receive(:next_result).and_return(true, false)
+
+      client.query('CALL two_selects()')
+      client.next_result
+      client.next_result
+      client.store_result
+
+      expect(plugin.sql_for('connection.store_result')).to eq([nil])
+    end
+
+    # mysql2 spells this with a question mark, which is what the wrapper has to call and what the
+    # dialect has to name.
+    it 'answers whether more results are pending' do
+      allow(connection).to receive(:more_results?).and_return(true)
+
+      expect(client.more_results?).to be(true)
+      expect(plugin.method_names).to eq(['connection.more_results?'])
+    end
+  end
+
+  # These are the calls that were left to method_missing because an application rarely makes them.
+  # They still talk to the server, so they still go through the plugins, and they are entered under
+  # the name the pipeline knows them by so that the connection they belong to is checked.
+  describe 'a network call that has no method of its own' do
+    it 'drains what is left of a statement through the pipeline' do
+      allow(connection).to receive(:query).and_return(nil)
+      allow(connection).to receive(:abandon_results!)
+
+      client.query('SELECT ssn FROM users', async: true)
+      client.abandon_results!
+
+      expect(plugin.method_names).to eq(['connection.query', 'connection.abandon_results!'])
+    end
+
+    it 'refuses to drain a connection the statement was not sent on' do
+      client.instance_variable_set(:@async_conn, instance_double(Mysql2::Client))
+      allow(connection).to receive(:abandon_results!)
+
+      expect { client.abandon_results! }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+    end
+
+    it 'sends a server option through the pipeline' do
+      allow(connection).to receive(:set_server_option).and_return(true)
+
+      client.set_server_option(0)
+
+      expect(plugin.method_names).to eq(['connection.set_server_option'])
+    end
+
+    it 'hands a call that does not talk to the server straight to the driver' do
+      allow(connection).to receive(:affected_rows).and_return(1)
+
+      expect(client.affected_rows).to eq(1)
+      expect(plugin.method_names).to be_empty
     end
   end
 

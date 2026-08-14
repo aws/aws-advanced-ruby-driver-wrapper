@@ -89,9 +89,11 @@ module AwsRubyDatabaseDriverWrapper
       # Statement methods that take no bind parameters. There is nothing to encrypt for these, but
       # a statement that carries its values in its own text is exactly the one that could store a
       # plaintext in an encrypted column, so they are checked all the same.
+      #
+      # mysql2's +query+ covers its asynchronous path as well, since that is the same call with
+      # +async: true+ passed to it, and the statement is inspected when it is sent either way.
       WRITE_CHECK_METHODS = Set[
-        RubyMethod::CONNECTION_QUERY.name,
-        RubyMethod::CONNECTION_QUERY_ASYNC.name
+        RubyMethod::CONNECTION_QUERY.name
       ].freeze
 
       # Result methods that hand out whole rows, keyed by column name.
