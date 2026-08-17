@@ -61,8 +61,7 @@ module AwsRubyDatabaseDriverWrapper
             # matching the effective behaviour of the Java/Go MySQL drivers which use the original
             # hostname for TLS regardless of the socket address.
             if driver_props[:sslca] && !plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
-              hostname_host = @substitute_host.deep_dup
-              hostname_host.host = @host
+              hostname_host = @substitute_host.deep_dup(host: @host)
               return plugin_manager.connect(hostname_host, driver_props, is_initial_connection)
             end
 

@@ -379,7 +379,7 @@ module AwsRubyDatabaseDriverWrapper
         role = db_dialect.host_role(conn)
 
         if role == Host::HostRole::READER || @failover_mode != FailoverMode::STRICT_READER
-          updated_host = host_info.deep_dup.tap { |h| h.role = role }
+          updated_host = host_info.deep_dup(role: role)
           return [:success, ReaderFailoverResult.new(conn, updated_host)]
         end
 
