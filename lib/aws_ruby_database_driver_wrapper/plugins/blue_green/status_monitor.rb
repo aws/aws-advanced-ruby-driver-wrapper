@@ -199,8 +199,7 @@ module AwsRubyDatabaseDriverWrapper
 
         def try_connect_single_ip_address(ip_address, host_info)
           original_host = host_info.host
-          host_info = host_info.deep_dup
-          host_info.host = ip_address
+          host_info = host_info.deep_dup(host: ip_address)
 
           connect_props = @status_monitor_driver_props.dup
           override_props = iam_enabled? ? map_merge(@status_monitor_wrapper_props, PropertyDefinition::IAM_HOST.name => original_host)
@@ -480,10 +479,9 @@ module AwsRubyDatabaseDriverWrapper
           connected_ip = @connected_ip_address.get
 
           if connected_ip && connected_ip != status_ip
-            @connection_host_info.set(@connection_host_info.get.deep_dup.tap do |h|
-              h.host = status_info.endpoint
-              h.port = status_info.port
-            end)
+            @connection_host_info.set(
+              @connection_host_info.get.deep_dup(host: status_info.endpoint, port: status_info.port)
+            )
             @correct_connection_host.make_true
             clear_connection
           else
