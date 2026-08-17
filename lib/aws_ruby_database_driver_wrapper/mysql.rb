@@ -39,7 +39,7 @@ module AwsRubyDatabaseDriverWrapper
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
     # This is how mysql2 sends a statement asynchronously as well: +query(sql, async: true)+ returns
-    # nothing and the result is read afterwards by +async_result+. The connection the statement was
+    # nothing and the result is read afterward by +async_result+. The connection the statement was
     # sent on is remembered for that read, since the read is a call of its own and does not name it.
     def query(sql, options = {})
       result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options)
@@ -66,8 +66,6 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- Async readers (check bounded to @async_conn) --
 
-    # The result of a statement that was sent with +async: true+. It is read by a call of its own, so
-    # it is refused on any connection other than the one that statement was sent on.
     def async_result
       result = pm.execute(RubyMethod::CONNECTION_ASYNC_RESULT, current_conn, -> { current_conn.async_result },
                           bounded_conn: @async_conn)
@@ -99,8 +97,7 @@ module AwsRubyDatabaseDriverWrapper
 
     # The network calls that are rare enough not to be worth a method of their own. They are entered
     # into the pipeline under the name the pipeline knows them by rather than as a bare string, so
-    # that the connection each is bound to is checked. mysql2 gives none of its calls a second
-    # spelling, so unlike pg there is nothing here to translate.
+    # that the connection each is bound to is checked.
     DYNAMIC_METHODS = {
       abandon_results!: RubyMethod::CONNECTION_ABANDON_RESULTS,
       select_db: RubyMethod::CONNECTION_SELECT_DB,
@@ -241,7 +238,7 @@ module AwsRubyDatabaseDriverWrapper
     # A buffered result is already in client memory, so letting it go is local. An unbuffered one,
     # from +query(sql, stream: true)+, still has whatever was not read on the wire, and libmysql has
     # to drain it before it can free the result. That makes this a call to the server, on the
-    # connection the statement was sent on, so it goes through the pipeline like any other.
+    # connection the statement was sent on, so it should go through the pipeline.
     def free
       pm.execute(RubyMethod::RESULT_FREE, current_conn, -> { @result.free }, bounded_conn: @connection)
     end

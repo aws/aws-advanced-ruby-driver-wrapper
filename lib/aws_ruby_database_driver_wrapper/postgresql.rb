@@ -85,12 +85,8 @@ module AwsRubyDatabaseDriverWrapper
 
     alias finish close
 
-    # pg has no ping of its own: PG::Connection.ping is a class method that opens a connection of its
-    # own to try a set of options out, and there is no instance method behind it. Asking the dialect
-    # keeps the answer the same as everywhere else in the wrapper, which is whether a trivial
-    # statement comes back.
     def ping
-      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { driver_dialect.ping(current_conn) })
+      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
     end
 
     def reset
@@ -215,8 +211,7 @@ module AwsRubyDatabaseDriverWrapper
 
     # The other spellings pg gives to a call that is defined above, or to one that is named in
     # {DYNAMIC_METHODS}. Each is the same operation, so it is performed by the canonical method and
-    # enters the pipeline under that method's name, which is what gives it the bookkeeping that goes
-    # with the operation.
+    # enters the pipeline under that method's name.
     #
     # A +sync_+ form is therefore performed the way its canonical method performs it, which for a
     # statement is the asynchronous libpq call. The two do the same work; the asynchronous one lets
