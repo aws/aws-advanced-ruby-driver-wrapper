@@ -42,7 +42,7 @@ module AwsRubyDatabaseDriverWrapper
              phase #{blue_green_phase || '<null>'},
              version '#{version}',
              port #{port},
-             hostNames:
+             host_names:
                #{blank?(host_names_str) ? '-' : host_names_str}
              Start #{blank?(start_topo_str) ? '-' : start_topo_str}
              Start IP map:
@@ -50,9 +50,9 @@ module AwsRubyDatabaseDriverWrapper
              Current #{blank?(current_topo_str) ? '-' : current_topo_str}
              Current IP map:
                #{blank?(current_ip_map) ? '-' : current_ip_map}
-             allStartTopologyIpChanged: #{all_start_topology_ip_changed}
-             allStartTopologyEndpointsRemoved: #{all_start_topology_endpoints_removed}
-             allTopologyChanged: #{all_topology_changed}
+             all_start_topology_ip_changed: #{all_start_topology_ip_changed}
+             all_start_topology_endpoints_removed: #{all_start_topology_endpoints_removed}
+             all_topology_changed: #{all_topology_changed}
             ]
           STATUS
         end
