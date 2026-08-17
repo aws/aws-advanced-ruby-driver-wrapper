@@ -40,6 +40,7 @@ module AwsRubyDatabaseDriverWrapper
       @async_conn = nil
       @copy_conn = nil
       @lo_conn = nil
+      @driver_spelling = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
@@ -47,7 +48,7 @@ module AwsRubyDatabaseDriverWrapper
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
 
     def exec(sql, *params)
-      result = pm.execute(RubyMethod::CONNECTION_EXEC, current_conn, ->(*a) { current_conn.exec(*a) }, sql, *params)
+      result = pm.execute(RubyMethod::CONNECTION_EXEC, current_conn, ->(*a) { current_conn.send(driver_method(:exec), *a) }, sql, *params)
       wrap_pg_result(result)
     end
 
@@ -64,7 +65,7 @@ module AwsRubyDatabaseDriverWrapper
     def exec_params(sql, params, result_format = 0, type_map = nil)
       result = pm.execute(
         RubyMethod::CONNECTION_EXEC_PARAMS, current_conn,
-        ->(*a) { current_conn.exec_params(*a) },
+        ->(*a) { current_conn.send(driver_method(:exec_params), *a) },
         sql, params, result_format, type_map
       )
       wrap_pg_result(result)
@@ -85,18 +86,15 @@ module AwsRubyDatabaseDriverWrapper
 
     alias finish close
 
-    def ping
-      pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
-    end
-
     def reset
-      pm.execute(RubyMethod::CONNECTION_RESET, current_conn, -> { current_conn.reset })
+      pm.execute(RubyMethod::CONNECTION_RESET, current_conn, -> { current_conn.send(driver_method(:reset)) })
     end
 
     # -- Prepared statement writers (store @prepared_on) --
 
     def prepare(stmt_name, sql, param_types = nil)
-      pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, stmt_name, sql, param_types)
+      pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.send(driver_method(:prepare), *a) },
+                 stmt_name, sql, param_types)
       @prepared_on[stmt_name] = current_conn
       nil
     end
@@ -112,7 +110,7 @@ module AwsRubyDatabaseDriverWrapper
     def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
       result = pm.execute(
         RubyMethod::CONNECTION_EXEC_PREPARED, current_conn,
-        ->(*a) { current_conn.exec_prepared(*a) },
+        ->(*a) { current_conn.send(driver_method(:exec_prepared), *a) },
         stmt_name, params, result_format, type_map,
         bounded_conn: @prepared_on[stmt_name]
       )
@@ -122,7 +120,7 @@ module AwsRubyDatabaseDriverWrapper
     def describe_prepared(stmt_name)
       result = pm.execute(
         RubyMethod::CONNECTION_DESCRIBE_PREPARED, current_conn,
-        ->(*a) { current_conn.describe_prepared(*a) },
+        ->(*a) { current_conn.send(driver_method(:describe_prepared), *a) },
         stmt_name, bounded_conn: @prepared_on[stmt_name]
       )
       wrap_pg_result(result)
@@ -158,14 +156,16 @@ module AwsRubyDatabaseDriverWrapper
     # -- Async readers (check bounded to @async_conn) --
 
     def get_result # rubocop:disable Naming/AccessorMethodName
-      result = pm.execute(RubyMethod::CONNECTION_GET_RESULT, current_conn, -> { current_conn.get_result }, bounded_conn: @async_conn)
+      result = pm.execute(RubyMethod::CONNECTION_GET_RESULT, current_conn, lambda {
+        current_conn.send(driver_method(:get_result))
+      }, bounded_conn: @async_conn)
       @async_conn = nil if result.nil?
       wrap_pg_result(result)
     end
 
     def get_last_result # rubocop:disable Naming/AccessorMethodName
       result = pm.execute(RubyMethod::CONNECTION_GET_LAST_RESULT, current_conn, lambda {
-        current_conn.get_last_result
+        current_conn.send(driver_method(:get_last_result))
       }, bounded_conn: @async_conn)
       @async_conn = nil
       wrap_pg_result(result)
@@ -185,7 +185,7 @@ module AwsRubyDatabaseDriverWrapper
     def put_copy_data(buffer, encoder = nil)
       pm.execute(
         RubyMethod::CONNECTION_PUT_COPY_DATA, current_conn,
-        ->(*a) { current_conn.put_copy_data(*a) },
+        ->(*a) { current_conn.send(driver_method(:put_copy_data), *a) },
         buffer, encoder, bounded_conn: @copy_conn
       )
     end
@@ -193,7 +193,7 @@ module AwsRubyDatabaseDriverWrapper
     def get_copy_data(async = false, decoder = nil)
       pm.execute(
         RubyMethod::CONNECTION_GET_COPY_DATA, current_conn,
-        ->(*a) { current_conn.get_copy_data(*a) },
+        ->(*a) { current_conn.send(driver_method(:get_copy_data), *a) },
         async, decoder, bounded_conn: @copy_conn
       )
     end
@@ -201,7 +201,7 @@ module AwsRubyDatabaseDriverWrapper
     def put_copy_end(error_message = nil)
       pm.execute(
         RubyMethod::CONNECTION_PUT_COPY_END, current_conn,
-        ->(*a) { current_conn.put_copy_end(*a) },
+        ->(*a) { current_conn.send(driver_method(:put_copy_end), *a) },
         error_message, bounded_conn: @copy_conn
       )
       @copy_conn = nil
@@ -213,10 +213,13 @@ module AwsRubyDatabaseDriverWrapper
     # {DYNAMIC_METHODS}. Each is the same operation, so it is performed by the canonical method and
     # enters the pipeline under that method's name.
     #
-    # A +sync_+ form is therefore performed the way its canonical method performs it, which for a
-    # statement is the asynchronous libpq call. The two do the same work; the asynchronous one lets
-    # Ruby interrupt the wait, which is what a plugin needs in order to act on a connection that has
-    # stopped answering.
+    # Only the pipeline name is shared. The driver is still asked for the spelling the caller used,
+    # because pg's +sync_+ forms are not aliases: +sync_exec+ is a blocking libpq call and +exec+ is
+    # +async_exec+, which sends the statement and then waits on the socket from Ruby, so the wait can
+    # be interrupted. Which of the two a bare +exec+ means is itself settable, through
+    # +PG::Connection.async_api=+, so a mapping that also chose the implementation would change the
+    # caller's choice in one direction under the default and the other direction once that was
+    # flipped.
     ALIASED_METHODS = {
       async_query: :exec, sync_exec: :exec,
       async_exec_params: :exec_params, sync_exec_params: :exec_params,
@@ -293,7 +296,7 @@ module AwsRubyDatabaseDriverWrapper
 
     def method_missing(method_name, *args, **kwargs, &)
       canonical = ALIASED_METHODS[method_name]
-      return send(canonical, *args, **kwargs, &) if canonical
+      return call_as(canonical, method_name, *args, **kwargs, &) if canonical
 
       conn = current_conn
       raise NoMethodError, 'Connection not initialized' if conn.nil?
@@ -311,12 +314,32 @@ module AwsRubyDatabaseDriverWrapper
 
     private
 
+    # Performs a call that arrived under one of the names in {ALIASED_METHODS} by running the canonical
+    # method, while remembering the spelling that was asked for so that {#driver_method} can hand the
+    # driver that one. The spelling is held in an instance variable rather than passed along, because
+    # the canonical methods take the parameters of a statement, among which a keyword of ours could
+    # only be guessed at. A libpq connection cannot be used by two threads at once, so there is no
+    # other caller to see it.
+    def call_as(canonical, spelling, ...)
+      previous = @driver_spelling
+      @driver_spelling = spelling
+      send(canonical, ...)
+    ensure
+      @driver_spelling = previous
+    end
+
+    # The name to call on the driver: the spelling that was asked for if the call arrived under one of
+    # the other names pg gives it, and otherwise the name of the method it arrived at.
+    def driver_method(default)
+      @driver_spelling || default
+    end
+
     # Runs a call that reached method_missing through the pipeline, telling the plugins the connection
     # it is bound to, which is known here rather than from the arguments of the call.
     def execute_dynamic(method_name, method_key, args, kwargs, &)
       result = pm.execute(
         DYNAMIC_METHODS[method_name] || method_key, current_conn,
-        ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) },
+        ->(*a, **opts, &b) { current_conn.send(driver_method(method_name), *a, **opts, &b) },
         *args, **kwargs, bounded_conn: bounded_conn_for(method_name, args), &
       )
       record_state_after(method_name, args)

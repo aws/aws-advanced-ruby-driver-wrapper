@@ -31,12 +31,12 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- Connection methods --
     CONNECTION_CLOSE               = define('connection.close', check_bounded_connection: false)
-    CONNECTION_PING                = define('connection.ping', check_bounded_connection: false)
     CONNECTION_RESET               = define('connection.reset', check_bounded_connection: false)
     CONNECTION_PREPARE             = define('connection.prepare', check_bounded_connection: false)
     CONNECTION_ESCAPE              = define('connection.escape', check_bounded_connection: false)
 
     # -- Connection methods (mysql2-specific) --
+    CONNECTION_PING                = define('connection.ping', check_bounded_connection: false)
     CONNECTION_QUERY               = define('connection.query', check_bounded_connection: false)
     CONNECTION_ASYNC_RESULT        = define('connection.async_result', check_bounded_connection: true)
     CONNECTION_SELECT_DB           = define('connection.select_db', check_bounded_connection: false)

@@ -61,28 +61,28 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     end
 
     it 'takes async_query through the pipeline' do
-      allow(connection).to receive(:exec).and_return(pg_result)
+      allow(connection).to receive(:async_query).and_return(pg_result)
       wrapper.async_query('SELECT ssn FROM users')
 
       expect(plugin.method_names).to eq(['connection.exec'])
     end
 
     it 'takes sync_exec_params through the pipeline' do
-      allow(connection).to receive(:exec_params).and_return(pg_result)
+      allow(connection).to receive(:sync_exec_params).and_return(pg_result)
       wrapper.sync_exec_params('SELECT ssn FROM users WHERE name = $1', ['Jo'])
 
       expect(plugin.method_names).to eq(['connection.exec_params'])
     end
 
     it 'performs the call it was given, once' do
-      allow(connection).to receive(:exec).and_return(pg_result)
+      allow(connection).to receive(:sync_exec).and_return(pg_result)
       wrapper.sync_exec('SELECT ssn FROM users')
 
-      expect(connection).to have_received(:exec).with('SELECT ssn FROM users').once
+      expect(connection).to have_received(:sync_exec).with('SELECT ssn FROM users').once
     end
 
     it 'wraps the result of a spelling it translated' do
-      allow(connection).to receive(:exec_params).and_return(pg_result)
+      allow(connection).to receive(:async_exec_params).and_return(pg_result)
       allow(pg_result).to receive(:to_a).and_return([])
 
       wrapper.async_exec_params('SELECT ssn FROM users WHERE name = $1', ['Jo']).to_a
@@ -90,11 +90,46 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
       expect(plugin.method_names).to eq(['connection.exec_params', 'result.to_a'])
     end
 
+    # Only the pipeline name is shared. pg's sync_ forms are separate libpq calls rather than aliases:
+    # sync_exec blocks in libpq and exec sends the statement and then waits on the socket from Ruby,
+    # where the wait can be interrupted. Performing one as the other would be choosing for the caller.
+    it 'asks the driver for the spelling it was given rather than the canonical one' do
+      allow(connection).to receive(:sync_exec).and_return(pg_result)
+      allow(connection).to receive(:exec).and_return(pg_result)
+
+      wrapper.sync_exec('SELECT ssn FROM users')
+
+      expect(connection).to have_received(:sync_exec)
+      expect(connection).not_to have_received(:exec)
+    end
+
+    it 'asks the driver for the spelling of a call that has no method of its own' do
+      allow(connection).to receive(:notifies_wait)
+      allow(connection).to receive(:wait_for_notify)
+
+      wrapper.notifies_wait(1)
+
+      expect(connection).to have_received(:notifies_wait).with(1)
+      expect(connection).not_to have_received(:wait_for_notify)
+      expect(plugin.method_names).to eq(['connection.wait_for_notify'])
+    end
+
+    it 'goes back to the canonical spelling once a translated call is done' do
+      allow(connection).to receive(:sync_exec).and_return(pg_result)
+      allow(connection).to receive(:exec).and_return(pg_result)
+
+      wrapper.sync_exec('SELECT ssn FROM users')
+      wrapper.exec('SELECT ssn FROM users')
+
+      expect(connection).to have_received(:sync_exec).once
+      expect(connection).to have_received(:exec).once
+    end
+
     # The statement was prepared by one spelling and executed by another, and the bookkeeping has to
     # survive the trip either way.
     it 'keeps the bookkeeping of a statement prepared under another spelling' do
-      allow(connection).to receive(:prepare)
-      allow(connection).to receive(:exec_prepared).and_return(pg_result)
+      allow(connection).to receive(:sync_prepare)
+      allow(connection).to receive(:async_exec_prepared).and_return(pg_result)
 
       wrapper.sync_prepare('insert_user', 'INSERT INTO users (name, ssn) VALUES ($1, $2)')
       wrapper.async_exec_prepared('insert_user', %w[Jo 123-45-6789])
@@ -141,14 +176,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
 
     it 'is refused when a large object was opened on another connection' do
       wrapper.instance_variable_set(:@lo_conn, instance_double(PG::Connection))
+      # Both spellings, since the double only answers respond_to? for what it has been given, and the
+      # canonical name is the one this class looks up while the short one is what it calls.
       allow(connection).to receive(:lo_read)
+      allow(connection).to receive(:loread)
 
       expect { wrapper.loread(0, 4) }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
     end
 
     it 'allows a large object read on the connection it was opened on' do
       allow(connection).to receive(:lo_open).and_return(0)
-      allow(connection).to receive(:lo_read).and_return('data')
+      allow(connection).to receive(:lo_read)
+      allow(connection).to receive(:loread).and_return('data')
 
       wrapper.lo_open(1234)
 
@@ -200,22 +239,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
 
       expect(wrapper.escape_string('Jo')).to eq('Jo')
       expect(plugin.method_names).to be_empty
-    end
-  end
-
-  # pg has no instance ping: PG::Connection.ping is a class method that opens a connection of its own
-  # to try a set of options out. Calling it on a connection raised NoMethodError, so the dialect
-  # answers it with a trivial statement instead.
-  describe '#ping' do
-    it 'asks the dialect rather than the connection' do
-      container.dialect_service = instance_double(
-        AwsRubyDatabaseDriverWrapper::Services::DialectService,
-        driver_dialect: AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new
-      )
-      allow(connection).to receive(:exec).and_return(driver_result(PG::Result, 'PingResult'))
-
-      expect(wrapper.ping).to be(true)
-      expect(plugin.method_names).to eq(['connection.ping'])
     end
   end
 end

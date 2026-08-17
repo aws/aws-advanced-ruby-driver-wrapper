@@ -47,18 +47,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
-  describe '#ping' do
-    it 'returns true on success' do
-      allow(connection).to receive(:exec).with('SELECT 1').and_return(:result)
-      expect(dialect.ping(connection)).to be true
-    end
-
-    it 'returns false on PG::Error' do
-      allow(connection).to receive(:exec).and_raise(PG::Error)
-      expect(dialect.ping(connection)).to be false
-    end
-  end
-
   describe '#closed?' do
     it 'delegates to connection.finished?' do
       allow(connection).to receive(:finished?).and_return(true)

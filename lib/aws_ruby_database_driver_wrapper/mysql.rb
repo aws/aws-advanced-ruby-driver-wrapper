@@ -80,7 +80,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def more_results?
-      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results }, bounded_conn: @async_conn)
+      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results? }, bounded_conn: @async_conn)
     end
 
     # A statement that leaves more than one result set is read by moving to each in turn and storing
