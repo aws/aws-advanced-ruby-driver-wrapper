@@ -257,7 +257,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     )
 
     sm_props = {
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'secretsManager',
+      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
       AwsRubyDatabaseDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id,
       AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
     }

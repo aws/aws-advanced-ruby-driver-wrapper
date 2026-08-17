@@ -45,7 +45,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
 
   let(:initial_connection_props) do
     base_wrapper_props.merge(
-      props::PLUGINS.name => 'initialConnection'
+      props::PLUGINS.name => 'initial_connection'
     )
   end
 

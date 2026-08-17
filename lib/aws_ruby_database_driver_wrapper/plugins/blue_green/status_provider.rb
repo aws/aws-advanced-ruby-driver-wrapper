@@ -83,7 +83,7 @@ module AwsRubyDatabaseDriverWrapper
           if dialect.respond_to?(:blue_green_status_available?)
             init_monitoring
           else
-            logger.warn { "[bgdId: '#{@bgd_id}'] Blue/Green Deployments isn't supported by database dialect #{dialect.class.name}." }
+            logger.warn { "[bgd_id: '#{@bgd_id}'] Blue/Green Deployments isn't supported by database dialect #{dialect.class.name}." }
           end
         end
 
@@ -99,12 +99,12 @@ module AwsRubyDatabaseDriverWrapper
 
         def log_current_context
           phase_str = @summary_status&.current_phase&.to_s || '<null>'
-          logger.debug { "[bgdId: '#{@bgd_id}'] BG status: #{phase_str}" }
-          logger.debug { "[bgdId: '#{@bgd_id}'] Summary status:\n#{@summary_status || '<null>'}" }
+          logger.debug { "[bgd_id: '#{@bgd_id}'] BG status: #{phase_str}" }
+          logger.debug { "[bgd_id: '#{@bgd_id}'] Summary status:\n#{@summary_status || '<null>'}" }
           logger.debug { "Corresponding hosts:\n#{@host_mapper.to_debug_s}" }
           logger.debug { "Phase times:\n#{@event_log.to_debug_s}" }
           logger.debug { "Green host certificate change times:\n#{@iam_tracker.to_debug_s}" }
-          logger.debug { "\n   latestStatusPhase: #{@latest_status_phase}\n#{@switchover_state.to_debug_s(@iam_tracker)}" }
+          logger.debug { "\n   latest_status_phase: #{@latest_status_phase}\n#{@switchover_state.to_debug_s(@iam_tracker)}" }
         end
 
         def log_green_topology_recognized
@@ -123,11 +123,11 @@ module AwsRubyDatabaseDriverWrapper
           ip_str = format_ip_mapping
 
           logger.info do
-            "[bgdId: '#{@bgd_id}'] Blue/Green target topology recognized\n   " \
+            "[bgd_id: '#{@bgd_id}'] Blue/Green target topology recognized\n   " \
               "phase: #{@latest_status_phase}\n   " \
-              "sourceHosts: #{source_host_count}\n   " \
-              "targetHosts: #{target_host_count}\n   " \
-              "correspondingHosts: #{corresponding_host_count}\n   " \
+              "source_hosts: #{source_host_count}\n   " \
+              "target_hosts: #{target_host_count}\n   " \
+              "corresponding_hosts: #{corresponding_host_count}\n   " \
               "ready: true\n " \
               "Blue -> Green Mapping:\n   " \
               "#{mapping_str}\n " \
@@ -225,7 +225,7 @@ module AwsRubyDatabaseDriverWrapper
             @switchover_state.update_dns_flags(@bgd_id, role, interim_status)
             @summary_status = @builder.completed(@rollback)
           else
-            raise ArgumentError, "[bgdId: '#{@bgd_id}'] Unknown BG phase '#{@latest_status_phase}'."
+            raise ArgumentError, "[bgd_id: '#{@bgd_id}'] Unknown BG phase '#{@latest_status_phase}'."
           end
         end
 
@@ -240,7 +240,7 @@ module AwsRubyDatabaseDriverWrapper
 
         def update_monitors
           settings = MONITOR_SETTINGS.fetch(@summary_status.current_phase) do
-            raise ArgumentError, "[bgdId: '#{@bgd_id}'] Unknown BG phase '#{@summary_status.current_phase}'."
+            raise ArgumentError, "[bgd_id: '#{@bgd_id}'] Unknown BG phase '#{@summary_status.current_phase}'."
           end
 
           @monitors.values.compact.each do |monitor|
@@ -269,7 +269,7 @@ module AwsRubyDatabaseDriverWrapper
              @latest_status_phase != Phase::COMPLETED &&
              new_phase < latest_interim_phase
             @rollback = true
-            logger.debug { "[bgdId: '#{@bgd_id}'] Blue/Green deployment is in rollback mode." }
+            logger.debug { "[bgd_id: '#{@bgd_id}'] Blue/Green deployment is in rollback mode." }
           end
 
           return if new_phase.nil?
@@ -293,7 +293,7 @@ module AwsRubyDatabaseDriverWrapper
               return
             end
 
-            logger.debug { "[bgdId: '#{@bgd_id}', role: #{role}] #{interim_status}" }
+            logger.debug { "[bgd_id: '#{@bgd_id}', role: #{role}] #{interim_status}" }
 
             update_phase(role, interim_status)
 
