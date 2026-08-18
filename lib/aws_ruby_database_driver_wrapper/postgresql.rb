@@ -44,14 +44,8 @@ module AwsRubyDatabaseDriverWrapper
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
-    # Every pg operation that talks to the server, and everything this class has to know about one: the
-    # name the plugins see it under, the earlier call whose connection it can only be made on, and what
-    # it leaves behind for the calls that follow it.
-    #
-    # An operation is described here rather than in the method that performs it, because there is more
-    # than one way to reach it: as the method of its own name below, as one of the other spellings pg
-    # gives it, or through method_missing. All three run {#execute_operation} against this entry, so an
-    # operation cannot be given its bookkeeping down one of those paths and left without it down another.
+    # Every canonical pg operation that talks to the server, and everything this class has to know about one: the
+    # name the plugins see it under, the connection it is bound to, and the steps that should be performed after.
     OPERATIONS = {
       exec: { method: RubyMethod::CONNECTION_EXEC },
       async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC },
@@ -117,16 +111,19 @@ module AwsRubyDatabaseDriverWrapper
       lo_close: { method: RubyMethod::CONNECTION_LO_CLOSE, bound_to: :large_object, after: :forget_large_object }
     }.freeze
 
-    # The operation each of the other names pg gives a call performs. The call enters the pipeline as
-    # that operation, and the driver is asked for the name that was actually used, because a +sync_+ form
-    # is not an alias: it is the blocking libpq call, where the +async_+ form sends the statement and then
-    # waits on the socket from Ruby, so the wait can be interrupted. Which of the two a bare +exec+ means
-    # is itself settable, through +PG::Connection.async_api=+, so performing one as the other would be
-    # making a choice that belongs to the caller.
+    # pg gives most operations more than one spelling, and an application is free to use any of them. Each
+    # spelling here is mapped to the operation it performs, so that spellings enter the pipeline under one
+    # canonical name and get the same +bound_to+ and +after+ handling its {OPERATIONS} entry asks for.
+    # Only the pipeline name is shared: the driver is still called under the original spelling.
+    #
+    # For example, the +sync_+ and +async_+ forms of an operation are two different calls, the first
+    # blocking in libpq and the second sending and then waiting on the socket from Ruby, where the
+    # wait can be interrupted. Which of the two a bare +exec+ means is itself settable, through
+    # +PG::Connection.async_api=+.
     #
     # A +sync_+ or +async_+ spelling that is missing here is still recognized, by {#operation_for}
-    # removing the prefix. They are written out all the same, so that the list can be checked against the
-    # gem, which the irregular ones below cannot be derived from at all.
+    # removing the prefix. The current spellings are written out here anyway, so that the list can
+    # be checked against the gem.
     OPERATION_BY_SPELLING = {
       async_query: :exec, sync_exec: :exec,
       async_exec_params: :exec_params, sync_exec_params: :exec_params,
@@ -273,12 +270,8 @@ module AwsRubyDatabaseDriverWrapper
 
     private
 
-    # Runs one operation through the pipeline: entered under the name the plugins know it by, refused if
-    # what it needs was left on a connection that is no longer current, and followed by whatever it
-    # leaves behind for the calls after it.
-    #
-    # The driver is asked for +spelling+, the name the call arrived under, which is not always the name
-    # of the operation and so defaults to it. See {OPERATION_BY_SPELLING}.
+    # Runs one canonical operation through the pipeline, passing the operation's `bound_to` connection
+    # and performing any `after` steps as necessary.
     def execute_operation(operation, args = [], kwargs = {}, spelling: operation, &)
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
       result = pm.execute(
