@@ -175,5 +175,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
 
       expect(unanswerable).to be_empty
     end
+
+    # A listed call the client neither defines nor names in DYNAMIC_METHODS still reaches the plugins,
+    # but as a bare string rather than a MethodInfo, and PluginManager only checks the bounded
+    # connection of a MethodInfo. Such a call would be run on whatever connection is current, however
+    # long ago the statement it is reading was sent. The names inherited from every dialect are left
+    # out, as they are above: reset has no mysql2 counterpart and connect is not a call on a connection.
+    it 'is answered by a client method or a DYNAMIC_METHODS entry for every call it lists of its own' do
+      wrapper = AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient
+      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      listed = (dialect.network_bound_methods - common).select { |entry| entry.start_with?('connection.') }
+
+      unnamed = listed.reject do |entry|
+        call = entry.delete_prefix('connection.').to_sym
+        wrapper.method_defined?(call, false) || wrapper::DYNAMIC_METHODS.key?(call)
+      end
+
+      expect(unnamed).to be_empty
+    end
   end
 end

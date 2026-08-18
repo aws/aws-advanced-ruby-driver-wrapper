@@ -156,11 +156,12 @@ module AwsRubyDatabaseDriverWrapper
     }.freeze
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
-    # Each names the operation it performs and the name to call on the driver, which for these is the
-    # same, and takes the arguments pg documents for it. What the operation entails is in {OPERATIONS}.
+    # Each names the operation it performs and takes the arguments pg documents for it. The driver is
+    # asked for the name of the operation unless the method says otherwise, as +query+ does. What the
+    # operation entails is in {OPERATIONS}.
 
     def exec(sql, *params)
-      execute_operation(:exec, :exec, [sql, *params])
+      execute_operation(:exec, [sql, *params])
     end
 
     # pg spells this operation +exec+, +query+, +async_exec+ and +async_query+, all of which run the
@@ -169,69 +170,69 @@ module AwsRubyDatabaseDriverWrapper
     # since that is the operation being performed. The name +connection.query+ is not used: that is
     # the mysql2 call, whose second argument is an options hash rather than a list of parameters.
     def query(sql, *params)
-      execute_operation(:exec, :query, [sql, *params])
+      execute_operation(:exec, [sql, *params], spelling: :query)
     end
 
     def exec_params(sql, params, result_format = 0, type_map = nil)
-      execute_operation(:exec_params, :exec_params, [sql, params, result_format, type_map])
+      execute_operation(:exec_params, [sql, params, result_format, type_map])
     end
 
     def async_exec(sql, *params)
-      execute_operation(:async_exec, :async_exec, [sql, *params])
+      execute_operation(:async_exec, [sql, *params])
     end
 
     def transaction(&)
-      execute_operation(:transaction, :transaction, &)
+      execute_operation(:transaction, &)
     end
 
     def close
-      execute_operation(:close, :close)
+      execute_operation(:close)
     end
 
     alias finish close
 
     def reset
-      execute_operation(:reset, :reset)
+      execute_operation(:reset)
     end
 
     # -- Prepared statements --
 
     def prepare(stmt_name, sql, param_types = nil)
-      execute_operation(:prepare, :prepare, [stmt_name, sql, param_types])
+      execute_operation(:prepare, [stmt_name, sql, param_types])
     end
 
     def send_prepare(stmt_name, sql, param_types = nil)
-      execute_operation(:send_prepare, :send_prepare, [stmt_name, sql, param_types])
+      execute_operation(:send_prepare, [stmt_name, sql, param_types])
     end
 
     def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      execute_operation(:exec_prepared, :exec_prepared, [stmt_name, params, result_format, type_map])
+      execute_operation(:exec_prepared, [stmt_name, params, result_format, type_map])
     end
 
     def describe_prepared(stmt_name)
-      execute_operation(:describe_prepared, :describe_prepared, [stmt_name])
+      execute_operation(:describe_prepared, [stmt_name])
     end
 
     def send_query_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      execute_operation(:send_query_prepared, :send_query_prepared, [stmt_name, params, result_format, type_map])
+      execute_operation(:send_query_prepared, [stmt_name, params, result_format, type_map])
     end
 
     # -- Pending exchanges --
 
     def send_query(sql, *params)
-      execute_operation(:send_query, :send_query, [sql, *params])
+      execute_operation(:send_query, [sql, *params])
     end
 
     def send_query_params(sql, params, result_format = 0, type_map = nil)
-      execute_operation(:send_query_params, :send_query_params, [sql, params, result_format, type_map])
+      execute_operation(:send_query_params, [sql, params, result_format, type_map])
     end
 
     def get_result # rubocop:disable Naming/AccessorMethodName
-      execute_operation(:get_result, :get_result)
+      execute_operation(:get_result)
     end
 
     def get_last_result # rubocop:disable Naming/AccessorMethodName
-      execute_operation(:get_last_result, :get_last_result)
+      execute_operation(:get_last_result)
     end
 
     # -- COPY --
@@ -240,21 +241,21 @@ module AwsRubyDatabaseDriverWrapper
     # raises, which is why this one keeps its own bookkeeping instead of leaving it to {OPERATIONS}.
     def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
-      execute_operation(:copy_data, :copy_data, [sql, coder], &)
+      execute_operation(:copy_data, [sql, coder], &)
     ensure
       @copy_conn = nil
     end
 
     def put_copy_data(buffer, encoder = nil)
-      execute_operation(:put_copy_data, :put_copy_data, [buffer, encoder])
+      execute_operation(:put_copy_data, [buffer, encoder])
     end
 
     def get_copy_data(async = false, decoder = nil)
-      execute_operation(:get_copy_data, :get_copy_data, [async, decoder])
+      execute_operation(:get_copy_data, [async, decoder])
     end
 
     def put_copy_end(error_message = nil)
-      execute_operation(:put_copy_end, :put_copy_end, [error_message])
+      execute_operation(:put_copy_end, [error_message])
     end
 
     # -- method_missing: covers non-network calls, the other spellings pg gives a call, and the network
@@ -268,7 +269,7 @@ module AwsRubyDatabaseDriverWrapper
       operation = operation_for(method_name)
       return conn.send(method_name, *args, **kwargs, &) if operation.nil?
 
-      execute_operation(operation, method_name, args, kwargs, &)
+      execute_operation(operation, args, kwargs, spelling: method_name, &)
     end
 
     def respond_to_missing?(method, include_private = false)
@@ -282,8 +283,8 @@ module AwsRubyDatabaseDriverWrapper
     # leaves behind for the calls after it.
     #
     # The driver is asked for +spelling+, the name the call arrived under, which is not always the name
-    # of the operation. See {OPERATION_BY_SPELLING}.
-    def execute_operation(operation, spelling, args = [], kwargs = {}, &)
+    # of the operation and so defaults to it. See {OPERATION_BY_SPELLING}.
+    def execute_operation(operation, args = [], kwargs = {}, spelling: operation, &)
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
       result = pm.execute(
         spec[:method], current_conn,

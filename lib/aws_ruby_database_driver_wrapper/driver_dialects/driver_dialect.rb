@@ -25,7 +25,6 @@ module AwsRubyDatabaseDriverWrapper
       COMMON_NETWORK_BOUND_METHODS = Set[
         RubyMethod::CONNECT.name,
         RubyMethod::CONNECTION_CLOSE.name,
-        RubyMethod::CONNECTION_PING.name,
         RubyMethod::CONNECTION_RESET.name,
         RubyMethod::CONNECTION_PREPARE.name,
         RubyMethod::STATEMENT_EXECUTE.name,
