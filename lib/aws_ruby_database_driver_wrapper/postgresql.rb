@@ -40,187 +40,94 @@ module AwsRubyDatabaseDriverWrapper
       @async_conn = nil
       @copy_conn = nil
       @lo_conn = nil
-      @driver_spelling = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
-    # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
-
-    def exec(sql, *params)
-      result = pm.execute(RubyMethod::CONNECTION_EXEC, current_conn, ->(*a) { current_conn.send(driver_method(:exec), *a) }, sql, *params)
-      wrap_pg_result(result)
-    end
-
-    # pg spells this operation +exec+, +query+, +async_exec+ and +async_query+, all of which run the
-    # same libpq call. +query+ is defined here rather than left to method_missing because it is the
-    # spelling applications use most after +exec+, and it enters the pipeline as +connection.exec+,
-    # since that is the operation being performed. The name +connection.query+ is not used: that is
-    # the mysql2 call, whose second argument is an options hash rather than a list of parameters.
-    def query(sql, *params)
-      result = pm.execute(RubyMethod::CONNECTION_EXEC, current_conn, ->(*a) { current_conn.query(*a) }, sql, *params)
-      wrap_pg_result(result)
-    end
-
-    def exec_params(sql, params, result_format = 0, type_map = nil)
-      result = pm.execute(
-        RubyMethod::CONNECTION_EXEC_PARAMS, current_conn,
-        ->(*a) { current_conn.send(driver_method(:exec_params), *a) },
-        sql, params, result_format, type_map
-      )
-      wrap_pg_result(result)
-    end
-
-    def async_exec(sql, *params)
-      result = pm.execute(RubyMethod::CONNECTION_ASYNC_EXEC, current_conn, ->(*a) { current_conn.async_exec(*a) }, sql, *params)
-      wrap_pg_result(result)
-    end
-
-    def transaction(&)
-      pm.execute(RubyMethod::CONNECTION_TRANSACTION, current_conn, ->(&b) { current_conn.transaction(&b) }, &)
-    end
-
-    def close
-      pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
-    end
-
-    alias finish close
-
-    def reset
-      pm.execute(RubyMethod::CONNECTION_RESET, current_conn, -> { current_conn.send(driver_method(:reset)) })
-    end
-
-    # -- Prepared statement writers (store @prepared_on) --
-
-    def prepare(stmt_name, sql, param_types = nil)
-      pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.send(driver_method(:prepare), *a) },
-                 stmt_name, sql, param_types)
-      @prepared_on[stmt_name] = current_conn
-      nil
-    end
-
-    def send_prepare(stmt_name, sql, param_types = nil)
-      pm.execute(RubyMethod::CONNECTION_SEND_PREPARE, current_conn, ->(*a) { current_conn.send_prepare(*a) }, stmt_name, sql, param_types)
-      @prepared_on[stmt_name] = current_conn
-      @async_conn = current_conn
-    end
-
-    # -- Prepared statement readers (check bounded to @prepared_on) --
-
-    def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      result = pm.execute(
-        RubyMethod::CONNECTION_EXEC_PREPARED, current_conn,
-        ->(*a) { current_conn.send(driver_method(:exec_prepared), *a) },
-        stmt_name, params, result_format, type_map,
-        bounded_conn: @prepared_on[stmt_name]
-      )
-      wrap_pg_result(result)
-    end
-
-    def describe_prepared(stmt_name)
-      result = pm.execute(
-        RubyMethod::CONNECTION_DESCRIBE_PREPARED, current_conn,
-        ->(*a) { current_conn.send(driver_method(:describe_prepared), *a) },
-        stmt_name, bounded_conn: @prepared_on[stmt_name]
-      )
-      wrap_pg_result(result)
-    end
-
-    # Cross-domain: reads @prepared_on, writes @async_conn
-    def send_query_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      pm.execute(
-        RubyMethod::CONNECTION_SEND_QUERY_PREPARED, current_conn,
-        ->(*a) { current_conn.send_query_prepared(*a) },
-        stmt_name, params, result_format, type_map,
-        bounded_conn: @prepared_on[stmt_name]
-      )
-      @async_conn = current_conn
-    end
-
-    # -- Async writers (store @async_conn) --
-
-    def send_query(sql, *params)
-      pm.execute(RubyMethod::CONNECTION_SEND_QUERY, current_conn, ->(*a) { current_conn.send_query(*a) }, sql, *params)
-      @async_conn = current_conn
-    end
-
-    def send_query_params(sql, params, result_format = 0, type_map = nil)
-      pm.execute(
-        RubyMethod::CONNECTION_SEND_QUERY_PARAMS, current_conn,
-        ->(*a) { current_conn.send_query_params(*a) },
-        sql, params, result_format, type_map
-      )
-      @async_conn = current_conn
-    end
-
-    # -- Async readers (check bounded to @async_conn) --
-
-    def get_result # rubocop:disable Naming/AccessorMethodName
-      result = pm.execute(RubyMethod::CONNECTION_GET_RESULT, current_conn, lambda {
-        current_conn.send(driver_method(:get_result))
-      }, bounded_conn: @async_conn)
-      @async_conn = nil if result.nil?
-      wrap_pg_result(result)
-    end
-
-    def get_last_result # rubocop:disable Naming/AccessorMethodName
-      result = pm.execute(RubyMethod::CONNECTION_GET_LAST_RESULT, current_conn, lambda {
-        current_conn.send(driver_method(:get_last_result))
-      }, bounded_conn: @async_conn)
-      @async_conn = nil
-      wrap_pg_result(result)
-    end
-
-    # -- COPY writer (store @copy_conn) --
-
-    def copy_data(sql, coder = nil, &)
-      @copy_conn = current_conn
-      pm.execute(RubyMethod::CONNECTION_COPY_DATA, current_conn, ->(*a, &b) { current_conn.copy_data(*a, &b) }, sql, coder, &)
-    ensure
-      @copy_conn = nil
-    end
-
-    # -- COPY readers (check bounded to @copy_conn) --
-
-    def put_copy_data(buffer, encoder = nil)
-      pm.execute(
-        RubyMethod::CONNECTION_PUT_COPY_DATA, current_conn,
-        ->(*a) { current_conn.send(driver_method(:put_copy_data), *a) },
-        buffer, encoder, bounded_conn: @copy_conn
-      )
-    end
-
-    def get_copy_data(async = false, decoder = nil)
-      pm.execute(
-        RubyMethod::CONNECTION_GET_COPY_DATA, current_conn,
-        ->(*a) { current_conn.send(driver_method(:get_copy_data), *a) },
-        async, decoder, bounded_conn: @copy_conn
-      )
-    end
-
-    def put_copy_end(error_message = nil)
-      pm.execute(
-        RubyMethod::CONNECTION_PUT_COPY_END, current_conn,
-        ->(*a) { current_conn.send(driver_method(:put_copy_end), *a) },
-        error_message, bounded_conn: @copy_conn
-      )
-      @copy_conn = nil
-    end
-
-    # -- method_missing: covers non-network calls and rarely used network calls --
-
-    # The other spellings pg gives to a call that is defined above, or to one that is named in
-    # {DYNAMIC_METHODS}. Each is the same operation, so it is performed by the canonical method and
-    # enters the pipeline under that method's name.
+    # Every pg operation that talks to the server, and everything this class has to know about one: the
+    # name the plugins see it under, the earlier call whose connection it can only be made on, and what
+    # it leaves behind for the calls that follow it.
     #
-    # Only the pipeline name is shared. The driver is still asked for the spelling the caller used,
-    # because pg's +sync_+ forms are not aliases: +sync_exec+ is a blocking libpq call and +exec+ is
-    # +async_exec+, which sends the statement and then waits on the socket from Ruby, so the wait can
-    # be interrupted. Which of the two a bare +exec+ means is itself settable, through
-    # +PG::Connection.async_api=+, so a mapping that also chose the implementation would change the
-    # caller's choice in one direction under the default and the other direction once that was
-    # flipped.
-    ALIASED_METHODS = {
+    # An operation is described here rather than in the method that performs it, because there is more
+    # than one way to reach it: as the method of its own name below, as one of the other spellings pg
+    # gives it, or through method_missing. All three run {#execute_operation} against this entry, so an
+    # operation cannot be given its bookkeeping down one of those paths and left without it down another.
+    OPERATIONS = {
+      exec: { method: RubyMethod::CONNECTION_EXEC },
+      async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC },
+      exec_params: { method: RubyMethod::CONNECTION_EXEC_PARAMS },
+      transaction: { method: RubyMethod::CONNECTION_TRANSACTION },
+      close: { method: RubyMethod::CONNECTION_CLOSE },
+      reset: { method: RubyMethod::CONNECTION_RESET },
+      reset_start: { method: RubyMethod::CONNECTION_RESET_START },
+      reset_poll: { method: RubyMethod::CONNECTION_RESET_POLL },
+
+      # A prepared statement only exists on the connection it was prepared on.
+      prepare: { method: RubyMethod::CONNECTION_PREPARE, after: :remember_prepared },
+      send_prepare: { method: RubyMethod::CONNECTION_SEND_PREPARE, after: %i[remember_prepared remember_async] },
+      exec_prepared: { method: RubyMethod::CONNECTION_EXEC_PREPARED, bound_to: :prepared },
+      describe_prepared: { method: RubyMethod::CONNECTION_DESCRIBE_PREPARED, bound_to: :prepared },
+      send_query_prepared: { method: RubyMethod::CONNECTION_SEND_QUERY_PREPARED, bound_to: :prepared, after: :remember_async },
+      send_describe_prepared: { method: RubyMethod::CONNECTION_SEND_DESCRIBE_PREPARED, bound_to: :prepared, after: :remember_async },
+      close_prepared: { method: RubyMethod::CONNECTION_CLOSE_PREPARED, bound_to: :prepared, after: :forget_prepared },
+
+      # A pending exchange, and the portal it may have left, can only be continued on the connection it
+      # was started on.
+      send_query: { method: RubyMethod::CONNECTION_SEND_QUERY, after: :remember_async },
+      send_query_params: { method: RubyMethod::CONNECTION_SEND_QUERY_PARAMS, after: :remember_async },
+      get_result: { method: RubyMethod::CONNECTION_GET_RESULT, bound_to: :async, after: :forget_async_when_drained },
+      get_last_result: { method: RubyMethod::CONNECTION_GET_LAST_RESULT, bound_to: :async, after: :forget_async },
+      describe_portal: { method: RubyMethod::CONNECTION_DESCRIBE_PORTAL, bound_to: :async },
+      close_portal: { method: RubyMethod::CONNECTION_CLOSE_PORTAL, bound_to: :async },
+      send_describe_portal: { method: RubyMethod::CONNECTION_SEND_DESCRIBE_PORTAL, bound_to: :async, after: :remember_async },
+      send_flush_request: { method: RubyMethod::CONNECTION_SEND_FLUSH_REQUEST, bound_to: :async, after: :remember_async },
+      pipeline_sync: { method: RubyMethod::CONNECTION_PIPELINE_SYNC, bound_to: :async },
+      send_pipeline_sync: { method: RubyMethod::CONNECTION_SEND_PIPELINE_SYNC, bound_to: :async, after: :remember_async },
+      discard_results: { method: RubyMethod::CONNECTION_DISCARD_RESULTS, bound_to: :async, after: :forget_async },
+      block: { method: RubyMethod::CONNECTION_BLOCK, bound_to: :async },
+
+      # A COPY can only be fed or read on the connection it was started on.
+      copy_data: { method: RubyMethod::CONNECTION_COPY_DATA },
+      put_copy_data: { method: RubyMethod::CONNECTION_PUT_COPY_DATA, bound_to: :copy },
+      get_copy_data: { method: RubyMethod::CONNECTION_GET_COPY_DATA, bound_to: :copy },
+      put_copy_end: { method: RubyMethod::CONNECTION_PUT_COPY_END, bound_to: :copy, after: :forget_copy },
+
+      cancel: { method: RubyMethod::CONNECTION_CANCEL },
+      flush: { method: RubyMethod::CONNECTION_FLUSH },
+      consume_input: { method: RubyMethod::CONNECTION_CONSUME_INPUT },
+      notifies: { method: RubyMethod::CONNECTION_NOTIFIES },
+      wait_for_notify: { method: RubyMethod::CONNECTION_WAIT_FOR_NOTIFY },
+      encrypt_password: { method: RubyMethod::CONNECTION_ENCRYPT_PASSWORD },
+      set_client_encoding: { method: RubyMethod::CONNECTION_SET_CLIENT_ENCODING },
+      set_default_encoding: { method: RubyMethod::CONNECTION_SET_DEFAULT_ENCODING },
+      'internal_encoding=': { method: RubyMethod::CONNECTION_INTERNAL_ENCODING_SET },
+
+      # A large object descriptor is only open on the connection that opened it.
+      lo_creat: { method: RubyMethod::CONNECTION_LO_CREAT },
+      lo_create: { method: RubyMethod::CONNECTION_LO_CREATE },
+      lo_import: { method: RubyMethod::CONNECTION_LO_IMPORT },
+      lo_export: { method: RubyMethod::CONNECTION_LO_EXPORT },
+      lo_unlink: { method: RubyMethod::CONNECTION_LO_UNLINK },
+      lo_open: { method: RubyMethod::CONNECTION_LO_OPEN, after: :remember_large_object },
+      lo_read: { method: RubyMethod::CONNECTION_LO_READ, bound_to: :large_object },
+      lo_write: { method: RubyMethod::CONNECTION_LO_WRITE, bound_to: :large_object },
+      lo_lseek: { method: RubyMethod::CONNECTION_LO_LSEEK, bound_to: :large_object },
+      lo_tell: { method: RubyMethod::CONNECTION_LO_TELL, bound_to: :large_object },
+      lo_truncate: { method: RubyMethod::CONNECTION_LO_TRUNCATE, bound_to: :large_object },
+      lo_close: { method: RubyMethod::CONNECTION_LO_CLOSE, bound_to: :large_object, after: :forget_large_object }
+    }.freeze
+
+    # The operation each of the other names pg gives a call performs. The call enters the pipeline as
+    # that operation, and the driver is asked for the name that was actually used, because a +sync_+ form
+    # is not an alias: it is the blocking libpq call, where the +async_+ form sends the statement and then
+    # waits on the socket from Ruby, so the wait can be interrupted. Which of the two a bare +exec+ means
+    # is itself settable, through +PG::Connection.async_api=+, so performing one as the other would be
+    # making a choice that belongs to the caller.
+    #
+    # A +sync_+ or +async_+ spelling that is missing here is still recognized, by {#operation_for}
+    # removing the prefix. They are written out all the same, so that the list can be checked against the
+    # gem, which the irregular ones below cannot be derived from at all.
+    OPERATION_BY_SPELLING = {
       async_query: :exec, sync_exec: :exec,
       async_exec_params: :exec_params, sync_exec_params: :exec_params,
       async_exec_prepared: :exec_prepared, sync_exec_prepared: :exec_prepared,
@@ -248,126 +155,207 @@ module AwsRubyDatabaseDriverWrapper
       lotell: :lo_tell, lotruncate: :lo_truncate
     }.freeze
 
-    # The network calls that are rare enough not to be worth a method of their own. They are entered
-    # into the pipeline under the name the pipeline knows them by rather than as a bare string, so
-    # that the connection each is bound to is checked.
-    DYNAMIC_METHODS = {
-      describe_portal: RubyMethod::CONNECTION_DESCRIBE_PORTAL,
-      close_prepared: RubyMethod::CONNECTION_CLOSE_PREPARED,
-      close_portal: RubyMethod::CONNECTION_CLOSE_PORTAL,
-      send_describe_prepared: RubyMethod::CONNECTION_SEND_DESCRIBE_PREPARED,
-      send_describe_portal: RubyMethod::CONNECTION_SEND_DESCRIBE_PORTAL,
-      send_flush_request: RubyMethod::CONNECTION_SEND_FLUSH_REQUEST,
-      discard_results: RubyMethod::CONNECTION_DISCARD_RESULTS,
-      pipeline_sync: RubyMethod::CONNECTION_PIPELINE_SYNC,
-      send_pipeline_sync: RubyMethod::CONNECTION_SEND_PIPELINE_SYNC,
-      block: RubyMethod::CONNECTION_BLOCK,
-      cancel: RubyMethod::CONNECTION_CANCEL,
-      flush: RubyMethod::CONNECTION_FLUSH,
-      consume_input: RubyMethod::CONNECTION_CONSUME_INPUT,
-      notifies: RubyMethod::CONNECTION_NOTIFIES,
-      wait_for_notify: RubyMethod::CONNECTION_WAIT_FOR_NOTIFY,
-      reset_start: RubyMethod::CONNECTION_RESET_START,
-      reset_poll: RubyMethod::CONNECTION_RESET_POLL,
-      encrypt_password: RubyMethod::CONNECTION_ENCRYPT_PASSWORD,
-      set_client_encoding: RubyMethod::CONNECTION_SET_CLIENT_ENCODING,
-      set_default_encoding: RubyMethod::CONNECTION_SET_DEFAULT_ENCODING,
-      'internal_encoding=': RubyMethod::CONNECTION_INTERNAL_ENCODING_SET,
-      lo_creat: RubyMethod::CONNECTION_LO_CREAT,
-      lo_create: RubyMethod::CONNECTION_LO_CREATE,
-      lo_import: RubyMethod::CONNECTION_LO_IMPORT,
-      lo_export: RubyMethod::CONNECTION_LO_EXPORT,
-      lo_unlink: RubyMethod::CONNECTION_LO_UNLINK,
-      lo_open: RubyMethod::CONNECTION_LO_OPEN,
-      lo_read: RubyMethod::CONNECTION_LO_READ,
-      lo_write: RubyMethod::CONNECTION_LO_WRITE,
-      lo_close: RubyMethod::CONNECTION_LO_CLOSE,
-      lo_lseek: RubyMethod::CONNECTION_LO_LSEEK,
-      lo_tell: RubyMethod::CONNECTION_LO_TELL,
-      lo_truncate: RubyMethod::CONNECTION_LO_TRUNCATE
-    }.freeze
+    # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
+    # Each names the operation it performs and the name to call on the driver, which for these is the
+    # same, and takes the arguments pg documents for it. What the operation entails is in {OPERATIONS}.
 
-    # Calls that can only be made on the connection an earlier call left something on: a prepared
-    # statement, a portal or a pending exchange, or an open large object descriptor.
-    BOUNDED_TO_PREPARED = Set[:close_prepared, :send_describe_prepared].freeze
-    BOUNDED_TO_ASYNC = Set[:describe_portal, :close_portal, :send_describe_portal, :send_flush_request,
-                           :pipeline_sync, :send_pipeline_sync, :discard_results, :block].freeze
-    BOUNDED_TO_LARGE_OBJECT = Set[:lo_read, :lo_write, :lo_lseek, :lo_tell, :lo_truncate, :lo_close].freeze
+    def exec(sql, *params)
+      execute_operation(:exec, :exec, [sql, *params])
+    end
+
+    # pg spells this operation +exec+, +query+, +async_exec+ and +async_query+, all of which run the
+    # same libpq call. +query+ is defined here rather than left to method_missing because it is the
+    # spelling applications use most after +exec+, and it enters the pipeline as +connection.exec+,
+    # since that is the operation being performed. The name +connection.query+ is not used: that is
+    # the mysql2 call, whose second argument is an options hash rather than a list of parameters.
+    def query(sql, *params)
+      execute_operation(:exec, :query, [sql, *params])
+    end
+
+    def exec_params(sql, params, result_format = 0, type_map = nil)
+      execute_operation(:exec_params, :exec_params, [sql, params, result_format, type_map])
+    end
+
+    def async_exec(sql, *params)
+      execute_operation(:async_exec, :async_exec, [sql, *params])
+    end
+
+    def transaction(&)
+      execute_operation(:transaction, :transaction, &)
+    end
+
+    def close
+      execute_operation(:close, :close)
+    end
+
+    alias finish close
+
+    def reset
+      execute_operation(:reset, :reset)
+    end
+
+    # -- Prepared statements --
+
+    def prepare(stmt_name, sql, param_types = nil)
+      execute_operation(:prepare, :prepare, [stmt_name, sql, param_types])
+    end
+
+    def send_prepare(stmt_name, sql, param_types = nil)
+      execute_operation(:send_prepare, :send_prepare, [stmt_name, sql, param_types])
+    end
+
+    def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
+      execute_operation(:exec_prepared, :exec_prepared, [stmt_name, params, result_format, type_map])
+    end
+
+    def describe_prepared(stmt_name)
+      execute_operation(:describe_prepared, :describe_prepared, [stmt_name])
+    end
+
+    def send_query_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
+      execute_operation(:send_query_prepared, :send_query_prepared, [stmt_name, params, result_format, type_map])
+    end
+
+    # -- Pending exchanges --
+
+    def send_query(sql, *params)
+      execute_operation(:send_query, :send_query, [sql, *params])
+    end
+
+    def send_query_params(sql, params, result_format = 0, type_map = nil)
+      execute_operation(:send_query_params, :send_query_params, [sql, params, result_format, type_map])
+    end
+
+    def get_result # rubocop:disable Naming/AccessorMethodName
+      execute_operation(:get_result, :get_result)
+    end
+
+    def get_last_result # rubocop:disable Naming/AccessorMethodName
+      execute_operation(:get_last_result, :get_last_result)
+    end
+
+    # -- COPY --
+
+    # The connection is held for as long as the block runs and let go afterward even if the block
+    # raises, which is why this one keeps its own bookkeeping instead of leaving it to {OPERATIONS}.
+    def copy_data(sql, coder = nil, &)
+      @copy_conn = current_conn
+      execute_operation(:copy_data, :copy_data, [sql, coder], &)
+    ensure
+      @copy_conn = nil
+    end
+
+    def put_copy_data(buffer, encoder = nil)
+      execute_operation(:put_copy_data, :put_copy_data, [buffer, encoder])
+    end
+
+    def get_copy_data(async = false, decoder = nil)
+      execute_operation(:get_copy_data, :get_copy_data, [async, decoder])
+    end
+
+    def put_copy_end(error_message = nil)
+      execute_operation(:put_copy_end, :put_copy_end, [error_message])
+    end
+
+    # -- method_missing: covers non-network calls, the other spellings pg gives a call, and the network
+    # calls that are rare enough not to be worth a method of their own --
 
     def method_missing(method_name, *args, **kwargs, &)
-      canonical = ALIASED_METHODS[method_name]
-      return call_as(canonical, method_name, *args, **kwargs, &) if canonical
-
       conn = current_conn
       raise NoMethodError, 'Connection not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
-      method_key = "connection.#{method_name}"
-      return conn.send(method_name, *args, **kwargs, &) unless network_bound_methods.include?(method_key)
+      operation = operation_for(method_name)
+      return conn.send(method_name, *args, **kwargs, &) if operation.nil?
 
-      execute_dynamic(method_name, method_key, args, kwargs, &)
+      execute_operation(operation, method_name, args, kwargs, &)
     end
 
     def respond_to_missing?(method, include_private = false)
-      ALIASED_METHODS.key?(method) || current_conn.respond_to?(method, include_private) || super
+      OPERATION_BY_SPELLING.key?(method) || current_conn.respond_to?(method, include_private) || super
     end
 
     private
 
-    # Performs a call that arrived under one of the names in {ALIASED_METHODS} by running the canonical
-    # method, while remembering the spelling that was asked for so that {#driver_method} can hand the
-    # driver that one. The spelling is held in an instance variable rather than passed along, because
-    # the canonical methods take the parameters of a statement, among which a keyword of ours could
-    # only be guessed at. A libpq connection cannot be used by two threads at once, so there is no
-    # other caller to see it.
-    def call_as(canonical, spelling, ...)
-      previous = @driver_spelling
-      @driver_spelling = spelling
-      send(canonical, ...)
-    ensure
-      @driver_spelling = previous
-    end
-
-    # The name to call on the driver: the spelling that was asked for if the call arrived under one of
-    # the other names pg gives it, and otherwise the name of the method it arrived at.
-    def driver_method(default)
-      @driver_spelling || default
-    end
-
-    # Runs a call that reached method_missing through the pipeline, telling the plugins the connection
-    # it is bound to, which is known here rather than from the arguments of the call.
-    def execute_dynamic(method_name, method_key, args, kwargs, &)
+    # Runs one operation through the pipeline: entered under the name the plugins know it by, refused if
+    # what it needs was left on a connection that is no longer current, and followed by whatever it
+    # leaves behind for the calls after it.
+    #
+    # The driver is asked for +spelling+, the name the call arrived under, which is not always the name
+    # of the operation. See {OPERATION_BY_SPELLING}.
+    def execute_operation(operation, spelling, args = [], kwargs = {}, &)
+      spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
       result = pm.execute(
-        DYNAMIC_METHODS[method_name] || method_key, current_conn,
-        ->(*a, **opts, &b) { current_conn.send(driver_method(method_name), *a, **opts, &b) },
-        *args, **kwargs, bounded_conn: bounded_conn_for(method_name, args), &
+        spec[:method], current_conn,
+        ->(*a, **opts, &b) { current_conn.send(spelling, *a, **opts, &b) },
+        *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), &
       )
-      record_state_after(method_name, args)
+      Array(spec[:after]).each { |hook| send(hook, args, result) }
       wrap_pg_result(result)
     end
 
-    # @return [Object, nil] the connection the call is bound to, if it is bound to one
-    def bounded_conn_for(method_name, args)
-      if BOUNDED_TO_PREPARED.include?(method_name)
-        @prepared_on[args.first]
-      elsif BOUNDED_TO_ASYNC.include?(method_name)
-        @async_conn
-      elsif BOUNDED_TO_LARGE_OBJECT.include?(method_name)
-        @lo_conn
+    # The operation a call performs, whatever spelling it arrived under, or nil for a call that does not
+    # talk to the server and so has no business in the pipeline.
+    def operation_for(spelling)
+      operation = OPERATION_BY_SPELLING[spelling] || spelling
+      return operation if OPERATIONS.key?(operation)
+
+      # A spelling pg has added since {OPERATION_BY_SPELLING} was written. +sync_+ and +async_+ are its
+      # own prefixes for the two ways it performs an operation, so whatever is left once one of them is
+      # removed names that operation.
+      stripped = spelling.to_s.sub(/\A(a?sync)_/, '').to_sym
+      return stripped if OPERATIONS.key?(stripped)
+
+      # Listed by the dialect but not described in {OPERATIONS}, which means the two have got out of
+      # step. It still talks to the server, so it still goes through the plugins, under a name they can
+      # match on, though without the bounded connection check that only a named method gets.
+      spelling if network_bound_methods.include?("connection.#{spelling}")
+    end
+
+    # @return [Object, nil] the connection the operation is bound to, if it is bound to one
+    def bounded_conn_for(bound_to, args)
+      case bound_to
+      when :prepared then @prepared_on[args.first]
+      when :async then @async_conn
+      when :copy then @copy_conn
+      when :large_object then @lo_conn
       end
     end
 
-    # Keeps track of what a call through method_missing leaves behind, so that whatever is done with
-    # it next knows which connection it belongs to.
-    def record_state_after(method_name, args)
-      case method_name
-      when :lo_open then @lo_conn = current_conn
-      when :lo_close then @lo_conn = nil
-      when :close_prepared then @prepared_on.delete(args.first)
-      when :send_describe_prepared, :send_describe_portal, :send_pipeline_sync, :send_flush_request
-        @async_conn = current_conn
-      when :discard_results then @async_conn = nil
-      end
+    # -- What an operation leaves behind, named by the +after+ entries of {OPERATIONS} --
+
+    def remember_prepared(args, _result)
+      @prepared_on[args.first] = current_conn
+    end
+
+    def forget_prepared(args, _result)
+      @prepared_on.delete(args.first)
+    end
+
+    def remember_async(_args, _result)
+      @async_conn = current_conn
+    end
+
+    def forget_async(_args, _result)
+      @async_conn = nil
+    end
+
+    # get_result answers nil once the last result of a pending exchange has been read, and there is
+    # nothing left to be bound to.
+    def forget_async_when_drained(_args, result)
+      @async_conn = nil if result.nil?
+    end
+
+    def forget_copy(_args, _result)
+      @copy_conn = nil
+    end
+
+    def remember_large_object(_args, _result)
+      @lo_conn = current_conn
+    end
+
+    def forget_large_object(_args, _result)
+      @lo_conn = nil
     end
 
     def current_conn

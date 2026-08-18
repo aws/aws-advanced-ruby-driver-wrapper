@@ -52,7 +52,7 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_EXEC_PARAMS         = define('connection.exec_params', check_bounded_connection: false)
     CONNECTION_EXEC_PREPARED       = define('connection.exec_prepared', check_bounded_connection: true)
     CONNECTION_DESCRIBE_PREPARED   = define('connection.describe_prepared', check_bounded_connection: true)
-    CONNECTION_DESCRIBE_PORTAL     = define('connection.describe_portal', check_bounded_connection: false)
+    CONNECTION_DESCRIBE_PORTAL     = define('connection.describe_portal', check_bounded_connection: true)
     CONNECTION_TRANSACTION         = define('connection.transaction', check_bounded_connection: false)
     CONNECTION_COPY_DATA           = define('connection.copy_data', check_bounded_connection: false)
     CONNECTION_PUT_COPY_DATA       = define('connection.put_copy_data', check_bounded_connection: true)

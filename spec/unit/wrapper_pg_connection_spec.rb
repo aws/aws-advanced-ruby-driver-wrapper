@@ -32,7 +32,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
   let(:recorded) { build_recording_container(connection) }
   let(:container) { recorded.first }
   let(:plugin) { recorded.last }
-  subject(:wrapper) do
+  subject(:wrapper) { build_wrapper(container) }
+
+  # The state initialize would have left, without connecting to anything.
+  def build_wrapper(container)
     wrapper = described_class.allocate
     wrapper.instance_variable_set(:@service_container, container)
     wrapper.instance_variable_set(:@prepared_on, {})
@@ -141,6 +144,74 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     it 'says it responds to the spellings it translates' do
       expect(wrapper).to respond_to(:sync_exec, :async_exec_params, :notifies_wait, :loread)
     end
+
+    # A spelling the table does not list, which is what a future pg release adding one looks like. The
+    # connection here is a plain double rather than a verifying one for that reason: the whole point is a
+    # name the installed gem does not define, which a verifying double would refuse.
+    it 'recognizes an unlisted sync_ spelling by what is left when the prefix is removed' do
+      connection = double('PG::Connection', sync_lo_read: 'data')
+      container, plugin = build_recording_container(connection)
+      wrapper = build_wrapper(container)
+
+      expect(wrapper.sync_lo_read(0, 4)).to eq('data')
+      expect(plugin.method_names).to eq(['connection.lo_read'])
+      expect(connection).to have_received(:sync_lo_read).with(0, 4)
+    end
+
+    it 'still refuses an unlisted spelling that belongs to another connection' do
+      connection = double('PG::Connection', sync_lo_read: 'data')
+      wrapper = build_wrapper(build_recording_container(connection).first)
+      wrapper.instance_variable_set(:@lo_conn, double('PG::Connection'))
+
+      expect { wrapper.sync_lo_read(0, 4) }
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+      expect(connection).not_to have_received(:sync_lo_read)
+    end
+  end
+
+  # The dialect's list is what enrolls a call in the pipeline and what failover subscribes to, and
+  # OPERATIONS is what says how each of those calls is performed. Neither is derivable from the other,
+  # so they are checked against each other here rather than by eye.
+  describe 'OPERATIONS' do
+    let(:operations) { described_class::OPERATIONS }
+    let(:listed) do
+      AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect::NETWORK_BOUND_METHODS
+        .select { |entry| entry.start_with?('connection.') }
+        .map { |entry| entry.delete_prefix('connection.').to_sym }
+    end
+
+    it 'describes every connection call the dialect takes through the pipeline' do
+      expect(listed - operations.keys).to be_empty
+    end
+
+    it 'describes nothing the dialect does not take through the pipeline' do
+      expect(operations.keys - listed).to be_empty
+    end
+
+    it 'gives every operation a name the pipeline can check the bounded connection against' do
+      expect(operations.values.map { |spec| spec[:method] })
+        .to all(be_a(AwsRubyDatabaseDriverWrapper::MethodInfo))
+    end
+
+    # An operation that reads what an earlier call left behind has to be checked against the connection
+    # it was left on, which the pipeline only does when the entry says so.
+    it 'has the pipeline check the connection of every bound operation' do
+      unchecked = operations.select { |_, spec| spec[:bound_to] }.reject { |_, spec| spec[:method].check_bounded_connection }
+
+      expect(unchecked).to be_empty
+    end
+
+    it 'names a hook it defines for every operation that leaves something behind' do
+      hooks = operations.values.flat_map { |spec| Array(spec[:after]) }.uniq
+
+      expect(hooks.reject { |hook| described_class.private_method_defined?(hook) }).to be_empty
+    end
+
+    it 'covers every spelling with an operation it describes' do
+      uncovered = described_class::OPERATION_BY_SPELLING.reject { |_, operation| operations.key?(operation) }
+
+      expect(uncovered).to be_empty
+    end
   end
 
   # These are the calls that were left to method_missing because an application rarely makes them.
@@ -176,9 +247,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
 
     it 'is refused when a large object was opened on another connection' do
       wrapper.instance_variable_set(:@lo_conn, instance_double(PG::Connection))
-      # Both spellings, since the double only answers respond_to? for what it has been given, and the
-      # canonical name is the one this class looks up while the short one is what it calls.
-      allow(connection).to receive(:lo_read)
       allow(connection).to receive(:loread)
 
       expect { wrapper.loread(0, 4) }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
@@ -186,7 +254,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
 
     it 'allows a large object read on the connection it was opened on' do
       allow(connection).to receive(:lo_open).and_return(0)
-      allow(connection).to receive(:lo_read)
       allow(connection).to receive(:loread).and_return('data')
 
       wrapper.lo_open(1234)
