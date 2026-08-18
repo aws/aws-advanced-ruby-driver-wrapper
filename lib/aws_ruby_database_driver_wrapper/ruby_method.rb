@@ -74,14 +74,6 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_LO_READ             = define('connection.lo_read', check_bounded_connection: true)
     CONNECTION_LO_WRITE            = define('connection.lo_write', check_bounded_connection: true)
     CONNECTION_LO_CLOSE            = define('connection.lo_close', check_bounded_connection: true)
-
-    # -- Connection methods (pg-specific, reached through WrapperPgConnection#method_missing) --
-    #
-    # These are the remaining pg calls that talk to the server. They are named here rather than
-    # entered into the pipeline as bare strings, since only a named method can have the connection it
-    # is bound to checked, and most of them are bound to one: a prepared statement or a portal only
-    # exists on the connection it was made on, a pending exchange can only be continued on the
-    # connection it was started on, and a large object descriptor is only open on that connection.
     CONNECTION_CLOSE_PREPARED         = define('connection.close_prepared', check_bounded_connection: true)
     CONNECTION_CLOSE_PORTAL           = define('connection.close_portal', check_bounded_connection: true)
     CONNECTION_DISCARD_RESULTS        = define('connection.discard_results', check_bounded_connection: true)

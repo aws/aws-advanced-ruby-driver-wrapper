@@ -28,7 +28,7 @@ module AwsRubyDatabaseDriverWrapper
       #
       # pg gives most of these operations several spellings (+query+ and +async_query+ for +exec+, an
       # +async_+ and a +sync_+ form for many others, a short +lo*+ form for every large object call).
-      # One entry covers every spelling of an operation: WrapperPgConnection recognizes which operation a
+      # One entry covers every spelling of a libpq operation: WrapperPgConnection recognizes which operation a
       # spelling performs and enters the pipeline under that name, then asks the driver for the spelling
       # it was given. Its OPERATIONS table has an entry per name listed here.
       #

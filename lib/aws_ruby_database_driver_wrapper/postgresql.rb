@@ -156,9 +156,6 @@ module AwsRubyDatabaseDriverWrapper
     }.freeze
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
-    # Each names the operation it performs and takes the arguments pg documents for it. The driver is
-    # asked for the name of the operation unless the method says otherwise, as +query+ does. What the
-    # operation entails is in {OPERATIONS}.
 
     def exec(sql, *params)
       execute_operation(:exec, [sql, *params])
@@ -167,8 +164,7 @@ module AwsRubyDatabaseDriverWrapper
     # pg spells this operation +exec+, +query+, +async_exec+ and +async_query+, all of which run the
     # same libpq call. +query+ is defined here rather than left to method_missing because it is the
     # spelling applications use most after +exec+, and it enters the pipeline as +connection.exec+,
-    # since that is the operation being performed. The name +connection.query+ is not used: that is
-    # the mysql2 call, whose second argument is an options hash rather than a list of parameters.
+    # since that is the libpq operation being performed.
     def query(sql, *params)
       execute_operation(:exec, [sql, *params], spelling: :query)
     end
@@ -237,8 +233,7 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- COPY --
 
-    # The connection is held for as long as the block runs and let go afterward even if the block
-    # raises, which is why this one keeps its own bookkeeping instead of leaving it to {OPERATIONS}.
+    # The connection is held for as long as the block runs and let go afterward even if the block raises.
     def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
       execute_operation(:copy_data, [sql, coder], &)
