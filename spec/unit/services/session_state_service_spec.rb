@@ -77,7 +77,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::SessionStateService do
     end
 
     it 'does not change state for non-SQL methods' do
-      service.update_transaction_state('connection.ping', [], true)
+      service.update_transaction_state('connection.close', [], true)
       expect(service.in_transaction?).to be false
       expect(service.autocommit?).to be true
     end

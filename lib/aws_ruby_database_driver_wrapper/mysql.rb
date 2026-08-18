@@ -38,8 +38,12 @@ module AwsRubyDatabaseDriverWrapper
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
+    # This is how mysql2 sends a statement asynchronously as well: +query(sql, async: true)+ returns
+    # nothing and the result is read afterward by +async_result+. The connection the statement was
+    # sent on is remembered for that read, since the read is a call of its own and does not name it.
     def query(sql, options = {})
       result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options)
+      @async_conn = current_conn if options[:async]
       wrap_mysql_result(result)
     end
 
@@ -60,15 +64,14 @@ module AwsRubyDatabaseDriverWrapper
       pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
     end
 
-    # -- Async writer (store @async_conn) --
+    # -- Async readers (check bounded to @async_conn) --
 
-    def query_async(sql, options = {})
-      result = pm.execute(RubyMethod::CONNECTION_QUERY_ASYNC, current_conn, ->(*a) { current_conn.query_async(*a) }, sql, options)
-      @async_conn = current_conn
+    def async_result
+      result = pm.execute(RubyMethod::CONNECTION_ASYNC_RESULT, current_conn, -> { current_conn.async_result },
+                          bounded_conn: @async_conn)
+      @async_conn = nil
       wrap_mysql_result(result)
     end
-
-    # -- Async readers (check bounded to @async_conn) --
 
     def store_result
       result = pm.execute(RubyMethod::CONNECTION_STORE_RESULT, current_conn, -> { current_conn.store_result }, bounded_conn: @async_conn)
@@ -76,26 +79,43 @@ module AwsRubyDatabaseDriverWrapper
       wrap_mysql_result(result)
     end
 
-    def more_results
-      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results }, bounded_conn: @async_conn)
+    def more_results?
+      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results? }, bounded_conn: @async_conn)
     end
 
+    # A statement that leaves more than one result set is read by moving to each in turn and storing
+    # it. Storing a result forgets the connection the statement was sent on, so it is put back for the
+    # read that follows and dropped once there is nothing left to read.
     def next_result
-      pm.execute(RubyMethod::CONNECTION_NEXT_RESULT, current_conn, -> { current_conn.next_result }, bounded_conn: @async_conn)
+      result = pm.execute(RubyMethod::CONNECTION_NEXT_RESULT, current_conn, -> { current_conn.next_result },
+                          bounded_conn: @async_conn)
+      @async_conn = result ? current_conn : nil
+      result
     end
 
-    # -- method_missing: non-network bypasses pipeline --
+    # -- method_missing: covers non-network calls and rarely used network calls --
 
-    def method_missing(method_name, ...)
+    # The network calls that are rare enough not to be worth a method of their own. They are entered
+    # into the pipeline under the name the pipeline knows them by rather than as a bare string, so
+    # that the connection each is bound to is checked.
+    DYNAMIC_METHODS = {
+      abandon_results!: RubyMethod::CONNECTION_ABANDON_RESULTS,
+      select_db: RubyMethod::CONNECTION_SELECT_DB,
+      set_server_option: RubyMethod::CONNECTION_SET_SERVER_OPTION
+    }.freeze
+
+    # Draining what is left of a statement can only be done on the connection it was sent on.
+    BOUNDED_TO_ASYNC = Set[:abandon_results!].freeze
+
+    def method_missing(method_name, *args, **kwargs, &)
       conn = current_conn
       raise NoMethodError, 'Connection not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"
-      return conn.send(method_name, ...) unless network_bound_methods.include?(method_key)
+      return conn.send(method_name, *args, **kwargs, &) unless network_bound_methods.include?(method_key)
 
-      result = pm.execute(method_key, conn, ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) }, ...)
-      wrap_mysql_result(result)
+      execute_dynamic(method_name, method_key, args, kwargs, &)
     end
 
     def respond_to_missing?(method, include_private = false)
@@ -103,6 +123,19 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     private
+
+    # Runs a call that reached method_missing through the pipeline, telling the plugins the connection
+    # it is bound to, which is known here rather than from the arguments of the call.
+    def execute_dynamic(method_name, method_key, args, kwargs, &)
+      bounded_conn = BOUNDED_TO_ASYNC.include?(method_name) ? @async_conn : nil
+      result = pm.execute(
+        DYNAMIC_METHODS[method_name] || method_key, current_conn,
+        ->(*a, **opts, &b) { current_conn.send(method_name, *a, **opts, &b) },
+        *args, **kwargs, bounded_conn: bounded_conn, &
+      )
+      @async_conn = nil if method_name == :abandon_results!
+      wrap_mysql_result(result)
+    end
 
     def current_conn
       @service_container.connection_service.current_connection
@@ -202,6 +235,14 @@ module AwsRubyDatabaseDriverWrapper
       pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection)
     end
 
+    # A buffered result is already in client memory, so letting it go is local. An unbuffered one,
+    # from +query(sql, stream: true)+, still has whatever was not read on the wire, and libmysql has
+    # to drain it before it can free the result. That makes this a call to the server, on the
+    # connection the statement was sent on, so it should go through the pipeline.
+    def free
+      pm.execute(RubyMethod::RESULT_FREE, current_conn, -> { @result.free }, bounded_conn: @connection)
+    end
+
     # Delegate non-network methods directly
     def fields
       @result.fields
@@ -217,10 +258,6 @@ module AwsRubyDatabaseDriverWrapper
 
     def size
       @result.size
-    end
-
-    def free
-      @result.free
     end
 
     def server_flags
