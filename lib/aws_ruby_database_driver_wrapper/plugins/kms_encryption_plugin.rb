@@ -55,7 +55,9 @@ module AwsRubyDatabaseDriverWrapper
     # Rows read as arrays rather than hashes cannot be decrypted, because the plugin has no column
     # names to match against the configuration: +PG::Result#each_row+, +#values+, +#column_values+
     # and +#tuple+, and mysql2's +as: :array+ option, all return values as they are stored. Read
-    # such columns through +#each+, +#to_a+, +#[]+ or +PG::Result#field_values+ instead.
+    # such columns through +#each+, +#to_a+, +#[]+ or +PG::Result#field_values+ instead. A
+    # +COPY ... TO+ hands out what the column holds as well, since its rows are a stream rather than
+    # values the plugin can replace.
     #
     # A read and a write behave differently when the encryption configuration itself cannot be
     # read. A read is lenient: the column is handed to the application exactly as the database
@@ -66,9 +68,25 @@ module AwsRubyDatabaseDriverWrapper
     # For the same reason a write fails closed when the value it stores is not one the plugin can
     # replace, or when which columns the statement writes cannot be established at all. A value
     # written into the SQL text, an expression, a DEFAULT, a nested SELECT, an INSERT that does not
-    # name its columns: none of these can be encrypted, and a column written in the clear reads back
-    # in the clear ever after, since the read path only decrypts a value whose integrity check
-    # passes. An annotation overrides this, since it says which column a parameter belongs to.
+    # name its columns, a +COPY ... FROM+: none of these can be encrypted, and a column written in
+    # the clear reads back in the clear ever after, since the read path only decrypts a value whose
+    # integrity check passes. An annotation overrides this, since it says which column a parameter
+    # belongs to, with the one exception of a COPY, which has no parameter for an annotation to name.
+    # A COPY is also turned away as it is opened rather than part way through its stream, since the
+    # statement that opens it is the last point at which anything can be said about it.
+    #
+    # None of that amounts to a guarantee that an encrypted column never holds a plaintext, and it
+    # should not be read as one. These checks cover the statements this wrapper sends, which is not
+    # the same as every statement the column sees: psql, a migration, another service, and whatever
+    # was in the table before the column was configured all reach it without passing through here.
+    # They are not exhaustive even for what does pass through, since some statements carry their
+    # values somewhere the plugin cannot see them at all, +LOAD DATA INFILE+, a +CALL+, a
+    # data-modifying common table expression and the second statement of a multi-statement string
+    # among them. What the checks are is an early and local failure in place of a plaintext stored
+    # silently in a column configured to be encrypted. Enforcing what the column itself may hold is
+    # the database's to do, with a constraint or a trigger that checks a value's integrity tag as it
+    # goes in, which it can do without help from the application because the HMAC key is stored in
+    # +key_storage+.
     class KmsEncryptionPlugin
       include Logging
 
@@ -87,13 +105,19 @@ module AwsRubyDatabaseDriverWrapper
       }.freeze
 
       # Statement methods that take no bind parameters. There is nothing to encrypt for these, but
-      # a statement that carries its values in its own text is exactly the one that could store a
-      # plaintext in an encrypted column, so they are checked all the same.
+      # a statement that carries its values outside its bind parameters is exactly the one that could
+      # store a plaintext in an encrypted column, so they are checked all the same.
       #
       # mysql2's +query+ covers its asynchronous path as well, since that is the same call with
       # +async: true+ passed to it, and the statement is inspected when it is sent either way.
+      #
+      # pg's +copy_data+ is here because it opens its COPY on the driver's own connection rather than
+      # through the wrapper, so the statement would otherwise never be seen. Checking it when the COPY
+      # is opened is what makes checking the calls that feed it unnecessary: a COPY that would store a
+      # plaintext is refused before there is anywhere to put a row.
       WRITE_CHECK_METHODS = Set[
-        RubyMethod::CONNECTION_QUERY.name
+        RubyMethod::CONNECTION_QUERY.name,
+        RubyMethod::CONNECTION_COPY_DATA.name
       ].freeze
 
       # Result methods that hand out whole rows, keyed by column name.
@@ -106,14 +130,15 @@ module AwsRubyDatabaseDriverWrapper
       # The result method that hands out every value of one named column.
       COLUMN_VALUES_METHOD = RubyMethod::RESULT_FIELD_VALUES.name
 
-      # Statement types whose bind parameters are stored. A configuration lookup that fails while
-      # one of these is being prepared cannot be shrugged off: the plugin would let the plaintext
-      # through to a column that is configured to be encrypted, and since the read path only
-      # decrypts payloads that pass their integrity check, the row would read back cleanly ever
-      # after and nothing would surface the leak. These statements therefore fail closed.
+      # Statement types that store values. A configuration lookup that fails while one of these is
+      # being prepared cannot be shrugged off: the plugin would let the plaintext through to a column
+      # that is configured to be encrypted, and since the read path only decrypts payloads that pass
+      # their integrity check, the row would read back cleanly ever after and nothing would surface
+      # the leak. These statements therefore fail closed.
       WRITE_QUERY_TYPES = Set[
         Utils::Parser::QueryType::INSERT,
-        Utils::Parser::QueryType::UPDATE
+        Utils::Parser::QueryType::UPDATE,
+        Utils::Parser::QueryType::COPY
       ].freeze
 
       # A statement that stores values, as far as its keywords go. The keywords are looked at as well
@@ -387,11 +412,13 @@ module AwsRubyDatabaseDriverWrapper
       # nothing would ever surface the leak.
       #
       # An annotation is how all of this is overridden. It names the column a parameter belongs to
-      # explicitly, so a statement that carries one is taken at its word.
+      # explicitly, so a statement that carries one is taken at its word. A COPY is the exception,
+      # since it has no parameter for an annotation to name.
       #
       # @param tables [Array<String>] the tables the statement writes to
       # @raise [Errors::MetadataError]
       def verify_write(analysis, tables, annotations)
+        return verify_copy(analysis, tables) if analysis.query_type == Utils::Parser::QueryType::COPY
         return unless annotations.empty?
         raise unreadable_statement_error if tables.empty?
 
@@ -401,6 +428,31 @@ module AwsRubyDatabaseDriverWrapper
 
         hidden = tables.find { |table| encrypted_columns_of(table, strict: true).any? }
         raise unreadable_columns_error(hidden) if hidden
+      end
+
+      # A COPY sends its rows to the server as a stream rather than as bind parameters, so there is
+      # nothing for the plugin to replace and none of its columns can be encrypted. It is refused
+      # when it names an encrypted column, and when it names no columns at all and the table it
+      # writes has any, since then the table's own column order decides what it fills.
+      #
+      # This is the one write an annotation does not excuse: there is no parameter for one to name,
+      # so it cannot say anything that would make the rows encryptable.
+      #
+      # The check happens when the COPY is opened, which is why the calls that feed it need no check
+      # of their own. Both the +copy_data+ form and a +COPY ... FROM STDIN+ sent as a statement of
+      # its own arrive here.
+      #
+      # @param tables [Array<String>] the tables the statement writes to
+      # @raise [Errors::MetadataError]
+      def verify_copy(analysis, tables)
+        raise unreadable_statement_error if tables.empty?
+
+        column = analysis.unbound_write_columns.find { |candidate| encrypted_column(candidate, tables) }
+        raise copy_write_error(column.table_name || tables.first, column.column_name) if column
+        return if analysis.write_columns_complete
+
+        hidden = tables.find { |table| encrypted_columns_of(table, strict: true).any? }
+        raise copy_write_error(hidden) if hidden
       end
 
       # @param column [Utils::Parser::ColumnInfo]
@@ -538,6 +590,22 @@ module AwsRubyDatabaseDriverWrapper
             'with an /*@encrypt:table.column*/ annotation.'
           )
           .with_table(table)
+      end
+
+      # An annotation is no way out of this one, since a COPY has no parameter for one to name, so the
+      # only advice worth giving is to write the rows some other way.
+      #
+      # @param table [String] the table the COPY writes
+      # @param column [String, nil] the encrypted column it names, when it names its columns at all
+      def copy_write_error(table, column = nil)
+        subject = column ? "#{table}.#{column} is configured for encryption" : "#{table} has columns configured for encryption"
+        Errors::MetadataError
+          .validation_failed(
+            "#{subject}, and a COPY sends its rows to the server as a stream rather than as bind " \
+            'parameters, which cannot be encrypted. Write the rows with INSERT and bind the values instead.'
+          )
+          .with_table(table)
+          .with_column(column)
       end
 
       def unreadable_statement_error

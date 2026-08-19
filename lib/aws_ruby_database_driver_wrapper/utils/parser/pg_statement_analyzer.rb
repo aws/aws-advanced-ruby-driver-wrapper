@@ -65,7 +65,7 @@ module AwsRubyDatabaseDriverWrapper
         def statement_tables(stmt)
           return extract_tables_from_clause(Array(stmt.dig(:select_stmt, :from_clause))) if stmt.key?(:select_stmt)
 
-          written = stmt.values_at(:insert_stmt, :update_stmt, :delete_stmt).compact.first
+          written = stmt.values_at(:insert_stmt, :update_stmt, :delete_stmt, :copy_stmt).compact.first
           written ? [written.dig(:relation, :relname)].compact : []
         end
 
@@ -81,6 +81,7 @@ module AwsRubyDatabaseDriverWrapper
           in { delete_stmt: inner_stmt } then extract_delete(inner_stmt, parameterized)
           in { create_stmt: inner_stmt } then extract_create(inner_stmt)
           in { drop_stmt: inner_stmt }   then extract_drop(inner_stmt)
+          in { copy_stmt: inner_stmt }   then extract_copy(inner_stmt, parameterized)
           else QueryAnalysis.unknown
           end
         end
@@ -232,6 +233,40 @@ module AwsRubyDatabaseDriverWrapper
             where_columns: [].freeze,
             for_update: false,
             parameterized: false
+          )
+        end
+
+        # A COPY moves rows between a table and the client in bulk. +COPY table FROM+ stores them, and
+        # is reported as a kind of its own: its values arrive as a stream on the connection rather than
+        # as bind parameters, so every column it names is a column written with something no caller can
+        # substitute a value for, which is what +unbound_write_columns+ says. Without a column list the
+        # stream is positional over the table's own column order, which the statement does not carry,
+        # so which columns it writes cannot be enumerated at all.
+        #
+        # +COPY table TO+ reads the table, and +COPY (SELECT ...) TO+ reads whatever the statement it
+        # carries reads, which is the one worth reporting.
+        def extract_copy(stmt, parameterized)
+          table = stmt.dig(:relation, :relname)
+          tables = (table ? [table] : []).freeze
+
+          unless stmt[:is_from]
+            query = stmt[:query]
+            return extract_from_stmt(query, parameterized) if query.is_a?(Hash) && !query.empty?
+
+            return QueryAnalysis.new(query_type: QueryType::SELECT, tables: tables, write_columns: [].freeze,
+                                     where_columns: [].freeze, for_update: false, parameterized: false)
+          end
+
+          declared = Array(stmt[:attlist]).filter_map { |column_entry| column_entry.dig(:string, :sval) }
+          QueryAnalysis.new(
+            query_type: QueryType::COPY,
+            tables: tables,
+            write_columns: [].freeze,
+            where_columns: [].freeze,
+            for_update: false,
+            parameterized: false,
+            unbound_write_columns: declared.map { |name| ColumnInfo.new(table_name: table, column_name: name) }.freeze,
+            write_columns_complete: declared.any?
           )
         end
 

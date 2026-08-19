@@ -48,6 +48,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     wrapper.instance_variable_set(:@async_conn, nil)
     wrapper.instance_variable_set(:@async_sql, nil)
     wrapper.instance_variable_set(:@copy_conn, nil)
+    wrapper.instance_variable_set(:@copy_sql, nil)
     wrapper.instance_variable_set(:@lo_conn, nil)
     # Which methods go through the pipeline is the dialect's answer, and it is memoized here, so it is
     # set rather than reached for through a service container that is not connected to anything.
@@ -217,6 +218,61 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
       wrapper.get_result
 
       expect(plugin.sql_for('connection.get_result')).to eq([nil])
+    end
+  end
+
+  # The rows a COPY carries are named nowhere but the statement that opened it, and every call that
+  # feeds or reads one is a call of its own, made after that statement was sent. That is why the
+  # statement is held for as long as the block runs.
+  describe 'a COPY' do
+    let(:copy_sql) { 'COPY users (name, ssn) FROM STDIN' }
+
+    before do
+      allow(connection).to receive(:copy_data).and_yield
+      allow(connection).to receive(:put_copy_data)
+      allow(connection).to receive(:get_copy_data)
+      allow(connection).to receive(:put_copy_end)
+    end
+
+    it 'publishes the statement it was opened with' do
+      wrapper.copy_data(copy_sql) { nil }
+
+      expect(plugin.sql_for('connection.copy_data')).to eq([copy_sql])
+    end
+
+    it 'publishes that statement for every row that is fed' do
+      wrapper.copy_data(copy_sql) do
+        wrapper.put_copy_data("Jo\t123-45-6789\n")
+        wrapper.put_copy_data("Al\t987-65-4321\n")
+      end
+
+      expect(plugin.sql_for('connection.put_copy_data')).to eq([copy_sql, copy_sql])
+    end
+
+    it 'publishes that statement for every row that is read' do
+      wrapper.copy_data('COPY users TO STDOUT') { wrapper.get_copy_data }
+
+      expect(plugin.sql_for('connection.get_copy_data')).to eq(['COPY users TO STDOUT'])
+    end
+
+    # A statement that is done with must not be published for whatever is fed or read next.
+    it 'forgets the statement once the COPY is over' do
+      wrapper.copy_data(copy_sql) { nil }
+      wrapper.put_copy_data("Jo\t123-45-6789\n")
+
+      expect(plugin.sql_for('connection.put_copy_data')).to eq([nil])
+    end
+
+    it 'forgets the statement once its end has been sent' do
+      wrapper.copy_data(copy_sql) { wrapper.put_copy_end }
+
+      expect(wrapper.instance_variable_get(:@copy_sql)).to be_nil
+    end
+
+    it 'forgets the statement even when the block raises' do
+      expect { wrapper.copy_data(copy_sql) { raise 'no' } }.to raise_error('no')
+
+      expect(wrapper.instance_variable_get(:@copy_sql)).to be_nil
     end
   end
 

@@ -50,6 +50,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(subject.analyze('DROP TABLE t').query_type).to eq(QueryType::DROP)
     end
 
+    it 'returns COPY for a COPY that stores rows' do
+      expect(subject.analyze('COPY users (name, ssn) FROM STDIN').query_type).to eq(QueryType::COPY)
+    end
+
+    # A COPY that reads is no more a write than the SELECT it stands in for.
+    it 'returns SELECT for a COPY that reads rows' do
+      expect(subject.analyze('COPY users TO STDOUT').query_type).to eq(QueryType::SELECT)
+    end
+
     it 'returns UNKNOWN for nil' do
       expect(subject.analyze(nil).query_type).to eq(QueryType::UNKNOWN)
     end
@@ -263,6 +272,57 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
 
       expect(result.tables).to include('t', 'u')
       expect(result.write_columns_complete).to be(false)
+    end
+  end
+
+  # A COPY's rows are a stream on the connection rather than bind parameters, so every column it
+  # writes is one a caller cannot substitute a value for.
+  describe 'a COPY' do
+    it 'reports the table it writes and the columns it names, none of them substitutable' do
+      result = subject.analyze('COPY users (name, ssn) FROM STDIN')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map { |c| [c.table_name, c.column_name] }).to eq([%w[users name], %w[users ssn]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reads the columns of a COPY however it is spelled' do
+      ['COPY users (name, ssn) FROM STDIN WITH (FORMAT csv, HEADER)',
+       "COPY users (name, ssn) FROM '/tmp/users.csv'",
+       "COPY users (name, ssn) FROM PROGRAM 'cat /tmp/users.csv'",
+       'copy users (name, ssn) from stdin'].each do |sql|
+        result = subject.analyze(sql)
+
+        expect(result.query_type).to eq(QueryType::COPY)
+        expect(result.unbound_write_columns.map(&:column_name)).to eq(%w[name ssn]), "for #{sql}"
+      end
+    end
+
+    # Without a column list the stream fills the table's columns in the order the table declares
+    # them, which the statement does not carry.
+    it 'reports a COPY that names no columns as not enumerable' do
+      result = subject.analyze('COPY users FROM STDIN')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.unbound_write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reports the table a COPY reads without treating it as a write' do
+      result = subject.analyze('COPY users TO STDOUT')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+      expect(result.tables).to eq(['users'])
+      expect(result.unbound_write_columns).to be_empty
+    end
+
+    # A COPY of a query reads whatever the query reads, which is what a caller has to know about.
+    it 'reports the tables of the query a COPY reads' do
+      result = subject.analyze('COPY (SELECT u.name FROM users u JOIN accounts a ON a.uid = u.id) TO STDOUT')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+      expect(result.tables).to include('users', 'accounts')
     end
   end
 end

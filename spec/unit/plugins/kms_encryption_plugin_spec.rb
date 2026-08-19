@@ -104,7 +104,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   describe '#initialize' do
     it 'subscribes to the statement, result and connection methods it has to intercept' do
       expect(plugin.subscribed_methods).to include('connection.exec_params', 'connection.exec', 'statement.execute',
-                                                   'result.each', 'result.to_a', 'result.[]', 'result.field_values',
+                                                   'connection.query', 'connection.copy_data', 'result.each',
+                                                   'result.to_a', 'result.[]', 'result.field_values',
                                                    'connection.close')
     end
 
@@ -585,6 +586,69 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       rows = [{ 'ssn' => bytea(ciphertext('123-45-6789')) }]
 
       expect(call('result.to_a', sql: sql, returns: rows).first['ssn']).to eq('123-45-6789')
+    end
+  end
+
+  # A COPY feeds its rows to the server as a stream, so there is no bind parameter to replace and no
+  # way to encrypt any column it writes. It is refused when it opens, which is why the calls that
+  # feed it are left alone: there is no COPY to feed by then.
+  describe 'refusing a COPY that would store a plaintext' do
+    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+
+    it 'refuses a COPY that names an encrypted column' do
+      sql = 'COPY users (name, ssn) FROM STDIN'
+
+      expect { call('connection.copy_data', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /users\.ssn is configured for encryption.*as a stream/m)
+    end
+
+    # Without a column list the stream fills the table's columns in the order the table declares
+    # them, so an encrypted one could be among them.
+    it 'refuses a COPY into a table with encrypted columns when it names none of them' do
+      sql = 'COPY users FROM STDIN'
+
+      expect { call('connection.copy_data', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /users has columns configured for encryption/)
+    end
+
+    # The convenience form opens its COPY on the driver's own connection, so the statement is only
+    # ever seen as an argument of the call itself. Sent on its own it arrives as any statement does.
+    it 'refuses a COPY sent as a statement of its own' do
+      sql = "COPY users (ssn) FROM '/tmp/users.csv'"
+
+      expect { call('connection.exec', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /users\.ssn is configured for encryption/)
+    end
+
+    # An annotation names the column a parameter belongs to, and a COPY has no parameters, so unlike
+    # every other write it cannot be waved through with one.
+    it 'refuses a COPY that carries an annotation' do
+      sql = 'COPY users (name, ssn) FROM STDIN /*@encrypt:users.ssn*/'
+
+      expect { call('connection.copy_data', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /users\.ssn is configured for encryption/)
+    end
+
+    it 'lets a COPY into a table with no encrypted column through' do
+      sql = 'COPY audit (event, at) FROM STDIN'
+      args = [sql]
+
+      expect(call('connection.copy_data', args: args, sql: sql, returns: :copied)).to be(:copied)
+      expect(bound_args).to be(args)
+    end
+
+    it 'lets a COPY that names only columns which are not encrypted through' do
+      sql = 'COPY users (name) FROM STDIN'
+
+      expect(call('connection.copy_data', args: [sql], sql: sql, returns: :copied)).to be(:copied)
+    end
+
+    # A COPY that reads stores nothing, so it is left alone. What it hands out is whatever the column
+    # holds, which for an encrypted column is the ciphertext.
+    it 'lets a COPY that reads through' do
+      sql = 'COPY users (name, ssn) TO STDOUT'
+
+      expect(call('connection.copy_data', args: [sql], sql: sql, returns: :copied)).to be(:copied)
     end
   end
 

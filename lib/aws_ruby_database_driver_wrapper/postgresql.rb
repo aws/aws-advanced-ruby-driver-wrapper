@@ -41,6 +41,7 @@ module AwsRubyDatabaseDriverWrapper
       @async_conn = nil
       @async_sql = nil
       @copy_conn = nil
+      @copy_sql = nil
       @lo_conn = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
@@ -51,8 +52,9 @@ module AwsRubyDatabaseDriverWrapper
     # arguments, and the steps that should be performed after.
     #
     # An operation with no +sql_at+ takes the SQL of whatever it is bound to: the statement a prepared
-    # operation names, or the statement a pending exchange was started with. That is the whole reason the
-    # two are remembered, since neither is among the arguments of the call that reads them back.
+    # operation names, the statement a pending exchange was started with, or the statement a COPY was
+    # opened with. That is the whole reason each of them is remembered, since none is among the arguments
+    # of the call that reads it back.
     OPERATIONS = {
       exec: { method: RubyMethod::CONNECTION_EXEC, sql_at: 0 },
       async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC, sql_at: 0 },
@@ -88,7 +90,7 @@ module AwsRubyDatabaseDriverWrapper
       block: { method: RubyMethod::CONNECTION_BLOCK, bound_to: :async },
 
       # A COPY can only be fed or read on the connection it was started on.
-      copy_data: { method: RubyMethod::CONNECTION_COPY_DATA },
+      copy_data: { method: RubyMethod::CONNECTION_COPY_DATA, sql_at: 0 },
       put_copy_data: { method: RubyMethod::CONNECTION_PUT_COPY_DATA, bound_to: :copy },
       get_copy_data: { method: RubyMethod::CONNECTION_GET_COPY_DATA, bound_to: :copy },
       put_copy_end: { method: RubyMethod::CONNECTION_PUT_COPY_END, bound_to: :copy, after: :forget_copy },
@@ -237,12 +239,16 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- COPY --
 
-    # The connection is held for as long as the block runs and let go afterward even if the block raises.
+    # The connection and the statement are held for as long as the block runs and let go afterward even
+    # if the block raises. The rows the block feeds or reads belong to that statement, and it is the only
+    # place they are named, so it is what the calls inside the block publish.
     def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
+      @copy_sql = sql
       execute_operation(:copy_data, [sql, coder], &)
     ensure
       @copy_conn = nil
+      @copy_sql = nil
     end
 
     def put_copy_data(buffer, encoder = nil)
@@ -329,6 +335,7 @@ module AwsRubyDatabaseDriverWrapper
       case spec[:bound_to]
       when :prepared then @prepared_sql[args.first]
       when :async then @async_sql
+      when :copy then @copy_sql
       end
     end
 
@@ -365,6 +372,7 @@ module AwsRubyDatabaseDriverWrapper
 
     def forget_copy(_args, _result, _sql)
       @copy_conn = nil
+      @copy_sql = nil
     end
 
     def remember_large_object(_args, _result, _sql)
