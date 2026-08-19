@@ -41,9 +41,9 @@ module AwsRubyDatabaseDriverWrapper
         'failover' => Plugins::FailoverPlugin,
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
-        'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
-        'kmsEncryption' => Plugins::KmsEncryptionPlugin,
-        'secretsManager' => Plugins::SecretsManagerPlugin
+        'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
+        'kms_encryption' => Plugins::KmsEncryptionPlugin,
+        'secrets_manager' => Plugins::SecretsManagerPlugin
       }
 
       # The final list of plugins will be sorted by weight, starting from the lowest values up to

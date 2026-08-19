@@ -56,19 +56,6 @@ module AwsRubyDatabaseDriverWrapper
         threads.clear
       end
 
-      def close_connections(connections, deadline)
-        return if connections.empty?
-
-        connections.each do |conn|
-          conn.close unless conn.closed?
-        rescue StandardError => e
-          # Suppress errors during shutdown
-          warn "Error closing connection: #{e.message}" unless deadline_exceeded?(deadline)
-        end
-
-        connections.clear
-      end
-
       def deadline_exceeded?(deadline)
         Time.now >= deadline
       end

@@ -301,7 +301,7 @@ module AwsRubyDatabaseDriverWrapper
     # used in ConnectionConfig#prefixed_wrapper_config and ConnectionConfig#prefixed_driver_config.
     # Plugins define their own prefix here.
     TOPOLOGY_MONITORING_PREFIX = 'topology_monitoring_'
-    BG_MONITORING_PROPERTY_PREFIX = 'bg-monitoring-'
+    BG_MONITORING_PROPERTY_PREFIX = 'bg_monitoring_'
 
     KNOWN_PREFIXES = [
       TOPOLOGY_MONITORING_PREFIX,

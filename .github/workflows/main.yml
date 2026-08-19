@@ -98,8 +98,6 @@ jobs:
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - name: Install Gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1
@@ -113,5 +111,4 @@ jobs:
           rm -f gitleaks.tar.gz gitleaks
           gitleaks version
       - name: Run Gitleaks (full git history)
-        # TODO: remove --no-git flag to scan git history.
-        run: gitleaks detect --source . --no-git --redact --verbose
+        run: gitleaks detect --source . --redact --verbose

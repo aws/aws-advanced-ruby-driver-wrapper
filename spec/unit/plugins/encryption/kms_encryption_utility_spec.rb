@@ -26,7 +26,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
   let(:kms_client) { instance_double(Aws::KMS::Client) }
   let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
   let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
-  let(:connection) { double('Connection', close: nil) }
+  # The dialect asks whether a connection is already finished before closing it, so a connection that
+  # the utility opened for itself has to answer that as an open one would.
+  let(:connection) { double('Connection', finished?: false, close: nil) }
   let(:plugin_manager) { instance_double(services::PluginManager, internal_connect: connection) }
   let(:service_container) do
     instance_double(services::ServiceContainer,

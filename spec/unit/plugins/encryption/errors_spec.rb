@@ -91,7 +91,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
 
     it 'records the algorithm and the data type' do
       error = described_class.decryption_failed('x').with_algorithm('AES-256-GCM').with_data_type('BIG_DECIMAL')
-      expect(error.context).to eq({ algorithm: 'AES-256-GCM', dataType: 'BIG_DECIMAL' })
+      expect(error.context).to eq({ algorithm: 'AES-256-GCM', data_type: 'BIG_DECIMAL' })
     end
   end
 
@@ -111,18 +111,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
 
     it 'masks the key id' do
       error = described_class.key_retrieval_failed('x').with_key_id('1234abcd-12ab-34cd-56ef-1234567890ab')
-      expect(error.context[:keyId]).to eq('1234***90ab')
+      expect(error.context[:key_id]).to eq('1234***90ab')
     end
 
     # An ARN names the account, so only the key id is kept.
     it 'masks the account and region of the master key ARN' do
       error = described_class.key_decryption_failed('x')
                              .with_master_key_arn('arn:aws:kms:us-east-1:123456789012:key/1234abcd-56ef')
-      expect(error.context[:masterKeyArn]).to eq('arn:aws:kms:***:***:key/1234abcd-56ef')
+      expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/1234abcd-56ef')
     end
 
     it 'records which retry failed' do
-      expect(described_class.kms_connection_failed('x').with_retry_info(2, 3).context[:retryAttempt]).to eq('2/3')
+      expect(described_class.kms_connection_failed('x').with_retry_info(2, 3).context[:retry_attempt]).to eq('2/3')
     end
   end
 
@@ -146,7 +146,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
 
     it 'records a cache miss as well as a hit' do
       expect(described_class.cache_failed('x').with_cache_info('metadata', false).context)
-        .to eq({ cacheType: 'metadata', cacheHit: false })
+        .to eq({ cache_type: 'metadata', cache_hit: false })
     end
 
     it 'masks the literals of the SQL it was running' do

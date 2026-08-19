@@ -226,10 +226,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
     end
 
     it 'uses the requested selection strategy' do
-      expect(host_service).to receive(:select_host).with(anything, host_role::READER, 'leastConnections').and_return(reader_host)
+      expect(host_service).to receive(:select_host).with(anything, host_role::READER, 'some_strategy').and_return(reader_host)
       retry_util.connect_to_allowed_host(plugin_to_skip, plugin_manager,
                                          verify_role: host_role::READER,
-                                         strategy: 'leastConnections',
+                                         strategy: 'some_strategy',
                                          deadline: Time.now + 5) { [reader_host] }
     end
 

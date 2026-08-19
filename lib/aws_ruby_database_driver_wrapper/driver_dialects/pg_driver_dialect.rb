@@ -21,16 +21,14 @@ module AwsRubyDatabaseDriverWrapper
     class PgDriverDialect
       include DriverDialect
 
-      PING_SQL = 'SELECT 1'
-
-      # Every pg call that talks to the server. A call that is not listed here is handed straight to
-      # the driver, so a method left out is a method no plugin can see: failover cannot retry it and
-      # the encryption plugin cannot inspect the statement it carries.
+      # Every pg call that talks to the server. A call that is not listed here is handed straight
+      # to the driver, bypassing the plugin pipeline.
       #
       # pg gives most of these operations several spellings (+query+ and +async_query+ for +exec+, an
       # +async_+ and a +sync_+ form for many others, a short +lo*+ form for every large object call).
-      # One entry covers every spelling of an operation, because WrapperPgConnection translates the
-      # alias to the canonical name before the pipeline is entered.
+      # One entry covers every spelling of a libpq operation: WrapperPgConnection recognizes which operation a
+      # spelling performs and enters the pipeline under that name, then asks the driver for the spelling
+      # it was given. Its OPERATIONS table has an entry per name listed here.
       #
       # Not listed, because libpq performs them without talking to the server: enter_pipeline_mode,
       # exit_pipeline_mode, is_busy, setnonblocking, set_single_row_mode, set_chunked_rows_mode, the
@@ -99,20 +97,15 @@ module AwsRubyDatabaseDriverWrapper
         connection.exec_params(sql, params)
       end
 
-      def ping(connection)
-        connection.exec(PING_SQL)
-        true
-      rescue ::PG::Error
-        false
-      end
-
       def closed?(connection)
         connection.finished?
       end
 
       def close_connection(connection)
+        return if connection.finished?
+
         connection.close
-      rescue ::PG::Error => e
+      rescue StandardError => e
         logger.error("Failed to close PostgreSQL connection: #{e.message}")
       end
 
@@ -133,6 +126,10 @@ module AwsRubyDatabaseDriverWrapper
         cfg[:port] = host_info.port if host_info.port_specified?
         cfg[:dbname] = cfg.delete(:database) if !cfg.key?(:dbname) && cfg.key?(:database)
         cfg
+      end
+
+      def apply_monitoring_defaults(driver_props)
+        driver_props[:connect_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
       end
     end
   end

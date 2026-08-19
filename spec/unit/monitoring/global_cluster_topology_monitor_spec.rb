@@ -64,7 +64,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
   let(:storage_service) { AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
 
   let(:db_dialect) { instance_double('DbDialect') }
-  let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect) }
+  let(:driver_dialect) { instance_double('DriverDialect', close_connection: nil, apply_monitoring_defaults: nil, closed?: false) }
+  let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect, driver_dialect: driver_dialect) }
   let(:initial_host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'global.endpoint.rds.amazonaws.com', port: 5432) }
   let(:connection_config) do
     instance_double('ConnectionConfig', wrapper_props: {

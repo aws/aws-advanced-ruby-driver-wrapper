@@ -250,7 +250,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
       expect { described_class.serialize_value('x', 12_345) }
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError,
                         /Unsupported value type: String/) do |error|
-        expect(error.context[:dataType]).to eq('String')
+        expect(error.context[:data_type]).to eq('String')
       end
     end
   end
@@ -347,7 +347,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
       expect { described_class.convert_to_target_type('abc', Integer) }
         .to raise_error(encryption_error, /Cannot convert String to Integer/) do |error|
           expect(error.code).to eq(encryption_error::TYPE_CONVERSION_FAILED)
-          expect(error.context[:dataType]).to eq('Integer')
+          expect(error.context[:data_type]).to eq('Integer')
         end
     end
 

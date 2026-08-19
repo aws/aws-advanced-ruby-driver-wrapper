@@ -115,7 +115,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # @return [self]
       def with_data_type(data_type)
-        with_context(:dataType, data_type)
+        with_context(:data_type, data_type)
       end
     end
 
@@ -157,19 +157,19 @@ module AwsRubyDatabaseDriverWrapper
 
       # @return [self]
       def with_key_id(key_id)
-        with_context(:keyId, Sanitizer.key_id(key_id))
+        with_context(:key_id, Sanitizer.key_id(key_id))
       end
 
       # @return [self]
       def with_master_key_arn(master_key_arn)
-        with_context(:masterKeyArn, Sanitizer.arn(master_key_arn))
+        with_context(:master_key_arn, Sanitizer.arn(master_key_arn))
       end
 
       # @param attempt [Integer] the attempt that failed, 1-based
       # @param max_attempts [Integer]
       # @return [self]
       def with_retry_info(attempt, max_attempts)
-        with_context(:retryAttempt, "#{attempt}/#{max_attempts}")
+        with_context(:retry_attempt, "#{attempt}/#{max_attempts}")
       end
     end
 
@@ -218,7 +218,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param cache_hit [Boolean]
       # @return [self]
       def with_cache_info(cache_type, cache_hit)
-        with_context(:cacheType, cache_type).with_context(:cacheHit, cache_hit)
+        with_context(:cache_type, cache_type).with_context(:cache_hit, cache_hit)
       end
 
       # @return [self]

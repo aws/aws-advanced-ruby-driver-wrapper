@@ -14,10 +14,11 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# Records the SQL that a driver wrapper published for every call it takes part in, the way the
-# encryption plugin reads it. It is the only plugin of its pipeline, so its pipeline callable is the
-# target driver method and the arguments and the block it was given are handed straight to it.
-class SqlRecordingPlugin
+# Records the name every call entered the plugin pipeline under, and the SQL the driver wrapper
+# published for it, the way a plugin which inspects statements reads it. It is the only plugin of its
+# pipeline, so its pipeline callable is the target driver method and the arguments and the block it
+# was given are handed straight to it.
+class PipelineRecordingPlugin
   attr_reader :subscribed_methods, :calls
   attr_accessor :manager
 
@@ -27,8 +28,13 @@ class SqlRecordingPlugin
   end
 
   def execute(method_name, target_callable, ...)
-    @calls << [method_name, @manager.current_sql]
+    @calls << [method_name, @manager&.current_sql]
     target_callable.call(...)
+  end
+
+  # @return [Array<String>] the methods the plugin was called for, in order
+  def method_names
+    @calls.map(&:first)
   end
 
   # A call that published no SQL is kept as a nil entry, since that is what has to be asserted for a
@@ -38,20 +44,15 @@ class SqlRecordingPlugin
   def sql_for(method_name)
     @calls.select { |name, _sql| name == method_name }.map(&:last)
   end
-
-  # @return [Array<String>] the methods the plugin was called for, in order
-  def method_names
-    @calls.map(&:first)
-  end
 end
 
-# Builds the wrapper internals that the driver wrapper classes need in order to publish the SQL of a
-# call to the plugins, without connecting to anything.
-module SqlContextHelper
+# Builds the wrapper internals that the driver wrapper classes need in order to take a call through
+# the plugins, without connecting to anything.
+module PipelineRecordingHelper
   # @param connection [Object] the driver connection the wrapper delegates to
-  # @return [Array(Services::ServiceContainer, SqlRecordingPlugin)]
+  # @return [Array(Services::ServiceContainer, PipelineRecordingPlugin)]
   def build_recording_container(connection)
-    plugin = SqlRecordingPlugin.new
+    plugin = PipelineRecordingPlugin.new
     manager = AwsRubyDatabaseDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, [plugin])
     manager.instance_variable_set(:@pipeline_cache, {})
@@ -76,4 +77,4 @@ module SqlContextHelper
   end
 end
 
-RSpec.configure { |config| config.include SqlContextHelper }
+RSpec.configure { |config| config.include PipelineRecordingHelper }

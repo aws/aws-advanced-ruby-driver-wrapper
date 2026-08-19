@@ -169,5 +169,58 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
 
       expect(plugin.sql_for('result.to_a')).to eq([nil])
     end
+
+    # Draining an unbuffered result reads whatever rows are still on the wire, which belong to the
+    # statement the result came from.
+    it 'publishes the SQL of the statement when the result is freed' do
+      allow(mysql_result).to receive(:free)
+      wrapper_result.free
+
+      expect(plugin.sql_for('result.free')).to eq([sql])
+    end
+  end
+
+  # Freeing a buffered result is local, but an unbuffered one still has whatever was not read on the
+  # wire and libmysql drains it before letting the result go. mysql2 says so itself, at
+  # ext/mysql2/result.c: "this may call flush_use_result, which can hit the socket". This used
+  # to be delegated straight to the driver as a non-network call, which took that read past every
+  # plugin and left an error raised while draining invisible to failover.
+  describe '#free' do
+    # A verifying double, so that a call on a method mysql2 does not define fails here rather than
+    # against a real server.
+    let(:result) { instance_double(Mysql2::Result) }
+    let(:connection) { instance_double(Mysql2::Client) }
+    let(:plugin) { TrackingPlugin.new }
+    subject(:wrapper_result) do
+      described_class.new(result, build_service_container_with_plugins([plugin], connection), connection)
+    end
+
+    it 'goes through the pipeline' do
+      allow(result).to receive(:free)
+
+      wrapper_result.free
+
+      expect(result).to have_received(:free)
+      expect(plugin.calls).to eq(['before:result.free', 'after:result.free'])
+    end
+
+    it 'routes an error raised while draining through the pipeline' do
+      allow(result).to receive(:free).and_raise(Mysql2::Error, 'Lost connection to MySQL server during query')
+
+      expect { wrapper_result.free }.to raise_error(Mysql2::Error, /Lost connection/)
+
+      expect(plugin.calls).to eq(['before:result.free', 'error:result.free'])
+      expect(plugin.caught_error).to be_a(Mysql2::Error)
+    end
+
+    # The rows still on the wire are only on the connection the statement was sent on.
+    it 'is refused on any other connection' do
+      allow(result).to receive(:free)
+      other = described_class.new(result, build_service_container_with_plugins([plugin], connection),
+                                  instance_double(Mysql2::Client))
+
+      expect { other.free }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+      expect(result).not_to have_received(:free)
+    end
   end
 end

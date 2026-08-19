@@ -28,6 +28,7 @@ require_relative 'utils/test_round_robin_host_selector'
 require_relative 'utils/test_utils'
 require 'aws_ruby_database_driver_wrapper'
 require 'aws_ruby_database_driver_wrapper/db_dialects/dialect_codes'
+require 'aws_ruby_database_driver_wrapper/services/service_utility'
 
 # Integration tests for the InitialConnectionStrategyPlugin.
 #
@@ -44,7 +45,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
 
   let(:initial_connection_props) do
     base_wrapper_props.merge(
-      props::PLUGINS.name => 'initialConnection'
+      props::PLUGINS.name => 'initial_connection'
     )
   end
 
@@ -262,10 +263,17 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
            features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
     let(:proxy_info) { env.proxy_database_info }
 
+    # The topology cache and its monitor are keyed by cluster id alone, and the monitor that is created
+    # first for a given cluster id keeps serving the instance host pattern it was built with. The examples
+    # above connect through the real endpoints under env.cluster_name, so reusing that cluster id here
+    # would leave the plugin substituting real instance endpoints that the outages below do not touch.
+    let(:proxied_cluster_id) { "#{env.cluster_name}-proxied" }
+
     # Points the plugin at the proxied instance endpoints so that substituted hosts are reachable only
     # through Toxiproxy, and keeps the retry window short enough to time out within the test.
     let(:retry_props) do
       initial_connection_props.merge(
+        props::CLUSTER_ID.name => proxied_cluster_id,
         props::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
         props::INITIAL_CONNECTION_RETRY_TIMEOUT_MS.name => 10_000,
@@ -289,6 +297,18 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     def warm_proxied_topology
       warmup = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
       Integration::DriverHelper.close(drv, warmup)
+
+      # The monitor fetches topology in the background, so wait for the proxied instance hosts to land in
+      # the cache instead of racing them. Without them the plugin has nothing to substitute and would
+      # connect through the given endpoint for the wrong reason.
+      cached = Integration::RetryHelper.retry_until(timeout_secs: 30, delay_secs: 0.5) do
+        hosts = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service.get(
+          :topology, proxied_cluster_id, register_access: false
+        )
+        !hosts.nil? && hosts.size >= proxy_info.instances.size &&
+          hosts.all? { |host| host.host.end_with?(proxy_info.instance_endpoint_suffix) }
+      end
+      expect(cached).to be(true), 'The proxied topology was not discovered before connectivity was cut'
     end
 
     it 'falls back to the cluster endpoint when every substitution candidate is unreachable' do

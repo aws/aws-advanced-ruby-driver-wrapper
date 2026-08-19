@@ -31,18 +31,12 @@ module AwsRubyDatabaseDriverWrapper
 
     # -- Connection methods --
     CONNECTION_CLOSE               = define('connection.close', check_bounded_connection: false)
-    CONNECTION_PING                = define('connection.ping', check_bounded_connection: false)
     CONNECTION_RESET               = define('connection.reset', check_bounded_connection: false)
     CONNECTION_PREPARE             = define('connection.prepare', check_bounded_connection: false)
     CONNECTION_ESCAPE              = define('connection.escape', check_bounded_connection: false)
 
     # -- Connection methods (mysql2-specific) --
-    #
-    # mysql2 has no asynchronous query method of its own: a statement is sent asynchronously by
-    # passing +async: true+ to +query+, and its result is read by +async_result+. The names here are
-    # the ones mysql2 actually defines, including the question mark on +more_results?+, since a name
-    # the driver does not answer to is a call the wrapper cannot make and an entry in a dialect's
-    # network bound methods that nothing can ever match.
+    CONNECTION_PING                = define('connection.ping', check_bounded_connection: false)
     CONNECTION_QUERY               = define('connection.query', check_bounded_connection: false)
     CONNECTION_ASYNC_RESULT        = define('connection.async_result', check_bounded_connection: true)
     CONNECTION_SELECT_DB           = define('connection.select_db', check_bounded_connection: false)
@@ -58,7 +52,7 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_EXEC_PARAMS         = define('connection.exec_params', check_bounded_connection: false)
     CONNECTION_EXEC_PREPARED       = define('connection.exec_prepared', check_bounded_connection: true)
     CONNECTION_DESCRIBE_PREPARED   = define('connection.describe_prepared', check_bounded_connection: true)
-    CONNECTION_DESCRIBE_PORTAL     = define('connection.describe_portal', check_bounded_connection: false)
+    CONNECTION_DESCRIBE_PORTAL     = define('connection.describe_portal', check_bounded_connection: true)
     CONNECTION_TRANSACTION         = define('connection.transaction', check_bounded_connection: false)
     CONNECTION_COPY_DATA           = define('connection.copy_data', check_bounded_connection: false)
     CONNECTION_PUT_COPY_DATA       = define('connection.put_copy_data', check_bounded_connection: true)
@@ -80,14 +74,6 @@ module AwsRubyDatabaseDriverWrapper
     CONNECTION_LO_READ             = define('connection.lo_read', check_bounded_connection: true)
     CONNECTION_LO_WRITE            = define('connection.lo_write', check_bounded_connection: true)
     CONNECTION_LO_CLOSE            = define('connection.lo_close', check_bounded_connection: true)
-
-    # -- Connection methods (pg-specific, reached through WrapperPgConnection#method_missing) --
-    #
-    # These are the remaining pg calls that talk to the server. They are named here rather than
-    # entered into the pipeline as bare strings, since only a named method can have the connection it
-    # is bound to checked, and most of them are bound to one: a prepared statement or a portal only
-    # exists on the connection it was made on, a pending exchange can only be continued on the
-    # connection it was started on, and a large object descriptor is only open on that connection.
     CONNECTION_CLOSE_PREPARED         = define('connection.close_prepared', check_bounded_connection: true)
     CONNECTION_CLOSE_PORTAL           = define('connection.close_portal', check_bounded_connection: true)
     CONNECTION_DISCARD_RESULTS        = define('connection.discard_results', check_bounded_connection: true)
@@ -124,5 +110,8 @@ module AwsRubyDatabaseDriverWrapper
     RESULT_COLUMN_VALUES           = define('result.column_values', check_bounded_connection: true)
     RESULT_FIELD_VALUES            = define('result.field_values', check_bounded_connection: true)
     RESULT_TUPLE                   = define('result.tuple', check_bounded_connection: true)
+    # Freeing an unbuffered result has to read whatever rows are still on the wire before it can let
+    # the result go, so it is a call to the server on the connection the statement was sent on.
+    RESULT_FREE                    = define('result.free', check_bounded_connection: true)
   end
 end

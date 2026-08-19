@@ -41,7 +41,7 @@ module AwsRubyDatabaseDriverWrapper
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead)
 
     # This is how mysql2 sends a statement asynchronously as well: +query(sql, async: true)+ returns
-    # nothing and the result is read afterwards by +async_result+. The connection the statement was
+    # nothing and the result is read afterward by +async_result+. The connection the statement was
     # sent on is remembered for that read, and so is its SQL, since the read is a call of its own and
     # carries neither.
     def query(sql, options = {})
@@ -95,13 +95,13 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def more_results?
-      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results? },
-                 bounded_conn: @async_conn)
+      pm.execute(RubyMethod::CONNECTION_MORE_RESULTS, current_conn, -> { current_conn.more_results? }, bounded_conn: @async_conn)
     end
 
     # A statement that leaves more than one result set is read by moving to each in turn and storing
-    # it. Every one of those results belongs to the statement that was sent, so its SQL is put back
-    # for the read that follows, and dropped once there is nothing left to read.
+    # it. Storing a result forgets the connection the statement was sent on and the SQL that was sent
+    # on it, and every one of those results belongs to that statement, so both are put back for the
+    # read that follows and dropped once there is nothing left to read.
     def next_result
       result = pm.execute(RubyMethod::CONNECTION_NEXT_RESULT, current_conn, -> { current_conn.next_result },
                           bounded_conn: @async_conn)
@@ -115,7 +115,7 @@ module AwsRubyDatabaseDriverWrapper
       result
     end
 
-    # -- method_missing: rarely used network calls, non-network bypasses pipeline --
+    # -- method_missing: covers non-network calls and rarely used network calls --
 
     # The network calls that are rare enough not to be worth a method of their own. They are entered
     # into the pipeline under the name the pipeline knows them by rather than as a bare string, so
@@ -268,6 +268,14 @@ module AwsRubyDatabaseDriverWrapper
       pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection, sql: @sql)
     end
 
+    # A buffered result is already in client memory, so letting it go is local. An unbuffered one,
+    # from +query(sql, stream: true)+, still has whatever was not read on the wire, and libmysql has
+    # to drain it before it can free the result. That makes this a call to the server, on the
+    # connection the statement was sent on, so it should go through the pipeline.
+    def free
+      pm.execute(RubyMethod::RESULT_FREE, current_conn, -> { @result.free }, bounded_conn: @connection, sql: @sql)
+    end
+
     # Delegate non-network methods directly
     def fields
       @result.fields
@@ -283,10 +291,6 @@ module AwsRubyDatabaseDriverWrapper
 
     def size
       @result.size
-    end
-
-    def free
-      @result.free
     end
 
     def server_flags

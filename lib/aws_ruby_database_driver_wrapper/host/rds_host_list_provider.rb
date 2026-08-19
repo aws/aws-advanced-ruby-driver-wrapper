@@ -173,12 +173,12 @@ module AwsRubyDatabaseDriverWrapper
 
         url_type = Utils::RdsUtils.identify_rds_type(pattern)
         if [Utils::RdsUrlType::RDS_PROXY, Utils::RdsUrlType::RDS_PROXY_ENDPOINT].include?(url_type)
-          raise Errors::AwsError, "clusterInstanceHostPattern is not supported for RDS Proxy: '#{pattern}'"
+          raise Errors::AwsError, "cluster_instance_host_pattern is not supported for RDS Proxy: '#{pattern}'"
         end
 
         return unless url_type == Utils::RdsUrlType::RDS_CUSTOM_CLUSTER
 
-        raise Errors::AwsError, "clusterInstanceHostPattern is not supported for RDS Custom Clusters: '#{pattern}'"
+        raise Errors::AwsError, "cluster_instance_host_pattern is not supported for RDS Custom Clusters: '#{pattern}'"
       end
 
       def register_monitor_type

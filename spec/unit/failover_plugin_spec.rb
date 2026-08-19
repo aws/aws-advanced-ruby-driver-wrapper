@@ -153,9 +153,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         plugin.send(:failover)
       end
 
-      it 'passes through connection.ping without failover logic' do
+      it 'passes through connection.close without failover logic' do
         result = plugin.execute(
-          AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_PING.name,
+          AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
           pipeline_callable
         )
         expect(result).to eq(:result)

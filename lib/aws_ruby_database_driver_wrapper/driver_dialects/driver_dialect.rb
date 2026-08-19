@@ -25,12 +25,13 @@ module AwsRubyDatabaseDriverWrapper
       COMMON_NETWORK_BOUND_METHODS = Set[
         RubyMethod::CONNECT.name,
         RubyMethod::CONNECTION_CLOSE.name,
-        RubyMethod::CONNECTION_PING.name,
         RubyMethod::CONNECTION_RESET.name,
         RubyMethod::CONNECTION_PREPARE.name,
         RubyMethod::STATEMENT_EXECUTE.name,
         RubyMethod::STATEMENT_CLOSE.name
       ].freeze
+
+      DEFAULT_MONITORING_TIMEOUT_SEC = 5
 
       def connect(host_info, config)
         raise NotImplementedError
@@ -72,6 +73,15 @@ module AwsRubyDatabaseDriverWrapper
       # Override in driver-specific dialects where the key differs.
       def user_property_key
         :user
+      end
+
+      # Applies default socket/connect timeouts to monitoring connection driver props.
+      # These ensure that a query or close on a dead connection raises a timeout error
+      # rather than hanging indefinitely or segfaulting.
+      # Implementations should only apply these properties if the user hasn't already set them.
+      # @param driver_props [Hash] the monitoring connection driver props (mutated in place)
+      def apply_monitoring_defaults(driver_props)
+        # No-op by default; driver-specific dialects override.
       end
     end
   end

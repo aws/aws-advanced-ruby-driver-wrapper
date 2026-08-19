@@ -66,7 +66,7 @@ module AwsRubyDatabaseDriverWrapper
                  end
             .join("\n")
 
-          "[bgdId: '#{bgd_id}'] Blue/Green Deployment Switchover #{status_label}\n" \
+          "[bgd_id: '#{bgd_id}'] Blue/Green Deployment Switchover #{status_label}\n" \
             "#{divider}#{header}\n#{divider}#{rows}\n#{divider}"
         end
 

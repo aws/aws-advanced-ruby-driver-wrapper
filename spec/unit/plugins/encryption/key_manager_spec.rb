@@ -102,7 +102,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
         expect { manager.decrypt_data_key(empty, 'arn:aws:kms:us-east-1:123456789012:key/abcd') }
           .to raise_error(key_error, /The stored key metadata has no encrypted data key/) do |error|
             expect(error.code).to eq(key_error::INVALID_KEY_METADATA)
-            expect(error.context[:masterKeyArn]).to eq('arn:aws:kms:***:***:key/abcd')
+            expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/abcd')
           end
       end
 
@@ -231,7 +231,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
 
       expect { manager.decrypt_data_key(encrypted_data_key) }
         .to raise_error(key_error, /ThrottlingException/) do |error|
-          expect(error.context[:retryAttempt]).to eq('3/3')
+          expect(error.context[:retry_attempt]).to eq('3/3')
         end
       expect(kms_client).to have_received(:decrypt).exactly(3).times
     end
@@ -261,7 +261,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
       allow(kms_client).to receive(:decrypt).and_raise(http_status_error(400))
 
       expect { manager.decrypt_data_key(encrypted_data_key) }
-        .to raise_error(key_error) { |error| expect(error.context[:retryAttempt]).to eq('1/3') }
+        .to raise_error(key_error) { |error| expect(error.context[:retry_attempt]).to eq('1/3') }
       expect(kms_client).to have_received(:decrypt).once
     end
 
@@ -336,7 +336,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
         expect { manager.store_key_metadata(key_metadata.with(key_id: '1234abcd-12ab-34cd-56ef-7890abcdef12')) }
           .to raise_error(key_error, /Failed to store key metadata: duplicate key value/) do |error|
             expect(error.code).to eq(key_error::KEY_STORAGE_FAILED)
-            expect(error.context[:keyId]).to eq('1234***ef12')
+            expect(error.context[:key_id]).to eq('1234***ef12')
           end
       end
     end

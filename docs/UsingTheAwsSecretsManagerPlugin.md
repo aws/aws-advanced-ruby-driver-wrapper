@@ -17,7 +17,7 @@ The AWS Ruby Database Driver Wrapper supports usage of database credentials stor
 > - Configure appropriate session durations for temporary credentials
 > - Implement proper error handling for credential-related failures
 
-To enable the Secrets Manager Plugin, add the plugin code `secretsManager` to the `wrapper_plugins` connection property.
+To enable the Secrets Manager Plugin, add the plugin code `secrets_manager` to the `wrapper_plugins` connection property.
 
 ## Parameters
 

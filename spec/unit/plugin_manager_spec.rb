@@ -513,8 +513,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'Duplicate plugins detected')
     end
 
-    it 'loads the KMS encryption plugin for the kmsEncryption code' do
-      container = service_container_with_wrapper_props(wrapper_plugins: 'kmsEncryption')
+    it 'loads the KMS encryption plugin for the kms_encryption code' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption')
       manager = described_class.new(container)
 
       expect(manager.plugin_in_use?(AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin)).to be true
@@ -523,7 +523,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
     # The encryption plugin has to see the parameters and the rows last on the way out and first on
     # the way back, so that everything before it works with plaintext.
     it 'orders the KMS encryption plugin after the failover plugin' do
-      container = service_container_with_wrapper_props(wrapper_plugins: 'kmsEncryption,failover')
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption,failover')
       manager = described_class.new(container)
 
       plugin_classes = manager.instance_variable_get(:@plugins).map(&:class)
