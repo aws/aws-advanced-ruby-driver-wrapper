@@ -107,14 +107,7 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def closed?(connection)
-        return true if connection.finished?
-        return true if connection.status != ::PG::CONNECTION_OK
-
-        # Execute a no-op query to verify the socket is alive.
-        connection.query ';'
-        false
-      rescue ::PG::Error
-        true
+        connection.finished? || connection.status != ::PG::CONNECTION_OK
       end
 
       def close_connection(connection)

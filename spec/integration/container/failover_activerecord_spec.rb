@@ -118,11 +118,6 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
   end
 
   after do
-    begin
-      Integration::ProxyHelper.enable_all_connectivity
-    rescue IOError
-      # Proxy control connection is dead — nothing to re-enable
-    end
     ActiveRecord::Base.connection_handler.clear_all_connections!
   end
 

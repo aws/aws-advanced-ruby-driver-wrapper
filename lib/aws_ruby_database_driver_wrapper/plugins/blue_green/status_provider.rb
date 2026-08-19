@@ -185,7 +185,6 @@ module AwsRubyDatabaseDriverWrapper
           old_monitors.each_value { |m| m&.stop }
 
           Plugins::IamAuthPlugin.clear_cache(@storage_service) if iam_enabled?
-          @storage_service.remove(Host::RdsHostListProvider::TOPOLOGY_CACHE_NAME, @cluster_id)
 
           @rollback = false
           @green_topology_recognized_logged = false

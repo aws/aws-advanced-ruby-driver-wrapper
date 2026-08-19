@@ -356,9 +356,7 @@ module AwsRubyDatabaseDriverWrapper
           if @use_ip_address.true? && connected_ip
             established = try_connect_on_all_instances(host_info)
             unless established
-              @connection_mutex.synchronize { @connection.set(nil) }
-              @panic_mode.make_true
-              notify_changes
+              clear_connection
               return
             end
             @connection_mutex.synchronize { @connection.set(established) }
@@ -382,9 +380,7 @@ module AwsRubyDatabaseDriverWrapper
           notify_changes
         rescue StandardError => e
           logger.debug { "[#{@role}] Failed to open monitoring connection: #{e.class}: #{e.message}" }
-          @connection.set(nil)
-          @panic_mode.make_true
-          notify_changes
+          clear_connection
         end
 
         def map_merge(base, overrides)
@@ -407,6 +403,14 @@ module AwsRubyDatabaseDriverWrapper
           notify_changes
         end
 
+        # Lock-free variant of clear_connection. The caller MUST already hold
+        # @connection_mutex
+        def clear_connection_locked
+          @connection.set(nil)
+          @panic_mode.make_true
+          notify_changes
+        end
+
         def connection_closed?(conn)
           driver_dialect.closed?(conn)
         rescue StandardError
@@ -421,12 +425,13 @@ module AwsRubyDatabaseDriverWrapper
           !driver_dialect.sql_state(err).nil?
         end
 
+        # @note Callers must hold @connection_mutex (invoke within a @connection_mutex.synchronize block).
         def status_available?(conn)
           dialect = @service_container.dialect_service.db_dialect
           return true if dialect.blue_green_status_available?(conn)
 
           if connection_closed?(conn)
-            clear_connection
+            clear_connection_locked
           else
             @current_phase = Phase::NOT_CREATED
             logger.debug { "[#{@role}] (status not available) current_phase: #{@current_phase}" }
@@ -491,9 +496,7 @@ module AwsRubyDatabaseDriverWrapper
               @connection_host_info.get.deep_dup(host: status_info.endpoint, port: status_info.port)
             )
             @correct_connection_host.make_true
-            @connection.set(nil)
-            @panic_mode.make_true
-            notify_changes
+            clear_connection_locked
           else
             @correct_connection_host.make_true
             @panic_mode.make_false

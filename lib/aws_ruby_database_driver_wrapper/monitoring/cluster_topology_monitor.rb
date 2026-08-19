@@ -347,6 +347,7 @@ module AwsRubyDatabaseDriverWrapper
 
           role = check_host_role(conn)
           if role.nil?
+            safe_close_connection(conn)
             conn = nil
             @instance_monitor_connections.delete(host_info.host)
             next
@@ -354,7 +355,6 @@ module AwsRubyDatabaseDriverWrapper
 
           if role == Host::HostRole::WRITER
             handle_writer_found(host_info, conn)
-            @instance_monitor_connections.delete(host_info.host)
             return
           end
 
@@ -436,10 +436,12 @@ module AwsRubyDatabaseDriverWrapper
         @monitoring_conn_lock.synchronize do
           existing_conn = @monitoring_connection.get
           return fetch_topology_and_update_cache(existing_conn) if existing_conn
+        end
 
-          conn = internal_connect(initial_host_info)
-          return nil if conn.nil?
+        conn = internal_connect(initial_host_info)
+        return nil if conn.nil?
 
+        @monitoring_conn_lock.synchronize do
           unless @monitoring_connection.compare_and_set(nil, conn)
             safe_close_connection(conn)
             return fetch_topology_and_update_cache(@monitoring_connection.get)
@@ -576,7 +578,7 @@ module AwsRubyDatabaseDriverWrapper
         # Direct match by host or id
         return true if cached_writer.host == verified_writer.host
 
-        true if cached_writer.id && verified_writer.id && cached_writer.id == verified_writer.id
+        cached_writer.id && verified_writer.id && cached_writer.id == verified_writer.id
       end
 
       # --- Reset ---

@@ -68,8 +68,6 @@ module AwsRubyDatabaseDriverWrapper
 
       def closed?(connection)
         connection.nil? || connection.closed?
-      rescue StandardError
-        true
       end
 
       def close_connection(connection)

@@ -73,12 +73,6 @@ RSpec.describe 'Failover', :integration,
     end
   end
 
-  after(:each) do
-    Integration::ProxyHelper.enable_all_connectivity
-  rescue IOError
-    # Proxy control connection is dead — nothing to re-enable
-  end
-
   describe 'writer failover' do
     it 'fails over on connection invocation when writer dies',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do

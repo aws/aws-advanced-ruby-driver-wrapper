@@ -49,7 +49,6 @@ module AwsRubyDatabaseDriverWrapper
           @bgd_id = PropertyDefinition::BGD_ID.get(props).to_s.strip.downcase
           @bg_status = nil
           @cluster_id = nil
-          @switchover_observed = false
           @start_time_ns = Concurrent::AtomicReference.new(0)
           @end_time_ns = Concurrent::AtomicReference.new(0)
 
@@ -82,11 +81,8 @@ module AwsRubyDatabaseDriverWrapper
 
             @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
             if @bg_status.nil? || @bg_status.current_phase == Phase::NOT_CREATED || @bg_status.current_phase == Phase::COMPLETED
-              update_host_info_after_rename if @switchover_observed
               return pipeline_callable.call
             end
-
-            @switchover_observed = true if @bg_status.current_phase&.active_switchover_or_completed?
 
             current_host = @service_container.connection_service.current_host_info
             host_role = @bg_status.role(current_host)
@@ -200,25 +196,6 @@ module AwsRubyDatabaseDriverWrapper
 
         def nano_time
           Process.clock_gettime(Process::CLOCK_MONOTONIC, :nanosecond)
-        end
-
-        # After a BG switchover completes and context resets, update current_host_info
-        # if it still points to a green hostname that was renamed to the blue hostname.
-        # This prevents the failover plugin from seeing a spurious "writer changed" event.
-        def update_host_info_after_rename
-          conn_service = @service_container.connection_service
-          current = conn_service.current_host_info
-          return unless current && Utils::RdsUtils.green_instance?(current.host)
-
-          new_host = Utils::RdsUtils.remove_green_instance_prefix(current.host)
-          return if new_host == current.host
-
-          updated = current.deep_dup
-          updated.host = new_host
-          conn_service.update_host_info(updated)
-          logger.debug { "[BG] Updated current_host_info after rename: #{current.host} -> #{new_host}" }
-        rescue StandardError => e
-          logger.debug { "[BG] Failed to update host_info after rename: #{e.message}" }
         end
       end
     end
