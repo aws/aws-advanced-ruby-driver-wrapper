@@ -62,9 +62,12 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.rds.RdsClient;
 import software.amazon.awssdk.services.rds.model.BlueGreenDeployment;
 import software.amazon.awssdk.services.rds.model.DBCluster;
+import software.amazon.awssdk.services.rds.model.DBClusterMember;
 import software.amazon.awssdk.services.rds.model.DBInstance;
 import software.amazon.awssdk.services.rds.model.DescribeDbClustersRequest;
 import software.amazon.awssdk.services.rds.model.DescribeDbClustersResponse;
+import software.amazon.awssdk.services.rds.model.DescribeDbInstancesRequest;
+import software.amazon.awssdk.services.rds.model.DescribeDbInstancesResponse;
 import integration.util.StringUtils;
 
 public class TestEnvironment implements AutoCloseable {
@@ -653,9 +656,12 @@ public class TestEnvironment implements AutoCloseable {
       String primaryEndpoint = primaryCluster.endpoint();
       String primaryReaderEndpoint = primaryCluster.readerEndpoint();
 
-      // Derive the domain suffix from the primary endpoint
-      // e.g. "my-cluster.cluster-abc123.us-east-1.rds.amazonaws.com" -> "abc123.us-east-1.rds.amazonaws.com"
+      // Derive the instance domain suffix from the primary cluster endpoint, e.g.
+      // "my-cluster.cluster-abc123.us-east-1.rds.amazonaws.com" -> "abc123.us-east-1.rds.amazonaws.com".
       String domainSuffix = primaryEndpoint.substring(primaryEndpoint.indexOf(".") + 1);
+      // Strip the "cluster-" marker so the suffix matches instance endpoints (instance endpoints do
+      // not carry the "cluster-" label). Without this the generated instance hosts are unresolvable.
+      domainSuffix = domainSuffix.replaceFirst("^cluster-", "");
       env.rdsDbDomain = domainSuffix;
 
       env.info.setDatabaseEngine(primaryCluster.engine());
@@ -672,7 +678,7 @@ public class TestEnvironment implements AutoCloseable {
       databaseInfo.getInstances().clear();
       databaseInfo.getInstances().addAll(instances);
 
-      // Set secondary cluster endpoint
+      // Set secondary cluster endpoint + populate secondary-region database info block
       String secondaryClusterId = env.info.getSecondaryClusterIdentifier();
       if (!StringUtils.isNullOrEmpty(secondaryClusterId)) {
         AwsCredentialsProvider credProvider = DefaultCredentialsProvider.create();
@@ -689,6 +695,7 @@ public class TestEnvironment implements AutoCloseable {
         } finally {
           secondaryRds.close();
         }
+        populateSecondaryDatabaseInfo(env, secondaryClusterId, secondaryRegion, credProvider, port);
       }
 
       LOGGER.finer("Global cluster endpoint: " + globalEndpoint);
@@ -717,7 +724,6 @@ public class TestEnvironment implements AutoCloseable {
 
       env.auroraUtil.waitUntilGlobalClusterAvailable(globalClusterId, 20);
 
-      // Create secondary cluster
       String secondaryClusterId = "gdb-secondary-" + env.info.getRandomBase();
       env.info.setSecondaryClusterIdentifier(secondaryClusterId);
       AwsCredentialsProvider credProvider = DefaultCredentialsProvider.create();
@@ -725,7 +731,7 @@ public class TestEnvironment implements AutoCloseable {
       String secondaryEndpoint = env.auroraUtil.createSecondaryCluster(
           secondaryClusterId, globalClusterId,
           env.info.getDatabaseEngine(), env.info.getDatabaseEngineVersion(),
-          Region.of(secondaryRegion), credProvider, 1);
+          Region.of(secondaryRegion), credProvider, 2);
       env.info.setSecondaryClusterEndpoint(secondaryEndpoint);
 
       env.auroraUtil.waitUntilGlobalClusterAvailable(globalClusterId, 20);
@@ -736,6 +742,9 @@ public class TestEnvironment implements AutoCloseable {
       env.info.setGlobalClusterEndpoint(globalEndpoint);
 
       LOGGER.finer("Global cluster endpoint: " + globalEndpoint);
+
+      // Populate the secondary-region database info block.
+      populateSecondaryDatabaseInfo(env, secondaryClusterId, secondaryRegion, credProvider, port);
     }
 
     authorizeRunnerIpAddress(env);
@@ -771,6 +780,91 @@ public class TestEnvironment implements AutoCloseable {
     configureIamAccess(env);
 
     return env;
+  }
+
+  /**
+   * Fetches the secondary-region cluster details and populates a {@link TestDatabaseInfo} block on
+   * the environment info so the test container (Ruby side) can reach region-B instances directly and
+   * proxy them. The secondary cluster lives in a different AWS region, so a region-scoped
+   * {@link RdsClient} is used rather than the default (primary-region) client.
+   *
+   * @param env the test environment
+   * @param secondaryClusterId the secondary cluster identifier
+   * @param secondaryRegion the secondary AWS region id
+   * @param credProvider AWS credentials provider
+   * @param port the database port
+   */
+  private static void populateSecondaryDatabaseInfo(
+      TestEnvironment env,
+      String secondaryClusterId,
+      String secondaryRegion,
+      AwsCredentialsProvider credProvider,
+      int port) {
+
+    RdsClient secondaryRds = RdsClient.builder()
+        .region(Region.of(secondaryRegion))
+        .credentialsProvider(credProvider)
+        .build();
+    try {
+      DescribeDbClustersResponse resp = secondaryRds.describeDBClusters(
+          DescribeDbClustersRequest.builder().dbClusterIdentifier(secondaryClusterId).build());
+      if (!resp.hasDbClusters() || resp.dbClusters().isEmpty()) {
+        LOGGER.warning("Secondary cluster not found while populating secondary database info: " + secondaryClusterId);
+        return;
+      }
+
+      DBCluster secondaryCluster = resp.dbClusters().get(0);
+      String secondaryEndpoint = secondaryCluster.endpoint();
+      String secondaryReaderEndpoint = secondaryCluster.readerEndpoint();
+
+      // Derive the instance domain suffix from the secondary cluster endpoint, e.g.
+      // "gdb-secondary-xyz.cluster-abc123.us-west-2.rds.amazonaws.com" ->
+      // "abc123.us-west-2.rds.amazonaws.com".
+      String secondaryDomainSuffix = null;
+      if (!StringUtils.isNullOrEmpty(secondaryEndpoint)) {
+        secondaryDomainSuffix = secondaryEndpoint.substring(secondaryEndpoint.indexOf(".") + 1);
+        // Strip the "cluster-" marker so the suffix matches instance endpoints.
+        secondaryDomainSuffix = secondaryDomainSuffix.replaceFirst("^cluster-", "");
+      }
+
+      TestDatabaseInfo secondaryInfo = new TestDatabaseInfo();
+      secondaryInfo.setUsername(env.info.getDatabaseInfo().getUsername());
+      secondaryInfo.setPassword(env.info.getDatabaseInfo().getPassword());
+      secondaryInfo.setDefaultDbName(env.info.getDatabaseInfo().getDefaultDbName());
+      if (!StringUtils.isNullOrEmpty(secondaryEndpoint)) {
+        secondaryInfo.setClusterEndpoint(secondaryEndpoint, port);
+      }
+      if (!StringUtils.isNullOrEmpty(secondaryReaderEndpoint)) {
+        secondaryInfo.setClusterReadOnlyEndpoint(secondaryReaderEndpoint, port);
+      }
+      if (!StringUtils.isNullOrEmpty(secondaryDomainSuffix)) {
+        secondaryInfo.setInstanceEndpointSuffix(secondaryDomainSuffix, port);
+      }
+
+      // Fetch live instances for the secondary cluster using the region-scoped client.
+      for (DBClusterMember member : secondaryCluster.dbClusterMembers()) {
+        DescribeDbInstancesResponse instResp = secondaryRds.describeDBInstances(
+            DescribeDbInstancesRequest.builder()
+                .dbInstanceIdentifier(member.dbInstanceIdentifier())
+                .build());
+        if (instResp.hasDbInstances() && !instResp.dbInstances().isEmpty()) {
+          DBInstance dbInstance = instResp.dbInstances().get(0);
+          secondaryInfo.getInstances().add(
+              new TestInstanceInfo(
+                  dbInstance.dbInstanceIdentifier(),
+                  dbInstance.endpoint().address(),
+                  dbInstance.endpoint().port()));
+        }
+      }
+
+      env.info.setSecondaryDatabaseInfo(secondaryInfo);
+      LOGGER.finer("Populated secondary database info with " + secondaryInfo.getInstances().size()
+          + " instances in region " + secondaryRegion);
+    } catch (Exception ex) {
+      LOGGER.warning("Failed to populate secondary database info: " + ex.getMessage());
+    } finally {
+      secondaryRds.close();
+    }
   }
 
   private static void createDbCluster(TestEnvironment env) {
@@ -1379,6 +1473,90 @@ public class TestEnvironment implements AutoCloseable {
               instanceInfo.getHost() + PROXIED_DOMAIN_NAME_SUFFIX,
               PROXY_PORT);
       env.info.getProxyDatabaseInfo().getInstances().add(proxyInstanceInfo);
+    }
+
+    // For AURORA_GLOBAL, also proxy the secondary-region instances and endpoints.
+    if (env.info.getSecondaryDatabaseInfo() != null) {
+      createSecondaryProxyContainers(env, containerHelper, port);
+    }
+  }
+
+  /**
+   * Stands up Toxiproxy containers for the secondary-region cluster (instances, cluster endpoint,
+   * and reader endpoint) and records the proxied hosts + control port in a
+   * {@link TestProxyDatabaseInfo} on the environment info. Mirrors the primary-region proxying in
+   * {@link #createProxyContainers(TestEnvironment)}.
+   *
+   * @param env the test environment
+   * @param containerHelper the container helper
+   * @param port the database port
+   */
+  private static void createSecondaryProxyContainers(
+      TestEnvironment env, ContainerHelper containerHelper, int port) throws IOException {
+
+    TestDatabaseInfo secondaryInfo = env.info.getSecondaryDatabaseInfo();
+
+    TestProxyDatabaseInfo secondaryProxyInfo = new TestProxyDatabaseInfo();
+    secondaryProxyInfo.setControlPort(PROXY_CONTROL_PORT);
+    secondaryProxyInfo.setUsername(secondaryInfo.getUsername());
+    secondaryProxyInfo.setPassword(secondaryInfo.getPassword());
+    secondaryProxyInfo.setDefaultDbName(secondaryInfo.getDefaultDbName());
+    env.info.setSecondaryProxyDatabaseInfo(secondaryProxyInfo);
+
+    for (TestInstanceInfo instance : secondaryInfo.getInstances()) {
+      ToxiproxyContainer container =
+          containerHelper.createProxyContainer(env.network, instance, PROXIED_DOMAIN_NAME_SUFFIX);
+
+      container.start();
+      env.proxyContainers.add(container);
+      final ToxiproxyClient toxiproxyClient = new ToxiproxyClient(
+          container.getHost(),
+          container.getMappedPort(PROXY_CONTROL_PORT));
+
+      containerHelper.createProxy(
+          toxiproxyClient,
+          instance.getHost(),
+          instance.getPort());
+    }
+
+    if (!StringUtils.isNullOrEmpty(secondaryInfo.getClusterEndpoint())) {
+      env.proxyContainers.add(
+          containerHelper.createAndStartProxyContainer(
+              env.network,
+              "proxy-secondary-cluster",
+              secondaryInfo.getClusterEndpoint() + PROXIED_DOMAIN_NAME_SUFFIX,
+              secondaryInfo.getClusterEndpoint(),
+              port));
+
+      secondaryProxyInfo.setClusterEndpoint(
+          secondaryInfo.getClusterEndpoint() + PROXIED_DOMAIN_NAME_SUFFIX, PROXY_PORT);
+    }
+
+    if (!StringUtils.isNullOrEmpty(secondaryInfo.getClusterReadOnlyEndpoint())) {
+      env.proxyContainers.add(
+          containerHelper.createAndStartProxyContainer(
+              env.network,
+              "proxy-secondary-ro-cluster",
+              secondaryInfo.getClusterReadOnlyEndpoint() + PROXIED_DOMAIN_NAME_SUFFIX,
+              secondaryInfo.getClusterReadOnlyEndpoint(),
+              port));
+
+      secondaryProxyInfo.setClusterReadOnlyEndpoint(
+          secondaryInfo.getClusterReadOnlyEndpoint() + PROXIED_DOMAIN_NAME_SUFFIX, PROXY_PORT);
+    }
+
+    if (!StringUtils.isNullOrEmpty(secondaryInfo.getInstanceEndpointSuffix())) {
+      secondaryProxyInfo.setInstanceEndpointSuffix(
+          secondaryInfo.getInstanceEndpointSuffix() + PROXIED_DOMAIN_NAME_SUFFIX, PROXY_PORT);
+    }
+
+    for (TestInstanceInfo instanceInfo : secondaryInfo.getInstances()) {
+      TestInstanceInfo proxyInstanceInfo =
+          new TestInstanceInfo(
+              instanceInfo.getInstanceId(),
+              instanceInfo.getHost() + PROXIED_DOMAIN_NAME_SUFFIX,
+              PROXY_PORT);
+      secondaryProxyInfo.getInstances().add(proxyInstanceInfo);
     }
   }
 

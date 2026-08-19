@@ -15,5 +15,5 @@
 #  limitations under the License.
 
 module Integration
-  ProxyInfo = Struct.new(:proxy, :control_host, :control_port)
+  ProxyInfo = Struct.new(:proxy, :control_host, :control_port, :region)
 end
