@@ -372,11 +372,8 @@ module Integration
       end
 
       # Failover-specific props
-      if combo.include?('failover')
-        config[:failover_timeout_sec] = 120
-        if @env.database_info.instance_endpoint_suffix
-          config[:cluster_instance_host_pattern] = "?.#{@env.database_info.instance_endpoint_suffix}:#{port}"
-        end
+      if combo.include?('failover') && @env.database_info.instance_endpoint_suffix
+        config[:cluster_instance_host_pattern] = "?.#{@env.database_info.instance_endpoint_suffix}:#{port}"
       end
 
       config
