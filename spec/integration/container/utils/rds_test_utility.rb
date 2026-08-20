@@ -27,6 +27,11 @@ module Integration
   class RdsTestUtility
     TRUE_VALUES = [true, 1, '1', 'true', 't', 'TRUE', 'T'].freeze
 
+    # An example that triggers a real cluster failover leaves the demoted instance rebooting, and Aurora reports
+    # the cluster as 'available' again long before that instance accepts connections. Recovery has been observed
+    # to take around 9 minutes, so give it more room than the RDS failover window suggests.
+    DEFAULT_INSTANCES_UP_TIMEOUT_SECS = 600
+
     # simulate_temporary_failure re-enables connectivity from a background thread once the failure window
     # closes, which can be after the example that started it has finished. Those threads are tracked here so
     # that test preparation can wait for them, rather than letting a stale re-enable land in the middle of a
@@ -205,22 +210,24 @@ module Integration
       end
     end
 
-    def make_sure_instances_up(instance_ids)
+    # Waits for every known instance in instance_ids to accept a connection. timeout_secs bounds the call as a
+    # whole rather than each instance, so the worst case does not grow with the number of instances in the cluster.
+    def make_sure_instances_up(instance_ids, timeout_secs: DEFAULT_INSTANCES_UP_TIMEOUT_SECS)
       db_info = TestEnvironment.current.database_info
       suffix = db_info.instance_endpoint_suffix
       port = db_info.instance_endpoint_port
       known_hosts = db_info.instances.to_set(&:host)
+      deadline = Time.now + timeout_secs
       instance_ids.each do |id|
         host = "#{id}.#{suffix}"
         next unless known_hosts.include?(host)
 
         instance_info = TestInstanceInfo.new('instanceId' => id, 'host' => host, 'port' => port)
-        deadline = Time.now + 300
         loop do
           open_connection(instance_info).tap(&:close)
           break
         rescue StandardError
-          raise "Instance #{id} did not come up within 5 minutes" if Time.now >= deadline
+          raise "Instance #{id} did not come up within #{timeout_secs} seconds" if Time.now >= deadline
 
           sleep(1)
         end
