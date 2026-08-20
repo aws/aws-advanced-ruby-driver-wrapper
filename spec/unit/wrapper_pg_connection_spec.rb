@@ -165,6 +165,96 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     end
   end
 
+  # A statement can be prepared by sending a PREPARE instead of by calling prepare, and the
+  # exec_prepared that runs it looks the same either way, so the SQL has to be remembered either way
+  # as well: a plugin reading the statement an exec_prepared runs has nowhere else to get it from.
+  describe 'a statement prepared by a PREPARE' do
+    before do
+      allow(connection).to receive(:exec).and_return(pg_result)
+      allow(connection).to receive(:exec_prepared).and_return(pg_result)
+    end
+
+    it 'publishes the prepared statement when it is executed' do
+      wrapper.exec('PREPARE insert_user AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+      wrapper.exec_prepared('insert_user', %w[Jo 123-45-6789])
+
+      expect(plugin.sql_for('connection.exec_prepared')).to eq(['INSERT INTO users (name, ssn) VALUES ($1, $2)'])
+    end
+
+    it 'reads a PREPARE whichever way it was written' do
+      [
+        ['one', 'PREPARE one (text, text) AS INSERT INTO users (name, ssn) VALUES ($1, $2)'],
+        ['two', "  prepare\n  two\n  as\n  INSERT INTO users (name, ssn) VALUES ($1, $2)"],
+        ['three', 'PREPARE "three" AS INSERT INTO users (name, ssn) VALUES ($1, $2)']
+      ].each do |name, sql|
+        wrapper.exec(sql)
+        wrapper.exec_prepared(name, %w[Jo 123-45-6789])
+
+        expect(plugin.sql_for('connection.exec_prepared').last)
+          .to eq('INSERT INTO users (name, ssn) VALUES ($1, $2)'), sql
+      end
+    end
+
+    # A statement prepared this way is named by an identifier, so an unquoted name is folded to lower
+    # case, and the folded name is the one an exec_prepared has to give.
+    it 'remembers an unquoted name folded to lower case' do
+      wrapper.exec('PREPARE InsertUser AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+
+      expect(wrapper.instance_variable_get(:@prepared_sql).keys).to eq(['insertuser'])
+    end
+
+    it 'remembers a quoted name as it was written' do
+      wrapper.exec('PREPARE "InsertUser" AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+
+      expect(wrapper.instance_variable_get(:@prepared_sql).keys).to eq(['InsertUser'])
+    end
+
+    it 'binds it to the connection it was prepared on, as prepare does' do
+      wrapper.exec('PREPARE insert_user AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+
+      expect(wrapper.instance_variable_get(:@prepared_on)['insert_user']).to eq(connection)
+    end
+
+    it 'leaves a statement that is not a PREPARE alone' do
+      wrapper.exec('SELECT ssn FROM users')
+
+      expect(wrapper.instance_variable_get(:@prepared_sql)).to be_empty
+    end
+
+    it 'forgets one that a DEALLOCATE un-prepares' do
+      wrapper.exec('PREPARE insert_user AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+      wrapper.exec('DEALLOCATE PREPARE insert_user')
+
+      expect(wrapper.instance_variable_get(:@prepared_sql)).to be_empty
+      expect(wrapper.instance_variable_get(:@prepared_on)).to be_empty
+    end
+
+    it 'forgets every statement that a DEALLOCATE ALL un-prepares' do
+      wrapper.exec('PREPARE one AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+      wrapper.exec('PREPARE two AS SELECT ssn FROM users WHERE name = $1')
+      wrapper.exec('DEALLOCATE ALL')
+
+      expect(wrapper.instance_variable_get(:@prepared_sql)).to be_empty
+    end
+
+    # ALL in quotes is a statement actually called ALL, and nothing else is un-prepared.
+    it 'forgets only the statement a quoted ALL names' do
+      wrapper.exec('PREPARE "ALL" AS SELECT 1')
+      wrapper.exec('PREPARE two AS SELECT ssn FROM users WHERE name = $1')
+      wrapper.exec('DEALLOCATE "ALL"')
+
+      expect(wrapper.instance_variable_get(:@prepared_sql).keys).to eq(['two'])
+    end
+
+    it 'reads a PREPARE that was sent asynchronously' do
+      allow(connection).to receive(:send_query)
+      wrapper.send_query('PREPARE insert_user AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+      wrapper.exec_prepared('insert_user', %w[Jo 123-45-6789])
+
+      expect(plugin.sql_for('connection.exec_prepared')).to eq(['INSERT INTO users (name, ssn) VALUES ($1, $2)'])
+    end
+  end
+
   describe 'an asynchronous statement' do
     before do
       allow(connection).to receive(:send_query)

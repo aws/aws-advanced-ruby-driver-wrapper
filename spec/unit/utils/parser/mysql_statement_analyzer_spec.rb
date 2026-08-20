@@ -369,12 +369,142 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       expect(result.write_columns_complete).to be(true)
     end
 
+    # MySQL lets the target of an assignment carry a qualifier, and what it carries is as often an
+    # alias as the table's own name. Reporting the qualifier as part of the column name leaves a
+    # column nobody can look up, and the parameter that fills it then goes to the database as it is.
+    it 'reads the column of a qualified assignment without its qualifier' do
+      ['UPDATE users u SET u.ssn = ? WHERE u.id = ?',
+       'UPDATE users AS u SET u.ssn = ? WHERE u.id = ?',
+       'UPDATE users SET users.ssn = ? WHERE id = ?',
+       'UPDATE users SET `users`.`ssn` = ? WHERE id = ?',
+       'UPDATE mydb.users SET mydb.users.ssn = ? WHERE id = ?'].each do |sql|
+        result = subject.analyze(sql)
+
+        expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]]), "for #{sql}"
+      end
+    end
+
+    it 'reads a qualified column of an INSERT column list without its qualifier' do
+      result = subject.analyze('INSERT INTO users (users.name, users.ssn) VALUES (?, ?)')
+
+      expect(result.write_columns.map(&:column_name)).to eq(%w[name ssn])
+    end
+
+    it 'reports a qualified column it cannot substitute a value for without its qualifier' do
+      result = subject.analyze('UPDATE users u SET u.ssn = upper(?) WHERE u.id = ?')
+
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['ssn'])
+    end
+
+    # A dot inside a quoted identifier is part of the name, not a qualifier in front of it.
+    it 'keeps a column whose own name contains a dot' do
+      result = subject.analyze('UPDATE users SET `a.b` = ? WHERE id = ?')
+
+      expect(result.write_columns.map(&:column_name)).to eq(['a.b'])
+    end
+
     # A comma inside a quoted value is part of the value, not a separator between two of them.
     it 'does not split a value on a comma inside a string' do
       result = subject.analyze("INSERT INTO users (name, ssn) VALUES ('Doe, Jo', ?)")
 
       expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
       expect(result.unbound_write_columns.map(&:column_name)).to eq(['name'])
+    end
+  end
+
+  # MySQL lets an UPDATE write more than one table at once, and an assignment then belongs to whichever
+  # of them its qualifier names. Attributing one to the first table named would be a guess, and a
+  # caller that acts on the answer needs the difference between an answer and a guess.
+  describe '.analyze an UPDATE of more than one table' do
+    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+
+    it 'reports every table it names and attributes no column to any of them' do
+      result = subject.analyze('UPDATE users u JOIN accounts a ON a.uid = u.id SET a.ssn = ? WHERE u.id = ?')
+
+      expect(result.query_type).to eq(query_type::UPDATE)
+      expect(result.tables).to eq(%w[users accounts])
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reads the tables however the references are joined' do
+      ['UPDATE users, accounts SET accounts.ssn = ? WHERE users.id = accounts.uid',
+       'UPDATE users u LEFT JOIN accounts a ON a.uid = u.id SET a.ssn = ?',
+       'UPDATE users u INNER JOIN accounts a ON a.uid = u.id SET a.ssn = ?',
+       'update `mydb`.`users` u straight_join accounts a on a.uid = u.id set a.ssn = ?'].each do |sql|
+        result = subject.analyze(sql)
+
+        expect(result.tables.map { |table| table.split('.').last }).to eq(%w[users accounts]), "for #{sql}"
+        expect(result.write_columns).to(be_empty, "for #{sql}")
+        expect(result.write_columns_complete).to(be(false), "for #{sql}")
+      end
+    end
+
+    # Which table it sits in is what is unknown here, not which column it is.
+    it 'reports a column it cannot substitute a value for without a table' do
+      result = subject.analyze('UPDATE users u JOIN accounts a ON a.uid = u.id SET a.ssn = upper(?)')
+
+      expect(result.unbound_write_columns.map { |c| [c.table_name, c.column_name] }).to eq([[nil, 'ssn']])
+    end
+
+    # A reference this cannot read leaves the tables it does read to be acted on, rather than a guess
+    # at the one it could not.
+    it 'reports only the tables it could read' do
+      result = subject.analyze('UPDATE users u JOIN (SELECT id FROM t) d ON d.id = u.id SET u.ssn = ?')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'still reads an UPDATE of one table under an alias' do
+      result = subject.analyze('UPDATE users u SET u.ssn = ? WHERE u.id = ?')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.table_name, c.column_name, c.parameter_index] }).to eq([['users', 'ssn', 1]])
+      expect(result.write_columns_complete).to be(true)
+    end
+  end
+
+  # The modifiers MySQL accepts in front of the table say how the statement behaves, not what it
+  # writes. Stopping at one of them would leave the table unread, and a statement whose table is
+  # unknown is one whose parameters go to the database as they are.
+  describe '.analyze past the modifiers of a statement' do
+    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+
+    it 'reads the table of an UPDATE past its modifiers' do
+      ['UPDATE LOW_PRIORITY users SET ssn = ? WHERE id = ?',
+       'UPDATE IGNORE users SET ssn = ? WHERE id = ?',
+       'UPDATE LOW_PRIORITY IGNORE users SET ssn = ? WHERE id = ?',
+       'update low_priority ignore users set ssn = ? where id = ?'].each do |sql|
+        result = subject.analyze(sql)
+
+        expect(result.query_type).to eq(query_type::UPDATE), "for #{sql}"
+        expect(result.tables).to(eq(['users']), "for #{sql}")
+        expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to(eq([['ssn', 1]]), "for #{sql}")
+      end
+    end
+
+    it 'reads the table and columns of an INSERT past its modifiers' do
+      ['INSERT LOW_PRIORITY INTO users (name, ssn) VALUES (?, ?)',
+       'INSERT HIGH_PRIORITY INTO users (name, ssn) VALUES (?, ?)',
+       'INSERT DELAYED INTO users (name, ssn) VALUES (?, ?)',
+       'INSERT LOW_PRIORITY IGNORE INTO users (name, ssn) VALUES (?, ?)',
+       'REPLACE LOW_PRIORITY INTO users (name, ssn) VALUES (?, ?)',
+       'insert delayed ignore into users (name, ssn) values (?, ?)'].each do |sql|
+        result = subject.analyze(sql)
+
+        expect(result.query_type).to eq(query_type::INSERT), "for #{sql}"
+        expect(result.tables).to(eq(['users']), "for #{sql}")
+        expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] })
+          .to(eq([['name', 1], ['ssn', 2]]), "for #{sql}")
+      end
+    end
+
+    it 'reads the SET form of an INSERT past its modifiers' do
+      result = subject.analyze('INSERT HIGH_PRIORITY INTO users SET name = ?, ssn = ?')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
     end
   end
 

@@ -61,8 +61,10 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # A SELECT names its tables in a FROM clause; the statements that write name the one they
-        # write in a relation of their own.
+        # write in a relation of their own. A PREPARE names whatever the statement it carries names.
         def statement_tables(stmt)
+          prepared = stmt.dig(:prepare_stmt, :query)
+          return statement_tables(prepared) if prepared.is_a?(Hash)
           return extract_tables_from_clause(Array(stmt.dig(:select_stmt, :from_clause))) if stmt.key?(:select_stmt)
 
           written = stmt.values_at(:insert_stmt, :update_stmt, :delete_stmt, :copy_stmt).compact.first
@@ -82,8 +84,21 @@ module AwsRubyDatabaseDriverWrapper
           in { create_stmt: inner_stmt } then extract_create(inner_stmt)
           in { drop_stmt: inner_stmt }   then extract_drop(inner_stmt)
           in { copy_stmt: inner_stmt }   then extract_copy(inner_stmt, parameterized)
+          in { prepare_stmt: inner_stmt } then extract_prepare(inner_stmt, parameterized)
           else QueryAnalysis.unknown
           end
+        end
+
+        # A PREPARE is the statement it carries, as far as what gets written where goes: the columns
+        # the carried statement writes are the columns the +EXECUTE+ that runs it later writes, and the
+        # parameters it declares are the ones that +EXECUTE+ binds. Reading it here is what lets a
+        # value written into the body itself, rather than left as a parameter, be seen at the moment
+        # the PREPARE is sent, which is the only moment its text is in hand.
+        def extract_prepare(stmt, parameterized)
+          query = stmt[:query]
+          return QueryAnalysis.unknown unless query.is_a?(Hash) && !query.empty?
+
+          extract_from_stmt(query, parameterized)
         end
 
         def extract_select(stmt, parameterized)

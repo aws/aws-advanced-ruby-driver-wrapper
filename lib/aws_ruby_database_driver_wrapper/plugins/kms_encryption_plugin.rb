@@ -75,6 +75,15 @@ module AwsRubyDatabaseDriverWrapper
     # A COPY is also turned away as it is opened rather than part way through its stream, since the
     # statement that opens it is the last point at which anything can be said about it.
     #
+    # A prepared statement is run by name, so the plugin reads the statement the connection remembers
+    # preparing under that name, whether it was prepared by the driver's own +prepare+ or by a
+    # +PREPARE+ sent as a statement. A name it has no statement for, which is a statement prepared
+    # somewhere the connection could not read, is refused when values are bound to it, there being no
+    # statement to place them in. A read prepared that way is refused along with the writes, since
+    # without the statement there is no telling one from the other. A +PREPARE+ is also checked as it
+    # is sent, and not only when its name is later run, since a value written into the statement it
+    # carries rather than left as a parameter is only in hand while the +PREPARE+ itself is.
+    #
     # None of that amounts to a guarantee that an encrypted column never holds a plaintext, and it
     # should not be read as one. These checks cover the statements this wrapper sends, which is not
     # the same as every statement the column sees: psql, a migration, another service, and whatever
@@ -214,11 +223,12 @@ module AwsRubyDatabaseDriverWrapper
       # The parameters are handed back through the call context, so that the application's own
       # array is left as it was.
       def encrypt_parameters(method_name, args, context, sql)
-        return if context.nil? || sql.nil?
+        return if context.nil?
 
         position = PARAMETER_METHODS[method_name]
         parameters = position.nil? ? args : args[position]
         parameters = [] unless parameters.is_a?(Array)
+        return verify_unknown_statement(parameters) if sql.nil?
 
         # Asked for even when there is nothing to bind, since that is what says whether the
         # statement is storing a value the plugin cannot reach.
@@ -235,6 +245,22 @@ module AwsRubyDatabaseDriverWrapper
           rewritten[position] = encrypted
           context.args = rewritten
         end
+      end
+
+      # A call whose statement the wrapper never saw, which is a prepared statement run by name after
+      # something other than a +prepare+ or a +PREPARE+ brought it into being: one prepared inside a
+      # multi-statement string, or on the driver's connection directly, or by a client library of its
+      # own devising. Values bound to it cannot be placed, there being no statement to place them in,
+      # so a call that binds any is refused rather than sending them as they are, this being the one
+      # path where a plaintext would reach an encrypted column silently and read back clean ever
+      # after. A call that binds nothing has nothing to leak and is let through.
+      #
+      # A read prepared that way is refused along with the writes, since without the statement there
+      # is no telling one from the other.
+      #
+      # @raise [Errors::MetadataError]
+      def verify_unknown_statement(parameters)
+        raise unknown_statement_error unless parameters.empty?
       end
 
       # A statement with no bind parameters has nothing to encrypt, so only its safety is at stake.
@@ -411,23 +437,40 @@ module AwsRubyDatabaseDriverWrapper
       # ever after, because the read path only decrypts a value whose integrity check passes, so
       # nothing would ever surface the leak.
       #
-      # An annotation is how all of this is overridden. It names the column a parameter belongs to
-      # explicitly, so a statement that carries one is taken at its word. A COPY is the exception,
-      # since it has no parameter for an annotation to name.
+      # An annotation is how all of this is overridden, but only as far as it reaches. It names the
+      # column one parameter belongs to, so that column is taken as the caller's own business and
+      # not held against the statement, while a second encrypted column the same statement writes in
+      # the clear is still refused. Which parameter fills which column is the one thing an
+      # annotation settles for the whole statement, since a caller that maps one parameter by hand is
+      # saying the parser's reading is not the one to go by. A COPY is outside all of this, having no
+      # parameter for an annotation to name.
       #
       # @param tables [Array<String>] the tables the statement writes to
       # @raise [Errors::MetadataError]
       def verify_write(analysis, tables, annotations)
         return verify_copy(analysis, tables) if analysis.query_type == Utils::Parser::QueryType::COPY
-        return unless annotations.empty?
         raise unreadable_statement_error if tables.empty?
 
-        unencryptable = analysis.unbound_write_columns.find { |column| encrypted_column(column, tables) }
+        named = annotated_columns(annotations, tables)
+        unencryptable = analysis.unbound_write_columns.find do |column|
+          config = encrypted_column(column, tables)
+          config && !named.include?(config.column_identifier)
+        end
         raise unencryptable_value_error(unencryptable) if unencryptable
-        return if analysis.write_columns_complete
+        return if analysis.write_columns_complete || annotations.any?
 
         hidden = tables.find { |table| encrypted_columns_of(table, strict: true).any? }
         raise unreadable_columns_error(hidden) if hidden
+      end
+
+      # The encrypted columns the statement's own annotations name.
+      #
+      # @return [Set<String>] column identifiers, empty when nothing was annotated
+      def annotated_columns(annotations, tables)
+        annotations.each_value.with_object(Set.new) do |reference, named|
+          config = resolve_column(reference, tables, strict: true)
+          named << config.column_identifier if config
+        end
       end
 
       # A COPY sends its rows to the server as a stream rather than as bind parameters, so there is
@@ -510,7 +553,11 @@ module AwsRubyDatabaseDriverWrapper
         table, _, column = reference.to_s.rpartition('.')
         return nil if column.empty?
 
-        candidates = table.empty? ? tables : [table.split('.').last]
+        # What qualifies a column is tried as a table first, and the statement's own tables after
+        # it, because the qualifier may be an alias: +/*@encrypt:u.ssn*/+ on a statement that says
+        # +UPDATE users u+ names a real column of a real table, and looking only for a table called
+        # +u+ would find nothing and leave the value unencrypted.
+        candidates = table.empty? ? tables : [table.split('.').last, *tables].uniq
         candidates.each do |candidate|
           config = column_config(candidate, column, strict: strict)
           return config if config
@@ -613,6 +660,14 @@ module AwsRubyDatabaseDriverWrapper
           'This statement stores values, and neither the tables nor the columns it writes could be ' \
           'established, so whether it writes an encrypted column is unknown. Name the column each ' \
           'parameter belongs to with an /*@encrypt:table.column*/ annotation.'
+        )
+      end
+
+      def unknown_statement_error
+        Errors::MetadataError.validation_failed(
+          'This call binds values to a prepared statement whose text this connection never saw, so ' \
+          'which column each value belongs to is unknown and a value could be stored in the clear. ' \
+          "Prepare the statement with the connection's prepare, or with a PREPARE sent on its own."
         )
       end
 

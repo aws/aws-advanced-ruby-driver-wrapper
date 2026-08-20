@@ -21,18 +21,39 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     module Parser
       module MysqlStatementAnalyzer
-        IDENTIFIER     = /`[^`]+`|"[^"]+"|\w+(?:\.\w+)*/
-        IDENTIFIER_CAP = /(`[^`]+`|"[^"]+"|\w+(?:\.\w+)*)/
-        IDENTIFIER_NC  = /(?:`[^`]+`|"[^"]+"|\w+(?:\.\w+)*)/ # non-capturing
+        # One part of a name, quoted or not. MySQL quotes a part on its own, which is how it writes a
+        # name that would otherwise be a reserved word.
+        IDENTIFIER_PART = /(?:`[^`]+`|"[^"]+"|\w+)/
+        # A name, in as many parts as it was written in: +ssn+, +u.ssn+, +`users`.`ssn`+,
+        # +mydb.users.ssn+. The parts are spelled out rather than assuming that a quoted name is a
+        # name of one part.
+        IDENTIFIER_CAP  = /(#{IDENTIFIER_PART}(?:\.#{IDENTIFIER_PART})*)/
+        IDENTIFIER_NC   = /(?:#{IDENTIFIER_PART}(?:\.#{IDENTIFIER_PART})*)/ # non-capturing
 
+        # The modifiers MySQL allows between the keyword and the table it writes. They say how the
+        # statement behaves, not what it writes, so the table has to be looked for past them: a
+        # statement whose table went unread is one whose columns go unencrypted.
         # REPLACE writes exactly like INSERT does, so it is read the same way.
-        INSERT_INTO  = /\b(?:INSERT|REPLACE)\s+(?:IGNORE\s+)?INTO\s+#{IDENTIFIER_CAP}/i
-        UPDATE_TABLE = /\bUPDATE\s+#{IDENTIFIER_CAP}/i
+        INSERT_START = /\b(?:INSERT|REPLACE)\s+(?:(?:LOW_PRIORITY|HIGH_PRIORITY|DELAYED)\s+)?(?:IGNORE\s+)?INTO\s+/i
+        UPDATE_START = /\bUPDATE\s+(?:LOW_PRIORITY\s+)?(?:IGNORE\s+)?/i
+
+        INSERT_INTO  = /#{INSERT_START}#{IDENTIFIER_CAP}/i
+        UPDATE_TABLE = /#{UPDATE_START}#{IDENTIFIER_CAP}/i
         DELETE_FROM  = /\bDELETE\s+FROM\s+#{IDENTIFIER_CAP}/i
         CREATE_TABLE = /\bCREATE\s+(?:TEMPORARY\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?#{IDENTIFIER_CAP}/i
         DROP_TABLE   = /\bDROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?#{IDENTIFIER_CAP}/i
 
-        INSERT_COLUMNS = /\b(?:INSERT|REPLACE)\s+(?:IGNORE\s+)?INTO\s+(?:`[^`]+`|"[^"]+"|\w+(?:\.\w+)*)\s*\(([^)]+)\)/i
+        # Everything an UPDATE names between its keyword and its SET clause: one table reference, or
+        # several when it writes more than one table.
+        UPDATE_REFERENCES  = /#{UPDATE_START}(.*?)\bSET\b/im
+        # What one table reference is joined to the next with. STRAIGHT_JOIN is spelled out because
+        # there is no word boundary in front of the JOIN inside it.
+        JOIN_KEYWORD       = /\bSTRAIGHT_JOIN\b|\bJOIN\b/i
+        # The table a reference begins with, whatever follows it: an alias, an index hint, an ON
+        # condition.
+        LEADING_IDENTIFIER = /\A\s*#{IDENTIFIER_CAP}/
+
+        INSERT_COLUMNS = /#{INSERT_START}#{IDENTIFIER_NC}\s*\(([^)]+)\)/i
         SET_CLAUSE     = /\bSET\b([^;]+?)(?:\bWHERE\b|\z)/im
         VALUES_CLAUSE  = /\A\s*VALUES?\s*/i
         ON_DUPLICATE   = /\AON\s+DUPLICATE\s+KEY\s+UPDATE\b/i
@@ -84,7 +105,14 @@ module AwsRubyDatabaseDriverWrapper
         CTE_NAME       = /\A#{IDENTIFIER_NC}\s*/
         CTE_AS         = /\AAS\s+(?:(?:NOT\s+)?MATERIALIZED\s*)?/i
 
-        STRIP_QUOTES   = /\A[`"']|[`"']\z/
+        # Every part of a name can be quoted, so all of them are taken off rather than only the ones
+        # at the ends: +`mydb`.`users`+ is the one table +mydb.users+.
+        STRIP_QUOTES   = /[`"']/
+
+        # A column named with something in front of it: +u.ssn+, +users.ssn+, +db.users.ssn+. Only
+        # the last part is the column. A quoted identifier can hold a dot of its own, so the parts
+        # are matched rather than split on, which keeps a column actually named +`a.b`+ intact.
+        QUALIFIED_COLUMN = /\A(?:#{IDENTIFIER_PART}\.)+(#{IDENTIFIER_PART})\z/
 
         module_function
 
@@ -193,6 +221,9 @@ module AwsRubyDatabaseDriverWrapper
 
         # @param first_index [Integer] the number the statement's first bind parameter has
         def extract_update(sql, first_index = 1)
+          references = UPDATE_REFERENCES.match(sql)&.[](1)
+          return extract_multi_table_update(sql, references, first_index) if references && multiple_references?(references)
+
           table = extract_first_capture(UPDATE_TABLE, sql)
           set_cols, unbound, complete = extract_set_columns(sql, table, first_index)
           where_cols = extract_where_columns(sql)
@@ -206,6 +237,50 @@ module AwsRubyDatabaseDriverWrapper
             unbound_write_columns: unbound.freeze,
             write_columns_complete: complete
           )
+        end
+
+        # Whether an UPDATE writes more than one table, which MySQL allows and which changes what an
+        # assignment means: with two tables in front of it, +SET a.ssn = ?+ belongs to whichever of
+        # them the reference list gave the name +a+ to, and that is more than this reader tracks.
+        # A reference list it cannot split is counted as more than one reference for the same reason.
+        def multiple_references?(references)
+          return true if JOIN_KEYWORD.match?(references)
+
+          entries = split_top_level(references)
+          entries.nil? || entries.length > 1
+        end
+
+        # An UPDATE of more than one table, reported as a statement whose written columns could not be
+        # enumerated. Attributing an assignment to the first table named would be a guess, and a wrong
+        # guess either leaves a plaintext in an encrypted column or writes a value under a key nothing
+        # reads it back with, so nothing is attributed at all. Every table the statement names is
+        # reported, which is what lets a caller see whether any of them holds a column worth
+        # protecting, and a column assigned something other than a bind parameter is reported without
+        # its table, the column name being known even where it sits not being.
+        #
+        # @param first_index [Integer] the number the statement's first bind parameter has
+        def extract_multi_table_update(sql, references, first_index)
+          _bound, unbound, = extract_set_columns(sql, nil, first_index)
+          QueryAnalysis.new(
+            query_type: QueryType::UPDATE,
+            tables: reference_tables(references).freeze,
+            write_columns: [].freeze,
+            where_columns: extract_where_columns(sql),
+            for_update: false,
+            parameterized: sql.include?('?'),
+            unbound_write_columns: unbound.freeze,
+            write_columns_complete: false
+          )
+        end
+
+        # The tables a reference list names, as far as they can be read. A reference this cannot read
+        # contributes nothing rather than a guess, and a list it reads nothing from leaves no tables at
+        # all, which is what says the statement could not be placed anywhere.
+        def reference_tables(references)
+          (split_top_level(references) || [references])
+            .flat_map { |entry| entry.split(JOIN_KEYWORD) }
+            .filter_map { |fragment| extract_first_capture(LEADING_IDENTIFIER, fragment) }
+            .uniq
         end
 
         def extract_delete(sql)
@@ -272,7 +347,7 @@ module AwsRubyDatabaseDriverWrapper
           declared = INSERT_COLUMNS.match(sql)
           return extract_set_columns(sql, table_name, first_index) unless declared
 
-          columns = split_top_level(declared[1])&.map { |column_token| strip_quotes(column_token) }
+          columns = split_top_level(declared[1])&.map { |column_token| column_name_of(column_token) }
           rows, trailing = value_rows(sql[declared.end(0)..])
           return [[], [], false] if columns.nil? || rows.nil?
 
@@ -351,7 +426,7 @@ module AwsRubyDatabaseDriverWrapper
             end
 
             value = match[2].strip
-            column = ColumnInfo.new(table_name: table_name, column_name: strip_quotes(match[1]), parameter_index: index)
+            column = ColumnInfo.new(table_name: table_name, column_name: column_name_of(match[1]), parameter_index: index)
             if value == '?'
               bound << column
             elsif !NULL_VALUE.match?(value)
@@ -383,6 +458,17 @@ module AwsRubyDatabaseDriverWrapper
 
         def strip_quotes(identifier)
           identifier.gsub(STRIP_QUOTES, '')
+        end
+
+        # The column an identifier names, with whatever qualifies it dropped.
+        #
+        # MySQL lets the target of an assignment carry a qualifier, +SET u.ssn = ?+, where +u+ is
+        # either the table or an alias for it. Which of the two it is cannot be told from the text,
+        # but a statement with one table to write can only mean that table either way, so only the
+        # column name is kept. Where the qualifier would carry the answer, an UPDATE naming more than
+        # one table, the assignments are not attributed at all: see +extract_multi_table_update+.
+        def column_name_of(identifier)
+          strip_quotes(QUALIFIED_COLUMN.match(identifier)&.[](1) || identifier)
         end
 
         # -- Reading the text without a grammar --

@@ -79,6 +79,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     @context.args
   end
 
+  # That a value was replaced by something that decrypts back to it. Asked as two expectations
+  # because decrypting is lenient: handed a value that is not an encrypted payload at all it answers
+  # with that value, so decrypting alone cannot tell an encrypted value from an untouched one.
+  def expect_encrypted(bound_value, plaintext_value, message = nil)
+    expect(bound_value).not_to eq(plaintext_value), message
+    expect(plaintext(bound_value)).to eq(plaintext_value), message
+  end
+
   # One encrypted column value, as the plugin would have written it.
   def ciphertext(value, config = ssn_config)
     cipher = encryption::ColumnCipher.new(key_manager: key_manager, sql_runner: sql_runner)
@@ -142,7 +150,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       name, ssn = bound_args[1]
       expect(name).to eq('Jo')
       expect(ssn).to include(format: 1)
-      expect(plaintext(ssn)).to eq('123-45-6789')
+      expect_encrypted(ssn, '123-45-6789')
     end
 
     # The array belongs to the application, which is free to reuse it after the call.
@@ -157,14 +165,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       call('statement.execute', args: %w[Jo 123-45-6789], sql: insert)
 
       expect(bound_args.first).to eq('Jo')
-      expect(plaintext(bound_args.last)).to eq('123-45-6789')
+      expect_encrypted(bound_args.last, '123-45-6789')
     end
 
     it 'encrypts what an UPDATE assigns to an encrypted column' do
       sql = 'UPDATE users SET ssn = $1 WHERE name = $2'
       call('connection.exec_params', args: [sql, %w[123-45-6789 Jo]], sql: sql)
 
-      expect(plaintext(bound_args[1].first)).to eq('123-45-6789')
+      expect_encrypted(bound_args[1].first, '123-45-6789')
       expect(bound_args[1].last).to eq('Jo')
     end
 
@@ -196,7 +204,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       sql = 'SELECT name FROM users WHERE ssn = $1'
       call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql)
 
-      expect(plaintext(bound_args[1].first)).to eq('123-45-6789')
+      expect_encrypted(bound_args[1].first, '123-45-6789')
     end
 
     # The annotation is the way out when a statement is too involved for the parser, so it has to
@@ -205,18 +213,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       sql = 'INSERT INTO users (name, nickname) VALUES ($1, /*@encrypt:users.ssn*/ $2)'
       call('connection.exec_params', args: [sql, %w[Jo Joey]], sql: sql)
 
-      expect(plaintext(bound_args[1].last)).to eq('Joey')
+      expect_encrypted(bound_args[1].last, 'Joey')
     end
 
     it 'encrypts an annotated parameter of a statement the parser makes nothing of' do
       sql = 'INSERT INTO users SELECT $1, /*@encrypt:users.ssn*/ $2'
       call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
 
-      expect(plaintext(bound_args[1].last)).to eq('123-45-6789')
+      expect_encrypted(bound_args[1].last, '123-45-6789')
     end
 
-    it 'does nothing when the call carries no SQL to parse' do
-      args = [%w[Jo 123-45-6789]]
+    it 'does nothing when the call carries no SQL to parse and binds nothing' do
+      args = []
       call('statement.execute', args: args, sql: nil)
 
       expect(bound_args).to be(args)
@@ -373,14 +381,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
       expect(bound_args.first).to eq('Jo')
       expect(bound_args.last.encoding).to eq(Encoding::BINARY)
-      expect(plaintext(bound_args.last)).to eq('123-45-6789')
+      expect_encrypted(bound_args.last, '123-45-6789')
     end
 
     it 'takes the column from an annotation on a question mark placeholder' do
       sql = 'INSERT INTO users (name, nickname) VALUES (?, /*@encrypt:users.ssn*/ ?)'
       call('statement.execute', args: %w[Jo Joey], sql: sql)
 
-      expect(plaintext(bound_args.last)).to eq('Joey')
+      expect_encrypted(bound_args.last, 'Joey')
     end
 
     it 'decrypts the binary column values of a row' do
@@ -397,14 +405,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
                                 sql: '/* app:checkout */ INSERT INTO users (name, ssn) VALUES (?, ?)')
 
       expect(bound_args.first).to eq('Jo')
-      expect(plaintext(bound_args.last)).to eq('123-45-6789')
+      expect_encrypted(bound_args.last, '123-45-6789')
     end
 
     it 'encrypts the parameters of a write behind a common table expression' do
       call('statement.execute', args: %w[Jo 123-45-6789],
                                 sql: 'WITH t AS (SELECT 1) INSERT INTO users (name, ssn) VALUES (?, ?)')
 
-      expect(plaintext(bound_args.last)).to eq('123-45-6789')
+      expect_encrypted(bound_args.last, '123-45-6789')
     end
 
     it 'refuses a write behind a clause it could not read' do
@@ -413,6 +421,80 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect { call('statement.execute', args: %w[Jo 123-45-6789], sql: sql) }
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError,
                         /neither the tables nor the columns it writes/)
+    end
+
+    # MySQL lets the target of an assignment carry the table it belongs to, or an alias for it, and
+    # an application that aliases its tables writes every assignment that way.
+    it 'encrypts a parameter assigned to a column named with its table' do
+      call('statement.execute', args: ['123-45-6789', 7], sql: 'UPDATE users SET users.ssn = ? WHERE id = ?')
+
+      expect_encrypted(bound_args.first, '123-45-6789')
+    end
+
+    it 'encrypts a parameter assigned to a column named with an alias for its table' do
+      ['UPDATE users u SET u.ssn = ? WHERE u.id = ?',
+       'UPDATE users AS u SET `u`.`ssn` = ? WHERE u.id = ?',
+       'UPDATE mydb.users u SET u.ssn = ? WHERE u.id = ?'].each do |sql|
+        call('statement.execute', args: ['123-45-6789', 7], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789', "for #{sql}")
+      end
+    end
+
+    # The modifiers MySQL accepts in front of the table say how the statement behaves and nothing
+    # about what it writes, so a write behind one is an ordinary write.
+    it 'encrypts a parameter of a write sent behind a statement modifier' do
+      ['UPDATE LOW_PRIORITY users SET ssn = ? WHERE id = ?',
+       'UPDATE IGNORE users SET ssn = ? WHERE id = ?'].each do |sql|
+        call('statement.execute', args: ['123-45-6789', 7], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789', "for #{sql}")
+      end
+    end
+
+    it 'encrypts the parameters of an INSERT sent behind a statement modifier' do
+      ['INSERT LOW_PRIORITY INTO users (name, ssn) VALUES (?, ?)',
+       'INSERT DELAYED IGNORE INTO users (name, ssn) VALUES (?, ?)',
+       'REPLACE LOW_PRIORITY INTO users (name, ssn) VALUES (?, ?)'].each do |sql|
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo'), "for #{sql}"
+        expect_encrypted(bound_args.last, '123-45-6789', "for #{sql}")
+      end
+    end
+
+    # MySQL lets an UPDATE write more than one table, and which of them +SET a.ssn = ?+ writes depends
+    # on the aliases the reference list handed out. Guessing the first table named would encrypt for
+    # the wrong column as readily as for the right one, so a statement that could be writing an
+    # encrypted column is refused instead.
+    describe 'an UPDATE of more than one table' do
+      let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+
+      it 'is refused when any table it names has an encrypted column' do
+        sql = 'UPDATE users u JOIN accounts a ON a.uid = u.id SET a.ssn = ? WHERE u.id = ?'
+
+        expect { call('statement.execute', args: ['123-45-6789', 7], sql: sql) }
+          .to raise_error(metadata_error, /which of them this statement writes could not be established/)
+      end
+
+      it 'is let through when none of the tables it names has one' do
+        sql = 'UPDATE audit_log l JOIN sessions s ON s.id = l.session_id SET s.token = ?'
+        args = ['abcd']
+
+        call('statement.execute', args: args, sql: sql)
+
+        expect(bound_args).to be(args)
+      end
+
+      # The caller knows which table an assignment lands on even where the parser does not, and saying
+      # so is what the annotation is for.
+      it 'encrypts an annotated parameter of one' do
+        sql = 'UPDATE users u JOIN accounts a ON a.uid = u.id SET u.ssn = /*@encrypt:users.ssn*/ ?'
+
+        call('statement.execute', args: ['123-45-6789'], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+      end
     end
   end
 
@@ -568,7 +650,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
       call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql)
 
-      expect(plaintext(bound_args[1][0])).to eq('123-45-6789')
+      expect_encrypted(bound_args[1][0], '123-45-6789')
     end
 
     # An annotation names the column a parameter belongs to, which is exactly what the refusals are
@@ -578,7 +660,48 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
       call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
 
-      expect(plaintext(bound_args[1][1])).to eq('123-45-6789')
+      expect_encrypted(bound_args[1][1], '123-45-6789')
+    end
+
+    # An annotation speaks for the column it names and no further. A statement that annotates one
+    # parameter has said nothing about the second encrypted column it fills with a literal, and that
+    # column would be stored in the clear, so it is still refused.
+    it 'still refuses an encrypted column the annotation says nothing about' do
+      sql = "INSERT INTO users (name, email, ssn) VALUES ($1, /*@encrypt:users.email*/ $2, '123-45-6789')"
+
+      expect { call('connection.exec_params', args: [sql, %w[Jo jo@example.com]], sql: sql) }
+        .to raise_error(metadata_error, /ssn is configured for encryption/)
+    end
+
+    # A cast is not a bind parameter as far as the parser is concerned, but casting the ciphertext is
+    # a reasonable thing to write, and the annotation says the parameter is the column's value.
+    it 'excuses the column its annotation does name' do
+      sql = 'INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2::bytea)'
+
+      call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
+
+      expect_encrypted(bound_args[1][1], '123-45-6789')
+    end
+
+    # An annotation that names no table cannot be resolved against a statement whose tables are
+    # unknown, so it does not stand in for one that would have said which column to encrypt.
+    it 'refuses a write it could not parse even when it carries an annotation' do
+      sql = 'INSERT INTO ((( /*@encrypt:ssn*/ $1'
+      allow(plugin.send(:logger)).to receive(:warn)
+
+      expect { call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql) }
+        .to raise_error(metadata_error, /neither the tables nor the columns it writes/)
+    end
+
+    # An application that aliases its tables annotates with the alias, since that is what the rest of
+    # the statement says. Looking only for a table of that name would find nothing configured and
+    # leave the value unencrypted.
+    it 'resolves an annotation that names the table by its alias' do
+      sql = 'INSERT INTO users AS u SELECT $1, /*@encrypt:u.ssn*/ $2'
+
+      call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
+
+      expect_encrypted(bound_args[1][1], '123-45-6789')
     end
 
     it 'reads a statement it refuses to write from' do
@@ -586,6 +709,81 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       rows = [{ 'ssn' => bytea(ciphertext('123-45-6789')) }]
 
       expect(call('result.to_a', sql: sql, returns: rows).first['ssn']).to eq('123-45-6789')
+    end
+  end
+
+  # A prepared statement is run by name, and the connection publishes the statement it was prepared
+  # with. A name it has no statement for is one prepared somewhere it could not read, and there is
+  # then no telling which column a value belongs to, or whether the statement writes at all.
+  describe 'binding values to a statement it never saw' do
+    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+
+    it 'refuses a prepared statement it has no statement for' do
+      expect { call('connection.exec_prepared', args: ['prepared_elsewhere', ['123-45-6789']]) }
+        .to raise_error(metadata_error, /prepared statement whose text this connection never saw/)
+    end
+
+    it 'refuses one sent asynchronously as well' do
+      expect { call('connection.send_query_prepared', args: ['prepared_elsewhere', ['123-45-6789']]) }
+        .to raise_error(metadata_error, /never saw/)
+    end
+
+    it 'refuses a mysql2 prepared statement it has no statement for' do
+      expect { call('statement.execute', args: ['123-45-6789']) }
+        .to raise_error(metadata_error, /never saw/)
+    end
+
+    it 'lets one that binds nothing through, there being nothing to store in the clear' do
+      expect { call('connection.exec_prepared', args: ['prepared_elsewhere', []]) }.not_to raise_error
+    end
+  end
+
+  # A PREPARE binds nothing itself, so the values in the statement it carries are the only values it
+  # has, and the PREPARE is the only time its text is in hand: by the time an EXECUTE runs it, the
+  # statement is the server's and a value written into it has already gone across in the clear.
+  describe 'a statement sent to be prepared' do
+    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+
+    it 'refuses a value written into the statement it carries' do
+      sql = "PREPARE ins AS INSERT INTO users (ssn) VALUES ('123-45-6789')"
+
+      expect { call('connection.exec', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /ssn is configured for encryption/)
+    end
+
+    it 'refuses one sent as a query as well' do
+      sql = "PREPARE upd AS UPDATE users SET ssn = '123-45-6789' WHERE id = $1"
+
+      expect { call('connection.query', args: [sql], sql: sql) }
+        .to raise_error(metadata_error, /ssn is configured for encryption/)
+    end
+
+    it 'lets one whose values are all parameters through' do
+      sql = 'PREPARE ins (text, text) AS INSERT INTO users (name, ssn) VALUES ($1, $2)'
+      args = [sql]
+
+      call('connection.exec', args: args, sql: sql)
+
+      expect(bound_args).to be(args)
+    end
+
+    # Nothing is bound by the PREPARE, so the parameters arrive with the exec_prepared that runs it,
+    # against the statement the connection published for that name.
+    it 'encrypts the parameters bound to it when it is run' do
+      sql = 'INSERT INTO users (name, ssn) VALUES ($1, $2)'
+      call('connection.exec_prepared', args: ['ins', %w[Jo 123-45-6789]], sql: sql)
+
+      expect(bound_args[1].first).to eq('Jo')
+      expect_encrypted(bound_args[1].last, '123-45-6789')
+    end
+
+    it 'lets a PREPARE of a table with no encrypted column through' do
+      sql = "PREPARE log AS INSERT INTO audit (event) VALUES ('login')"
+      args = [sql]
+
+      call('connection.exec', args: args, sql: sql)
+
+      expect(bound_args).to be(args)
     end
   end
 

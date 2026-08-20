@@ -325,4 +325,57 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(result.tables).to include('users', 'accounts')
     end
   end
+
+  # A PREPARE writes nothing itself, but the statement it carries is the one a later EXECUTE runs, and
+  # the PREPARE is the only place its text appears.
+  describe 'a PREPARE' do
+    it 'reads the statement it carries as the statement it is' do
+      result = subject.analyze('PREPARE ins AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
+      expect(result.write_columns_complete).to be(true)
+      expect(result.parameterized).to be(true)
+    end
+
+    it 'reads it past the parameter types it declares' do
+      result = subject.analyze('prepare ins (text, text) as insert into users (name, ssn) values ($1, $2)')
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.write_columns.map(&:column_name)).to eq(%w[name ssn])
+    end
+
+    # A value written into the body is a value no caller can substitute for, which is the whole reason
+    # for reading the body at all.
+    it 'reports a value written into the statement it carries as not substitutable' do
+      result = subject.analyze("PREPARE ins AS INSERT INTO users (ssn) VALUES ('123-45-6789')")
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map { |c| [c.table_name, c.column_name] }).to eq([%w[users ssn]])
+    end
+
+    it 'reports a PREPARE that carries a read as a read' do
+      result = subject.analyze('PREPARE q AS SELECT ssn FROM users WHERE id = $1')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+      expect(result.tables).to eq(['users'])
+      expect(result.where_columns.map(&:column_name)).to eq(['id'])
+    end
+
+    it 'reports a PREPARE whose body says nothing about what it writes as unknown' do
+      result = subject.analyze('PREPARE d AS DEALLOCATE ALL')
+
+      expect(result.query_type).to eq(QueryType::UNKNOWN)
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'collects the table of a PREPARE sent alongside another statement' do
+      result = subject.analyze("PREPARE ins AS INSERT INTO users (ssn) VALUES ($1); INSERT INTO logs (note) VALUES ('x')")
+
+      expect(result.tables).to include('users', 'logs')
+      expect(result.write_columns_complete).to be(false)
+    end
+  end
 end

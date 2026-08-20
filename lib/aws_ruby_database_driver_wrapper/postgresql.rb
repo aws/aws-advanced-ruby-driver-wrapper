@@ -56,9 +56,9 @@ module AwsRubyDatabaseDriverWrapper
     # opened with. That is the whole reason each of them is remembered, since none is among the arguments
     # of the call that reads it back.
     OPERATIONS = {
-      exec: { method: RubyMethod::CONNECTION_EXEC, sql_at: 0 },
-      async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC, sql_at: 0 },
-      exec_params: { method: RubyMethod::CONNECTION_EXEC_PARAMS, sql_at: 0 },
+      exec: { method: RubyMethod::CONNECTION_EXEC, sql_at: 0, after: :remember_sql_prepared },
+      async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC, sql_at: 0, after: :remember_sql_prepared },
+      exec_params: { method: RubyMethod::CONNECTION_EXEC_PARAMS, sql_at: 0, after: :remember_sql_prepared },
       transaction: { method: RubyMethod::CONNECTION_TRANSACTION },
       close: { method: RubyMethod::CONNECTION_CLOSE },
       reset: { method: RubyMethod::CONNECTION_RESET },
@@ -76,8 +76,9 @@ module AwsRubyDatabaseDriverWrapper
 
       # A pending exchange, and the portal it may have left, can only be continued on the connection it
       # was started on.
-      send_query: { method: RubyMethod::CONNECTION_SEND_QUERY, sql_at: 0, after: :remember_async },
-      send_query_params: { method: RubyMethod::CONNECTION_SEND_QUERY_PARAMS, sql_at: 0, after: :remember_async },
+      send_query: { method: RubyMethod::CONNECTION_SEND_QUERY, sql_at: 0, after: %i[remember_async remember_sql_prepared] },
+      send_query_params: { method: RubyMethod::CONNECTION_SEND_QUERY_PARAMS, sql_at: 0,
+                           after: %i[remember_async remember_sql_prepared] },
       get_result: { method: RubyMethod::CONNECTION_GET_RESULT, bound_to: :async, after: :forget_async_when_drained },
       get_last_result: { method: RubyMethod::CONNECTION_GET_LAST_RESULT, bound_to: :async, after: :forget_async },
       describe_portal: { method: RubyMethod::CONNECTION_DESCRIBE_PORTAL, bound_to: :async },
@@ -160,6 +161,25 @@ module AwsRubyDatabaseDriverWrapper
       loclose: :lo_close, lolseek: :lo_lseek, lo_seek: :lo_lseek, loseek: :lo_lseek,
       lotell: :lo_tell, lotruncate: :lo_truncate
     }.freeze
+
+    # A statement can also be prepared by sending a +PREPARE+ rather than by calling pg's own
+    # +prepare+, and the +exec_prepared+ that runs it looks no different either way. The two are read
+    # here so that a statement prepared the first way is remembered like one prepared the second, and
+    # a plugin that has to inspect the statement a call runs still has it to look at.
+    #
+    # The name is an identifier, so an unquoted one is folded to lower case. The parameter types in
+    # front of +AS+ are optional. What follows +AS+ is the statement, to the end of the string, which
+    # a +PREPARE+ shares with nothing else unless the caller sent more than one statement at once.
+    #
+    # Read with a pattern rather than a parse because this sits on the path of every statement the
+    # connection sends, and the two pieces wanted here are a name and everything after +AS+.
+    # +Utils::Parser::PgStatementAnalyzer+ reads the same construct properly, from the parse tree, for
+    # the plugin that has to know what the carried statement writes.
+    STATEMENT_NAME = /"(?:[^"]|"")+"|\w+/
+    SQL_PREPARE    = /\A\s*PREPARE\s+(#{STATEMENT_NAME})\s*(?:\([^)]*\)\s*)?AS\s+(.+)\z/im
+    # +DEALLOCATE [PREPARE] { name | ALL }+ un-prepares what a +PREPARE+ prepared, which is what
+    # +close_prepared+ does to a statement prepared through the driver.
+    SQL_DEALLOCATE = /\A\s*DEALLOCATE\s+(?:PREPARE\s+)?(#{STATEMENT_NAME})\s*;?\s*\z/im
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
 
@@ -349,6 +369,38 @@ module AwsRubyDatabaseDriverWrapper
     def forget_prepared(args, _result, _sql)
       @prepared_on.delete(args.first)
       @prepared_sql.delete(args.first)
+    end
+
+    # A +PREPARE+ or +DEALLOCATE+ that was sent as a statement, treated as the +prepare+ or the
+    # +close_prepared+ it amounts to. Anything else that was sent is left alone.
+    def remember_sql_prepared(_args, _result, sql)
+      return unless sql.is_a?(String)
+
+      if (prepared = SQL_PREPARE.match(sql))
+        remember_prepared([statement_name_of(prepared[1])], nil, prepared[2].strip)
+      elsif (deallocated = SQL_DEALLOCATE.match(sql))
+        forget_sql_prepared(deallocated[1])
+      end
+    end
+
+    # +DEALLOCATE ALL+ un-prepares every statement of the session, which +ALL+ in quotes does not: that
+    # names one statement actually called +ALL+.
+    def forget_sql_prepared(name_token)
+      if !name_token.start_with?('"') && name_token.casecmp('ALL').zero?
+        @prepared_on.clear
+        @prepared_sql.clear
+      else
+        forget_prepared([statement_name_of(name_token)], nil, nil)
+      end
+    end
+
+    # The name a statement prepared by a +PREPARE+ ends up with. Being an identifier, it is folded to
+    # lower case unless it was quoted, and that folded name is the one the +exec_prepared+ which runs
+    # it has to give as well, so it is the one to remember it under.
+    def statement_name_of(name_token)
+      return name_token.downcase unless name_token.start_with?('"')
+
+      name_token[1..-2].gsub('""', '"')
     end
 
     def remember_async(_args, _result, sql)
