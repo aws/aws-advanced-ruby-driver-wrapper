@@ -16,6 +16,7 @@
 
 require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_ruby_database_driver_wrapper/postgresql'
 
 require 'concurrent'
 
@@ -46,18 +47,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
-  describe '#ping' do
-    it 'returns true on success' do
-      allow(connection).to receive(:exec).with('SELECT 1').and_return(:result)
-      expect(dialect.ping(connection)).to be true
-    end
-
-    it 'returns false on PG::Error' do
-      allow(connection).to receive(:exec).and_raise(PG::Error)
-      expect(dialect.ping(connection)).to be false
-    end
-  end
-
   describe '#closed?' do
     it 'delegates to connection.finished?' do
       allow(connection).to receive(:finished?).and_return(true)
@@ -67,11 +56,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
 
   describe '#abort_connection' do
     it 'calls close' do
+      allow(connection).to receive(:finished?).and_return(false)
       expect(connection).to receive(:close)
       dialect.close_connection(connection)
     end
 
     it 'suppresses PG::Error' do
+      allow(connection).to receive(:finished?).and_return(false)
       allow(connection).to receive(:close).and_raise(PG::Error)
       expect { dialect.close_connection(connection) }.not_to raise_error
     end
@@ -150,6 +141,40 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
 
     it 'excludes CONNECTION_ESCAPE' do
       expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
+    end
+
+    # A call that is not listed here is handed straight to the driver, which takes it past every
+    # plugin. The calls that run a statement or move its results are the ones that must never be
+    # missed, so they are checked against the driver itself rather than against a list written out by
+    # hand, which is what let several spellings of exec go unlisted to begin with.
+    it 'covers every pg call that runs a statement or moves its results' do
+      wrapper = AwsRubyDatabaseDriverWrapper::WrapperPgConnection
+      # Accessors for the coder a COPY call uses, which do not talk to the server.
+      local = %i[decoder_for_get_copy_data decoder_for_get_copy_data= encoder_for_put_copy_data encoder_for_put_copy_data=]
+      statement_calls = PG::Connection.instance_methods(false).grep(
+        /exec|query|prepare|copy_data|copy_end|get_result|get_last_result|discard_results/
+      ) - local
+
+      uncovered = statement_calls.reject do |method|
+        canonical = wrapper::OPERATION_BY_SPELLING[method] || method
+        dialect.network_bound_methods.include?("connection.#{canonical}") || wrapper.method_defined?(canonical)
+      end
+
+      expect(uncovered).to be_empty
+    end
+
+    # A name pg does not answer to is a call the wrapper cannot make and an entry nothing can ever
+    # match. The names inherited from every dialect are left out: pg has no
+    # prepared statement object of its own, and connect is not a call on a connection at all.
+    it 'names a method pg defines for every call it lists of its own' do
+      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      defined_by_pg = [PG::Connection, PG::Result].flat_map(&:instance_methods).to_set
+
+      unanswerable = (dialect.network_bound_methods - common).reject do |entry|
+        defined_by_pg.include?(entry.split('.', 2).last.to_sym)
+      end
+
+      expect(unanswerable).to be_empty
     end
   end
 end

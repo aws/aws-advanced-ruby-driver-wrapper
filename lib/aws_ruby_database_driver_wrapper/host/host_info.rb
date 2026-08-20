@@ -25,7 +25,13 @@ module AwsRubyDatabaseDriverWrapper
       NO_HOST = ''
       DEFAULT_WEIGHT = 100
 
-      attr_accessor :host, :port, :role, :availability_strategy, :weight, :id, :last_update_time
+      # The attributes that define this host's identity, and that {#==} and {#hash} are derived from. They are
+      # read-only so that the hash code of an instance cannot change while it is held in a Hash or Set, which
+      # would otherwise make the instance impossible to look up. Use {#deep_dup} to obtain a copy with
+      # different values.
+      attr_reader :host, :port, :role
+
+      attr_accessor :availability_strategy, :weight, :id, :last_update_time
 
       def initialize(
         host: NO_HOST,
@@ -56,6 +62,12 @@ module AwsRubyDatabaseDriverWrapper
           role == other.role
       end
 
+      alias eql? ==
+
+      def hash
+        [host, port, role].hash
+      end
+
       def to_s
         "HostInfo(#{host}, #{port}, #{role}, #{availability})"
       end
@@ -64,9 +76,14 @@ module AwsRubyDatabaseDriverWrapper
         to_s
       end
 
-      # Returns a deep copy of this HostInfo, duplicating all mutable fields.
+      # Returns a deep copy of this HostInfo, duplicating all mutable fields. Since {#host}, {#port} and {#role}
+      # are read-only, this is also the way to obtain an instance that differs from this one in any of them.
+      #
+      # @param host [String] the host of the copy, defaulting to this host's.
+      # @param port [String] the port of the copy, defaulting to this host's.
+      # @param role [Symbol] the role of the copy, defaulting to this host's.
       # @return [HostInfo]
-      def deep_dup
+      def deep_dup(host: self.host, port: self.port, role: self.role)
         HostInfo.new(
           host: host.dup,
           port: port.dup,

@@ -30,7 +30,9 @@ module AwsRubyDatabaseDriverWrapper
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover', type: String)
     DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.', type: String)
-
+    AWS_CREDENTIALS_PROVIDER = WrapperProperty.new(:aws_credentials_provider,
+                                                   'AWS credentials provider for IAM token generation or Secrets Manager',
+                                                   default_value: nil)
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(
       :failover_timeout_sec,
@@ -56,6 +58,33 @@ module AwsRubyDatabaseDriverWrapper
       'Enable/disable cluster-aware failover if the initial connection fails due to a network exception.',
       default_value: false,
       type: :boolean
+    )
+
+    # -- GDB Failover --
+    IN_HOME_FAILOVER_MODE = WrapperProperty.new(
+      :in_home_failover_mode,
+      'GDB-only: the host role to target during failover while the GDB primary region is the home region. ' \
+      'Valid values are strict_writer, strict_home_reader, strict_out_of_home_reader, strict_any_reader, ' \
+      'home_reader_or_writer, out_of_home_reader_or_writer, and any_reader_or_writer.',
+      default_value: nil,
+      type: String
+    )
+    OUT_OF_HOME_FAILOVER_MODE = WrapperProperty.new(
+      :out_of_home_failover_mode,
+      'GDB-only: the host role to target during failover while the GDB primary region is not the home region. ' \
+      'Accepts the same values as in_home_failover_mode.',
+      default_value: nil,
+      type: String
+    )
+    FAILOVER_HOME_REGION = WrapperProperty.new(
+      :failover_home_region,
+      'GDB-only: the AWS region the application runs in, e.g. us-east-1. Determines which of ' \
+      'in_home_failover_mode and out_of_home_failover_mode applies: the in-home mode is used while the GDB ' \
+      'primary is in this region, and the out-of-home mode is used while it is not. Defaults to the region ' \
+      'parsed from the connection endpoint, and is required when the endpoint carries no region, e.g. a global ' \
+      'endpoint, an IP address, or a custom domain.',
+      default_value: nil,
+      type: String
     )
 
     # -- Topology Monitoring --
@@ -115,9 +144,6 @@ module AwsRubyDatabaseDriverWrapper
                                                                                                    validator: POSITIVE_INTEGER)
     IAM_ACCESS_TOKEN_PROPERTY_NAME = WrapperProperty.new(:iam_access_token_property_name, 'Property name used to pass the IAM token',
                                                          default_value: :password, type: Symbol)
-    IAM_CREDENTIALS_PROVIDER = WrapperProperty.new(:iam_credentials_provider,
-                                                   'AWS credentials provider for IAM token generation',
-                                                   default_value: nil)
 
     # -- Initial Connection Strategy --
     INITIAL_CONNECTION_SUBSTITUTE_HOST = WrapperProperty.new(
@@ -240,10 +266,6 @@ module AwsRubyDatabaseDriverWrapper
       :secret_expiration_sec, 'Cached secret expiration in seconds (minimum: 300)',
       default_value: 870, type: Integer
     )
-    SECRET_CREDENTIALS_PROVIDER = WrapperProperty.new(
-      :secret_credentials_provider, 'Custom AWS credentials provider for Secrets Manager',
-      default_value: nil
-    )
     SECRET_ROTATION_RETRY_TIMEOUT_MS = WrapperProperty.new(
       :secret_rotation_retry_timeout_ms,
       'Max time in milliseconds to retry connecting during a secret rotation window (0 = disabled)',
@@ -265,7 +287,7 @@ module AwsRubyDatabaseDriverWrapper
     # used in ConnectionConfig#prefixed_wrapper_config and ConnectionConfig#prefixed_driver_config.
     # Plugins define their own prefix here.
     TOPOLOGY_MONITORING_PREFIX = 'topology_monitoring_'
-    BG_MONITORING_PROPERTY_PREFIX = 'bg-monitoring-'
+    BG_MONITORING_PROPERTY_PREFIX = 'bg_monitoring_'
 
     KNOWN_PREFIXES = [
       TOPOLOGY_MONITORING_PREFIX,

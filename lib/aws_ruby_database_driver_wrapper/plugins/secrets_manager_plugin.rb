@@ -54,7 +54,7 @@ module AwsRubyDatabaseDriverWrapper
         ensure_sdk!
         @service_container = service_container
         @wrapper_props = props
-        @credentials_provider = PropertyDefinition::SECRET_CREDENTIALS_PROVIDER.get(props) ||
+        @credentials_provider = PropertyDefinition::AWS_CREDENTIALS_PROVIDER.get(props) ||
                                 Aws::CredentialProviderChain.new.resolve
         @secret_id = PropertyDefinition::SECRET_ID.get(props)
         raise Errors::SecretsManagerAuthError, 'secret_id is required' unless @secret_id

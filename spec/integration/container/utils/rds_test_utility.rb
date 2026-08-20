@@ -25,6 +25,26 @@ require_relative 'test_instance_info'
 
 module Integration
   class RdsTestUtility
+    TRUE_VALUES = [true, 1, '1', 'true', 't', 'TRUE', 'T'].freeze
+
+    # simulate_temporary_failure re-enables connectivity from a background thread once the failure window
+    # closes, which can be after the example that started it has finished. Those threads are tracked here so
+    # that test preparation can wait for them, rather than letting a stale re-enable land in the middle of a
+    # later example.
+    @pending_failures = []
+    @pending_failures_mutex = Mutex.new
+
+    def self.await_pending_failures(timeout_secs: 60)
+      pending = @pending_failures_mutex.synchronize do
+        @pending_failures.dup.tap { @pending_failures.clear }
+      end
+      pending.each { |thread| thread.join(timeout_secs) }
+    end
+
+    def self.track_pending_failure(thread)
+      @pending_failures_mutex.synchronize { @pending_failures << thread }
+    end
+
     def initialize(region, endpoint: nil)
       options = { region: region }
       options[:endpoint] = endpoint if endpoint
@@ -152,7 +172,7 @@ module Integration
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
       value = row.is_a?(Hash) ? row.values.first : row[0]
-      [1, true].include?(value) ? :reader : :writer
+      TRUE_VALUES.include?(value) ? :reader : :writer
     end
 
     def self.sleep_sql(engine = nil)
@@ -248,22 +268,40 @@ module Integration
     end
 
     def simulate_temporary_failure(instance_name, delay_secs, failure_duration_secs)
-      Thread.new do
-        sleep(delay_secs) if delay_secs.positive?
+      sleep(delay_secs) if delay_secs.positive?
+
+      # Disable connectivity synchronously in the caller's thread so that any failure is raised
+      # here instead of being silently swallowed in a background thread.
+      disable_instance_connectivity(instance_name)
+
+      # Re-enable in the background after the failure window so the test can observe failover while
+      # the instance is unreachable. A failure to re-enable is logged rather than swallowed.
+      thread = Thread.new do
+        sleep(failure_duration_secs)
+      ensure
         begin
-          if instance_name == '*'
-            ProxyHelper.disable_all_connectivity
-          else
-            ProxyHelper.disable_proxy(instance_name)
-          end
-          sleep(failure_duration_secs)
-        ensure
-          if instance_name == '*'
-            ProxyHelper.enable_all_connectivity
-          else
-            ProxyHelper.enable_proxy(instance_name)
-          end
+          enable_instance_connectivity(instance_name)
+        rescue StandardError => e
+          TestUtils.logger.error("Failed to re-enable connectivity for #{instance_name}: #{e.message}")
         end
+      end
+      self.class.track_pending_failure(thread)
+      thread
+    end
+
+    def disable_instance_connectivity(instance_name)
+      if instance_name == '*'
+        ProxyHelper.disable_all_connectivity
+      else
+        ProxyHelper.disable_proxy(instance_name)
+      end
+    end
+
+    def enable_instance_connectivity(instance_name)
+      if instance_name == '*'
+        ProxyHelper.enable_all_connectivity
+      else
+        ProxyHelper.enable_proxy(instance_name)
       end
     end
 

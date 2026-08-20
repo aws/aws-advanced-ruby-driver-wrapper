@@ -54,7 +54,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
   let(:storage_service) { AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
 
   let(:db_dialect) { instance_double('DbDialect') }
-  let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect) }
+  let(:driver_dialect) { instance_double('DriverDialect', close_connection: nil, apply_monitoring_defaults: nil, closed?: false) }
+  let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect, driver_dialect: driver_dialect) }
   let(:connection_config) do
     instance_double('ConnectionConfig', wrapper_props: {
                       cluster_topology_refresh_rate_ms: 100,
@@ -330,8 +331,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
       monitor.close
 
-      expect(conn1).to have_received(:close)
-      expect(conn2).to have_received(:close)
+      expect(driver_dialect).to have_received(:close_connection).with(conn1)
+      expect(driver_dialect).to have_received(:close_connection).with(conn2)
     end
   end
 

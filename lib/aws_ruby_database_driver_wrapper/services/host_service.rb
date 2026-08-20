@@ -27,10 +27,11 @@ module AwsRubyDatabaseDriverWrapper
       attr_accessor :host_list_provider
 
       @host_id_cache = Concurrent::Map.new
+      @strategies = Concurrent::Map.new
+      DEFAULT_HOST_SELECTORS.each { |name, selector| @strategies[name] = selector }
 
       def initialize(service_container)
         @service_container = service_container
-        @strategies = DEFAULT_HOST_SELECTORS.dup
         @all_hosts = []
         @availability_cache = Utils::Storage::ExpirationCache.new
         @host_list_provider = nil
@@ -42,16 +43,31 @@ module AwsRubyDatabaseDriverWrapper
         def clear_id_cache
           @host_id_cache.clear
         end
-      end
 
-      # Register a non-default host selector with the HostService (e.g. fastest_response).
-      #
-      # @param name [String] strategy name
-      # @param selector [#select_host] any object responding to select_host(hosts, role, props)
-      def register_host_selector(name, selector)
-        raise Errors::AwsError, "Cannot override default host selection strategy: '#{name}'" if DEFAULT_HOST_SELECTORS.key?(name)
+        # Register a non-default host selector. The selector is shared by every HostService in the process,
+        # so it must be safe to call from multiple threads.
+        #
+        # @param name [String] strategy name
+        # @param selector [#select_host] any object responding to select_host(hosts, role, props)
+        def register_host_selector(name, selector)
+          raise Errors::AwsError, "Cannot override default host selection strategy: '#{name}'" if DEFAULT_HOST_SELECTORS.key?(name)
 
-        @strategies[name] = selector
+          @strategies[name] = selector
+        end
+
+        # @param name [String] strategy name
+        # @return [#select_host, nil] the registered selector, or nil if the name is unknown
+        def host_selector(name)
+          @strategies[name]
+        end
+
+        # Removes every non-default host selector. For testing only.
+        # @api private
+        def reset_host_selectors
+          # Snapshot the names first rather than iterating the map while deleting from it.
+          custom_names = @strategies.keys.reject { |name| DEFAULT_HOST_SELECTORS.key?(name) }
+          custom_names.each { |name| @strategies.delete(name) }
+        end
       end
 
       # @param hosts [Array<Host::HostInfo>]
@@ -60,7 +76,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param props [Hash, nil]
       # @return [Host::HostInfo]
       def select_host(hosts, role, strategy, props = nil)
-        selector = @strategies[strategy]
+        selector = self.class.host_selector(strategy)
         raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" if selector.nil?
 
         selector.select_host(hosts, role, props)

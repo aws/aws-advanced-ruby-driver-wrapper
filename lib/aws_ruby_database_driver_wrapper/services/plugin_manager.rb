@@ -20,6 +20,7 @@ require_relative '../property_definition'
 require_relative '../ruby_method'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
+require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/secrets_manager_plugin'
@@ -37,9 +38,10 @@ module AwsRubyDatabaseDriverWrapper
         'bg' => Plugins::BlueGreen::BlueGreenPlugin,
         'custom_endpoint' => Plugins::CustomEndpoint::CustomEndpointPlugin,
         'failover' => Plugins::FailoverPlugin,
+        'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
-        'initialConnection' => Plugins::InitialConnectionStrategyPlugin,
-        'secretsManager' => Plugins::SecretsManagerPlugin
+        'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
+        'secrets_manager' => Plugins::SecretsManagerPlugin
       }
 
       # The final list of plugins will be sorted by weight, starting from the lowest values up to
@@ -50,6 +52,7 @@ module AwsRubyDatabaseDriverWrapper
         Plugins::CustomEndpoint::CustomEndpointPlugin => 250,
         Plugins::InitialConnectionStrategyPlugin => 300,
         Plugins::FailoverPlugin => 400,
+        Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900
       }

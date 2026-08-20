@@ -43,7 +43,7 @@ module AwsRubyDatabaseDriverWrapper
 
         def update_dns_flags(bgd_id, role, interim_status)
           if role == Role::SOURCE && !@blue_dns_update_completed && interim_status.all_start_topology_ip_changed
-            logger.debug { "[bgdId: '#{bgd_id}'] Blue DNS update completed." }
+            logger.debug { "[bgd_id: '#{bgd_id}'] Blue DNS update completed." }
             @blue_dns_update_completed = true
             @on_event.call('Blue DNS updated')
           end
@@ -51,14 +51,14 @@ module AwsRubyDatabaseDriverWrapper
           return unless role == Role::TARGET
 
           if !@green_dns_removed && interim_status.all_start_topology_endpoints_removed
-            logger.debug { "[bgdId: '#{bgd_id}'] Green DNS removed." }
+            logger.debug { "[bgd_id: '#{bgd_id}'] Green DNS removed." }
             @green_dns_removed = true
             @on_event.call('Green DNS removed')
           end
 
           return unless !@green_topology_changed && interim_status.all_topology_changed
 
-          logger.debug { "[bgdId: '#{bgd_id}'] Green topology changed." }
+          logger.debug { "[bgd_id: '#{bgd_id}'] Green topology changed." }
           @green_topology_changed = true
           @on_event.call('Green topology changed')
           trigger_monitor_reset(@monitor_reset_on_topology_completed, '- green topology')

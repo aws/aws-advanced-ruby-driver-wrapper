@@ -4,7 +4,7 @@ Valid AWS credentials are required by the wrapper plugins that use the AWS SDK. 
 
 Plugins that require AWS credentials:
 - IAM Authentication Plugin (`iam`) — requires `aws-sdk-rds`
-- Secrets Manager Plugin (`secretsManager`) — requires `aws-sdk-secretsmanager`
+- Secrets Manager Plugin (`secrets_manager`) — requires `aws-sdk-secretsmanager`
 
 ## Credential Configuration
 

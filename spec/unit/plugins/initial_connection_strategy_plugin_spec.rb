@@ -93,9 +93,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
   end
 
   describe 'registration' do
-    it 'is registered in PluginManager with code initialConnection' do
+    it 'is registered in PluginManager with code initial_connection' do
       plugin_classes = AwsRubyDatabaseDriverWrapper::Services::PluginManager.plugin_classes
-      expect(plugin_classes['initialConnection']).to eq(described_class)
+      expect(plugin_classes['initial_connection']).to eq(described_class)
     end
 
     it 'has weight 300' do

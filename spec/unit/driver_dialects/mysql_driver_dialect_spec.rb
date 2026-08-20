@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_ruby_database_driver_wrapper/mysql'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
 
 require 'concurrent'
@@ -68,11 +69,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
 
   describe '#abort_connection' do
     it 'calls close' do
+      allow(connection).to receive(:closed?).and_return(false)
       expect(connection).to receive(:close)
       dialect.close_connection(connection)
     end
 
     it 'suppresses errors' do
+      allow(connection).to receive(:closed?).and_return(false)
       allow(connection).to receive(:close).and_raise(StandardError)
       expect { dialect.close_connection(connection) }.not_to raise_error
     end
@@ -138,6 +141,57 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
 
     it 'excludes CONNECTION_ESCAPE' do
       expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
+    end
+
+    # A call that is not listed here is handed straight to the driver, which takes it past every
+    # plugin. The calls that run a statement or move its results are the ones that must never be
+    # missed, so they are checked against the driver itself rather than against a list written out by
+    # hand, which is what let async_result go unlisted to begin with.
+    it 'covers every mysql2 call that runs a statement or moves its results' do
+      wrapper = AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient
+      # The client's own options, and the info libmysql buffered about the last statement, none of
+      # which is a call to the server.
+      local = %i[query_options query_info query_info_string]
+      statement_calls = Mysql2::Client.instance_methods(false).grep(/query|prepare|result/) - local
+
+      uncovered = statement_calls.reject do |method|
+        dialect.network_bound_methods.include?("connection.#{method}") || wrapper.method_defined?(method)
+      end
+
+      expect(uncovered).to be_empty
+    end
+
+    # A name mysql2 does not answer to is a call the wrapper cannot make and an entry nothing can ever
+    # match, which is how the client came to call query_async and more_results. The names inherited
+    # from every dialect are left out: reset has no mysql2 counterpart and connect is not a call on a
+    # connection at all.
+    it 'names a method mysql2 defines for every call it lists of its own' do
+      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      defined_by_mysql2 = [Mysql2::Client, Mysql2::Result, Mysql2::Statement].flat_map(&:instance_methods).to_set
+
+      unanswerable = (dialect.network_bound_methods - common).reject do |entry|
+        defined_by_mysql2.include?(entry.split('.', 2).last.to_sym)
+      end
+
+      expect(unanswerable).to be_empty
+    end
+
+    # A listed call the client neither defines nor names in DYNAMIC_METHODS still reaches the plugins,
+    # but as a bare string rather than a MethodInfo, and PluginManager only checks the bounded
+    # connection of a MethodInfo. Such a call would be run on whatever connection is current, however
+    # long ago the statement it is reading was sent. The names inherited from every dialect are left
+    # out, as they are above: reset has no mysql2 counterpart and connect is not a call on a connection.
+    it 'is answered by a client method or a DYNAMIC_METHODS entry for every call it lists of its own' do
+      wrapper = AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient
+      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      listed = (dialect.network_bound_methods - common).select { |entry| entry.start_with?('connection.') }
+
+      unnamed = listed.reject do |entry|
+        call = entry.delete_prefix('connection.').to_sym
+        wrapper.method_defined?(call, false) || wrapper::DYNAMIC_METHODS.key?(call)
+      end
+
+      expect(unnamed).to be_empty
     end
   end
 end

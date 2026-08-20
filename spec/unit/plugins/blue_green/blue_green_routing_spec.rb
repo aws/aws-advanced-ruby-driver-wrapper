@@ -217,7 +217,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
 
       it 'raises if IAM hosts list is empty' do
         r = routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [], nil)
-        expect { r.apply(host_info, driver_props, props, true, service_container) }.to raise_error(StandardError, /iamHost/)
+        expect { r.apply(host_info, driver_props, props, true, service_container) }.to raise_error(StandardError, /iam_host/)
       end
 
       it 'calls the notify callback with the successful iam_host' do

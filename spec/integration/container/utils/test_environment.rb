@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'json'
+require 'aws_ruby_database_driver_wrapper'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'proxy_info'
@@ -25,6 +26,9 @@ require_relative 'test_environment_request'
 
 module Integration
   class TestEnvironment
+    # Suffix the test framework appends to an endpoint to route it through Toxiproxy.
+    PROXIED_SUFFIX = '.proxied'
+
     def initialize(test_info)
       @info = TestEnvironmentInfo.new(test_info)
       @proxies = nil
@@ -159,9 +163,26 @@ module Integration
       raise 'Could not parse TEST_ENV_INFO_JSON' if test_info.empty?
 
       env = new(test_info)
-      init_proxies(env) if env.features.include?(TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED)
+      if env.features.include?(TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED)
+        init_proxies(env)
+        init_prepare_host_func
+      end
 
       env
+    end
+
+    # Proxied endpoints are the real endpoints with '.proxied' appended, which RdsUtils would otherwise
+    # classify as RdsUrlType::OTHER. That makes every proxied cluster endpoint ineligible for anything
+    # keyed off the URL type. Stripping the suffix before matching lets a proxied endpoint be recognized
+    # as the actual endpoint it stands in for, while connections still go to the proxy host as given.
+    #
+    # Note this also strips the suffix from the auto-derived instance host pattern, so tests connecting
+    # through the proxies must set CLUSTER_INSTANCE_HOST_PATTERN to the proxied suffix explicitly or
+    # substituted instance hosts will bypass the proxies.
+    private_class_method def self.init_prepare_host_func
+      AwsRubyDatabaseDriverWrapper.config.prepare_host_func = ->(host) { host&.delete_suffix(PROXIED_SUFFIX) }
+      # Entries cached before the func was set are keyed by the unprepared host.
+      AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.clear_cache
     end
 
     private_class_method def self.init_proxies(environment)
