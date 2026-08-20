@@ -25,6 +25,7 @@ require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/secrets_manager_plugin'
 require_relative '../plugins/blue_green/blue_green_plugin'
+require_relative '../plugins/custom_endpoint/custom_endpoint_plugin'
 
 module AwsRubyDatabaseDriverWrapper
   module Services
@@ -35,6 +36,7 @@ module AwsRubyDatabaseDriverWrapper
 
       @plugin_classes = {
         'bg' => Plugins::BlueGreen::BlueGreenPlugin,
+        'custom_endpoint' => Plugins::CustomEndpoint::CustomEndpointPlugin,
         'failover' => Plugins::FailoverPlugin,
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
@@ -47,6 +49,7 @@ module AwsRubyDatabaseDriverWrapper
       # last one will have the highest weight.
       @plugin_weights = {
         Plugins::BlueGreen::BlueGreenPlugin => 200,
+        Plugins::CustomEndpoint::CustomEndpointPlugin => 250,
         Plugins::InitialConnectionStrategyPlugin => 300,
         Plugins::FailoverPlugin => 400,
         Plugins::Gdb::GdbFailoverPlugin => 500,

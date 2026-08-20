@@ -27,6 +27,7 @@ module AwsRubyDatabaseDriverWrapper
   module Utils
     module ConnectionConfigParser
       CONNINFO_PATTERN = /(\w+)=(?:'([^']*)'|([^\s]++))/
+      BOOLEAN_STRINGS = %w[true false].freeze
 
       module_function
 
@@ -196,11 +197,17 @@ module AwsRubyDatabaseDriverWrapper
           prop = PropertyDefinition::KNOWN_PROPERTIES[key]
           next unless prop
           next if value.nil?
+          next if prop.type.nil?
 
-          unless prop.type.nil? || value.is_a?(prop.type) ||
-                 (prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/))
-            raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}"
-          end
+          valid = if prop.type == :boolean
+                    value.is_a?(TrueClass) || value.is_a?(FalseClass) ||
+                      (value.is_a?(String) && BOOLEAN_STRINGS.include?(value.downcase))
+                  else
+                    value.is_a?(prop.type) ||
+                      (prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/))
+                  end
+
+          raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}" unless valid
 
           prop.validate!(value)
         end

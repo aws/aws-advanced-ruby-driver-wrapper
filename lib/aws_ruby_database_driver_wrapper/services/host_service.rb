@@ -85,11 +85,24 @@ module AwsRubyDatabaseDriverWrapper
       # @return [Array<Host::HostInfo>] all hosts in the topology, including blocked/unavailable
       attr_reader :all_hosts
 
-      # @return [Array<Host::HostInfo>] hosts filtered by allowed/blocked rules
+      # @return [Array<Host::HostInfo>] hosts filtered by allowed/blocked rules from the custom endpoint plugin
       def hosts
-        # NOTE: there will be no allowed/blocked rules until the custom endpoint plugin is implemented, so this method
-        # just returns all hosts for now.
-        @all_hosts
+        rules = @service_container.storage_service.get(
+          :custom_endpoint_allowed_blocked,
+          @service_container.connection_service.current_host_info&.url,
+          register_access: false
+        )
+        return @all_hosts if rules.nil?
+
+        allowed = rules[:allowed]
+        blocked = rules[:blocked]
+        required_role = rules[:required_role]
+
+        hosts = @all_hosts
+        hosts = hosts.select { |h| allowed.include?(h.id) } if allowed
+        hosts = hosts.reject { |h| h.id && blocked.include?(h.id) } if blocked
+        hosts = hosts.select { |h| h.role == required_role } if required_role
+        hosts
       end
 
       # Updates the availability of a host in the internal host list.
