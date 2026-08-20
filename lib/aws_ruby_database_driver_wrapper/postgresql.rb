@@ -274,11 +274,25 @@ module AwsRubyDatabaseDriverWrapper
     # and performing any `after` steps as necessary.
     def execute_operation(operation, args = [], kwargs = {}, spelling: operation, &)
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
-      result = pm.execute(
-        spec[:method], current_conn,
-        ->(*a, **opts, &b) { current_conn.send(spelling, *a, **opts, &b) },
-        *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), &
-      )
+      conn = current_conn
+      # Guard against a missing connection. Fail loudly instead.
+      raise NoMethodError, 'Connection not initialized' if conn.nil?
+
+      # Only forward keyword arguments when there are any.
+      result =
+        if kwargs.empty?
+          pm.execute(
+            spec[:method], conn,
+            ->(*a, &b) { current_conn.public_send(spelling, *a, &b) },
+            *args, bounded_conn: bounded_conn_for(spec[:bound_to], args), &
+          )
+        else
+          pm.execute(
+            spec[:method], conn,
+            ->(*a, **opts, &b) { current_conn.public_send(spelling, *a, **opts, &b) },
+            *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), &
+          )
+        end
       Array(spec[:after]).each { |hook| send(hook, args, result) }
       wrap_pg_result(result)
     end
