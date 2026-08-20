@@ -136,9 +136,6 @@ module AwsRubyDatabaseDriverWrapper
             filters: [{ name: 'db-cluster-endpoint-type', values: ['custom'] }]
           )
           response.db_cluster_endpoints
-        rescue StandardError => e
-          logger.error("[#{@endpoint_id}] Failed to fetch endpoints: #{e.message}")
-          nil
         end
 
         def valid_endpoint_count?(endpoints)

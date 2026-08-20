@@ -89,7 +89,7 @@ module AwsRubyDatabaseDriverWrapper
       def hosts
         rules = @service_container.storage_service.get(
           :custom_endpoint_allowed_blocked,
-          @service_container.connection_service.current_host_info&.url,
+          @service_container.connection_service.initial_host_info&.url,
           register_access: false
         )
         return @all_hosts if rules.nil?
