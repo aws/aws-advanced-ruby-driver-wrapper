@@ -106,10 +106,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
   end
 
   describe '#hosts' do
+    let(:mock_connection_service) { instance_double('ConnectionService', current_host_info: writer) }
+
     before do
       service.instance_variable_set(:@all_hosts, hosts)
       service.instance_variable_set(:@initial_host_info, writer)
-      allow(storage_service).to receive(:get).with(:host_permissions, writer.url).and_return(host_permissions)
+      allow(service_container).to receive(:connection_service).and_return(mock_connection_service)
+      allow(storage_service).to receive(:get).with(:custom_endpoint_allowed_blocked, writer.url, register_access: false).and_return(nil)
     end
 
     context 'with no filtering rules' do
