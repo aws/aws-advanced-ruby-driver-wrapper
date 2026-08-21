@@ -306,6 +306,7 @@ module AwsRubyDatabaseDriverWrapper
             @host_mapper.update(@interim_statuses[Role::SOURCE], @interim_statuses[Role::TARGET])
 
             update_summary_status(role, interim_status)
+            check_switchover_timer_expiry
             update_monitors
             update_status_cache
             log_current_context

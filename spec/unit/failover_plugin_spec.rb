@@ -164,10 +164,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
     context 'when the current connection is closed unexpectedly' do
       before do
+        allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
+        props[:failover_mode] = 'reader_or_writer'
+        plugin.connect(reader_host, props, true, -> { connection })
+
         allow(driver_dialect).to receive(:closed?).and_return(true)
         allow(host_service).to receive(:all_hosts).and_return([writer_host, reader_host])
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
+        allow(plugin_manager).to receive(:connect).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
       end
@@ -369,6 +374,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
     before do
       props[:failover_timeout_sec] = 5
       props[:failover_mode] = 'reader_or_writer'
+      allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
+      plugin.connect(writer_host, props, true, -> { connection })
+
       allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
       allow(plugin_manager).to receive(:connect).and_return(new_connection)
       allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
@@ -388,6 +396,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
     before do
       props[:failover_timeout_sec] = 5
       props[:failover_mode] = 'strict_writer'
+      allow(db_dialect).to receive(:host_role).and_return(host_role::WRITER)
+      plugin.connect(writer_host, props, true, -> { connection })
+
       allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
       writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
       allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)

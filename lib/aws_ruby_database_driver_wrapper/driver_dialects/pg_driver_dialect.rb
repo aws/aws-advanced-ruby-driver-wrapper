@@ -107,11 +107,11 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       def closed?(connection)
-        connection.finished?
+        connection.finished? || connection.status != ::PG::CONNECTION_OK
       end
 
       def close_connection(connection)
-        return if connection.finished?
+        return if connection.nil? || connection.finished?
 
         connection.close
       rescue StandardError => e

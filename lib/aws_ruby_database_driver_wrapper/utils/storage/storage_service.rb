@@ -72,6 +72,26 @@ module AwsRubyDatabaseDriverWrapper
           value
         end
 
+        # Retrieves an item without raising if the named cache has not been registered.
+        # Returns nil when the cache partition is absent, or when the item is absent or expired.
+        # Use this for reads of optional/foreign caches that may not exist in the current
+        # plugin configuration (e.g. a plugin reading a cache owned by another, optional plugin).
+        # @param name [Symbol] cache name (need not be registered).
+        # @param key [Object] item key.
+        # @param register_access [Boolean] whether to publish a DataAccessEvent.
+        # @return [Object, nil]
+        def get_if_registered(name, key, register_access: true)
+          cache = @caches[name]
+          return nil if cache.nil?
+
+          value = cache.get(key)
+          return nil unless value
+
+          @event_publisher.publish(Events::DataAccessEvent.new(data_type: name, key:)) if register_access && @event_publisher
+
+          value
+        end
+
         # Returns true if a non-expired item exists at the given name + key.
         # @param name [Symbol] registered cache name.
         # @param key [Object] item key.

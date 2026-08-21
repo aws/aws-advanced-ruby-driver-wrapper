@@ -98,6 +98,10 @@ module Integration
       @info.iam_user_name
     end
 
+    def bg_deployment_id
+      @info.bg_deployment_id
+    end
+
     def rds_endpoint
       @info.rds_endpoint
     end

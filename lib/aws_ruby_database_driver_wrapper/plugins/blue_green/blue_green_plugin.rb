@@ -61,14 +61,14 @@ module AwsRubyDatabaseDriverWrapper
         attr_reader :subscribed_methods
 
         def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
-          route_connect(host_info, driver_props, is_initial_connection, pipeline_callable)
+          route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: false)
         end
 
         def internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, pipeline_callable)
           # BG monitoring connections set BG_SKIP_ROUTING_KEY to bypass routing.
           return pipeline_callable.call if wrapper_props[BG_SKIP_ROUTING_KEY]
 
-          route_connect(host_info, driver_props, is_initial_connection, pipeline_callable)
+          route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: true)
         end
 
         def execute(method_name, pipeline_callable, *_, **, &)
@@ -80,7 +80,9 @@ module AwsRubyDatabaseDriverWrapper
             return pipeline_callable.call if CLOSING_METHODS.include?(method_name)
 
             @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
-            return pipeline_callable.call if @bg_status.nil?
+            if @bg_status.nil? || @bg_status.current_phase == Phase::NOT_CREATED || @bg_status.current_phase == Phase::COMPLETED
+              return pipeline_callable.call
+            end
 
             current_host = @service_container.connection_service.current_host_info
             host_role = @bg_status.role(current_host)
@@ -130,7 +132,7 @@ module AwsRubyDatabaseDriverWrapper
 
         private
 
-        def route_connect(host_info, driver_props, is_initial_connection, pipeline_callable)
+        def route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: false)
           reset_routing_time_ns
 
           begin
@@ -147,7 +149,8 @@ module AwsRubyDatabaseDriverWrapper
             conn = nil
 
             while routing && conn.nil?
-              conn = routing.apply(host_info, driver_props, @wrapper_props, is_initial_connection, @service_container)
+              conn = routing.apply(host_info, driver_props, @wrapper_props, is_initial_connection, @service_container,
+                                   is_internal: is_internal)
 
               next unless conn.nil?
 

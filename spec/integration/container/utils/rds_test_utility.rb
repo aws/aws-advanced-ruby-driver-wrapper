@@ -274,6 +274,43 @@ module Integration
       nil
     end
 
+    # Triggers a Blue/Green Deployment switchover via the RDS API.
+    def switchover_blue_green_deployment(bgd_id)
+      @client.switchover_blue_green_deployment(
+        blue_green_deployment_identifier: bgd_id
+      )
+    end
+
+    # Retrieves a Blue/Green Deployment descriptor.
+    # Returns nil if not found.
+    def get_blue_green_deployment(bgd_id)
+      resp = @client.describe_blue_green_deployments(
+        blue_green_deployment_identifier: bgd_id
+      )
+      resp.blue_green_deployments.first
+    rescue Aws::RDS::Errors::BlueGreenDeploymentNotFoundFault
+      nil
+    end
+
+    # Resolves all blue and green instance endpoints for a Blue/Green Deployment.
+    # Returns an array of endpoint hostnames (strings).
+    #
+    # For Aurora: queries both blue and green clusters for all instance endpoints.
+    # For RDS Multi-AZ Instance: returns the blue and green instance endpoints directly.
+    def get_blue_green_endpoints(bgd_id, deployment:, engine:)
+      bg_deployment = get_blue_green_deployment(bgd_id)
+      raise "Blue/Green Deployment not found: #{bgd_id}" if bg_deployment.nil?
+
+      case deployment
+      when DatabaseEngineDeployment::RDS_MULTI_AZ_INSTANCE
+        get_rds_instance_bg_endpoints(bg_deployment)
+      when DatabaseEngineDeployment::AURORA
+        get_aurora_bg_endpoints(bg_deployment, engine)
+      else
+        raise "Unsupported deployment for BG endpoints: #{deployment}"
+      end
+    end
+
     def simulate_temporary_failure(instance_name, delay_secs, failure_duration_secs)
       sleep(delay_secs) if delay_secs.positive?
 
@@ -372,6 +409,39 @@ module Integration
     end
 
     private
+
+    def get_rds_instance_bg_endpoints(bg_deployment)
+      blue_instance = db_instance_by_arn(bg_deployment.source)
+      raise 'Blue instance not found from BG deployment source ARN' if blue_instance.nil?
+
+      green_instance = db_instance_by_arn(bg_deployment.target)
+      raise 'Green instance not found from BG deployment target ARN' if green_instance.nil?
+
+      [blue_instance.endpoint.address, green_instance.endpoint.address]
+    end
+
+    def get_aurora_bg_endpoints(bg_deployment, _engine)
+      # Blue cluster instances
+      blue_cluster = db_cluster_by_arn(bg_deployment.source)
+      raise 'Blue cluster not found from BG deployment source ARN' if blue_cluster.nil?
+
+      env = TestEnvironment.current
+      endpoints = env.database_info.instances.map(&:host)
+
+      # Green cluster instances
+      green_cluster = db_cluster_by_arn(bg_deployment.target)
+      raise 'Green cluster not found from BG deployment target ARN' if green_cluster.nil?
+
+      green_instance_ids = aurora_instance_ids(green_cluster.endpoint)
+      raise "Can't find green cluster instances for #{green_cluster.endpoint}" if green_instance_ids.empty?
+
+      instance_pattern = AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.rds_instance_host_pattern(green_cluster.endpoint)
+      green_instance_ids.each do |instance_id|
+        endpoints << instance_pattern.sub('?', instance_id)
+      end
+
+      endpoints
+    end
 
     def query_aurora_instance_id(conn, engine)
       sql = self.class.instance_id_query(engine)

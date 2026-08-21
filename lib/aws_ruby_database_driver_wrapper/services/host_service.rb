@@ -87,7 +87,7 @@ module AwsRubyDatabaseDriverWrapper
 
       # @return [Array<Host::HostInfo>] hosts filtered by allowed/blocked rules from the custom endpoint plugin
       def hosts
-        rules = @service_container.storage_service.get(
+        rules = @service_container.storage_service.get_if_registered(
           :custom_endpoint_allowed_blocked,
           @service_container.connection_service.initial_host_info&.url,
           register_access: false

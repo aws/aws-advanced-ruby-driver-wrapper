@@ -58,7 +58,7 @@ module AwsRubyDatabaseDriverWrapper
 
           @role = role
           @bgd_id = bgd_id.freeze
-          @initial_host = initial_host.freeze
+          @initial_host = initial_host.deep_dup.freeze
           @service_container = service_container
           @status_monitor_driver_props = monitoring_driver_props
           @status_monitor_wrapper_props = monitoring_wrapper_props
@@ -69,6 +69,7 @@ module AwsRubyDatabaseDriverWrapper
           @version = LATEST_KNOWN_VERSION
           @port = -1
           @connection = Monitoring::MonitorConnection.new(service_container.dialect_service.driver_dialect)
+          @connection_mutex = Mutex.new
           @use_ip_address = Concurrent::AtomicBoolean.new(false)
           @panic_mode = Concurrent::AtomicBoolean.new(true)
           @correct_connection_host = Concurrent::AtomicBoolean.new(false)
@@ -121,7 +122,7 @@ module AwsRubyDatabaseDriverWrapper
               )
 
               delay_ms = @status_check_interval_map.fetch(
-                @panic_mode.true? ? IntervalRate::HIGH : @interval_rate.get,
+                @panic_mode.true? && @current_phase != Phase::NOT_CREATED && !@current_phase.nil? ? IntervalRate::HIGH : @interval_rate.get,
                 DEFAULT_CHECK_INTERVAL_MS
               )
               delay(delay_ms)
@@ -133,7 +134,7 @@ module AwsRubyDatabaseDriverWrapper
             end
           end
         ensure
-          @connection.close
+          @connection_mutex.synchronize { @connection.close }
           @host_list_provider&.stop_monitor if @host_list_provider.respond_to?(:stop_monitor)
           @host_list_provider = nil
           @open_connection_future.set(nil)
@@ -275,8 +276,10 @@ module AwsRubyDatabaseDriverWrapper
         def collect_topology
           return if @host_list_provider.nil?
 
-          conn = @connection.get
-          return if conn.nil? || connection_closed?(conn)
+          @connection_mutex.synchronize do
+            conn = @connection.get
+            return if conn.nil? || connection_closed?(conn)
+          end
 
           topology = @host_list_provider.force_refresh(false, Host::RdsHostListProvider::DEFAULT_TOPOLOGY_QUERY_TIMEOUT_SEC)
           return logger.debug { 'Timed out while waiting for force_refresh to return new topology info.' } if topology.nil?
@@ -290,19 +293,21 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         def collect_status
-          conn = @connection.get
-          return if conn.nil? || connection_closed?(conn)
+          @connection_mutex.synchronize do
+            conn = @connection.get
+            return if conn.nil? || connection_closed?(conn)
 
-          return unless status_available?(conn)
+            return unless status_available?(conn)
 
-          dialect = @service_container.dialect_service.db_dialect
-          status_entries = parse_status_entries(conn, dialect)
-          status_info = resolve_status_info(status_entries)
-          apply_status_info(status_info, status_entries)
-          verify_connection_host(status_info)
-          init_host_list_provider if @correct_connection_host.true? && @host_list_provider.nil?
+            dialect = @service_container.dialect_service.db_dialect
+            status_entries = parse_status_entries(conn, dialect)
+            status_info = resolve_status_info(status_entries)
+            apply_status_info(status_info, status_entries)
+            verify_connection_host(status_info)
+            init_host_list_provider if @correct_connection_host.true? && @host_list_provider.nil?
+          end
         rescue StandardError => e
-          handle_collect_status_error(e, conn)
+          handle_collect_status_error(e, @connection.get)
         end
 
         def collect_ip_addresses=(val)
@@ -336,7 +341,7 @@ module AwsRubyDatabaseDriverWrapper
         private
 
         def attempt_open_connection
-          @connection.set(nil)
+          @connection_mutex.synchronize { @connection.set(nil) }
           @panic_mode.make_true
 
           if @connection_host_info.get.nil?
@@ -351,12 +356,10 @@ module AwsRubyDatabaseDriverWrapper
           if @use_ip_address.true? && connected_ip
             established = try_connect_on_all_instances(host_info)
             unless established
-              @connection.set(nil)
-              @panic_mode.make_true
-              notify_changes
+              clear_connection
               return
             end
-            @connection.set(established)
+            @connection_mutex.synchronize { @connection.set(established) }
             logger.debug { "[#{@role}] Opened monitoring connection (IP) to #{@connected_ip_address.get}." }
           else
             logger.debug { "[#{@role}] Opening monitoring connection to #{host_info.host}." }
@@ -364,9 +367,11 @@ module AwsRubyDatabaseDriverWrapper
             connect_props = @status_monitor_driver_props.dup
             override_props = iam_enabled? ? map_merge(@status_monitor_wrapper_props, PropertyDefinition::IAM_HOST.name => host_info.host)
                                : @status_monitor_wrapper_props
-            @connection.set(@service_container.plugin_manager.internal_connect(
-                              host_info, connect_props, override_props, false
-                            ))
+            @connection_mutex.synchronize do
+              @connection.set(@service_container.plugin_manager.internal_connect(
+                                host_info, connect_props, override_props, false
+                              ))
+            end
             @connected_ip_address.set(ip)
             logger.debug { "[#{@role}] Opened monitoring connection to #{host_info.host}." }
           end
@@ -375,9 +380,7 @@ module AwsRubyDatabaseDriverWrapper
           notify_changes
         rescue StandardError => e
           logger.debug { "[#{@role}] Failed to open monitoring connection: #{e.class}: #{e.message}" }
-          @connection.set(nil)
-          @panic_mode.make_true
-          notify_changes
+          clear_connection
         end
 
         def map_merge(base, overrides)
@@ -395,6 +398,14 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         def clear_connection
+          @connection_mutex.synchronize { @connection.set(nil) }
+          @panic_mode.make_true
+          notify_changes
+        end
+
+        # Lock-free variant of clear_connection. The caller MUST already hold
+        # @connection_mutex
+        def clear_connection_locked
           @connection.set(nil)
           @panic_mode.make_true
           notify_changes
@@ -414,12 +425,13 @@ module AwsRubyDatabaseDriverWrapper
           !driver_dialect.sql_state(err).nil?
         end
 
+        # @note Callers must hold @connection_mutex (invoke within a @connection_mutex.synchronize block).
         def status_available?(conn)
           dialect = @service_container.dialect_service.db_dialect
           return true if dialect.blue_green_status_available?(conn)
 
           if connection_closed?(conn)
-            clear_connection
+            clear_connection_locked
           else
             @current_phase = Phase::NOT_CREATED
             logger.debug { "[#{@role}] (status not available) current_phase: #{@current_phase}" }
@@ -472,6 +484,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # Compares the connected IP against the endpoint IP from the status table.
         # Reconnects to the correct host if a mismatch is detected.
+        # @note Callers must hold @connection_mutex (invoke within a @connection_mutex.synchronize block).
         def verify_connection_host(status_info)
           return if @correct_connection_host.true? || status_info.nil?
 
@@ -483,7 +496,7 @@ module AwsRubyDatabaseDriverWrapper
               @connection_host_info.get.deep_dup(host: status_info.endpoint, port: status_info.port)
             )
             @correct_connection_host.make_true
-            clear_connection
+            clear_connection_locked
           else
             @correct_connection_host.make_true
             @panic_mode.make_false
@@ -499,10 +512,16 @@ module AwsRubyDatabaseDriverWrapper
               @current_phase = Phase::NOT_CREATED
               return
             end
-            logger.debug { "[#{@role}] Unhandled SQLException." }
+            # If already in NOT_CREATED phase, this is the expected steady state after switchover
+            # (status table/function is gone). Don't enter panic mode — stay at BASELINE rate.
+            if @current_phase.nil? || @current_phase == Phase::NOT_CREATED
+              logger.debug { "[#{@role}] (status not available) current_phase: #{@current_phase}" }
+              return
+            end
+            logger.debug { "[#{@role}] Unhandled SQLException: #{err.message}" }
             clear_connection unless connection_closed?(conn)
           else
-            logger.debug { "[#{@role}] Unhandled exception." }
+            logger.debug { "[#{@role}] Unhandled exception: #{err.class}: #{err.message}" }
             clear_connection
           end
         end

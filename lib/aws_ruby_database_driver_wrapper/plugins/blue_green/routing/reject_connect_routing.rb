@@ -30,7 +30,7 @@ module AwsRubyDatabaseDriverWrapper
             @role = role
           end
 
-          def apply(*)
+          def apply(*, **)
             raise Errors::BlueGreenSwitchoverError, 'Blue/Green Deployment switchover is in progress. New connection can\'t be opened.'
           end
         end

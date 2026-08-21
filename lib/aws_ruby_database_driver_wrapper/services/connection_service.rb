@@ -64,6 +64,15 @@ module AwsRubyDatabaseDriverWrapper
       # @param connection [Object] the new connection
       # @param host_info [Host::HostInfo] host info for the new connection
       def update_current_connection(connection, host_info)
+        if connection.nil?
+          origin = caller(1, 5)
+          raise Errors::AwsError.new(
+            '[ConnectionService] update_current_connection called with nil connection! ' \
+            "host_info=#{host_info&.host}, caller=#{origin.join(' <- ')}",
+            connection_broken: true
+          )
+        end
+
         @connection_switch_lock.synchronize do
           # Close the connection being replaced so it does not leak.
           previous = @current_connection
