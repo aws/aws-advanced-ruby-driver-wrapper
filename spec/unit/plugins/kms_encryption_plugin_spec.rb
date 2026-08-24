@@ -282,6 +282,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(rows).to eq([{ 'name' => 'Jo', 'ssn' => '123-45-6789' }])
     end
 
+    # each called without a block returns an Enumerator; the rows it yields must still be decrypted
+    # rather than handed back as the stored ciphertext.
+    it 'decrypts the rows of the enumerator each returns when called without a block' do
+      enumerator = call('result.each', sql: select, returns: [encrypted_row, encrypted_row].each)
+
+      expect(enumerator).to be_a(Enumerator)
+      expect(enumerator.map { |row| row['ssn'] }).to eq(%w[123-45-6789 123-45-6789])
+    end
+
     it 'decrypts the rows to_a returns' do
       result = call('result.to_a', sql: select, returns: [encrypted_row, encrypted_row])
 

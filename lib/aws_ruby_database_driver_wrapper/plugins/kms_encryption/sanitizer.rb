@@ -98,7 +98,9 @@ module AwsRubyDatabaseDriverWrapper
         def config_details(value)
           return nil if value.nil?
 
-          truncate(value.gsub(CREDENTIAL_ASSIGNMENT_PATTERN, '\1=***'), MAX_CONFIG_DETAILS_LENGTH)
+          masked = value.gsub(CREDENTIAL_ASSIGNMENT_PATTERN, '\1=***')
+                        .gsub(KMS_ARN_PATTERN, 'arn:aws:kms:***:***:key/***')
+          truncate(masked, MAX_CONFIG_DETAILS_LENGTH)
         end
 
         # Masks credentials embedded in a connection URL, both as query parameters and as user info.

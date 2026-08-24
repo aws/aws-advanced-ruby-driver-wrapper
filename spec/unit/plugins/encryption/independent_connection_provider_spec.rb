@@ -287,6 +287,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
         .with(target: 'db.example.com:5432/', success: true)
     end
 
+    # The connection is already open by the time its audit record is written, so a logging failure
+    # must not lose the connection or count a successful connect as a failure.
+    it 'returns and counts the opened connection even when writing its audit record fails' do
+      allow(audit_logger).to receive(:log_independent_connection_creation).and_raise(StandardError, 'log sink down')
+      allow(provider.send(:logger)).to receive(:warn)
+
+      expect(provider.open_connection).to be(connection)
+      expect(provider.successful_connection_count).to eq(1)
+      expect(provider.failed_connection_count).to eq(0)
+    end
+
     it 'records a connection that could not be opened' do
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED, 'db.example.com')
       allow(provider.send(:logger)).to receive(:debug)

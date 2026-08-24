@@ -59,10 +59,11 @@ module AwsRubyDatabaseDriverWrapper
           with(last_used_at: now)
         end
 
-        # A key is usable once it names a master key and carries an encrypted data key.
+        # A key is usable once it names a master key, carries an encrypted data key, and states the
+        # key spec it was generated under.
         # @return [Boolean]
         def valid?
-          !blank?(master_key_arn) && !blank?(encrypted_data_key)
+          !blank?(master_key_arn) && !blank?(encrypted_data_key) && !blank?(key_spec)
         end
 
         # @return [String] a description with the key material redacted

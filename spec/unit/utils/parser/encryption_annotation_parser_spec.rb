@@ -105,6 +105,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::EncryptionAnnotation
       expect(subject.parse_annotations("INSERT INTO users (ssn) VALUES (/*@encrypt:users.ssn*/ '123')")).to eq({})
     end
 
+    # Rule 2 - the annotation must precede the placeholder; one placed after it is not associated.
+    it 'does not associate an annotation that follows the placeholder' do
+      expect(subject.parse_annotations('INSERT INTO t (a) VALUES (? /*@encrypt:t.a*/)')).to eq({})
+    end
+
+    # Rule 4 - the opening delimiter must be exactly "/*@encrypt:"; a space after "/*" invalidates it.
+    it 'does not match when there is a space after the opening comment delimiter' do
+      expect(subject.parse_annotations('INSERT INTO t (a) VALUES (/* @encrypt:t.a*/ ?)')).to eq({})
+    end
+
+    # Rule 3 - the "table.column" grammar (regex [\w.]+) is not validated here; a bare column with no
+    # table still parses. Whether "table.column" is well-formed is enforced downstream, not by the parser.
+    it 'parses an annotation with a missing table part as-is' do
+      expect(subject.parse_annotations('INSERT INTO t (ssn) VALUES (/*@encrypt:ssn*/ ?)')).to eq({ 1 => 'ssn' })
+    end
+
     it 'returns empty hash for nil' do
       expect(subject.parse_annotations(nil)).to eq({})
     end
@@ -133,6 +149,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::EncryptionAnnotation
     it 'removes an annotation and preserves the numbered placeholder' do
       sql = 'INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)'
       expect(subject.strip_annotations(sql)).to eq('INSERT INTO users (name, ssn) VALUES ($1, $2)')
+    end
+
+    # The strip pattern does not require a following placeholder, so a misplaced annotation that
+    # parse_annotations would ignore is still removed from the SQL.
+    it 'strips a misplaced annotation that is not followed by a placeholder' do
+      sql = 'INSERT INTO t (a) VALUES (? /*@encrypt:t.a*/)'
+      expect(subject.strip_annotations(sql)).to eq('INSERT INTO t (a) VALUES (? )')
     end
 
     it 'returns the sql unchanged when there are no annotations' do

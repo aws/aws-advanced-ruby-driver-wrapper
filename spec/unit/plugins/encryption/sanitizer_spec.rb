@@ -112,6 +112,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::Sanitizer do
       expect(sanitizer.config_details('credential=abc')).to eq('credential=***')
     end
 
+    # A KMS ARN carries the account id and region, so it is masked in config details just as it is in
+    # error messages.
+    it 'masks the account and region of a KMS ARN' do
+      expect(sanitizer.config_details('master_key_arn=arn:aws:kms:us-east-1:123456789012:key/abcd-1234'))
+        .to eq('master_key_arn=arn:aws:kms:***:***:key/***')
+    end
+
     it 'returns nil for nil' do
       expect(sanitizer.config_details(nil)).to be_nil
     end

@@ -322,6 +322,12 @@ module AwsRubyDatabaseDriverWrapper
             # untouched.
             context.block = proc { |row, *rest| caller_block.call(decrypt_row(row, columns, cipher), *rest) }
             pipeline_callable.call
+          elsif method_name == RubyMethod::RESULT_EACH.name
+            # each called without a block returns an Enumerator over the rows. The rows are decrypted
+            # eagerly and handed back as an enumerator over the results, because the cipher is released
+            # as soon as this method returns and a lazy wrapper would decrypt with a spent cipher.
+            result = pipeline_callable.call
+            result.respond_to?(:map) ? result.map { |row| decrypt_row(row, columns, cipher) }.each : result
           elsif method_name == RubyMethod::RESULT_TO_A.name
             rows = pipeline_callable.call
             rows.is_a?(Array) ? rows.map { |row| decrypt_row(row, columns, cipher) } : rows

@@ -131,7 +131,9 @@ module AwsRubyDatabaseDriverWrapper
         def log_connection_sharing_fallback(reason:, original_failure: nil, active: false)
           return unless @enabled
 
-          emit(:debug, 'CONNECTION_SHARING_FALLBACK', true, nil,
+          # The fallback deactivating (returning to normal) is worth an info record; while it is
+          # active the steady state is logged at debug.
+          emit(active ? :debug : :info, 'CONNECTION_SHARING_FALLBACK', true, nil,
                reason: Sanitizer.description(reason),
                original_failure: Sanitizer.error_message(original_failure),
                active: active)

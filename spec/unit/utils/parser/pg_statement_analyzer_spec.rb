@@ -378,4 +378,99 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(result.write_columns_complete).to be(false)
     end
   end
+
+  # A MERGE writes through its WHEN clauses, so it is reported as a write rather than being refused
+  # wholesale, and its bound values are paired with the columns they fill.
+  describe 'a MERGE' do
+    it 'reads the columns its UPDATE and INSERT clauses write and the parameters that fill them' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct ' \
+        'WHEN MATCHED THEN UPDATE SET ssn = $1 ' \
+        'WHEN NOT MATCHED THEN INSERT (id, ssn) VALUES ($2, $3)'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['accounts'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1], ['id', 2], ['ssn', 3]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reports a value written by an expression as one it cannot substitute' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct ' \
+        'WHEN MATCHED THEN UPDATE SET ssn = upper($1)'
+      )
+
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['ssn'])
+    end
+
+    # An INSERT clause with no column list fills the table's columns in its own order, which the
+    # statement does not carry, so the write cannot be enumerated and must fail closed.
+    it 'reports an INSERT clause with no column list as not enumerable' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct ' \
+        'WHEN NOT MATCHED THEN INSERT VALUES ($1, $2)'
+      )
+
+      expect(result.tables).to eq(['accounts'])
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    # A clause that only deletes stores nothing, so there is nothing to enumerate and nothing to fail
+    # closed over.
+    it 'treats a MERGE whose only action deletes as enumerable with no written columns' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct WHEN MATCHED THEN DELETE'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(true)
+    end
+  end
+
+  # A data-modifying CTE writes through the statement that carries it, even when the top-level
+  # statement is a SELECT, so it must be seen as a write rather than mistaken for a read.
+  describe 'a data-modifying CTE' do
+    it 'reports the write of an INSERT CTE under a SELECT, with its parameter mapped' do
+      result = subject.analyze(
+        'WITH w AS (INSERT INTO users (ssn) VALUES ($1) RETURNING id) SELECT * FROM w'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reports an UPDATE CTE under a SELECT as a write' do
+      result = subject.analyze(
+        'WITH w AS (UPDATE users SET ssn = $1 WHERE id = $2 RETURNING id) SELECT * FROM w'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map(&:column_name)).to eq(['ssn'])
+    end
+
+    # A CTE the analyzer cannot read column-by-column must fail closed, not be taken for a read.
+    it 'reports a CTE INSERT ... SELECT as not enumerable' do
+      result = subject.analyze(
+        'WITH w AS (INSERT INTO users (ssn) SELECT secret FROM staging RETURNING id) SELECT * FROM w'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    # A CTE that only reads leaves the statement a plain SELECT.
+    it 'leaves a read-only CTE as a SELECT' do
+      result = subject.analyze('WITH w AS (SELECT id FROM users) SELECT * FROM w')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+    end
+  end
 end

@@ -16,7 +16,6 @@
 
 require 'base64'
 require 'digest'
-require 'openssl'
 require 'securerandom'
 require_relative '../../logging'
 require_relative '../../utils/conversion_utils'
@@ -118,7 +117,7 @@ module AwsRubyDatabaseDriverWrapper
             GeneratedDataKey.new(
               plaintext: response.plaintext.dup.b,
               encrypted_data_key: Base64.strict_encode64(response.ciphertext_blob),
-              hmac_key: OpenSSL::Random.random_bytes(HMAC_KEY_LENGTH)
+              hmac_key: SecureRandom.bytes(HMAC_KEY_LENGTH)
             )
           end
 
@@ -169,6 +168,12 @@ module AwsRubyDatabaseDriverWrapper
         # @return [KeyMetadata] the stored key, with +id+ and timestamps filled in
         # @raise [Errors::KeyManagementError] if the row cannot be written
         def store_key_metadata(key_metadata)
+          unless key_metadata.valid?
+            raise Errors::KeyManagementError.invalid_key_metadata(
+              'Refusing to store key metadata that names no master key or carries no encrypted data key'
+            )
+          end
+
           now = Time.now
           to_store = key_metadata.with(
             key_id: key_metadata.key_id || generate_key_id,

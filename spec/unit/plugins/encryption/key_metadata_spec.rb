@@ -55,6 +55,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyMetadata do
       expect(metadata.with(encrypted_data_key: nil).valid?).to be(false)
       expect(metadata.with(encrypted_data_key: '').valid?).to be(false)
     end
+
+    it 'is false without a key spec' do
+      expect(metadata.with(key_spec: nil).valid?).to be(false)
+      expect(metadata.with(key_spec: '  ').valid?).to be(false)
+    end
   end
 
   describe '#with_updated_last_used' do

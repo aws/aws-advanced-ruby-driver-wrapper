@@ -50,7 +50,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaName do
     # statement or start a new one has to be refused.
     it 'rejects anything that is not a plain identifier' do
       ['2schema', 'my schema', 'my-schema', '"quoted"', 'a.b', 'encrypt;DROP TABLE users',
-       'encrypt--comment', "encrypt'"].each do |name|
+       'encrypt--comment', "encrypt'", "encrypt\nDROP TABLE users", "encrypt\n"].each do |name|
         expect { described_class.new(name) }.to raise_error(ArgumentError, /Invalid schema name/)
       end
     end

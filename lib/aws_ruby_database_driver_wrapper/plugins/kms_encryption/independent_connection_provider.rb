@@ -147,13 +147,15 @@ module AwsRubyDatabaseDriverWrapper
         # @return [void]
         def log_health_status
           status = health_status
-          healthy? ? logger.info(status) : logger.warn(status)
+          healthy = healthy?
+          healthy ? logger.info(status) : logger.warn(status)
 
+          successful, failed = @lock.synchronize { [@successful_connection_count, @failed_connection_count] }
           @audit_logger&.log_connection_health_check(
             connection_type: 'INDEPENDENT_CONNECTION',
-            healthy: healthy?,
-            success_count: @successful_connection_count,
-            failure_count: @failed_connection_count,
+            healthy: healthy,
+            success_count: successful,
+            failure_count: failed,
             success_rate: connection_success_rate
           )
         end
@@ -170,6 +172,11 @@ module AwsRubyDatabaseDriverWrapper
             @last_successful_connection_time = monotonic_now
           end
           @audit_logger&.log_independent_connection_creation(target: host_info&.url, success: true)
+        rescue StandardError => e
+          # The connection is already open. A failure to write its audit record must not propagate to
+          # open_connection's rescue, which would close the connection and report a successful connect
+          # as a failure, so it is swallowed after being noted.
+          logger.warn("Failed to write the independent connection audit record: #{e.message}")
         end
 
         def record_failure(host_info, operation, error)

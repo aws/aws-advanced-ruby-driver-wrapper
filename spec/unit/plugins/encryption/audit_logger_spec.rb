@@ -203,6 +203,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::AuditLogger do
                               'original_failure=ECONNREFUSED', 'active=true')
     end
 
+    # The fallback deactivating - going back to a dedicated connection - is a state change worth
+    # surfacing at info, unlike the steady state while it is active.
+    it 'records connection sharing being deactivated at info level' do
+      audit.log_connection_sharing_fallback(reason: 'independent host recovered', active: false)
+
+      expect(level).to eq(:info)
+      expect(line).to include('operation=CONNECTION_SHARING_FALLBACK', 'active=false')
+    end
+
     it 'records a healthy connection at info level with its success rate' do
       audit.log_connection_health_check(connection_type: 'independent', healthy: true, success_count: 9,
                                         failure_count: 1, success_rate: 0.9)

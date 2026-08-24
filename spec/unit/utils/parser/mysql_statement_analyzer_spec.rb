@@ -228,6 +228,36 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       result = subject.analyze('SELECT name FROM users WHERE deleted_at IS NULL')
       expect(result.where_columns).to be_empty
     end
+
+    # An IN list binds one parameter per placeholder, so each is reported with its own index rather
+    # than the whole list counting as a single parameter.
+    it 'reports one entry per placeholder of an IN list, each with its own parameter index' do
+      result = subject.analyze('SELECT * FROM users WHERE name IN (?, ?, ?)')
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] })
+        .to eq([['name', 1], ['name', 2], ['name', 3]])
+    end
+
+    # A parameter after a multi-value IN must keep its true position, not be shifted onto an earlier
+    # parameter's slot: here status is the fourth parameter, not the second.
+    it 'numbers a parameter after an IN list by its true position' do
+      result = subject.analyze('SELECT * FROM users WHERE name IN (?, ?, ?) AND status = ?')
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] })
+        .to eq([['name', 1], ['name', 2], ['name', 3], ['status', 4]])
+    end
+
+    # A SELECT-list parameter comes before the WHERE clause, so the WHERE parameter is numbered after
+    # it rather than from one.
+    it 'numbers a WHERE parameter after parameters that precede the clause' do
+      result = subject.analyze('SELECT ? AS tag FROM users WHERE ssn = ?')
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 2]])
+    end
+
+    # An UPDATE's SET assignments are bound before its WHERE predicates, so the WHERE parameter is
+    # numbered after them.
+    it 'numbers an UPDATE WHERE parameter after its SET parameters' do
+      result = subject.analyze('UPDATE users SET name = ?, email = ? WHERE ssn = ?')
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 3]])
+    end
   end
 
   describe '.analyze for_update' do

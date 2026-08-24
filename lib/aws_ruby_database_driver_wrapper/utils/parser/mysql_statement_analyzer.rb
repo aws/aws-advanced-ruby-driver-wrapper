@@ -65,16 +65,7 @@ module AwsRubyDatabaseDriverWrapper
           (?:\bGROUP\s+BY\b|\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b|
              \bFOR\s+(?:UPDATE|SHARE|NO\s+KEY\s+UPDATE|KEY\s+SHARE)\b|\z)
         /imx
-        FOR_UPDATE     = /\bFOR\s+(?:UPDATE|SHARE|NO\s+KEY\s+UPDATE|KEY\s+SHARE)\b/i
-
-        # Matches col = ? / col != ? / col > ? etc. in SET / WHERE
-        COLUMN_PARAM   = /#{IDENTIFIER_CAP}\s*[=<>!]+\s*\?/
-        # Matches col IN (?, ?, ...)
-        COLUMN_IN      = /#{IDENTIFIER_CAP}\s+IN\s*\([^)]*\?[^)]*\)/i
-        # Matches col LIKE ? / col NOT LIKE ?
-        COLUMN_LIKE    = /#{IDENTIFIER_CAP}\s+(?:NOT\s+)?LIKE\s*\?/i
-        # Matches col BETWEEN ? AND ? / col NOT BETWEEN ? AND ? (two params)
-        COLUMN_BETWEEN = /#{IDENTIFIER_CAP}\s+(?:NOT\s+)?BETWEEN\s*\?\s+AND\s*\?/i
+        FOR_UPDATE = /\bFOR\s+(?:UPDATE|SHARE|NO\s+KEY\s+UPDATE|KEY\s+SHARE)\b/i
 
         # Single capture group 1 = column name; group 2 = :between sentinel when BETWEEN matched
         WHERE_PATTERN = /
@@ -226,7 +217,7 @@ module AwsRubyDatabaseDriverWrapper
 
           table = extract_first_capture(UPDATE_TABLE, sql)
           set_cols, unbound, complete = extract_set_columns(sql, table, first_index)
-          where_cols = extract_where_columns(sql)
+          where_cols = extract_where_columns(sql, first_index)
           QueryAnalysis.new(
             query_type: QueryType::UPDATE,
             tables: table ? [table].freeze : [].freeze,
@@ -265,7 +256,7 @@ module AwsRubyDatabaseDriverWrapper
             query_type: QueryType::UPDATE,
             tables: reference_tables(references).freeze,
             write_columns: [].freeze,
-            where_columns: extract_where_columns(sql),
+            where_columns: extract_where_columns(sql, first_index),
             for_update: false,
             parameterized: sql.include?('?'),
             unbound_write_columns: unbound.freeze,
@@ -438,20 +429,35 @@ module AwsRubyDatabaseDriverWrapper
           [bound, unbound, complete, index]
         end
 
-        def extract_where_columns(sql)
+        # The columns a WHERE clause compares against a bind parameter, each paired with the parameter
+        # that fills it. Unlike PostgreSQL, MySQL numbers its parameters positionally, so the index of
+        # each one has to be counted rather than read: a parameter is numbered after everything that
+        # comes before the clause - an UPDATE's SET assignments, a SELECT list, a CTE - and after every
+        # parameter of an earlier predicate. Without this a clause is numbered from one and a parameter
+        # that follows an unrecognised one, or a multi-value +IN (?, ?, ...)+, shifts every column after
+        # it onto the wrong parameter.
+        #
+        # @param first_index [Integer] the number the statement's first bind parameter has
+        def extract_where_columns(sql, first_index = 1)
           match = WHERE_CLAUSE.match(sql)
           return [].freeze unless match
 
           where_body = match[1]
           return [].freeze unless where_body.include?('?')
 
+          base = first_index + placeholder_count(sql[0...match.begin(1)])
+
           cols = []
           where_body.scan(WHERE_PATTERN) do
             m = Regexp.last_match
             # Groups: 1=BETWEEN col, 2=BETWEEN sentinel, 3=PARAM col, 4=IN col, 5=LIKE col
             col = strip_quotes((m[1] || m[3] || m[4] || m[5]).to_s)
-            cols << ColumnInfo.new(table_name: nil, column_name: col)
-            cols << ColumnInfo.new(table_name: nil, column_name: col) if m[1] # BETWEEN: two params
+            index = base + placeholder_count(where_body[0...m.begin(0)])
+            # One entry per bound parameter the predicate consumes: one for +=+ or +LIKE+, two for a
+            # +BETWEEN+, and one per placeholder for an +IN (?, ?, ...)+.
+            placeholder_count(m[0]).times do |offset|
+              cols << ColumnInfo.new(table_name: nil, column_name: col, parameter_index: index + offset)
+            end
           end
           cols.freeze
         end

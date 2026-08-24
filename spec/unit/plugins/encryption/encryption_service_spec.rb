@@ -202,6 +202,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
         .to raise_error(encryption_error, /Data key must be 32 bytes for AES-256-GCM, got nil/)
     end
 
+    # The decrypt path validates the data key too, past the length check but before decrypting.
+    it 'rejects a data key of the wrong length on the decrypt path' do
+      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+
+      expect { described_class.decrypt(encrypted, OpenSSL::Random.random_bytes(16), hmac_key) }
+        .to raise_error(encryption_error, /Data key must be 32 bytes for AES-256-GCM, got 16/) do |error|
+          expect(error.code).to eq(encryption_error::INVALID_KEY)
+        end
+    end
+
     it 'rejects a missing HMAC key' do
       expect { described_class.encrypt('x', data_key, nil) }
         .to raise_error(encryption_error, /An HMAC key is required to protect encrypted values/)
@@ -354,6 +364,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
     it 'reports a type it does not know how to convert to' do
       expect { described_class.convert_to_target_type('abc', Array) }
         .to raise_error(encryption_error, /Cannot convert String to Array/)
+    end
+
+    # Ruby's Integer("1.5", 10) raises rather than truncating (unlike JDBC, which rounds), so
+    # decrypting a stored Float with an Integer target type fails instead of silently coercing.
+    it 'fails to convert a stored Float to an Integer target type' do
+      expect { round_trip(1.5, target_type: Integer) }
+        .to raise_error(encryption_error, /Cannot convert Float to Integer/) do |error|
+          expect(error.code).to eq(encryption_error::TYPE_CONVERSION_FAILED)
+          expect(error.context[:data_type]).to eq('Integer')
+        end
     end
   end
 

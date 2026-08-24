@@ -339,6 +339,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
             expect(error.context[:key_id]).to eq('1234***ef12')
           end
       end
+
+      # Storing metadata that names no master key or carries no encrypted data key would leave a
+      # key_storage row that can never encrypt or decrypt anything, so it is refused before the insert.
+      it 'refuses metadata that is not valid without touching the database' do
+        allow(sql_runner).to receive(:insert_returning_id)
+
+        expect { manager.store_key_metadata(key_metadata.with(master_key_arn: '')) }
+          .to raise_error(key_error) { |error| expect(error.code).to eq(key_error::INVALID_KEY_METADATA) }
+        expect { manager.store_key_metadata(key_metadata.with(encrypted_data_key: '')) }
+          .to raise_error(key_error) { |error| expect(error.code).to eq(key_error::INVALID_KEY_METADATA) }
+        expect(sql_runner).not_to have_received(:insert_returning_id)
+      end
     end
 
     describe '#key_metadata_by_id' do

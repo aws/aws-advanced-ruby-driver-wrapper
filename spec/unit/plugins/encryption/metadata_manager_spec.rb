@@ -177,6 +177,36 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
       expect(column_config.key_metadata.key_spec).to eq(encryption::KeyMetadata::DEFAULT_KEY_SPEC)
     end
 
+    # The timestamp columns are nullable, so a row without them yields nil rather than raising.
+    it 'yields nil timestamps when the row has null timestamp columns' do
+      allow(sql_runner).to receive(:query).and_return(
+        [row('users', 'ssn', { 'created_at' => nil, 'updated_at' => nil, 'key_created_at' => nil, 'last_used_at' => nil })]
+      )
+      column_config = manager.load_metadata['users.ssn']
+
+      expect(column_config.created_at).to be_nil
+      expect(column_config.updated_at).to be_nil
+      expect(column_config.key_metadata.created_at).to be_nil
+      expect(column_config.key_metadata.last_used_at).to be_nil
+    end
+
+    # The LEFT JOIN to key_storage keeps a column whose key row is missing, so it is still reported
+    # as encrypted but with blank key material, which fails validation and so blocks the write.
+    it 'still reports a column as encrypted when its key_storage join is null' do
+      allow(sql_runner).to receive(:query).and_return(
+        [row('users', 'ssn', { 'key_uuid' => nil, 'name' => nil, 'master_key_arn' => nil, 'encrypted_data_key' => nil,
+                               'hmac_key' => nil, 'key_spec' => nil, 'key_created_at' => nil, 'last_used_at' => nil })]
+      )
+      column_config = manager.load_metadata['users.ssn']
+
+      expect(column_config).not_to be_nil
+      expect(column_config.column_identifier).to eq('users.ssn')
+      expect(column_config.usable?).to be(false)
+      expect(column_config.key_metadata.master_key_arn).to be_nil
+      expect(column_config.key_metadata.encrypted_data_key).to be_nil
+      expect(column_config.key_metadata.valid?).to be(false)
+    end
+
     # The HMAC key is a bytea or blob column, so it goes through the driver specific reader.
     it 'reads the HMAC key as binary' do
       manager.load_metadata

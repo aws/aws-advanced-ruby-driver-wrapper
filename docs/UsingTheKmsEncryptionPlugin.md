@@ -51,7 +51,7 @@ conn.exec_params('SELECT ssn FROM users WHERE name = $1', ['Jo']).each { |row| r
 client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123-45-6789')
 ```
 
-- Bind parameters of an `INSERT`, `UPDATE` or `REPLACE` whose columns the plugin can read from the statement, including a multi-row `VALUES` list and the `ON CONFLICT ... DO UPDATE` half of an upsert.
+- Bind parameters of an `INSERT`, `UPDATE`, or `REPLACE` whose columns the plugin can read from the statement, including a multi-row `VALUES` list and the assignments of an upsert (`ON CONFLICT ... DO UPDATE` on PostgreSQL, `ON DUPLICATE KEY UPDATE` on MySQL). On PostgreSQL this also covers a `MERGE`'s `WHEN MATCHED ... UPDATE` / `WHEN NOT MATCHED ... INSERT` clauses and a data-modifying common table expression, for example `WITH w AS (INSERT INTO users (ssn) VALUES ($1) RETURNING id) SELECT * FROM w`.
 - Bind parameters compared against an encrypted column in a `WHERE` clause. Note that encryption is randomized, with a fresh IV per value, so the ciphertext differs every time and an equality search against an encrypted column will not match anything. Filter on a column that is not encrypted instead.
 - Statements run by name after being prepared, whether prepared by the driver's own `prepare` or by a `PREPARE` sent as a statement. A `PREPARE` is also checked as it is sent, so a plaintext written into the statement it carries is caught at that point.
 - Reads that return rows as hashes or single values: `PG::Result#each`, `#to_a`, `#[]` and `#field_values`, and mysql2's default hash and array-of-hash results.
@@ -66,7 +66,7 @@ A read and a write behave differently when the plugin cannot do its job. A read 
 
 ### Refused, so the plaintext is not stored
 
-A write raises rather than storing a value the plugin cannot encrypt. This covers a value written into the SQL text, an expression around a parameter, a `DEFAULT`, a nested `SELECT`, an `INSERT` that does not name its columns, a `COPY ... FROM`, an `UPDATE` naming more than one table (which of them an assignment belongs to cannot be established), and a statement prepared somewhere the connection could not read. An annotation overrides this wherever there is a parameter for it to name, which a `COPY` does not have.
+A write raises rather than storing a value the plugin cannot encrypt. This covers a value written into the SQL text, an expression around a parameter, a `DEFAULT`, a nested `SELECT`, an `INSERT` that does not name its columns, a `COPY ... FROM`, an `UPDATE` naming more than one table (which of them an assignment belongs to cannot be established), and a statement prepared somewhere the connection could not read. The same applies inside a `MERGE` clause or a data-modifying CTE: when its written columns cannot be enumerated the whole statement is refused. An annotation overrides this wherever there is a parameter for it to name, which a `COPY` does not have.
 
 ### Not seen at all, so a plaintext is stored silently
 
@@ -76,7 +76,6 @@ A write raises rather than storing a value the plugin cannot encrypt. This cover
 - `LOAD DATA INFILE` on MySQL, and a `COPY ... FROM` whose statement text cannot be parsed.
 - Anything the server runs on the application's behalf: `CALL`, `DO`, a function, a stored routine, a trigger.
 - MySQL's `PREPARE stmt FROM '<statement text>'` together with `EXECUTE stmt USING @vars`, and SQL-level `EXECUTE` with inline literals: the values live in server-side variables the plugin never sees.
-- A data-modifying common table expression under a `SELECT`, for example `WITH w AS (INSERT INTO users ...) SELECT ...`.
 - The second and later statements of a multi-statement string.
 - Reads that return rows as bare arrays, which give the plugin no column names to match against the configuration: `PG::Result#each_row`, `#values`, `#column_values` and `#tuple`, mysql2's `as: :array` option, and `COPY ... TO`. These hand out the stored payload rather than the decrypted value. Read such columns through one of the hash-returning methods instead.
 - Everything that reaches the column without passing through this wrapper: `psql` or the `mysql` client, a migration tool, another service, and whatever was already in the table before the column was configured.

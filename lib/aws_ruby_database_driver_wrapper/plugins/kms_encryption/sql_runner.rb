@@ -132,7 +132,7 @@ module AwsRubyDatabaseDriverWrapper
         def rows(result)
           return [] if result.nil? || !result.respond_to?(:each)
 
-          result.each_with_object([]) { |row, collected| collected << row }
+          result.to_a
         end
       end
     end
