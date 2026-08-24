@@ -29,7 +29,7 @@ module AwsRubyDatabaseDriverWrapper
       #
       # The cache is loaded once at startup and then refreshed on a background thread every
       # +encryption_metadata_cache_refresh_interval_sec+, so that a column can be added to or
-      # removed from the encryption configuration without restarting the application. Lookups
+      # removed from the kms_encryption configuration without restarting the application. Lookups
       # fall back to querying the database directly when caching is disabled or the cache has
       # expired.
       class MetadataManager
@@ -60,7 +60,7 @@ module AwsRubyDatabaseDriverWrapper
         # @return [void]
         # @raise [Errors::MetadataError] if the initial load fails
         def start
-          logger.debug('Initializing the encryption metadata manager')
+          logger.debug('Initializing the kms_encryption metadata manager')
           refresh if @config.metadata_cache_enabled
           start_refresh_thread if @config.background_refresh_enabled?
           nil
@@ -78,7 +78,7 @@ module AwsRubyDatabaseDriverWrapper
             @last_refresh_time = Time.now
           end
 
-          logger.debug { "Refreshed the encryption metadata cache with #{metadata.size} column configuration(s)" }
+          logger.debug { "Refreshed the kms_encryption metadata cache with #{metadata.size} column configuration(s)" }
           @audit_logger&.log_metadata_operation(operation: 'refresh', success: true)
           metadata.size
         rescue Errors::MetadataError => e
@@ -102,12 +102,12 @@ module AwsRubyDatabaseDriverWrapper
         rescue StandardError => e
           raise e if e.is_a?(Errors::MetadataError)
 
-          raise Errors::MetadataError.load_failed("Failed to load encryption metadata: #{e.message}")
+          raise Errors::MetadataError.load_failed("Failed to load kms_encryption metadata: #{e.message}")
         end
 
         # @param table_name [String, nil]
         # @param column_name [String, nil]
-        # @return [Boolean] whether the column is configured for encryption
+        # @return [Boolean] whether the column is configured for kms_encryption
         # @raise [Errors::MetadataError] if the lookup has to hit the database and that fails
         def column_encrypted?(table_name, column_name)
           return false if table_name.nil? || column_name.nil?
@@ -227,7 +227,7 @@ module AwsRubyDatabaseDriverWrapper
           return error if error.is_a?(Errors::MetadataError)
 
           Errors::MetadataError
-            .lookup_failed("Failed to load the encryption configuration: #{error.message}")
+            .lookup_failed("Failed to load the kms_encryption configuration: #{error.message}")
             .with_table(table_name)
             .with_column(column_name)
         end
@@ -279,7 +279,7 @@ module AwsRubyDatabaseDriverWrapper
         # storage table's own key_id is the external identifier of the key.
         #
         # The join is an outer one so that a column whose key row is missing is still reported as
-        # configured for encryption. An inner join would drop it, the column would look like an
+        # configured for kms_encryption. An inner join would drop it, the column would look like an
         # ordinary one, and a write would store the plaintext. Kept this way, its key metadata comes
         # back empty, which fails validation and so fails the write instead.
         def joined_columns_sql
@@ -304,12 +304,12 @@ module AwsRubyDatabaseDriverWrapper
               begin
                 refresh
               rescue StandardError => e
-                logger.warn("Failed to refresh the encryption metadata cache: #{e.message}")
+                logger.warn("Failed to refresh the kms_encryption metadata cache: #{e.message}")
               end
             end
           end
-          @refresh_thread.name = 'encryption-metadata-refresh'
-          logger.debug { "Started the encryption metadata refresh thread with a #{interval}s interval" }
+          @refresh_thread.name = 'kms_encryption-metadata-refresh'
+          logger.debug { "Started the kms_encryption metadata refresh thread with a #{interval}s interval" }
         end
       end
     end

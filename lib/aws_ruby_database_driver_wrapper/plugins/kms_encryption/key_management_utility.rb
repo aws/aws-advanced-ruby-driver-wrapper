@@ -24,14 +24,14 @@ require_relative 'sanitizer'
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
-      # The administrative side of the plugin: creates master keys, turns encryption on or off for a
+      # The administrative side of the plugin: creates master keys, turns kms_encryption on or off for a
       # column, rotates data keys, and reports which columns a key is used by.
       #
       # None of this runs during normal query execution. It is meant to be called once, from a
-      # migration or a setup script, by whoever administers the encryption configuration:
+      # migration or a setup script, by whoever administers the kms_encryption configuration:
       #
       #   utility = plugin.key_management_utility
-      #   arn = utility.create_master_key('application column encryption')
+      #   arn = utility.create_master_key('application column kms_encryption')
       #   utility.initialize_encryption_for_column('users', 'ssn', arn)
       #
       # Rotating a data key only changes the key that new writes use. Values already written with
@@ -42,7 +42,7 @@ module AwsRubyDatabaseDriverWrapper
 
         HMAC_KEY_LENGTH = 32
         KEY_SPEC = 'AES_256'
-        ALIAS_PREFIX = 'alias/ruby-encryption-'
+        ALIAS_PREFIX = 'alias/ruby-kms_encryption-'
 
         # @param key_manager [KeyManager]
         # @param metadata_manager [MetadataManager]
@@ -62,7 +62,7 @@ module AwsRubyDatabaseDriverWrapper
           @audit_logger = audit_logger
         end
 
-        # Creates a KMS master key for column encryption and gives it an alias.
+        # Creates a KMS master key for column kms_encryption and gives it an alias.
         #
         # @param description [String] the key description
         # @param key_policy [String, nil] a key policy document; KMS applies its default when omitted
@@ -90,7 +90,7 @@ module AwsRubyDatabaseDriverWrapper
           raise Errors::KeyManagementError.key_creation_failed("Failed to create the master key: #{e.message}")
         end
 
-        # Sets up encryption for a column that is not encrypted yet: generates a data key, stores it,
+        # Sets up kms_encryption for a column that is not encrypted yet: generates a data key, stores it,
         # and records the column in +encryption_metadata+.
         #
         # @param table_name [String]
@@ -101,13 +101,13 @@ module AwsRubyDatabaseDriverWrapper
         # @raise [Errors::KeyManagementError] if the column is already encrypted or the setup fails
         def initialize_encryption_for_column(table_name, column_name, master_key_arn,
                                              algorithm = EncryptionAlgorithm::DEFAULT)
-          logger.info("Initializing encryption for #{table_name}.#{column_name}")
+          logger.info("Initializing kms_encryption for #{table_name}.#{column_name}")
 
           begin
             already_encrypted = @metadata_manager.column_encrypted?(table_name, column_name)
           rescue Errors::MetadataError => e
             raise Errors::KeyManagementError
-              .key_creation_failed("Failed to check the encryption status of the column: #{e.message}")
+              .key_creation_failed("Failed to check the kms_encryption status of the column: #{e.message}")
               .with_context(:table, table_name)
               .with_context(:column, column_name)
           end
@@ -172,7 +172,7 @@ module AwsRubyDatabaseDriverWrapper
           current = @metadata_manager.column_config(table_name, column_name)
           if current.nil?
             raise Errors::KeyManagementError
-              .key_creation_failed("No encryption configuration exists for #{table_name}.#{column_name}")
+              .key_creation_failed("No kms_encryption configuration exists for #{table_name}.#{column_name}")
               .with_context(:table, table_name)
               .with_context(:column, column_name)
           end
@@ -208,16 +208,16 @@ module AwsRubyDatabaseDriverWrapper
           raise ArgumentError, 'table_name is required' if table_name.nil?
           raise ArgumentError, 'column_name is required' if column_name.nil?
 
-          logger.info("Removing the encryption configuration for #{table_name}.#{column_name}")
+          logger.info("Removing the kms_encryption configuration for #{table_name}.#{column_name}")
 
           affected = @connection_provider.with_connection(operation: 'DELETE_ENCRYPTION_METADATA') do |connection|
             @sql.update(connection, delete_encryption_metadata_sql, [table_name, column_name])
           end
 
           if affected.zero?
-            logger.warn("No encryption configuration existed for #{table_name}.#{column_name}")
+            logger.warn("No kms_encryption configuration existed for #{table_name}.#{column_name}")
           else
-            logger.info("Removed the encryption configuration for #{table_name}.#{column_name}")
+            logger.info("Removed the kms_encryption configuration for #{table_name}.#{column_name}")
           end
 
           @metadata_manager.refresh if @config.metadata_cache_enabled
@@ -227,7 +227,7 @@ module AwsRubyDatabaseDriverWrapper
           raise e if e.is_a?(ArgumentError)
 
           raise Errors::KeyManagementError
-            .key_storage_failed("Failed to remove the encryption configuration: #{e.message}")
+            .key_storage_failed("Failed to remove the kms_encryption configuration: #{e.message}")
             .with_context(:table, table_name)
             .with_context(:column, column_name)
         end
@@ -316,7 +316,7 @@ module AwsRubyDatabaseDriverWrapper
 
           if affected.zero?
             raise Errors::KeyManagementError
-              .key_storage_failed("No encryption configuration row was updated for #{table_name}.#{column_name}")
+              .key_storage_failed("No kms_encryption configuration row was updated for #{table_name}.#{column_name}")
               .with_context(:table, table_name)
               .with_context(:column, column_name)
           end

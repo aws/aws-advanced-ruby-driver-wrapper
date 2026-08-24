@@ -264,7 +264,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
       expect(received).to eq([['SELECT $1', ['Jo']], {}])
     end
 
-    # This is how the encryption plugin substitutes an encrypted bind parameter without touching the
+    # This is how the kms_encryption plugin substitutes an encrypted bind parameter without touching the
     # array the application passed.
     it 'lets a plugin replace the arguments the target method is called with' do
       context_plugin = TestPlugins::TestPluginReadsContext.new([], new_args: ['SELECT $1', ['encrypted']])
@@ -513,16 +513,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginManager do
         .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'Duplicate plugins detected')
     end
 
-    it 'loads the KMS encryption plugin for the kms_encryption code' do
+    it 'loads the KMS kms_encryption plugin for the kms_encryption code' do
       container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption')
       manager = described_class.new(container)
 
       expect(manager.plugin_in_use?(AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin)).to be true
     end
 
-    # The encryption plugin has to see the parameters and the rows last on the way out and first on
+    # The kms_encryption plugin has to see the parameters and the rows last on the way out and first on
     # the way back, so that everything before it works with plaintext.
-    it 'orders the KMS encryption plugin after the failover plugin' do
+    it 'orders the KMS kms_encryption plugin after the failover plugin' do
       container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption,failover')
       manager = described_class.new(container)
 

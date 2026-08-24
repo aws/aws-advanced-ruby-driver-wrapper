@@ -14,14 +14,14 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../logging'
-require_relative '../ruby_method'
-require_relative '../utils/parser/encryption_annotation_parser'
-require_relative '../utils/parser/query_type'
-require_relative '../utils/parser/sql_parser'
-require_relative 'encryption/column_cipher'
-require_relative 'encryption/errors'
-require_relative 'encryption/kms_encryption_utility'
+require_relative '../../logging'
+require_relative '../../ruby_method'
+require_relative '../../utils/parser/encryption_annotation_parser'
+require_relative '../../utils/parser/query_type'
+require_relative '../../utils/parser/sql_parser'
+require_relative 'column_cipher'
+require_relative 'errors'
+require_relative 'kms_encryption_utility'
 
 module AwsRubyDatabaseDriverWrapper
   module Plugins
@@ -59,7 +59,7 @@ module AwsRubyDatabaseDriverWrapper
     # +COPY ... TO+ hands out what the column holds as well, since its rows are a stream rather than
     # values the plugin can replace.
     #
-    # A read and a write behave differently when the encryption configuration itself cannot be
+    # A read and a write behave differently when the kms_encryption configuration itself cannot be
     # read. A read is lenient: the column is handed to the application exactly as the database
     # holds it, which is what the application would have got without the plugin. A write fails
     # closed and raises, because leaving the column alone there means storing the plaintext in a
@@ -389,7 +389,7 @@ module AwsRubyDatabaseDriverWrapper
       # be raised rather than logged.
       #
       # @return [Hash{Integer => ColumnEncryptionConfig}] by 1-based parameter index
-      # @raise [Errors::MetadataError] when the statement stores values and either the encryption
+      # @raise [Errors::MetadataError] when the statement stores values and either the kms_encryption
       #   configuration cannot be read or the values cannot be encrypted
       def parameter_columns(sql)
         annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql)
@@ -591,7 +591,7 @@ module AwsRubyDatabaseDriverWrapper
         # since leaving the column alone means storing the plaintext.
         raise if strict
 
-        logger.warn("Could not read the encryption configuration of #{described}: #{e.message}")
+        logger.warn("Could not read the kms_encryption configuration of #{described}: #{e.message}")
         nil
       end
 
@@ -601,16 +601,16 @@ module AwsRubyDatabaseDriverWrapper
 
         raise incomplete_config_error(config) if strict
 
-        logger.warn("Skipping #{config.column_identifier}: its encryption configuration is incomplete")
+        logger.warn("Skipping #{config.column_identifier}: its kms_encryption configuration is incomplete")
         false
       end
 
-      # A column that is configured for encryption but whose key metadata is unusable is in the
+      # A column that is configured for kms_encryption but whose key metadata is unusable is in the
       # same position as one whose configuration could not be read at all, and must not be stored
       # in the clear either.
       def incomplete_config_error(config)
         Errors::MetadataError
-          .validation_failed("The encryption configuration of #{config.column_identifier} is incomplete")
+          .validation_failed("The kms_encryption configuration of #{config.column_identifier} is incomplete")
           .with_table(config.table_name)
           .with_column(config.column_name)
       end
@@ -619,7 +619,7 @@ module AwsRubyDatabaseDriverWrapper
       def unencryptable_value_error(column)
         Errors::MetadataError
           .validation_failed(
-            "#{column.column_name} is configured for encryption, but this statement writes it with " \
+            "#{column.column_name} is configured for kms_encryption, but this statement writes it with " \
             'something other than a bind parameter, which cannot be encrypted. Bind the value, or ' \
             'name the parameter it belongs to with an /*@encrypt:table.column*/ annotation.'
           )
@@ -631,7 +631,7 @@ module AwsRubyDatabaseDriverWrapper
       def unreadable_columns_error(table)
         Errors::MetadataError
           .validation_failed(
-            "#{table} has columns configured for encryption, and which of them this statement " \
+            "#{table} has columns configured for kms_encryption, and which of them this statement " \
             'writes could not be established, so a value could be stored in the clear. Have the ' \
             'statement name the columns it writes, or name the column each parameter belongs to ' \
             'with an /*@encrypt:table.column*/ annotation.'
@@ -645,7 +645,7 @@ module AwsRubyDatabaseDriverWrapper
       # @param table [String] the table the COPY writes
       # @param column [String, nil] the encrypted column it names, when it names its columns at all
       def copy_write_error(table, column = nil)
-        subject = column ? "#{table}.#{column} is configured for encryption" : "#{table} has columns configured for encryption"
+        subject = column ? "#{table}.#{column} is configured for kms_encryption" : "#{table} has columns configured for kms_encryption"
         Errors::MetadataError
           .validation_failed(
             "#{subject}, and a COPY sends its rows to the server as a stream rather than as bind " \
@@ -690,12 +690,12 @@ module AwsRubyDatabaseDriverWrapper
         return true if error.nil?
         raise error if strict
 
-        # On a read the application's statement is not the place to report that the encryption
+        # On a read the application's statement is not the place to report that the kms_encryption
         # tables cannot be read; every column stays as the database holds it until they can. A
         # statement that stores its parameters asks for the strict form instead, because there the
         # plugin cannot tell whether the statement targets an encrypted column, and guessing that
         # it does not would store the plaintext.
-        logger.warn("The KMS encryption plugin is not ready, leaving columns as they are: #{error.message}")
+        logger.warn("The KMS kms_encryption plugin is not ready, leaving columns as they are: #{error.message}")
         false
       end
 
@@ -704,11 +704,11 @@ module AwsRubyDatabaseDriverWrapper
         @encryption_utility.ensure_initialized
         return nil unless @encryption_utility.metadata_manager.nil?
 
-        Errors::MetadataError.load_failed('The encryption metadata manager could not be built')
+        Errors::MetadataError.load_failed('The kms_encryption metadata manager could not be built')
       rescue Errors::MetadataError => e
         e
       rescue StandardError => e
-        Errors::MetadataError.load_failed("The KMS encryption plugin is not ready: #{e.message}")
+        Errors::MetadataError.load_failed("The KMS kms_encryption plugin is not ready: #{e.message}")
       end
 
       def new_cipher

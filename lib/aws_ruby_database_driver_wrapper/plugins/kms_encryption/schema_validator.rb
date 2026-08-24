@@ -20,7 +20,7 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
       # Checks that the +encryption_metadata+ and +key_storage+ tables exist and look the way the
-      # plugin expects before any encryption is attempted.
+      # plugin expects before any kms_encryption is attempted.
       #
       # Everything is read from +information_schema+, which both PostgreSQL and MySQL provide, so
       # the same queries work for either driver. Only the foreign key lookup differs: MySQL keeps

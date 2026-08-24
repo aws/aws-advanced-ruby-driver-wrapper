@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/column_cipher'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/column_encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/key_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/sql_runner'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/column_cipher'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/column_encryption_config'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_manager'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnCipher do
   let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
@@ -78,7 +78,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnCipher d
       expect(cipher.decrypt(cipher.encrypt(42, config), config)).to eq('42')
     end
 
-    # A column that was written before encryption was turned on still has to read back.
+    # A column that was written before kms_encryption was turned on still has to read back.
     it 'leaves a value that is not an encrypted payload untouched' do
       expect(cipher.decrypt('123-45-6789', config)).to eq('123-45-6789')
     end
@@ -89,7 +89,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnCipher d
     end
 
     # A value that fails its integrity check cannot be told apart from a value written before
-    # encryption was turned on, so it comes back as the bytes that are actually stored rather
+    # kms_encryption was turned on, so it comes back as the bytes that are actually stored rather
     # than as a plaintext the wrapper cannot vouch for.
     it 'never decrypts a payload that fails its integrity check' do
       encrypted = cipher.encrypt('123-45-6789', config)

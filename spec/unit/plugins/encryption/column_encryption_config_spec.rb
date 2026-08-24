@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/column_encryption_config'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/column_encryption_config'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnEncryptionConfig do
   let(:key_metadata_class) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyMetadata }

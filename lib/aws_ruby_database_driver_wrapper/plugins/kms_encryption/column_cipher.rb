@@ -40,7 +40,7 @@ module AwsRubyDatabaseDriverWrapper
         # Encrypts one value for the column the configuration describes.
         #
         # @param value [Object, nil] the plaintext value
-        # @param config [ColumnEncryptionConfig] the column's encryption configuration
+        # @param config [ColumnEncryptionConfig] the column's kms_encryption configuration
         # @return [String, nil] the binary payload to store, nil when value is nil
         # @raise [Errors::EncryptionError] if the value cannot be encrypted
         def encrypt(value, config)
@@ -52,11 +52,11 @@ module AwsRubyDatabaseDriverWrapper
         # Decrypts one value read from the column the configuration describes.
         #
         # A value that does not carry a valid integrity tag is returned untouched, so that a column
-        # holding values written before encryption was turned on still reads back as it was
+        # holding values written before kms_encryption was turned on still reads back as it was
         # written.
         #
         # @param raw [Object, nil] the raw column value
-        # @param config [ColumnEncryptionConfig] the column's encryption configuration
+        # @param config [ColumnEncryptionConfig] the column's kms_encryption configuration
         # @return [Object, nil] the decrypted value, or +raw+ when it is not an encrypted payload
         # @raise [Errors::EncryptionError] if the value is encrypted but cannot be decrypted
         def decrypt(raw, config)

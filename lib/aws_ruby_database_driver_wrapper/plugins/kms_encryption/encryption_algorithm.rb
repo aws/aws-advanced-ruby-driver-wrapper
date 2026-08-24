@@ -66,7 +66,7 @@ module AwsRubyDatabaseDriverWrapper
         # @return [Errors::EncryptionError]
         def unsupported(name)
           Errors::EncryptionError
-            .invalid_algorithm("Unsupported encryption algorithm: #{name.inspect}. Supported algorithms: #{ALL.join(', ')}")
+            .invalid_algorithm("Unsupported kms_encryption algorithm: #{name.inspect}. Supported algorithms: #{ALL.join(', ')}")
             .with_algorithm(name)
         end
       end

@@ -198,7 +198,7 @@ module AwsRubyDatabaseDriverWrapper
               end
             end
           end
-          thread.name = 'encryption-data-key-cache-cleanup'
+          thread.name = 'kms_encryption-data-key-cache-cleanup'
           thread
         end
       end

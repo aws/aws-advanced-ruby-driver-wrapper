@@ -16,11 +16,11 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/data_key_cache'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/key_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/sql_runner'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/data_key_cache'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_manager'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
   let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }

@@ -21,7 +21,7 @@ require_relative 'sanitizer'
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
-      # Emits one audit record per key management, encryption, decryption, and metadata
+      # Emits one audit record per key management, kms_encryption, decryption, and metadata
       # operation, enabled with the +encryption_audit_logging_enabled+ property.
       #
       # Records are written to the wrapper's logger as a single +AUDIT+ line of +key=value+

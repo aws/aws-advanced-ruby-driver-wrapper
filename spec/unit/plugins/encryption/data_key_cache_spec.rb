@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/data_key_cache'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/data_key_cache'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::DataKeyCache do
   let(:data_key) { 'a' * 32 }

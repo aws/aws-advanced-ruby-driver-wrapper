@@ -18,7 +18,7 @@ require_relative '../../../spec_helper'
 require 'bigdecimal'
 require 'date'
 require 'openssl'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/encryption_service'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_service'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionService do
   let(:type_marker) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption::TypeMarker }
@@ -211,7 +211,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
 
     it 'rejects an unsupported algorithm' do
       expect { described_class.encrypt('x', data_key, hmac_key, 'AES_256_GCM') }
-        .to raise_error(encryption_error, /Unsupported encryption algorithm/)
+        .to raise_error(encryption_error, /Unsupported kms_encryption algorithm/)
     end
   end
 
@@ -233,7 +233,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
     end
 
     # Plaintext already in the column is short and unsigned, which is how the plugin tells
-    # encrypted values apart from values written before encryption was turned on.
+    # encrypted values apart from values written before kms_encryption was turned on.
     it 'is false for a value that is not an encrypted payload' do
       expect(described_class.encrypted_data_valid?('123-45-6789', hmac_key)).to be(false)
     end

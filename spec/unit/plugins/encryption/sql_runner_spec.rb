@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/sql_runner'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SqlRunner do
   # The runner picks its behaviour from the dialect class, so these have to be real dialects

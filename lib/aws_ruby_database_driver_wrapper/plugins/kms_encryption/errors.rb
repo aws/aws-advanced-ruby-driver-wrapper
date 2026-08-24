@@ -19,7 +19,7 @@ require_relative 'sanitizer'
 
 module AwsRubyDatabaseDriverWrapper
   module Errors
-    # Base class for every failure raised by the KMS encryption plugin. Carries a stable
+    # Base class for every failure raised by the KMS kms_encryption plugin. Carries a stable
     # error code and an ordered context hash that is appended to the message, so that a
     # failure can be traced back to the table, column, key, and operation involved without
     # leaking the encrypted values themselves.
@@ -173,7 +173,7 @@ module AwsRubyDatabaseDriverWrapper
       end
     end
 
-    # Raised when the encryption metadata tables cannot be read, refreshed, or validated.
+    # Raised when the kms_encryption metadata tables cannot be read, refreshed, or validated.
     class MetadataError < EncryptionPluginError
       METADATA_LOAD_FAILED = 'META01'
       METADATA_CACHE_FAILED = 'META02'
@@ -228,7 +228,7 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     # Raised when the plugin cannot open the independent connection it uses to read the
-    # encryption metadata and key storage tables.
+    # kms_encryption metadata and key storage tables.
     class IndependentConnectionError < AwsError
       attr_reader :attempted_parameters, :connection_attempt, :failure_reason
 

@@ -31,7 +31,7 @@ require_relative 'sql_runner'
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
-      # Wires up everything the encryption plugin needs and owns its lifecycle.
+      # Wires up everything the kms_encryption plugin needs and owns its lifecycle.
       #
       # Construction is split in two, because the two halves become available at different times:
       #
@@ -55,7 +55,7 @@ module AwsRubyDatabaseDriverWrapper
         # @param service_container [Services::ServiceContainer]
         # @param props [Concurrent::Map, Hash] the wrapper properties
         # @param kms_client [Aws::KMS::Client, nil] a client to use instead of building one
-        # @raise [ArgumentError] if the encryption properties are invalid
+        # @raise [ArgumentError] if the kms_encryption properties are invalid
         def initialize(service_container, props, kms_client: nil)
           raise ArgumentError, 'service_container is required' if service_container.nil?
 
@@ -75,7 +75,7 @@ module AwsRubyDatabaseDriverWrapper
           )
 
           logger.debug do
-            "Loaded the encryption configuration: region=#{@config.kms_region}, " \
+            "Loaded the kms_encryption configuration: region=#{@config.kms_region}, " \
               "schema=#{@config.metadata_schema}, metadata cache=#{@config.metadata_cache_enabled}, " \
               "max retries=#{@config.key_management_max_retries}"
           end
@@ -170,9 +170,9 @@ module AwsRubyDatabaseDriverWrapper
         # @return [String] a description of how metadata is being read
         def connection_mode_status
           if using_independent_connections?
-            'The encryption plugin is reading its metadata over independent connections'
+            'The kms_encryption plugin is reading its metadata over independent connections'
           else
-            'The encryption plugin has not opened a metadata connection yet'
+            'The kms_encryption plugin has not opened a metadata connection yet'
           end
         end
 
@@ -246,7 +246,7 @@ module AwsRubyDatabaseDriverWrapper
           )
 
           @metadata_manager.start
-          logger.debug('The encryption plugin is ready to encrypt and decrypt column values')
+          logger.debug('The kms_encryption plugin is ready to encrypt and decrypt column values')
         end
 
         def create_kms_client
@@ -267,7 +267,7 @@ module AwsRubyDatabaseDriverWrapper
           require 'aws-sdk-kms'
         rescue LoadError
           raise LoadError,
-                "The KMS encryption plugin requires 'aws-sdk-kms'. " \
+                "The KMS kms_encryption plugin requires 'aws-sdk-kms'. " \
                 "Add it to your Gemfile: gem 'aws-sdk-kms'"
         end
 
@@ -275,7 +275,7 @@ module AwsRubyDatabaseDriverWrapper
         def quietly(description)
           yield
         rescue StandardError => e
-          logger.warn("Failed to #{description} while cleaning up the encryption plugin: #{e.message}")
+          logger.warn("Failed to #{description} while cleaning up the kms_encryption plugin: #{e.message}")
         end
       end
     end

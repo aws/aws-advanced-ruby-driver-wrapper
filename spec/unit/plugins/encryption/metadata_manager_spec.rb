@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/metadata_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/sql_runner'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/metadata_manager'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManager do
   let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
@@ -71,13 +71,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
       expect(manager.cache_size).to eq(0)
     end
 
-    # A column can be added to or removed from the encryption configuration while the application
+    # A column can be added to or removed from the kms_encryption configuration while the application
     # runs, so the cache is reloaded periodically.
     it 'refreshes the cache in the background when an interval is configured' do
       manager = described_class.new(connection_provider: connection_provider, sql_runner: sql_runner,
                                     config: config.with(metadata_cache_refresh_interval_sec: 1))
       manager.start
-      refresh_thread = Thread.list.find { |thread| thread.name == 'encryption-metadata-refresh' }
+      refresh_thread = Thread.list.find { |thread| thread.name == 'kms_encryption-metadata-refresh' }
 
       expect(refresh_thread).to be_alive
       manager.shutdown
@@ -86,14 +86,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
 
     it 'starts no refresh thread when no interval is configured' do
       manager.start
-      expect(Thread.list.map(&:name)).not_to include('encryption-metadata-refresh')
+      expect(Thread.list.map(&:name)).not_to include('kms_encryption-metadata-refresh')
     end
 
     it 'fails when the metadata cannot be loaded' do
       allow(sql_runner).to receive(:query).and_raise(StandardError, 'relation does not exist')
 
       expect { manager.start }
-        .to raise_error(metadata_error, /Failed to load encryption metadata: relation does not exist/) do |error|
+        .to raise_error(metadata_error, /Failed to load kms_encryption metadata: relation does not exist/) do |error|
           expect(error.code).to eq(metadata_error::METADATA_LOAD_FAILED)
         end
     end
@@ -144,7 +144,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
       expect(manager.load_metadata.keys).to eq(['users.ssn', 'users.email', 'orders.card_number'])
     end
 
-    it 'is empty when no column is configured for encryption' do
+    it 'is empty when no column is configured for kms_encryption' do
       allow(sql_runner).to receive(:query).and_return([])
       expect(manager.load_metadata).to eq({})
     end
@@ -286,7 +286,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
       allow(sql_runner).to receive(:query).and_raise(StandardError, 'relation does not exist')
 
       expect { manager.column_config('users', 'ssn') }
-        .to raise_error(metadata_error, /Failed to load the encryption configuration/) do |error|
+        .to raise_error(metadata_error, /Failed to load the kms_encryption configuration/) do |error|
           expect(error.code).to eq(metadata_error::METADATA_LOOKUP_FAILED)
           expect(error.context).to include(table: 'users', column: 'ssn')
         end

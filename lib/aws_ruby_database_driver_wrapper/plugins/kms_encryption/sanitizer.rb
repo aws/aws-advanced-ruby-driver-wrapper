@@ -18,7 +18,7 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
       # Redaction helpers shared by the audit logger, the error context builder, and the
-      # encryption error classes. Every method returns nil when given nil so that callers
+      # kms_encryption error classes. Every method returns nil when given nil so that callers
       # can decide how to render a missing value.
       module Sanitizer
         # Matches "password=...", "secret=...", "key=...", "token=..." assignments.

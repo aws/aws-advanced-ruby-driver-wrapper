@@ -17,7 +17,7 @@
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
 require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/kms_encryption_utility'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
 require 'aws_ruby_database_driver_wrapper/services/service_container'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionUtility do
@@ -115,7 +115,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
       expect(utility.sql_runner.pg?).to be(true)
     end
 
-    it 'loads the encryption metadata' do
+    it 'loads the kms_encryption metadata' do
       metadata_manager = instance_double(encryption::MetadataManager, start: nil, shutdown: nil)
       allow(encryption::MetadataManager).to receive(:new).and_return(metadata_manager)
 
@@ -255,7 +255,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
   describe '#connection_mode_status' do
     it 'says that no metadata connection has been made yet' do
       expect(utility.using_independent_connections?).to be(false)
-      expect(utility.connection_mode_status).to eq('The encryption plugin has not opened a metadata connection yet')
+      expect(utility.connection_mode_status).to eq('The kms_encryption plugin has not opened a metadata connection yet')
     end
 
     it 'says that the metadata is read over independent connections' do
@@ -263,7 +263,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
 
       expect(utility.using_independent_connections?).to be(true)
       expect(utility.connection_mode_status)
-        .to eq('The encryption plugin is reading its metadata over independent connections')
+        .to eq('The kms_encryption plugin is reading its metadata over independent connections')
     end
   end
 
@@ -333,7 +333,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
 
       expect(utility.data_key_cache).to have_received(:shutdown)
       expect(utility.send(:logger)).to have_received(:warn)
-        .with(/Failed to stop the metadata refresh while cleaning up the encryption plugin: refresh thread already gone/)
+        .with(/Failed to stop the metadata refresh while cleaning up the kms_encryption plugin: refresh thread already gone/)
     end
 
     it 'can be called before the components were built, and twice over' do

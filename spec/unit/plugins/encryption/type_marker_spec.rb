@@ -17,7 +17,7 @@
 require_relative '../../../spec_helper'
 require 'bigdecimal'
 require 'date'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/type_marker'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/type_marker'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::TypeMarker do
   subject(:marker) { described_class }

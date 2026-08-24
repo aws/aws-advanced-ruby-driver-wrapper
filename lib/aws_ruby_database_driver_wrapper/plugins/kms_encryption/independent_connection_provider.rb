@@ -22,7 +22,7 @@ require_relative 'errors'
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
-      # Opens the plugin's own connections to the encryption metadata and key storage tables.
+      # Opens the plugin's own connections to the kms_encryption metadata and key storage tables.
       #
       # The plugin must not read metadata over the application's connection: that connection can
       # be inside a transaction, can be mid-failover, and its session state belongs to the

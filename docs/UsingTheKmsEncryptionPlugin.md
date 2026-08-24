@@ -1,4 +1,4 @@
-# KMS Encryption Plugin
+``# KMS Encryption Plugin
 
 The KMS Encryption Plugin encrypts individual table columns with data keys held in [AWS KMS](https://aws.amazon.com/kms/), without the application having to know about it. Which columns are encrypted is configured in the database itself, in the `encryption_metadata` table, so it can be changed without redeploying the application. When a statement writes to one of those columns the plugin encrypts the bind parameter on its way to the server, and when a statement reads one back it decrypts the value on its way to the application. The plaintext never reaches the server, and neither does any data key: only a KMS-encrypted copy of each data key is stored, in `key_storage`.
 
@@ -93,7 +93,7 @@ The trigger needs no help from the application, because the HMAC key that signs 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Refuses any value that was not written by the encryption plugin.
+-- Refuses any value that was not written by the kms_encryption plugin.
 -- Replace 'encrypt' below if encryption_metadata_schema is set to something else.
 CREATE OR REPLACE FUNCTION enforce_encrypted_column() RETURNS trigger AS $$
 DECLARE
@@ -125,7 +125,7 @@ BEGIN
   -- Payload: [ HMAC-SHA256 tag : 32 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
   IF length(col_value) < 61
      OR substring(col_value from 1 for 32) <> hmac(substring(col_value from 33), hmac_key, 'sha256') THEN
-    RAISE EXCEPTION 'Column %.% was not written by the encryption plugin', TG_TABLE_NAME, col_name;
+    RAISE EXCEPTION 'Column %.% was not written by the kms_encryption plugin', TG_TABLE_NAME, col_name;
   END IF;
 
   RETURN NEW;

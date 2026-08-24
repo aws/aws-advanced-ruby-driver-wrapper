@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/errors'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/errors'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
   let(:errors) { AwsRubyDatabaseDriverWrapper::Errors }

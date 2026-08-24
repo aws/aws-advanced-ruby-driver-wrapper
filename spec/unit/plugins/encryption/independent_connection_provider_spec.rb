@@ -16,7 +16,7 @@
 
 require_relative '../../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/independent_connection_provider'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
 require 'aws_ruby_database_driver_wrapper/services/service_container'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentConnectionProvider do

@@ -16,12 +16,12 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/key_management_utility'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/key_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/metadata_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/encryption/sql_runner'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_management_utility'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_manager'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/metadata_manager'
+require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementUtility do
   let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
@@ -65,29 +65,29 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
     end
 
     it 'creates a symmetric encrypt and decrypt key' do
-      expect(utility.create_master_key('column encryption')).to eq(master_key_arn)
+      expect(utility.create_master_key('column kms_encryption')).to eq(master_key_arn)
       expect(kms_client).to have_received(:create_key)
-        .with(description: 'column encryption', key_usage: 'ENCRYPT_DECRYPT', key_spec: 'SYMMETRIC_DEFAULT')
+        .with(description: 'column kms_encryption', key_usage: 'ENCRYPT_DECRYPT', key_spec: 'SYMMETRIC_DEFAULT')
     end
 
     it 'applies a key policy when one was given' do
-      utility.create_master_key('column encryption', key_policy: '{"Version":"2012-10-17"}')
+      utility.create_master_key('column kms_encryption', key_policy: '{"Version":"2012-10-17"}')
       expect(kms_client).to have_received(:create_key).with(hash_including(policy: '{"Version":"2012-10-17"}'))
     end
 
     it 'lets KMS apply its default policy when none was given' do
-      utility.create_master_key('column encryption', key_policy: '   ')
+      utility.create_master_key('column kms_encryption', key_policy: '   ')
       expect(kms_client).to have_received(:create_key).with(hash_excluding(:policy))
     end
 
     it 'gives the key an alias' do
-      utility.create_master_key('column encryption')
+      utility.create_master_key('column kms_encryption')
       expect(kms_client).to have_received(:create_alias)
         .with(alias_name: start_with(described_class::ALIAS_PREFIX), target_key_id: master_key_arn)
     end
 
     it 'can be asked not to create an alias' do
-      utility.create_master_key('column encryption', create_alias: false)
+      utility.create_master_key('column kms_encryption', create_alias: false)
       expect(kms_client).not_to have_received(:create_alias)
     end
 
@@ -95,7 +95,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
     it 'keeps the key when the alias could not be created' do
       allow(kms_client).to receive(:create_alias).and_raise(StandardError, 'AlreadyExistsException')
 
-      expect(utility.create_master_key('column encryption')).to eq(master_key_arn)
+      expect(utility.create_master_key('column kms_encryption')).to eq(master_key_arn)
       expect(AwsRubyDatabaseDriverWrapper.logger).to have_received(:warn)
         .with(/could not create an alias for it: AlreadyExistsException/)
     end
@@ -107,7 +107,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
     it 'reports a KMS refusal' do
       allow(kms_client).to receive(:create_key).and_raise(StandardError, 'AccessDeniedException')
 
-      expect { utility.create_master_key('column encryption') }
+      expect { utility.create_master_key('column kms_encryption') }
         .to raise_error(key_error, /Failed to create the master key: AccessDeniedException/)
     end
 
@@ -118,10 +118,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
                                     connection_provider: connection_provider, sql_runner: sql_runner,
                                     kms_client: kms_client, config: config, audit_logger: audit_logger)
 
-      utility.create_master_key('column encryption')
+      utility.create_master_key('column kms_encryption')
 
       expect(audit_logger).to have_received(:log_key_creation)
-        .with(master_key_arn: master_key_arn, description: 'column encryption', success: true)
+        .with(master_key_arn: master_key_arn, description: 'column kms_encryption', success: true)
     end
   end
 
@@ -200,7 +200,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
         .and_raise(metadata_error.lookup_failed('relation does not exist'))
 
       expect { utility.initialize_encryption_for_column('users', 'ssn', master_key_arn) }
-        .to raise_error(key_error, /Failed to check the encryption status of the column/)
+        .to raise_error(key_error, /Failed to check the kms_encryption status of the column/)
       expect(key_manager).not_to have_received(:generate_data_key)
     end
   end
@@ -236,7 +236,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
 
     it 'refuses an algorithm it cannot encrypt with' do
       expect { utility.generate_and_store_data_key('users', 'ssn', master_key_arn, 'rot13') }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError, /Unsupported encryption algorithm/)
+        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm/)
       expect(key_manager).not_to have_received(:generate_data_key)
     end
 
@@ -303,7 +303,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
       allow(metadata_manager).to receive(:column_config).and_return(nil)
 
       expect { utility.rotate_data_key('users', 'ssn') }
-        .to raise_error(key_error, /No encryption configuration exists for users\.ssn/)
+        .to raise_error(key_error, /No kms_encryption configuration exists for users\.ssn/)
       expect(key_manager).not_to have_received(:generate_data_key)
     end
 
@@ -313,7 +313,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
       allow(sql_runner).to receive(:update).and_return(0)
 
       expect { utility.rotate_data_key('users', 'ssn') }
-        .to raise_error(key_error, /No encryption configuration row was updated for users\.ssn/) do |error|
+        .to raise_error(key_error, /No kms_encryption configuration row was updated for users\.ssn/) do |error|
           expect(error.context).to include(table: 'users', column: 'ssn')
         end
     end
@@ -341,7 +341,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
 
       expect(utility.remove_encryption_for_column('users', 'ssn')).to be(false)
       expect(AwsRubyDatabaseDriverWrapper.logger).to have_received(:warn)
-        .with(/No encryption configuration existed for users\.ssn/)
+        .with(/No kms_encryption configuration existed for users\.ssn/)
     end
 
     it 'reloads the metadata cache so that the column stops being encrypted' do
@@ -358,7 +358,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
       allow(sql_runner).to receive(:update).and_raise(StandardError, 'permission denied')
 
       expect { utility.remove_encryption_for_column('users', 'ssn') }
-        .to raise_error(key_error, /Failed to remove the encryption configuration: permission denied/) do |error|
+        .to raise_error(key_error, /Failed to remove the kms_encryption configuration: permission denied/) do |error|
           expect(error.code).to eq(key_error::KEY_STORAGE_FAILED)
           expect(error.context).to include(table: 'users', column: 'ssn')
         end
