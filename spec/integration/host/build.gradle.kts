@@ -307,6 +307,7 @@ tasks.register<Test>("test-bgd-mysql-instance") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-pg-driver", "true")
@@ -326,6 +327,7 @@ tasks.register<Test>("test-bgd-mysql-aurora") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-pg-driver", "true")
@@ -338,7 +340,6 @@ tasks.register<Test>("test-bgd-mysql-aurora") {
         systemProperty("exclude-instances-5", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("test-bg-only", "true")
-
     }
 }
 
@@ -346,6 +347,7 @@ tasks.register<Test>("test-bgd-pg-instance") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-mysql-driver", "true")
@@ -365,6 +367,7 @@ tasks.register<Test>("test-bgd-pg-aurora") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
     doFirst {
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-mysql-driver", "true")
@@ -377,7 +380,6 @@ tasks.register<Test>("test-bgd-pg-aurora") {
         systemProperty("exclude-instances-5", "true")
         systemProperty("exclude-multi-az-cluster", "true")
         systemProperty("test-bg-only", "true")
-
     }
 }
 

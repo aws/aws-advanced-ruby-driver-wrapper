@@ -23,7 +23,7 @@ require 'concurrent'
 RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect do
   subject(:dialect) { described_class.new }
 
-  let(:connection) { instance_double('Mysql2::Client') }
+  let(:connection) { instance_double('Mysql2::Client', closed?: false) }
   let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 3306) }
   let(:config) do
     Concurrent::Map.new.tap do |m|
@@ -45,6 +45,22 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     it 'delegates to connection.query' do
       expect(connection).to receive(:query).with('SELECT 1').and_return(:result)
       expect(dialect.execute(connection, 'SELECT 1')).to eq(:result)
+    end
+
+    it 'raises Mysql2::Error when connection is closed' do
+      stub_const('Mysql2::Error', Class.new(StandardError))
+      allow(connection).to receive(:closed?).and_return(true)
+      expect { dialect.execute(connection, 'SELECT 1') }.to raise_error(Mysql2::Error, /not connected/)
+    end
+  end
+
+  describe '#execute_with_params' do
+    let(:stmt) { double('Statement', close: nil) }
+
+    it 'raises Mysql2::Error when connection is closed' do
+      stub_const('Mysql2::Error', Class.new(StandardError))
+      allow(connection).to receive(:closed?).and_return(true)
+      expect { dialect.execute_with_params(connection, 'SELECT ?', [1]) }.to raise_error(Mysql2::Error, /not connected/)
     end
   end
 

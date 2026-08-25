@@ -14,25 +14,30 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../../../errors'
-
 module AwsRubyDatabaseDriverWrapper
   module Plugins
-    module BlueGreen
-      module Routing
-        # Rejects any attempt to open a new connection during a Blue/Green switchover.
-        class RejectConnectRouting
-          include BaseRouting
+    module CustomEndpoint
+      # Represents the possible roles of instances specified by a custom endpoint.
+      module Role
+        # Instances may be either a writer or a reader.
+        ANY = :any
 
-          def initialize(host, port, role)
-            @host = host
-            @port = port
-            @role = role
-          end
+        # Instance is always the writer.
+        WRITER = :writer
 
-          def apply(*, **)
-            raise Errors::BlueGreenSwitchoverError, 'Blue/Green Deployment switchover is in progress. New connection can\'t be opened.'
-          end
+        # Instances are always readers.
+        READER = :reader
+
+        ROLE_MAPPING = {
+          'ANY' => ANY,
+          'WRITER' => WRITER,
+          'READER' => READER
+        }.freeze
+
+        def self.parse(value)
+          raise ArgumentError, 'Role value is blank' if value.nil? || value.strip.empty?
+
+          ROLE_MAPPING.fetch(value.upcase) { raise ArgumentError, "Unknown role: #{value}" }
         end
       end
     end

@@ -277,9 +277,11 @@ module AwsRubyDatabaseDriverWrapper
 
           begin
             result = @retry_util.connect_to_writer(self, @service_container.plugin_manager, deadline: deadline)
-            success = true
-            connection_service.update_current_connection(result.connection, result.host_info)
-            raise_failover_success_error(was_in_transaction)
+            if result&.connection && result.host_info
+              success = true
+              connection_service.update_current_connection(result.connection, result.host_info)
+              raise_failover_success_error(was_in_transaction)
+            end
           rescue Timeout::Error
             raise Errors::FailoverFailedError,
                   "Failover timed out after #{@failover_timeout}s. " \
@@ -302,9 +304,11 @@ module AwsRubyDatabaseDriverWrapper
               strategy: @reader_selector_strategy,
               deadline: deadline
             ) { |allowed_hosts| allowed_hosts_for(mode, allowed_hosts) }
-            success = true
-            connection_service.update_current_connection(result.connection, result.host_info)
-            raise_failover_success_error(was_in_transaction)
+            if result&.connection && result.host_info
+              success = true
+              connection_service.update_current_connection(result.connection, result.host_info)
+              raise_failover_success_error(was_in_transaction)
+            end
           rescue Timeout::Error
             raise Errors::FailoverFailedError,
                   "Failover timed out after #{@failover_timeout}s. Unable to connect to a host allowed by failover mode #{mode}."

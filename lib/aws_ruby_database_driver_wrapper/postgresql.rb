@@ -309,12 +309,26 @@ module AwsRubyDatabaseDriverWrapper
     # plugin which has to inspect the statement still sees it when the rows are read.
     def execute_operation(operation, args = [], kwargs = {}, spelling: operation, &)
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
+      conn = current_conn
+      # Guard against a missing connection. Fail loudly instead.
+      raise NoMethodError, 'Connection not initialized' if conn.nil?
+
+      # Only forward keyword arguments when there are any.
       sql = sql_for(spec, args)
-      result = pm.execute(
-        spec[:method], current_conn,
-        ->(*a, **opts, &b) { current_conn.send(spelling, *a, **opts, &b) },
-        *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), sql: sql, &
-      )
+      result =
+        if kwargs.empty?
+          pm.execute(
+            spec[:method], conn,
+            ->(*a, &b) { current_conn.public_send(spelling, *a, &b) },
+            *args, bounded_conn: bounded_conn_for(spec[:bound_to], args), sql: sql, &
+          )
+        else
+          pm.execute(
+            spec[:method], conn,
+            ->(*a, **opts, &b) { current_conn.public_send(spelling, *a, **opts, &b) },
+            *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), sql: sql, &
+          )
+        end
       Array(spec[:after]).each { |hook| send(hook, args, result, sql) }
       wrap_pg_result(result, sql)
     end

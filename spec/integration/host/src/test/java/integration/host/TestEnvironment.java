@@ -1390,11 +1390,15 @@ public class TestEnvironment implements AutoCloseable {
         "aws/rds-test-container",
         getContainerBaseImageName(env.info.getRequest()));
 
+    TestEnvironmentConfiguration config = new TestEnvironmentConfiguration();
+
     env.testContainer
         .withNetworkAliases(TEST_CONTAINER_NAME)
         .withNetwork(env.network)
         .withEnv("TEST_ENV_INFO_JSON", getEnvironmentInfoAsString(env))
-        .withEnv("TEST_ENV_DESCRIPTION", env.info.getRequest().getDisplayName());
+        .withEnv("TEST_ENV_DESCRIPTION", env.info.getRequest().getDisplayName())
+        .withEnv("TEST_BG_ONLY", String.valueOf(config.testBlueGreenOnly))
+        .withEnv("EXCLUDE_BG", String.valueOf(config.noBlueGreen));
 
     if (env.info
         .getRequest()
@@ -1532,33 +1536,32 @@ public class TestEnvironment implements AutoCloseable {
             e);
       }
 
-      String url;
+      final String connectivityHost;
+      final int connectivityPort;
       switch (deployment) {
         case AURORA:
         case AURORA_GLOBAL:
         case RDS_MULTI_AZ_CLUSTER:
-          url = String.format(
-              "%s%s:%d/%s",
-              DriverHelper.getDriverProtocol(env.info.getRequest().getDatabaseEngine()),
-              env.info.getDatabaseInfo().getClusterEndpoint(),
-              env.info.getDatabaseInfo().getClusterEndpointPort(),
-              env.info.getDatabaseInfo().getDefaultDbName());
+          connectivityHost = env.info.getDatabaseInfo().getClusterEndpoint();
+          connectivityPort = env.info.getDatabaseInfo().getClusterEndpointPort();
           break;
         case RDS_MULTI_AZ_INSTANCE:
-          url = String.format(
-              "%s%s:%d/%s",
-              DriverHelper.getDriverProtocol(env.info.getRequest().getDatabaseEngine()),
-              env.info.getDatabaseInfo().getInstances().get(0).getHost(),
-              env.info.getDatabaseInfo().getInstances().get(0).getPort(),
-              env.info.getDatabaseInfo().getDefaultDbName());
+          connectivityHost = env.info.getDatabaseInfo().getInstances().get(0).getHost();
+          connectivityPort = env.info.getDatabaseInfo().getInstances().get(0).getPort();
           break;
         default:
           throw new UnsupportedOperationException(deployment.toString());
       }
 
+      final String url = String.format(
+          "%s%s:%d/%s",
+          DriverHelper.getDriverProtocol(env.info.getRequest().getDatabaseEngine()),
+          connectivityHost,
+          connectivityPort,
+          env.info.getDatabaseInfo().getDefaultDbName());
+
       try {
-        waitForConnectivity(env.info.getDatabaseInfo().getClusterEndpoint(),
-            env.info.getDatabaseInfo().getClusterEndpointPort());
+        waitForConnectivity(connectivityHost, connectivityPort);
         final boolean useRdsTools = env.info.getRequest().getFeatures()
               .contains(TestEnvironmentFeatures.BLUE_GREEN_DEPLOYMENT)
             && env.info.getRequest().getDatabaseEngine() == DatabaseEngine.PG
@@ -1844,6 +1847,18 @@ public class TestEnvironment implements AutoCloseable {
           return;
         }
 
+        // Wait for the switchover to fully settle, then re-fetch the deployment so that
+        // status(), source() and target() reflect the final state. Without this re-fetch the
+        // snapshot above can be captured mid-switchover (e.g. SWITCHOVER_IN_PROGRESS), which
+        // sends teardown down the wrong branch and leaves the old cluster/instance orphaned.
+        auroraUtil.waitUntilBlueGreenDeploymentHasRightState(
+            this.info.getBlueGreenDeploymentId(), "available", "switchover_completed");
+        blueGreenDeployment = auroraUtil.getBlueGreenDeployment(this.info.getBlueGreenDeploymentId());
+
+        if (blueGreenDeployment == null) {
+          return;
+        }
+
         auroraUtil.deleteBlueGreenDeployment(this.info.getBlueGreenDeploymentId(), true);
 
         // Remove extra DB cluster
@@ -1884,6 +1899,18 @@ public class TestEnvironment implements AutoCloseable {
           break;
         }
 
+        blueGreenDeployment = auroraUtil.getBlueGreenDeployment(this.info.getBlueGreenDeploymentId());
+
+        if (blueGreenDeployment == null) {
+          return;
+        }
+
+        // Wait for the switchover to fully settle, then re-fetch the deployment so that
+        // status(), source() and target() reflect the final state. Without this re-fetch the
+        // snapshot above can be captured mid-switchover (e.g. SWITCHOVER_IN_PROGRESS), which
+        // sends teardown down the wrong branch and leaves the old cluster/instance orphaned.
+        auroraUtil.waitUntilBlueGreenDeploymentHasRightState(
+            this.info.getBlueGreenDeploymentId(), "available", "switchover_completed");
         blueGreenDeployment = auroraUtil.getBlueGreenDeployment(this.info.getBlueGreenDeploymentId());
 
         if (blueGreenDeployment == null) {

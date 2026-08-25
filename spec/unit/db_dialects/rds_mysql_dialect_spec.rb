@@ -20,7 +20,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::RdsMysqlDialect do
   let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
-  let(:connection) { instance_double('Mysql2::Client') }
+  let(:connection) { instance_double('Mysql2::Client', closed?: false) }
 
   describe '#dialect?' do
     it 'returns true for RDS MySQL with Source distribution and empty report_host' do

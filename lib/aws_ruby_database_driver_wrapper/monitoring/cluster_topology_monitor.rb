@@ -78,6 +78,7 @@ module AwsRubyDatabaseDriverWrapper
         @update_requested = false
 
         @instance_monitors = {} # { host_string => Thread }
+        @instance_monitor_connections = Concurrent::Map.new # { host_string => raw connection }
         @stop_instance_monitors = false
         @instance_monitors_writer_conn = MonitorConnection.new(service_container.dialect_service.driver_dialect)
         @panic_mutex = Mutex.new
@@ -126,7 +127,7 @@ module AwsRubyDatabaseDriverWrapper
 
       def close
         close_instance_monitors
-        @monitoring_connection.close
+        @monitoring_conn_lock.synchronize { @monitoring_connection.close }
         @instance_monitors_writer_conn.close
       end
 
@@ -149,7 +150,7 @@ module AwsRubyDatabaseDriverWrapper
       ensure
         @stop_instance_monitors = true
         close_instance_monitors
-        @monitoring_connection.close
+        @monitoring_conn_lock.synchronize { @monitoring_connection.close }
         @instance_monitors_writer_conn.close
         event_publisher.unsubscribe(self, Set[Utils::Events::MonitorResetEvent])
         logger.debug("[#{@cluster_id}] Stopped cluster topology monitor")
@@ -237,7 +238,7 @@ module AwsRubyDatabaseDriverWrapper
         return false unless writer_conn && writer_host
 
         logger.info("[#{@cluster_id}] Writer found: #{writer_host.host}")
-        @monitoring_connection.set(writer_conn, close_old: true)
+        @monitoring_conn_lock.synchronize { @monitoring_connection.set(writer_conn, close_old: true) }
         # Avoid double-close: clear host reference without closing since we transferred ownership.
         @instance_monitors_writer_conn.set(nil, close_old: false)
         @writer_info = writer_host
@@ -334,11 +335,21 @@ module AwsRubyDatabaseDriverWrapper
               next
             end
             connection_attempts = 0
+            @instance_monitor_connections[host_info.host] = conn
+          end
+
+          # If the connection was closed externally abandon it and reconnect on the next iteration.
+          if @service_container.dialect_service.driver_dialect.closed?(conn)
+            conn = nil
+            @instance_monitor_connections.delete(host_info.host)
+            next
           end
 
           role = check_host_role(conn)
           if role.nil?
+            safe_close_connection(conn)
             conn = nil
+            @instance_monitor_connections.delete(host_info.host)
             next
           end
 
@@ -355,6 +366,7 @@ module AwsRubyDatabaseDriverWrapper
       rescue StandardError => e
         logger.debug("[#{@cluster_id}] Instance Monitor #{host_info.host}: #{e.message}")
       ensure
+        @instance_monitor_connections.delete(host_info.host)
         @panic_mutex.synchronize do
           @completed_one_cycle[host_info.id] = true
           @instance_monitor_topologies.delete(host_info.id)
@@ -421,30 +433,34 @@ module AwsRubyDatabaseDriverWrapper
       # --- Topology operations ---
 
       def open_any_connection_and_update_topology
-        existing_conn = @monitoring_connection.get
-        return fetch_topology_and_update_cache(existing_conn) if existing_conn
+        @monitoring_conn_lock.synchronize do
+          existing_conn = @monitoring_connection.get
+          return fetch_topology_and_update_cache(existing_conn) if existing_conn
+        end
 
         conn = internal_connect(initial_host_info)
         return nil if conn.nil?
 
-        unless @monitoring_connection.compare_and_set(nil, conn)
-          safe_close_connection(conn)
-          return fetch_topology_and_update_cache(@monitoring_connection.get)
-        end
+        @monitoring_conn_lock.synchronize do
+          unless @monitoring_connection.compare_and_set(nil, conn)
+            safe_close_connection(conn)
+            return fetch_topology_and_update_cache(@monitoring_connection.get)
+          end
 
-        role = check_host_role(conn)
-        if role == Host::HostRole::WRITER
-          @verified_writer = true
-          @writer_info = initial_host_info
-        end
+          role = check_host_role(conn)
+          if role == Host::HostRole::WRITER
+            @verified_writer = true
+            @writer_info = initial_host_info
+          end
 
-        hosts = fetch_topology_and_update_cache(conn)
-        if hosts.nil?
-          @monitoring_connection.set(nil)
-          @verified_writer = false
-          @writer_info = nil
+          hosts = fetch_topology_and_update_cache(conn)
+          if hosts.nil?
+            @monitoring_connection.set(nil)
+            @verified_writer = false
+            @writer_info = nil
+          end
+          hosts
         end
-        hosts
       rescue StandardError => e
         logger.debug("[#{@cluster_id}] Failed to open monitoring connection: #{e.message}")
         nil
@@ -557,7 +573,12 @@ module AwsRubyDatabaseDriverWrapper
         return false if verified_writer.nil? || hosts.nil?
 
         cached_writer = hosts.find { |h| h.role == Host::HostRole::WRITER }
-        !cached_writer.nil? && cached_writer.host == verified_writer.host
+        return false if cached_writer.nil?
+
+        # Direct match by host or id
+        return true if cached_writer.host == verified_writer.host
+
+        cached_writer.id && verified_writer.id && cached_writer.id == verified_writer.id
       end
 
       # --- Reset ---
@@ -565,9 +586,10 @@ module AwsRubyDatabaseDriverWrapper
       def reset!
         logger.debug("[#{@cluster_id}] Monitor reset")
         @stop_instance_monitors = true
+        close_instance_monitor_connections
         close_instance_monitors
         @stop_instance_monitors = false
-        @monitoring_connection.set(nil)
+        @monitoring_conn_lock.synchronize { @monitoring_connection.set(nil) }
         @verified_writer = false
         @writer_info = nil
         @high_refresh_end_time = 0
@@ -580,6 +602,15 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       # --- Cleanup helpers ---
+
+      # Closes all instance monitor connections so that any in-flight queries exits safely.
+      # This MUST be called before join/kill on the threads.
+      def close_instance_monitor_connections
+        @instance_monitor_connections.each_pair do |host, conn|
+          safe_close_connection(conn)
+          @instance_monitor_connections.delete(host)
+        end
+      end
 
       def close_instance_monitors
         @stop_instance_monitors = true
@@ -596,10 +627,12 @@ module AwsRubyDatabaseDriverWrapper
 
       def cleanup_host_writer_connection
         # Avoid double-close if the monitoring connection already owns this reference.
-        if @monitoring_connection.get.equal?(@instance_monitors_writer_conn.get)
-          @instance_monitors_writer_conn.set(nil, close_old: false)
-        else
-          @instance_monitors_writer_conn.set(nil)
+        @monitoring_conn_lock.synchronize do
+          if @monitoring_connection.get.equal?(@instance_monitors_writer_conn.get)
+            @instance_monitors_writer_conn.set(nil, close_old: false)
+          else
+            @instance_monitors_writer_conn.set(nil)
+          end
         end
       end
 
@@ -609,9 +642,12 @@ module AwsRubyDatabaseDriverWrapper
         use_high_rate = true if @high_refresh_end_time.positive? && monotonic_time < @high_refresh_end_time
 
         @topology_mutex.synchronize do
-          use_high_rate = true if @update_requested
+          if @update_requested
+            use_high_rate = true
+            @update_requested = false
+          end
           duration = use_high_rate ? @high_refresh_rate_sec : @refresh_rate_sec
-          @topology_cv.wait(@topology_mutex, duration) unless @update_requested || stopped?
+          @topology_cv.wait(@topology_mutex, duration) unless stopped?
         end
       end
 

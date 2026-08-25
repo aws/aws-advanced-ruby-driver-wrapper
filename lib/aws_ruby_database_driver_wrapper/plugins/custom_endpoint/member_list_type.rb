@@ -14,26 +14,17 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../../../errors'
-
 module AwsRubyDatabaseDriverWrapper
   module Plugins
-    module BlueGreen
-      module Routing
-        # Rejects any attempt to open a new connection during a Blue/Green switchover.
-        class RejectConnectRouting
-          include BaseRouting
+    module CustomEndpoint
+      # Represents the member list type of a custom endpoint.
+      # Used with a member list to determine which instances are included or excluded.
+      module MemberListType
+        # Only the listed instances are included. New cluster instances are NOT auto-added.
+        STATIC_LIST = :static_list
 
-          def initialize(host, port, role)
-            @host = host
-            @port = port
-            @role = role
-          end
-
-          def apply(*, **)
-            raise Errors::BlueGreenSwitchoverError, 'Blue/Green Deployment switchover is in progress. New connection can\'t be opened.'
-          end
-        end
+        # The listed instances are excluded. New cluster instances ARE auto-added.
+        EXCLUSION_LIST = :exclusion_list
       end
     end
   end

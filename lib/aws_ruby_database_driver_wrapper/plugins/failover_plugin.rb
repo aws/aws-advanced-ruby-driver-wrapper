@@ -83,7 +83,13 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         conn = connection_service.current_connection
-        if conn && !@closed_explicitly && driver_dialect.closed?(connection_service.current_connection)
+        if conn.nil?
+          logger.warn do
+            "[execute] current_connection is nil for #{method_name} — " \
+              "host_info=#{connection_service.current_host_info&.host}, " \
+              "closed_explicitly=#{@closed_explicitly}, failover_mode=#{@failover_mode.inspect}"
+          end
+        elsif !@closed_explicitly && driver_dialect.closed?(conn)
           logger.warn("#{method_name} was called on closed connection #{conn} to #{connection_service.current_host_info}. " \
                       'The driver will attempt to failover and then execute.')
           failover
@@ -248,6 +254,8 @@ module AwsRubyDatabaseDriverWrapper
         begin
           was_in_transaction = @service_container.session_state_service.in_transaction?
           result = reader_failover_connection(failover_deadline)
+          raise Errors::FailoverFailedError, 'Unable to connect to a reader instance' unless result&.connection
+
           connection_service.update_current_connection(result.connection, result.host_info)
         rescue Timeout::Error
           raise Errors::FailoverFailedError, 'Unable to connect to a reader instance'
@@ -284,7 +292,10 @@ module AwsRubyDatabaseDriverWrapper
         ensure
           duration_ms = ((Time.now - failover_start) * 1000).round
           logger.debug { "Writer failover duration: #{duration_ms}ms" }
-          close_quietly(result&.connection) unless success
+          unless success
+            close_quietly(result&.connection)
+            raise Errors::FailoverFailedError, 'Unable to connect to a writer instance'
+          end
         end
       end
 

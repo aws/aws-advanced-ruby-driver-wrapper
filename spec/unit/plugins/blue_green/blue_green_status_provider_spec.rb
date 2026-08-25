@@ -41,7 +41,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::StatusProvider,
   let(:green_cluster_ep)  { 'blue-green-xyz.cluster-abc.us-east-1.rds.amazonaws.com' }
   let(:green_cluster_ro)  { 'blue-green-xyz.cluster-ro-abc.us-east-1.rds.amazonaws.com' }
 
-  let(:storage_service) { double('storage_service', get: nil, set: nil) }
+  let(:storage_service) { double('storage_service', get: nil, set: nil, remove: nil) }
+  let(:host_service)    { double('host_service') }
   let(:event_publisher) { double('event_publisher', publish: nil) }
   let(:db_dialect)      { double('db_dialect', blue_green_status_available?: true, create_host_list_provider: nil) }
   let(:driver_dialect)  { double('driver_dialect') }
@@ -62,7 +63,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::StatusProvider,
   let(:service_container) do
     AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
       connection_service, dialect_service, event_publisher,
-      nil, plugin_manager, nil, storage_service, nil
+      host_service, plugin_manager, nil, storage_service, nil
     )
   end
   let(:props) { Concurrent::Map.new }

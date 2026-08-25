@@ -68,7 +68,7 @@ module Integration
         params[:port] = port if port
         params
       when TestDriver::MYSQL
-        params = { host: host, database: dbname, username: user, password: password, ssl_mode: :preferred }
+        params = { host: host, database: dbname, username: user, password: password, ssl_mode: :required }
         params[:port] = port.to_i if port
         params
       else
