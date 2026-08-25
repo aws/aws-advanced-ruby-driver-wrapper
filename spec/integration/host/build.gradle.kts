@@ -273,6 +273,44 @@ tasks.register<Test>("test-mysql-multi-az") {
     }
 }
 
+tasks.register<Test>("test-ruby-3.3-mysql-performance") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-ruby-4-0", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-iam", "true")
+        systemProperty("exclude-secrets-manager", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-2", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
+tasks.register<Test>("test-ruby-3.3-pg-performance") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-ruby-4-0", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-iam", "true")
+        systemProperty("exclude-secrets-manager", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-mysql-engine", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-2", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
 tasks.register<Test>("test-pg-aurora-performance") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
