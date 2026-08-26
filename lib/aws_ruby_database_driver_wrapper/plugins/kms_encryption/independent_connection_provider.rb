@@ -26,7 +26,7 @@ module AwsRubyDatabaseDriverWrapper
       #
       # The plugin must not read metadata over the application's connection: that connection can
       # be inside a transaction, can be mid-failover, and its session state belongs to the
-      # application. Every metadata and key lookup therefore runs on a short lived connection of
+      # application. Every metadata and key lookup therefore runs on a short-lived connection of
       # its own, opened through the internal_connect pipeline so that it still picks up IAM
       # authentication and Secrets Manager credentials.
       class IndependentConnectionProvider
@@ -194,6 +194,7 @@ module AwsRubyDatabaseDriverWrapper
           )
         end
 
+        # @param connection [Object, nil] a pg or mysql2 connection, or nil
         def close_quietly(connection)
           return if connection.nil?
 

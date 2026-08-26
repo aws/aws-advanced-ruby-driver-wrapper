@@ -306,9 +306,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
         end
     end
 
-    # A date written by another wrapper in a format Ruby cannot parse is still worth returning.
-    it 'falls back to the raw string when a date cannot be parsed' do
-      expect(described_class.deserialize_value('not a date', type_marker::LOCAL_DATE)).to eq('not a date')
+    # An unparseable date fails the read rather than being handed back as a string, matching how the
+    # numeric and BIG_DECIMAL markers behave (and the JDBC wrapper).
+    it 'raises when a date cannot be parsed' do
+      expect { described_class.deserialize_value('not a date', type_marker::LOCAL_DATE) }
+        .to raise_error(encryption_error, /Failed to deserialize LOCAL_DATE/) do |error|
+          expect(error.code).to eq(encryption_error::TYPE_CONVERSION_FAILED)
+        end
     end
 
     it 'raises for a marker it cannot read' do

@@ -296,7 +296,7 @@ module AwsRubyDatabaseDriverWrapper
           @running = true
           interval = @config.metadata_cache_refresh_interval_sec
 
-          @refresh_thread = Thread.new do
+          thread = Thread.new do
             while @running
               sleep(interval)
               break unless @running
@@ -308,7 +308,8 @@ module AwsRubyDatabaseDriverWrapper
               end
             end
           end
-          @refresh_thread.name = 'kms_encryption-metadata-refresh'
+          thread.name = 'kms_encryption-metadata-refresh'
+          @refresh_thread = thread
           logger.debug { "Started the kms_encryption metadata refresh thread with a #{interval}s interval" }
         end
       end

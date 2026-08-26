@@ -95,14 +95,15 @@ module AwsRubyDatabaseDriverWrapper
         # @return [void]
         def log_configuration_change(config_type:, details: nil, success: true, error_message: nil)
           record('CONFIGURATION_CHANGE', success, error_message,
-                 config_type: config_type,
+                 config_type: Sanitizer.truncate(config_type, Sanitizer::MAX_NAME_LENGTH),
                  details: Sanitizer.config_details(details))
         end
 
         # @return [void]
         def log_connection_parameter_extraction(strategy:, connection_type:, success: true, error_message: nil)
           record('CONNECTION_PARAMETER_EXTRACTION', success, error_message,
-                 strategy: strategy, connection_type: connection_type)
+                 strategy: Sanitizer.truncate(strategy, Sanitizer::MAX_NAME_LENGTH),
+                 connection_type: Sanitizer.truncate(connection_type, Sanitizer::MAX_NAME_LENGTH))
         end
 
         # Logged at debug level on failure, since the caller decides whether a failed
@@ -144,7 +145,7 @@ module AwsRubyDatabaseDriverWrapper
           return unless @enabled
 
           emit(healthy ? :info : :warn, 'CONNECTION_HEALTH_CHECK', healthy, nil,
-               connection_type: connection_type,
+               connection_type: Sanitizer.truncate(connection_type, Sanitizer::MAX_NAME_LENGTH),
                healthy: healthy,
                successful: success_count,
                failed: failure_count,

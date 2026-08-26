@@ -280,8 +280,8 @@ module AwsRubyDatabaseDriverWrapper
     # -- KMS Encryption --
     ENCRYPTION_KMS_REGION = WrapperProperty.new(
       :encryption_kms_region,
-      'AWS region for KMS calls made by the kms_encryption plugin. Defaults to the AWS_REGION or ' \
-      'AWS_DEFAULT_REGION environment variable, then to us-east-1.',
+      'AWS region for KMS calls made by the kms_encryption plugin. Required: falls back to the ' \
+      'AWS_REGION or AWS_DEFAULT_REGION environment variable, and is rejected if none is set.',
       default_value: nil, type: String
     )
     ENCRYPTION_KMS_ENDPOINT = WrapperProperty.new(

@@ -32,7 +32,7 @@ module AwsRubyDatabaseDriverWrapper
         # @return [SchemaName]
         # @raise [ArgumentError] if the name is empty or is not a plain SQL identifier
         def self.of(name)
-          name.is_a?(self) ? name : new(name)
+          name.is_a?(SchemaName) ? name : new(name)
         end
 
         # @param value [String, Symbol]

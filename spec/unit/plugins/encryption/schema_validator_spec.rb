@@ -17,6 +17,8 @@
 require_relative '../../../spec_helper'
 require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/schema_validator'
 require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
 
 RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaValidator do
   let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
@@ -36,10 +38,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaValidato
   let(:foreign_keys) do
     { 'encryption_metadata' => [{ from: 'key_id', to_table: 'key_storage', to_column: 'id' }] }
   end
+  # The foreign-key query now comes from the driver dialect; build the real ones so the stub stays
+  # in step with what the dialects actually produce.
+  let(:pg_foreign_key_sql) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new.foreign_key_query }
+  let(:mysql_foreign_key_sql) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new.foreign_key_query }
   subject(:validator) { described_class.new('encrypt', sql_runner) }
 
   # information_schema is queried for four different things, so the runner answers by SQL shape.
   before do
+    allow(sql_runner).to receive(:foreign_key_query).and_return(pg_foreign_key_sql)
     allow(sql_runner).to receive(:query) do |_connection, sql, params|
       table = params.last
       case sql
@@ -85,6 +92,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaValidato
     # some versions.
     it 'passes for a MySQL schema that reports upper case column names' do
       allow(sql_runner).to receive(:pg?).and_return(false)
+      allow(sql_runner).to receive(:foreign_key_query).and_return(mysql_foreign_key_sql)
       allow(sql_runner).to receive(:query) do |_connection, sql, params|
         table = params.last
         case sql
@@ -103,6 +111,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaValidato
     # MySQL keeps the referenced table on key_column_usage, PostgreSQL on constraint_column_usage.
     it 'asks MySQL for the referenced table the way MySQL exposes it' do
       allow(sql_runner).to receive(:pg?).and_return(false)
+      allow(sql_runner).to receive(:foreign_key_query).and_return(mysql_foreign_key_sql)
       validator.validate(connection)
 
       expect(sql_runner).to have_received(:query).with(connection, /referenced_table_name IS NOT NULL/, any_args)

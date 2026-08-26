@@ -34,7 +34,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
   let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
   let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true) }
   let(:connection) { double('Connection') }
-  let(:config) { encryption::EncryptionConfig.new(kms_region: 'us-east-1', metadata_schema: 'encrypt') }
+  let(:config) { build_encryption_config }
   let(:plaintext_key) { +('a' * 32) }
   let(:generated_key) do
     encryption::KeyManager::GeneratedDataKey.new(plaintext: plaintext_key, encrypted_data_key: 'AQIDAHj...',
@@ -52,6 +52,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
     allow(key_manager).to receive(:generate_data_key).and_return(generated_key)
     allow(key_manager).to receive(:store_key_metadata) { |metadata| metadata.with(id: 7) }
     allow(sql_runner).to receive(:update).and_return(1)
+    allow(sql_runner).to receive(:upsert_clause).and_return('ON CONFLICT (table_name, column_name) DO UPDATE')
     allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:info)
     allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn)
   end
@@ -206,17 +207,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
   end
 
   describe '#generate_and_store_data_key' do
-    it 'upserts the configuration row for PostgreSQL' do
-      utility.generate_and_store_data_key('users', 'ssn', master_key_arn)
-      expect(sql_runner).to have_received(:update).with(connection, /ON CONFLICT \(table_name, column_name\) DO UPDATE/,
-                                                        any_args)
-    end
-
-    it 'upserts the configuration row for MySQL' do
-      allow(sql_runner).to receive(:pg?).and_return(false)
+    # The driver-specific upsert grammar now lives in the dialect; the utility only asks for it and
+    # appends it to the insert. The ON CONFLICT / ON DUPLICATE KEY syntax is covered by the dialect specs.
+    it 'appends the dialect upsert clause from the sql runner to the insert' do
+      allow(sql_runner).to receive(:upsert_clause)
+        .with(%w[table_name column_name], %w[encryption_algorithm key_id updated_at])
+        .and_return('UPSERT_CLAUSE_SENTINEL')
       utility.generate_and_store_data_key('users', 'ssn', master_key_arn)
 
-      expect(sql_runner).to have_received(:update).with(connection, /ON DUPLICATE KEY UPDATE/, any_args)
+      expect(sql_runner).to have_received(:update)
+        .with(connection, /VALUES \(\?, \?, \?, \?, \?, \?\) UPSERT_CLAUSE_SENTINEL/, any_args)
     end
 
     it 'needs a table, a column, and a master key' do

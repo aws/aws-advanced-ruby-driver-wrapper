@@ -19,7 +19,7 @@ require_relative 'sanitizer'
 module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
-      # Builds the human readable, redacted message that goes with an kms_encryption failure.
+      # Builds the human-readable, redacted message that goes with a kms_encryption failure.
       #
       #   ErrorContext.builder
       #               .table('users').column('ssn').operation('ENCRYPT').parameter_index(2)

@@ -32,8 +32,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
   let(:data_key_cache) { encryption::DataKeyCache.new(max_size: 10, ttl_sec: 60) }
   # A 1 ms backoff base keeps the retry examples from actually waiting.
   let(:config) do
-    encryption::EncryptionConfig.new(kms_region: 'us-east-1', metadata_schema: 'encrypt',
-                                     key_management_max_retries: 2, key_management_retry_backoff_base_ms: 1)
+    build_encryption_config(key_management_max_retries: 2, key_management_retry_backoff_base_ms: 1)
   end
   # The KMS SDK names its error classes after the KMS error code and attaches the request
   # context, including the HTTP response, to every error it raises.

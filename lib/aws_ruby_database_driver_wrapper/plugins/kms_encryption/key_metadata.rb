@@ -23,7 +23,7 @@ module AwsRubyDatabaseDriverWrapper
       # it, and the HMAC key used to sign the payloads it encrypts.
       #
       # The data key is only ever held here in its encrypted form. The plaintext key exists
-      # only for the duration of a single encrypt or decrypt call and is zeroed afterwards.
+      # only for the duration of a single encrypt or decrypt call and is zeroed afterward.
       KeyMetadata = Data.define(
         :id,
         :key_id,
@@ -41,7 +41,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # @param id [Integer, nil] the +key_storage.id+ surrogate key, nil before the row is inserted
         # @param key_id [String, nil] the +key_storage.key_id+ identifier
-        # @param key_name [String, nil] a human readable name for the key
+        # @param key_name [String, nil] a human-readable name for the key
         # @param master_key_arn [String, nil] the ARN of the KMS master key wrapping the data key
         # @param encrypted_data_key [String, nil] the base64 encoded, KMS encrypted data key
         # @param hmac_key [String, nil] the binary HMAC-SHA256 key used for integrity protection

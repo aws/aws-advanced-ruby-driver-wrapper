@@ -93,7 +93,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # @param marker [Integer]
-        # @return [String, nil] the human readable name of the marker
+        # @return [String, nil] the human-readable name of the marker
         def name_for(marker)
           NAMES[marker]
         end

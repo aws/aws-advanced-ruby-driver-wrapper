@@ -23,12 +23,18 @@ module AwsRubyDatabaseDriverWrapper
       module MysqlStatementAnalyzer
         # One part of a name, quoted or not. MySQL quotes a part on its own, which is how it writes a
         # name that would otherwise be a reserved word.
+        #
+        # The non-capturing group is required, not redundant: this constant is interpolated into larger
+        # patterns (IDENTIFIER_CAP, QUALIFIED_COLUMN, ...) where its alternation must stay grouped so it
+        # binds correctly against the surrounding pattern.
         IDENTIFIER_PART = /(?:`[^`]+`|"[^"]+"|\w+)/
         # A name, in as many parts as it was written in: +ssn+, +u.ssn+, +`users`.`ssn`+,
         # +mydb.users.ssn+. The parts are spelled out rather than assuming that a quoted name is a
         # name of one part.
         IDENTIFIER_CAP  = /(#{IDENTIFIER_PART}(?:\.#{IDENTIFIER_PART})*)/
-        IDENTIFIER_NC   = /(?:#{IDENTIFIER_PART}(?:\.#{IDENTIFIER_PART})*)/ # non-capturing
+        # Same as IDENTIFIER_CAP but without the outer capturing group. No wrapping group is needed:
+        # the content is a sequence, not an alternation, so it binds correctly wherever it is interpolated.
+        IDENTIFIER_NC   = /#{IDENTIFIER_PART}(?:\.#{IDENTIFIER_PART})*/
 
         # The modifiers MySQL allows between the keyword and the table it writes. They say how the
         # statement behaves, not what it writes, so the table has to be looked for past them: a
@@ -91,7 +97,7 @@ module AwsRubyDatabaseDriverWrapper
 
         # Whitespace and comments in front of a statement. Query instrumentation and ORMs prepend a
         # comment routinely, and it says nothing about what the statement does.
-        LEADING_NOISE  = %r{\A(?:\s+|/\*.*?\*/|--[^\n]*|\#[^\n]*)+}m
+        LEADING_NOISE  = %r{\A(?:\s+|/\*.*?\*/|--[^\n]*|#[^\n]*)+}m
         CTE_START      = /\AWITH\s+(?:RECURSIVE\s+)?/i
         CTE_NAME       = /\A#{IDENTIFIER_NC}\s*/
         CTE_AS         = /\AAS\s+(?:(?:NOT\s+)?MATERIALIZED\s*)?/i
@@ -108,7 +114,7 @@ module AwsRubyDatabaseDriverWrapper
         module_function
 
         def analyze(sql)
-          return QueryAnalysis.unknown unless sql.is_a?(String) && !sql&.strip&.empty?
+          return QueryAnalysis.unknown unless sql.is_a?(String) && !sql.strip.empty?
 
           body, preceding_parameters = statement_body(sql)
           return QueryAnalysis.unknown if body.nil?
@@ -247,7 +253,7 @@ module AwsRubyDatabaseDriverWrapper
         # reads it back with, so nothing is attributed at all. Every table the statement names is
         # reported, which is what lets a caller see whether any of them holds a column worth
         # protecting, and a column assigned something other than a bind parameter is reported without
-        # its table, the column name being known even where it sits not being.
+        # its table, since the column name is known even when the table it sits in is not.
         #
         # @param first_index [Integer] the number the statement's first bind parameter has
         def extract_multi_table_update(sql, references, first_index)
@@ -448,8 +454,9 @@ module AwsRubyDatabaseDriverWrapper
           base = first_index + placeholder_count(sql[0...match.begin(1)])
 
           cols = []
-          where_body.scan(WHERE_PATTERN) do
-            m = Regexp.last_match
+          pos = 0
+          while (m = WHERE_PATTERN.match(where_body, pos))
+            pos = m.end(0)
             # Groups: 1=BETWEEN col, 2=BETWEEN sentinel, 3=PARAM col, 4=IN col, 5=LIKE col
             col = strip_quotes((m[1] || m[3] || m[4] || m[5]).to_s)
             index = base + placeholder_count(where_body[0...m.begin(0)])
@@ -525,6 +532,7 @@ module AwsRubyDatabaseDriverWrapper
           unclosed_quote = each_unquoted_char(group) do |char, index|
             next if closed_at
 
+            # No else: only parentheses affect the depth, so every other character is ignored.
             case char
             when '(' then depth += 1
             when ')'
@@ -544,6 +552,7 @@ module AwsRubyDatabaseDriverWrapper
           depth = 0
           boundaries = []
           unclosed_quote = each_unquoted_char(text) do |char, index|
+            # No else: only parentheses and top-level commas matter, so every other character is ignored.
             case char
             when '(' then depth += 1
             when ')' then depth -= 1

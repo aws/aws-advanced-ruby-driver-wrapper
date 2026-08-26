@@ -74,7 +74,7 @@ module AwsRubyDatabaseDriverWrapper
           logger.info("Creating a KMS master key: #{Sanitizer.description(description)}")
 
           request = { description: description, key_usage: 'ENCRYPT_DECRYPT', key_spec: 'SYMMETRIC_DEFAULT' }
-          request[:policy] = key_policy unless key_policy.nil? || key_policy.strip.empty?
+          request[:policy] = key_policy unless key_policy.nil? || key_policy&.strip&.empty?
 
           arn = @kms_client.create_key(**request).key_metadata.arn
           add_alias(arn) if create_alias
@@ -265,6 +265,8 @@ module AwsRubyDatabaseDriverWrapper
 
         # Generates a data key through KMS and writes it to +key_storage+. The plaintext key is
         # wiped again immediately: nothing here needs to encrypt with it.
+        #
+        # @return [KeyMetadata] the stored data key, with its +id+ filled in
         def store_new_data_key(table_name, column_name, master_key_arn)
           generated = @key_manager.generate_data_key(master_key_arn)
 
@@ -325,21 +327,13 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         # Upserting keeps this idempotent, so re-running a setup script does not fail on a column
-        # that is already configured. The two drivers spell the upsert differently.
+        # that is already configured. The driver dialect supplies its own upsert grammar.
         def insert_encryption_metadata_sql
           base = "INSERT INTO #{@config.metadata_schema}.encryption_metadata " \
                  '(table_name, column_name, encryption_algorithm, key_id, created_at, updated_at) ' \
                  'VALUES (?, ?, ?, ?, ?, ?)'
-
-          if @sql.pg?
-            "#{base} ON CONFLICT (table_name, column_name) DO UPDATE SET " \
-              'encryption_algorithm = EXCLUDED.encryption_algorithm, ' \
-              'key_id = EXCLUDED.key_id, updated_at = EXCLUDED.updated_at'
-          else
-            "#{base} ON DUPLICATE KEY UPDATE " \
-              'encryption_algorithm = VALUES(encryption_algorithm), ' \
-              'key_id = VALUES(key_id), updated_at = VALUES(updated_at)'
-          end
+          clause = @sql.upsert_clause(%w[table_name column_name], %w[encryption_algorithm key_id updated_at])
+          "#{base} #{clause}"
         end
 
         def update_encryption_metadata_key_sql

@@ -120,7 +120,8 @@ module AwsRubyDatabaseDriverWrapper
           # @param hmac_key [String, nil]
           # @return [Boolean]
           def encrypted_data_valid?(encrypted, hmac_key)
-            return false if encrypted.nil? || hmac_key.nil? || hmac_key.empty?
+            return false if encrypted.nil? || hmac_key.nil?
+            return false if hmac_key.empty?
 
             data = encrypted.b
             return false if data.bytesize < MIN_ENCRYPTED_LENGTH
@@ -174,8 +175,8 @@ module AwsRubyDatabaseDriverWrapper
             when TypeMarker::BIG_DECIMAL then BigDecimal(utf8(bytes))
             when TypeMarker::DATE then from_millis(expect_length(bytes, 8, marker).unpack1('q>')).to_date
             when TypeMarker::TIME, TypeMarker::TIMESTAMP then from_millis(expect_length(bytes, 8, marker).unpack1('q>'))
-            when TypeMarker::LOCAL_DATE then parse_or_string(utf8(bytes)) { |str| Date.parse(str) }
-            when TypeMarker::LOCAL_DATE_TIME then parse_or_string(utf8(bytes)) { |str| DateTime.parse(str) }
+            when TypeMarker::LOCAL_DATE then Date.parse(utf8(bytes))
+            when TypeMarker::LOCAL_DATE_TIME then DateTime.parse(utf8(bytes))
             else
               raise Errors::EncryptionError
                 .decryption_failed("Unsupported type marker: #{marker.inspect}")
@@ -194,7 +195,8 @@ module AwsRubyDatabaseDriverWrapper
           # @return [Object, nil]
           # @raise [Errors::EncryptionError] if the value cannot be coerced
           def convert_to_target_type(value, target_type)
-            return value if target_type.nil? || value.nil? || value.is_a?(target_type)
+            return value if target_type.nil? || value.nil?
+            return value if value.is_a?(target_type)
 
             coerce(value, target_type)
           rescue ArgumentError, TypeError => e
@@ -208,7 +210,8 @@ module AwsRubyDatabaseDriverWrapper
           # @param buffer [String, nil]
           # @return [nil]
           def wipe(buffer)
-            return nil unless buffer.is_a?(String) && !buffer.frozen?
+            return nil unless buffer.is_a?(String)
+            return nil if buffer.frozen?
 
             buffer.replace("\0" * buffer.bytesize)
             nil
@@ -308,12 +311,6 @@ module AwsRubyDatabaseDriverWrapper
 
           def utf8(bytes)
             bytes.dup.force_encoding(Encoding::UTF_8)
-          end
-
-          def parse_or_string(str)
-            yield str
-          rescue ArgumentError, TypeError
-            str
           end
 
           def to_millis(value)

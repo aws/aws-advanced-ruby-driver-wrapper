@@ -59,12 +59,7 @@ module AwsRubyDatabaseDriverWrapper
         # @return [Integer] the number of affected rows
         def update(connection, template, params = [])
           result = raw_execute(connection, template, params)
-
-          if @pg
-            result.respond_to?(:cmd_tuples) ? result.cmd_tuples.to_i : 0
-          else
-            connection.affected_rows.to_i
-          end
+          @driver_dialect.affected_rows(connection, result)
         end
 
         # Runs an INSERT and returns the generated +id+.
@@ -75,14 +70,7 @@ module AwsRubyDatabaseDriverWrapper
         # @param id_column [String] the generated column to return
         # @return [Integer, nil] the generated id
         def insert_returning_id(connection, template, params, id_column: 'id')
-          if @pg
-            row = query(connection, "#{template} RETURNING #{id_column}", params).first
-            row && row[id_column].to_i
-          else
-            query(connection, template, params)
-            id = connection.last_id
-            id&.positive? ? id : nil
-          end
+          @driver_dialect.insert_returning_id(connection, translate(template), params, id_column)
         end
 
         # Wraps a binary value so that it can be bound to a bytea or blob parameter.
@@ -92,7 +80,7 @@ module AwsRubyDatabaseDriverWrapper
         def binary_param(bytes)
           return nil if bytes.nil?
 
-          @pg ? { value: bytes, format: 1 } : bytes.b
+          @driver_dialect.binary_param(bytes)
         end
 
         # Reads a bytea or blob column back into binary data.
@@ -102,7 +90,7 @@ module AwsRubyDatabaseDriverWrapper
         def read_binary(value)
           return nil if value.nil?
 
-          @pg ? ::PG::Connection.unescape_bytea(value) : value.b
+          @driver_dialect.read_binary(value)
         end
 
         # Translates +?+ placeholders into the driver's own placeholder syntax.
@@ -110,13 +98,24 @@ module AwsRubyDatabaseDriverWrapper
         # @param template [String]
         # @return [String]
         def translate(template)
-          return template unless @pg
+          @driver_dialect.translate_placeholders(template)
+        end
 
-          index = 0
-          template.gsub('?') do
-            index += 1
-            "$#{index}"
-          end
+        # The driver-specific trailing upsert clause for an INSERT.
+        #
+        # @param conflict_columns [Array<String>] the columns whose conflict triggers the update
+        # @param update_columns [Array<String>] the columns to overwrite from the incoming row
+        # @return [String]
+        def upsert_clause(conflict_columns, update_columns)
+          @driver_dialect.upsert_clause(conflict_columns, update_columns)
+        end
+
+        # The driver-specific query for a table's foreign keys, using +?+ placeholders for the
+        # schema and table names.
+        #
+        # @return [String]
+        def foreign_key_query
+          @driver_dialect.foreign_key_query
         end
 
         private

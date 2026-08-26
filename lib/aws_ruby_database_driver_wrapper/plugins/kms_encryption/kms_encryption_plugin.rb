@@ -69,7 +69,7 @@ module AwsRubyDatabaseDriverWrapper
     # replace, or when which columns the statement writes cannot be established at all. A value
     # written into the SQL text, an expression, a DEFAULT, a nested SELECT, an INSERT that does not
     # name its columns, a +COPY ... FROM+: none of these can be encrypted, and a column written in
-    # the clear reads back in the clear ever after, since the read path only decrypts a value whose
+    # plaintext reads back in plaintext ever after, since the read path only decrypts a value whose
     # integrity check passes. An annotation overrides this, since it says which column a parameter
     # belongs to, with the one exception of a COPY, which has no parameter for an annotation to name.
     # A COPY is also turned away as it is opened rather than part way through its stream, since the

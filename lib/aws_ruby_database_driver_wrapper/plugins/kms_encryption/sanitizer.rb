@@ -22,7 +22,7 @@ module AwsRubyDatabaseDriverWrapper
       # can decide how to render a missing value.
       module Sanitizer
         # Matches "password=...", "secret=...", "key=...", "token=..." assignments.
-        SENSITIVE_ASSIGNMENT_PATTERN = /(password|secret|key|token)=[^\s]+/i
+        SENSITIVE_ASSIGNMENT_PATTERN = /(password|secret|key|token)=\S+/i
         # Same as above, plus "credential=...", and stops at commas and closing braces so that
         # it works on rendered hashes.
         CREDENTIAL_ASSIGNMENT_PATTERN = /(password|secret|key|token|credential)=[^\s,}]+/i
@@ -47,10 +47,11 @@ module AwsRubyDatabaseDriverWrapper
         def arn(value)
           return nil if value.nil?
 
-          last_slash = value.rindex('/')
-          return 'arn:aws:kms:***:***:key/***' if last_slash.nil? || last_slash.zero? || last_slash == value.length - 1
+          str = value.to_s
+          last_slash = str.rindex('/')
+          return 'arn:aws:kms:***:***:key/***' if last_slash.nil? || last_slash.zero? || last_slash == str.length - 1
 
-          "arn:aws:kms:***:***:key/#{value[(last_slash + 1)..]}"
+          "arn:aws:kms:***:***:key/#{str[(last_slash + 1)..]}"
         end
 
         # Keeps the first and last four characters of a key id, masking the middle.

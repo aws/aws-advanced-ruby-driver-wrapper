@@ -27,22 +27,20 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionConf
   end
 
   def build_config(overrides = {})
-    described_class.new(kms_region: 'us-east-1', metadata_schema: 'encrypt', **overrides)
+    build_encryption_config(overrides)
   end
 
   # The region falls back to the environment, which the test host may well have set.
   def without_region_env
-    allow(ENV).to receive(:[]).and_call_original
-    allow(ENV).to receive(:[]).with('AWS_REGION').and_return(nil)
-    allow(ENV).to receive(:[]).with('AWS_DEFAULT_REGION').and_return(nil)
+    allow(ENV).to receive(:fetch).and_call_original
+    allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return(nil)
+    allow(ENV).to receive(:fetch).with('AWS_DEFAULT_REGION', nil).and_return(nil)
   end
 
   describe '.from_props' do
     it 'applies the default for every setting' do
-      without_region_env
-      config = described_class.from_props(props)
+      config = described_class.from_props(props(encryption_kms_region: 'us-east-1'))
 
-      expect(config.kms_region).to eq('us-east-1')
       expect(config.kms_endpoint).to be_nil
       expect(config.metadata_schema).to eq(schema_name_class.of('encrypt'))
       expect(config.metadata_cache_enabled).to be(true)
@@ -89,22 +87,30 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionConf
     end
 
     it 'falls back to AWS_REGION' do
-      allow(ENV).to receive(:[]).and_call_original
-      allow(ENV).to receive(:[]).with('AWS_REGION').and_return('ap-south-1')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return('ap-south-1')
       expect(described_class.from_props(props).kms_region).to eq('ap-south-1')
     end
 
     it 'falls back to AWS_DEFAULT_REGION' do
-      allow(ENV).to receive(:[]).and_call_original
-      allow(ENV).to receive(:[]).with('AWS_REGION').and_return(nil)
-      allow(ENV).to receive(:[]).with('AWS_DEFAULT_REGION').and_return('ap-south-1')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return(nil)
+      allow(ENV).to receive(:fetch).with('AWS_DEFAULT_REGION', nil).and_return('ap-south-1')
       expect(described_class.from_props(props).kms_region).to eq('ap-south-1')
     end
 
     it 'prefers an explicitly configured region over the environment' do
-      allow(ENV).to receive(:[]).and_call_original
-      allow(ENV).to receive(:[]).with('AWS_REGION').and_return('ap-south-1')
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return('ap-south-1')
       expect(described_class.from_props(props(encryption_kms_region: 'eu-west-1')).kms_region).to eq('eu-west-1')
+    end
+
+    # No region is assumed: like the JDBC wrapper, the configuration is rejected rather than
+    # defaulting to a region when neither the property nor the environment supplies one.
+    it 'raises when no region is configured and none is in the environment' do
+      without_region_env
+      expect { described_class.from_props(props) }
+        .to raise_error(ArgumentError, /encryption_kms_region cannot be empty/)
     end
 
     it 'rejects a schema name that could not be used safely in a query' do
@@ -119,7 +125,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionConf
   end
 
   describe '#initialize' do
-    it 'needs only a region and a schema' do
+    it 'carries the property defaults for the settings that are not overridden' do
       config = build_config
       expect(config.metadata_cache_enabled).to be(true)
       expect(config.data_key_cache_max_size).to eq(1000)

@@ -23,8 +23,8 @@ module AwsRubyDatabaseDriverWrapper
       class SqlParser
         # What a statement was found to be doing: the kind of statement, the tables it touches with
         # any schema prefix removed, which bind parameter fills which column, and what it writes that
-        # no bind parameter fills. The last two are what a caller needs to tell a column it can put a
-        # value into from one it cannot.
+        # no bind parameter fills. The last two are what a caller needs to distinguish between a
+        # column it can put a value into from one it cannot.
         SqlAnalysisResult = Data.define(:query_type, :affected_tables, :parameter_column_names,
                                         :unbound_write_columns, :write_columns_complete) do
           def initialize(query_type:, affected_tables:, parameter_column_names: {}.freeze,

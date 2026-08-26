@@ -25,7 +25,7 @@ The plugin expects two tables in the schema named by `encryption_metadata_schema
 | Parameter | Type | Required | Description | Example | Default |
 |---|---|:---:|---|---|---|
 | `encryption_metadata_schema` | String | No | Schema holding the `encryption_metadata` and `key_storage` tables. | `'app_encrypt'` | `'encrypt'` |
-| `encryption_kms_region` | String | No | AWS region for KMS calls. Falls back to the `AWS_REGION` or `AWS_DEFAULT_REGION` environment variable, then to `us-east-1`. | `'us-east-2'` | `nil` |
+| `encryption_kms_region` | String | Yes | AWS region for KMS calls. Falls back to the `AWS_REGION` or `AWS_DEFAULT_REGION` environment variable; the plugin raises if none of these is set. | `'us-east-2'` | None |
 | `encryption_kms_endpoint` | String | No | Endpoint URL override for KMS. | `'http://localhost:4566'` | `nil` |
 | `aws_credentials_provider` | `Aws::CredentialProvider` | No | A custom AWS credentials provider instance for authenticating with KMS. | `Aws::AssumeRoleCredentials.new(...)` | AWS SDK default chain |
 | `encryption_metadata_cache_enabled` | Boolean | No | Cache the encryption metadata in memory instead of querying it per statement. | `false` | `true` |

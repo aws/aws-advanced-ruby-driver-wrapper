@@ -27,10 +27,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManage
   let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
   let(:sql_runner) { instance_double(encryption::SqlRunner) }
   # Background refresh off by default, so that an example only sees the queries it makes itself.
-  let(:config) do
-    encryption::EncryptionConfig.new(kms_region: 'us-east-1', metadata_schema: 'encrypt',
-                                     metadata_cache_refresh_interval_sec: 0)
-  end
+  let(:config) { build_encryption_config(metadata_cache_refresh_interval_sec: 0) }
   let(:rows) { [row('users', 'ssn'), row('users', 'email'), row('orders', 'card_number')] }
   subject(:manager) do
     described_class.new(connection_provider: connection_provider, sql_runner: sql_runner, config: config)

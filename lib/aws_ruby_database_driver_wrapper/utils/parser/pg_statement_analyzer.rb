@@ -32,10 +32,12 @@ module AwsRubyDatabaseDriverWrapper
                   'pg_query gem is required for PostgreSQL SQL parsing. Add gem "pg_query" to your Gemfile.'
           end
 
-          return QueryAnalysis.unknown unless sql.is_a?(String) && !sql&.strip&.empty?
+          return QueryAnalysis.unknown unless sql.is_a?(String) && !sql.strip.empty?
 
           begin
             result = ::PgQuery.parse(sql)
+            # stmts is a protobuf-generated accessor on the parse tree, defined dynamically at load
+            # time, so static analysers cannot resolve it and flag a false "cannot find stmts".
             statements = result.tree.stmts
             stmt = statements.first&.stmt
             return QueryAnalysis.unknown unless stmt
@@ -135,6 +137,8 @@ module AwsRubyDatabaseDriverWrapper
             clause = wrapped[:merge_when_clause]
             next unless clause
 
+            # No else: a CMD_DELETE or CMD_NOTHING clause stores nothing, so it contributes no
+            # written columns and is intentionally skipped.
             case clause[:command_type]
             when :CMD_UPDATE
               set_bound, set_unbound = extract_assignments(table, Array(clause[:target_list]))

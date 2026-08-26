@@ -188,19 +188,7 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         def foreign_key_sql
-          if @sql.pg?
-            'SELECT kcu.column_name AS from_column, ccu.table_name AS to_table, ccu.column_name AS to_column ' \
-              'FROM information_schema.table_constraints tc ' \
-              'JOIN information_schema.key_column_usage kcu ' \
-              'ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema ' \
-              'JOIN information_schema.constraint_column_usage ccu ' \
-              'ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema ' \
-              "WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = ? AND tc.table_name = ?"
-          else
-            'SELECT column_name AS from_column, referenced_table_name AS to_table, ' \
-              'referenced_column_name AS to_column FROM information_schema.key_column_usage ' \
-              'WHERE table_schema = ? AND table_name = ? AND referenced_table_name IS NOT NULL'
-          end
+          @sql.foreign_key_query
         end
 
         # MySQL reports information_schema column names in upper case on some versions, so every

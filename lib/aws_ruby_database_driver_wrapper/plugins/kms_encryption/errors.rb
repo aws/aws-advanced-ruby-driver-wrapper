@@ -19,7 +19,7 @@ require_relative 'sanitizer'
 
 module AwsRubyDatabaseDriverWrapper
   module Errors
-    # Base class for every failure raised by the KMS kms_encryption plugin. Carries a stable
+    # Base class for every failure raised by the kms_encryption plugin. Carries a stable
     # error code and an ordered context hash that is appended to the message, so that a
     # failure can be traced back to the table, column, key, and operation involved without
     # leaking the encrypted values themselves.
@@ -30,7 +30,6 @@ module AwsRubyDatabaseDriverWrapper
     #                               .with_table('users').with_column('ssn')
     class EncryptionPluginError < AwsError
       Sanitizer = Plugins::Encryption::Sanitizer
-      DEFAULT_CODE = nil
 
       attr_reader :code, :base_message, :context
 
@@ -40,9 +39,16 @@ module AwsRubyDatabaseDriverWrapper
       def initialize(message, code: nil, context: {})
         super(message)
         @base_message = message.to_s
-        @code = code || self.class::DEFAULT_CODE
+        @code = code || default_code
         @context = {}
         context.each { |key, value| with_context(key, value) }
+      end
+
+      # The error code used when one is not passed explicitly. Subclasses override this; the base
+      # class has no default code.
+      # @return [String, nil]
+      def default_code
+        nil
       end
 
       # Adds a context entry, ignoring nil values so that unknown details are simply absent.
@@ -74,7 +80,10 @@ module AwsRubyDatabaseDriverWrapper
       INVALID_ALGORITHM = 'ENC03'
       INVALID_KEY = 'ENC04'
       TYPE_CONVERSION_FAILED = 'ENC05'
-      DEFAULT_CODE = ENCRYPTION_FAILED
+
+      def default_code
+        ENCRYPTION_FAILED
+      end
 
       class << self
         def encryption_failed(message, context = {})
@@ -127,7 +136,10 @@ module AwsRubyDatabaseDriverWrapper
       KEY_STORAGE_FAILED = 'KEY04'
       KMS_CONNECTION_FAILED = 'KEY05'
       INVALID_KEY_METADATA = 'KEY06'
-      DEFAULT_CODE = KEY_RETRIEVAL_FAILED
+
+      def default_code
+        KEY_RETRIEVAL_FAILED
+      end
 
       class << self
         def key_creation_failed(message, context = {})
@@ -180,7 +192,10 @@ module AwsRubyDatabaseDriverWrapper
       METADATA_REFRESH_FAILED = 'META03'
       METADATA_LOOKUP_FAILED = 'META04'
       METADATA_VALIDATION_FAILED = 'META05'
-      DEFAULT_CODE = METADATA_LOOKUP_FAILED
+
+      def default_code
+        METADATA_LOOKUP_FAILED
+      end
 
       class << self
         def load_failed(message, context = {})
@@ -241,6 +256,7 @@ module AwsRubyDatabaseDriverWrapper
 
       private
 
+      # @return [String] the failure message with whatever context was supplied appended
       def build_message(message)
         parts = ['Independent connection creation failed']
         parts << " while attempting: #{@connection_attempt}" if @connection_attempt

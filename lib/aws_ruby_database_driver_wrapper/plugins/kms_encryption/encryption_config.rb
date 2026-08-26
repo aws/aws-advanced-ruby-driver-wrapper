@@ -21,9 +21,6 @@ module AwsRubyDatabaseDriverWrapper
   module Plugins
     module Encryption
       # The plugin's own configuration, resolved once from the wrapper properties.
-      #
-      # Every duration is in seconds, matching the rest of the wrapper, except for
-      # +retry_backoff_base_ms+ whose property name says milliseconds.
       EncryptionConfig = Data.define(
         :kms_region,
         :kms_endpoint,
@@ -40,18 +37,16 @@ module AwsRubyDatabaseDriverWrapper
       )
 
       class EncryptionConfig
-        DEFAULT_REGION = 'us-east-1'
-
         class << self
           # Builds the configuration from the wrapper properties, applying defaults and
           # validating the result.
           #
           # @param props [Concurrent::Map, Hash] the wrapper properties
           # @return [EncryptionConfig]
-          # @raise [ArgumentError] if a value is out of range
+          # @raise [ArgumentError] if a value is out of range, or if no region was configured
           def from_props(props)
             new(
-              kms_region: PropertyDefinition::ENCRYPTION_KMS_REGION.get_string(props) || default_region,
+              kms_region: PropertyDefinition::ENCRYPTION_KMS_REGION.get_string(props) || region_from_env,
               kms_endpoint: PropertyDefinition::ENCRYPTION_KMS_ENDPOINT.get_string(props),
               metadata_schema: SchemaName.of(PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.get_string(props)),
               metadata_cache_enabled: PropertyDefinition::ENCRYPTION_METADATA_CACHE_ENABLED.get_bool(props),
@@ -70,19 +65,16 @@ module AwsRubyDatabaseDriverWrapper
 
           private
 
-          def default_region
-            ENV['AWS_REGION'] || ENV['AWS_DEFAULT_REGION'] || DEFAULT_REGION
+          def region_from_env
+            ENV.fetch('AWS_REGION', nil) || ENV.fetch('AWS_DEFAULT_REGION', nil)
           end
         end
 
-        # Every setting the plugin reads is one keyword, so that the defaults live here rather than
-        # in each caller.
-        # rubocop:disable Metrics/ParameterLists
-        def initialize(kms_region:, metadata_schema:, kms_endpoint: nil, metadata_cache_enabled: true,
-                       metadata_cache_expiration_sec: 3600, metadata_cache_refresh_interval_sec: 300,
-                       key_management_max_retries: 3, key_management_retry_backoff_base_ms: 100,
-                       audit_logging_enabled: false, data_key_cache_enabled: true,
-                       data_key_cache_max_size: 1000, data_key_cache_expiration_sec: 3600)
+        def initialize(kms_region:, kms_endpoint:, metadata_schema:, metadata_cache_enabled:,
+                       metadata_cache_expiration_sec:, metadata_cache_refresh_interval_sec:,
+                       key_management_max_retries:, key_management_retry_backoff_base_ms:,
+                       audit_logging_enabled:, data_key_cache_enabled:,
+                       data_key_cache_max_size:, data_key_cache_expiration_sec:)
           super(
             kms_region: kms_region,
             kms_endpoint: kms_endpoint,
@@ -99,7 +91,6 @@ module AwsRubyDatabaseDriverWrapper
           )
           validate!
         end
-        # rubocop:enable Metrics/ParameterLists
 
         # @return [Boolean] true when the metadata should be refreshed on a background thread
         def background_refresh_enabled?
