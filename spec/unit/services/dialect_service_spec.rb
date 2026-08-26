@@ -15,14 +15,14 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/services/dialect_service'
-require 'aws_ruby_database_driver_wrapper/services/connection_service'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/services/host_service'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/services/dialect_service'
+require 'aws_advanced_ruby_driver_wrapper/services/connection_service'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/services/host_service'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
-  let(:dialect_codes) { AwsRubyDatabaseDriverWrapper::DialectCodes }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
+  let(:dialect_codes) { AwsAdvancedRubyDriverWrapper::DialectCodes }
 
   before do
     # Clear the endpoint cache between tests to avoid cross-test contamination
@@ -30,9 +30,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
   end
 
   def build_connection_service(host: 'localhost', wrapper_props: {})
-    host_info = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: host)
+    host_info = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: host)
     instance_double(
-      AwsRubyDatabaseDriverWrapper::Services::ConnectionService,
+      AwsAdvancedRubyDriverWrapper::Services::ConnectionService,
       initial_host_info: host_info,
       wrapper_props: wrapper_props,
       prefixed_wrapper_config: {},
@@ -56,7 +56,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
     monitor_service = double('MonitorService', register_type: nil)
     storage_service = double('StorageService', register: nil)
 
-    container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service: conn_service,
       dialect_service: service,
       host_service: host_service,
@@ -70,17 +70,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
   describe '#initialize' do
     it 'sets the driver dialect for postgresql' do
       service = build_service(:postgresql)
-      expect(service.driver_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect)
+      expect(service.driver_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect)
     end
 
     it 'sets the driver dialect for mysql2' do
       service = build_service(:mysql2)
-      expect(service.driver_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect)
+      expect(service.driver_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect)
     end
 
     it 'raises an error for unknown driver' do
       expect { build_service(:unknown) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Unknown driver/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unknown driver/)
     end
   end
 
@@ -88,69 +88,69 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
     context 'PostgreSQL driver' do
       it 'returns AuroraPgDialect for Aurora writer cluster endpoint' do
         service = build_service(:postgresql, host: 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
 
       it 'returns AuroraPgDialect for Aurora reader cluster endpoint' do
         service = build_service(:postgresql, host: 'my-cluster.cluster-ro-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
 
       it 'returns GlobalPgDialect for global writer cluster endpoint' do
         service = build_service(:postgresql, host: 'my-global.global-xyz.global.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect)
       end
 
       it 'returns AuroraPgDialect for limitless shard group endpoint' do
         service = build_service(:postgresql, host: 'my-db.shardgrp-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
 
       it 'returns RdsPgDialect for RDS instance endpoint' do
         service = build_service(:postgresql, host: 'my-instance.xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::RdsPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::RdsPgDialect)
       end
 
       it 'returns PgDialect for non-RDS endpoint' do
         service = build_service(:postgresql, host: 'my-database.example.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::PgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::PgDialect)
       end
 
       it 'returns PgDialect for IP address' do
         service = build_service(:postgresql, host: '192.168.1.1')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::PgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::PgDialect)
       end
     end
 
     context 'MySQL driver' do
       it 'returns AuroraMysqlDialect for Aurora writer cluster endpoint' do
         service = build_service(:mysql2, host: 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect)
       end
 
       it 'returns AuroraMysqlDialect for Aurora reader cluster endpoint' do
         service = build_service(:mysql2, host: 'my-cluster.cluster-ro-xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect)
       end
 
       it 'returns GlobalMysqlDialect for global writer cluster endpoint' do
         service = build_service(:mysql2, host: 'my-global.global-xyz.global.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalMysqlDialect)
       end
 
       it 'returns RdsMysqlDialect for RDS instance endpoint' do
         service = build_service(:mysql2, host: 'my-instance.xyz.us-east-2.rds.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::RdsMysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::RdsMysqlDialect)
       end
 
       it 'returns MysqlDialect for non-RDS endpoint' do
         service = build_service(:mysql2, host: 'my-database.example.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::MysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::MysqlDialect)
       end
 
       it 'returns MysqlDialect for IP address' do
         service = build_service(:mysql2, host: '10.0.0.1')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::MysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::MysqlDialect)
       end
     end
 
@@ -160,14 +160,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
 
         # First call resolves via RDS type
         service = build_service(:postgresql, host: host)
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
 
         # Manually cache the dialect to simulate what update_dialect would do
-        described_class.known_endpoint_dialects.put(host, AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_PG)
+        described_class.known_endpoint_dialects.put(host, AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_PG)
 
         # Second service instance should pick up the cached dialect
         service2 = build_service(:postgresql, host: host)
-        expect(service2.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service2.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
     end
 
@@ -175,38 +175,38 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
       it 'uses the user-specified dialect code' do
         service = build_service(:postgresql, host: 'my-database.example.com',
                                              wrapper_props: { wrapper_dialect: dialect_codes::AURORA_PG })
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
 
       it 'raises an error for an invalid user-specified dialect code' do
         expect do
           build_service(:postgresql, host: 'my-database.example.com',
                                      wrapper_props: { wrapper_dialect: 'nonexistent-dialect' })
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Unknown dialect code/)
+        end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unknown dialect code/)
       end
     end
 
     context 'China region endpoints' do
       it 'returns AuroraPgDialect for China new format cluster endpoint' do
         service = build_service(:postgresql, host: 'my-cluster.cluster-xyz.rds.cn-northwest-1.amazonaws.com.cn')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
 
       it 'returns AuroraPgDialect for China old format cluster endpoint' do
         service = build_service(:postgresql, host: 'my-cluster.cluster-xyz.cn-northwest-1.rds.amazonaws.com.cn')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
     end
 
     context 'Gov/ISO region endpoints' do
       it 'returns AuroraMysqlDialect for Gov cluster endpoint' do
         service = build_service(:mysql2, host: 'my-cluster.cluster-xyz.rds.us-gov-east-1.amazonaws.com')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect)
       end
 
       it 'returns AuroraMysqlDialect for ISO cluster endpoint' do
         service = build_service(:mysql2, host: 'my-cluster.cluster-xyz.rds.us-iso-east-1.c2s.ic.gov')
-        expect(service.db_dialect).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect)
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect)
       end
     end
 
@@ -266,27 +266,27 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
 
         allow(connection).to receive(:exec).and_return([])
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::AURORA_UTILS_EXIST_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::AURORA_UTILS_EXIST_QUERY)
           .and_return(aurora_utils_result)
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_STATUS_FUNC_EXISTS_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_STATUS_FUNC_EXISTS_QUERY)
           .and_return(global_status_result)
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_INSTANCE_STATUS_FUNC_EXISTS_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_INSTANCE_STATUS_FUNC_EXISTS_QUERY)
           .and_return(global_instance_result)
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::REGION_COUNT_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::REGION_COUNT_QUERY)
           .and_return(region_count_result)
 
         result = service.update_dialect(connection)
-        expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect)
+        expect(result).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect)
       end
 
       it 'caches the dialect after update' do
         allow(connection).to receive(:exec).and_raise(StandardError)
 
         service.update_dialect(connection)
-        expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_PG)
+        expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_PG)
       end
 
       it 'caches dialect for both host and host_url on successful candidate match' do
@@ -297,23 +297,23 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
 
         allow(connection).to receive(:exec).and_return([])
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::AURORA_UTILS_EXIST_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::AURORA_UTILS_EXIST_QUERY)
           .and_return(aurora_utils_result)
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_STATUS_FUNC_EXISTS_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_STATUS_FUNC_EXISTS_QUERY)
           .and_return(global_status_result)
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_INSTANCE_STATUS_FUNC_EXISTS_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::GLOBAL_INSTANCE_STATUS_FUNC_EXISTS_QUERY)
           .and_return(global_instance_result)
         allow(connection).to receive(:exec)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect::REGION_COUNT_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect::REGION_COUNT_QUERY)
           .and_return(region_count_result)
 
         service.update_dialect(connection)
 
         host_url = conn_service.initial_host_info.url
-        expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_PG)
-        expect(described_class.known_endpoint_dialects.get(host_url)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_PG)
+        expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsAdvancedRubyDriverWrapper::DialectCodes::GLOBAL_AURORA_PG)
+        expect(described_class.known_endpoint_dialects.get(host_url)).to eq(AwsAdvancedRubyDriverWrapper::DialectCodes::GLOBAL_AURORA_PG)
       end
 
       it 'sets can_update to false after update completes without match' do
@@ -327,7 +327,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
         allow(connection).to receive(:exec).and_raise(StandardError)
 
         result = service.update_dialect(connection)
-        expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraPgDialect)
+        expect(result).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
       end
     end
 
@@ -348,31 +348,31 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::DialectService do
 
         allow(connection).to receive(:query).and_return([])
         allow(connection).to receive(:query)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect::GLOBAL_STATUS_TABLE_EXISTS_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalMysqlDialect::GLOBAL_STATUS_TABLE_EXISTS_QUERY)
           .and_return(status_result)
         allow(connection).to receive(:query)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect::GLOBAL_INSTANCE_STATUS_EXISTS_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalMysqlDialect::GLOBAL_INSTANCE_STATUS_EXISTS_QUERY)
           .and_return(instance_status_result)
         allow(connection).to receive(:query)
-          .with(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect::REGION_COUNT_QUERY)
+          .with(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalMysqlDialect::REGION_COUNT_QUERY)
           .and_return(region_count_result)
 
         result = service.update_dialect(connection)
-        expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect)
+        expect(result).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::GlobalMysqlDialect)
       end
 
       it 'keeps AuroraMysqlDialect when no candidate matches' do
         allow(connection).to receive(:query).and_raise(StandardError)
 
         result = service.update_dialect(connection)
-        expect(result).to be_a(AwsRubyDatabaseDriverWrapper::DbDialects::AuroraMysqlDialect)
+        expect(result).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect)
       end
 
       it 'caches dialect for host after no candidate matches' do
         allow(connection).to receive(:query).and_raise(StandardError)
 
         service.update_dialect(connection)
-        expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_MYSQL)
+        expect(described_class.known_endpoint_dialects.get(host)).to eq(AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL)
       end
     end
   end

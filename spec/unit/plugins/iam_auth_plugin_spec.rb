@@ -16,14 +16,14 @@
 
 require_relative '../../spec_helper'
 require 'aws-sdk-rds'
-require 'aws_ruby_database_driver_wrapper/plugins/iam_auth_plugin'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/utils/rds_url_type'
-require 'aws_ruby_database_driver_wrapper/utils/rds_utils'
-require 'aws_ruby_database_driver_wrapper/utils/iam_auth_utils'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/plugins/iam_auth_plugin'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/utils/rds_url_type'
+require 'aws_advanced_ruby_driver_wrapper/utils/rds_utils'
+require 'aws_advanced_ruby_driver_wrapper/utils/iam_auth_utils'
+require 'aws_advanced_ruby_driver_wrapper/errors'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
   GENERATED_TOKEN    = 'generatedToken'
   TEST_TOKEN         = 'testToken'
   DEFAULT_PG_PORT    = 5432
@@ -37,34 +37,34 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
   MYSQL_CACHE_KEY = "us-east-2:#{MYSQL_HOST}:#{DEFAULT_MYSQL_PORT}:mysqlUser".freeze
   GDB_CACHE_KEY   = "us-east-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser".freeze
 
-  IAM_TOKEN_CACHE_NAME = AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
+  IAM_TOKEN_CACHE_NAME = AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
 
-  IAM_AUTH_UTILS = AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils
-  RDS_URL_TYPE   = AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType
+  IAM_AUTH_UTILS = AwsAdvancedRubyDriverWrapper::Utils::IamAuthUtils
+  RDS_URL_TYPE   = AwsAdvancedRubyDriverWrapper::Utils::RdsUrlType
 
   def pg_host_info(port: nil)
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: PG_HOST,
-      port: port ? port.to_s : AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_PORT
+      port: port ? port.to_s : AwsAdvancedRubyDriverWrapper::Host::HostInfo::NO_PORT
     )
   end
 
   def mysql_host_info
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: MYSQL_HOST,
-      port: AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_PORT
+      port: AwsAdvancedRubyDriverWrapper::Host::HostInfo::NO_PORT
     )
   end
 
   def gdb_host_info
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: GDB_HOST,
-      port: AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_PORT
+      port: AwsAdvancedRubyDriverWrapper::Host::HostInfo::NO_PORT
     )
   end
 
   def arbitrary_host_info(host)
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host:)
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host:)
   end
 
   def base_pg_props
@@ -82,13 +82,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     )
   end
 
-  let(:mock_storage_service) { instance_double(AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService) }
+  let(:mock_storage_service) { instance_double(AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService) }
   let(:mock_db_dialect) { double('DbDialect') }
   let(:mock_dialect_service) do
     double('DialectService',
            db_dialect: mock_db_dialect,
            login_error?: false,
-           driver_dialect: AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
+           driver_dialect: AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
   end
   let(:mock_service_container) do
     double('ServiceContainer',
@@ -111,7 +111,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     allow(mock_storage_service).to receive(:set)
     allow(mock_db_dialect).to receive(:default_port).and_return(DEFAULT_PG_PORT)
     allow(mock_dialect_service).to receive(:driver_dialect)
-      .and_return(AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
+      .and_return(AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
   end
 
   def build_plugin(wrapper_props = Concurrent::Map.new)
@@ -339,13 +339,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     it 'raises IamAuthError when user is nil' do
       expect do
         build_plugin.connect(pg_host_info, base_pg_props.merge(user: nil), true, -> {})
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IamAuthError, /user/)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError, /user/)
     end
 
     it 'raises IamAuthError when user is an empty string' do
       expect do
         build_plugin.connect(pg_host_info, base_pg_props.merge(user: ''), true, -> {})
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IamAuthError, /user/)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError, /user/)
     end
   end
 
@@ -353,7 +353,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
     it 'raises IamAuthError for a non-RDS hostname with no iam_region prop' do
       expect do
         build_plugin.connect(arbitrary_host_info('custom.internal.corp'), base_pg_props, true, -> {})
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IamAuthError, /region/)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError, /region/)
     end
   end
 
@@ -373,7 +373,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
       double('DialectService',
              db_dialect: mock_db_dialect,
              login_error?: false,
-             driver_dialect: AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager::MYSQL_DIALECT)
+             driver_dialect: AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager::MYSQL_DIALECT)
     end
     let(:mysql_service_container) do
       double('ServiceContainer',
@@ -458,7 +458,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
       expect do
         build_plugin.connect(gdb_host_info, base_pg_props, true, -> {})
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IamAuthError, /region/)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError, /region/)
     end
 
     it 'uses an explicit iam_region prop without calling describe_global_clusters' do
@@ -553,14 +553,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::IamAuthPlugin do
 
   describe "PluginManager registration under code 'iam'" do
     it "is registered under the code 'iam'" do
-      require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
-      plugin_classes = AwsRubyDatabaseDriverWrapper::Services::PluginManager.plugin_classes
+      require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+      plugin_classes = AwsAdvancedRubyDriverWrapper::Services::PluginManager.plugin_classes
       expect(plugin_classes['iam']).to eq(described_class)
     end
 
     it 'has weight 1800 (after failover, matching JDBC ConnectionPluginChainBuilder)' do
-      require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
-      plugin_weights = AwsRubyDatabaseDriverWrapper::Services::PluginManager.plugin_weights
+      require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+      plugin_weights = AwsAdvancedRubyDriverWrapper::Services::PluginManager.plugin_weights
       expect(plugin_weights[described_class]).to eq(1800)
     end
   end

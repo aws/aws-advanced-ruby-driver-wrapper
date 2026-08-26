@@ -4,17 +4,17 @@
 |--------------------|--------------------------------------------------------------------------------------|
 
 
-`aws-advanced-ruby-database-driver-wrapper` [follows semver](https://semver.org/#semantic-versioning-200) which means we
+`aws-advanced-ruby-driver-wrapper` [follows semver](https://semver.org/#semantic-versioning-200) which means we
 will only release breaking changes in major versions. Generally speaking patches will be released to fix existing
 problems without adding new features. Minor version releases will include new features as well as fixes to existing
 features. We will do our best to deprecate existing features before removing them completely.
 
-For minor version releases, `aws-advanced-ruby-database-driver-wrapper` uses a “release-train” model. Approximately
+For minor version releases, `aws-advanced-ruby-driver-wrapper` uses a “release-train” model. Approximately
 every four weeks we release a new minor version which includes all the new features and fixes that are ready to go.
-Having a set release schedule makes sure `aws-advanced-ruby-database-driver-wrapper` is released in a predictable way
+Having a set release schedule makes sure `aws-advanced-ruby-driver-wrapper` is released in a predictable way
 and prevents a backlog of unreleased changes.
 
-In contrast, `aws-advanced-ruby-database-driver-wrapper` releases new major versions only when there are a critical mass
+In contrast, `aws-advanced-ruby-driver-wrapper` releases new major versions only when there are a critical mass
 of breaking changes (e.g. changes that are incompatible with existing APIs). This tends to happen if we need to change
 the way the wrapper is currently working. Fortunately, the ActiveRecord adapter API is fairly mature and has not
 changed, however in the event that the API changes we will release a version to be compatible.
@@ -25,14 +25,14 @@ and log all changes in the changelog at the bottom of this page.
 
 # Maintenance Policy
 
-For `aws-advanced-ruby-database-driver-wrapper` new features and active development always takes place against the
-newest version. The `aws-advanced-ruby-database-driver-wrapper` project follows the semantic versioning specification
+For `aws-advanced-ruby-driver-wrapper` new features and active development always takes place against the
+newest version. The `aws-advanced-ruby-driver-wrapper` project follows the semantic versioning specification
 for assigning version numbers to releases, so you should be able to upgrade to the latest minor version of that same
 major version of the software without encountering incompatible changes (e.g., 1.1.0 → 1.3.x).
 
 Sometimes an incompatible change is unavoidable. When this happens, the software’s maintainers will increment
-the major version number (e.g., increment from `aws-advanced-ruby-database-driver-wrapper` 1.1.1 to
-`aws-advanced-ruby-database-driver-wrapper` 2.0.0). The last minor version of the previous major version of the software
+the major version number (e.g., increment from `aws-advanced-ruby-driver-wrapper` 1.1.1 to
+`aws-advanced-ruby-driver-wrapper` 2.0.0). The last minor version of the previous major version of the software
 will then enter a maintenance window (e.g., 1.3.x). During the maintenance window, the software will continue to receive
 bug fixes and security patches, but no new features.
 

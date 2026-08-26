@@ -15,25 +15,25 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/services/connection_service'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/services/connection_service'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/errors'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::ConnectionService do
   let(:writer_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-host',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER
+      role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER
     )
   end
 
   let(:reader_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-host',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER
+      role: AwsAdvancedRubyDriverWrapper::Host::HostRole::READER
     )
   end
 
@@ -70,8 +70,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
 
     context 'when initial_host_info is nil' do
       before do
-        allow(AwsRubyDatabaseDriverWrapper::Utils::HostListUtils).to receive(:writer).and_return(writer_host)
-        allow(AwsRubyDatabaseDriverWrapper::Utils::HostListUtils).to receive(:contains_url?).and_return(true)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::HostListUtils).to receive(:writer).and_return(writer_host)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::HostListUtils).to receive(:contains_url?).and_return(true)
       end
 
       it 'resolves the writer from the host list' do
@@ -84,7 +84,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
 
       it 'raises an error' do
         expect { service.current_host_info }
-          .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /host list is empty/)
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /host list is empty/)
       end
     end
 
@@ -94,7 +94,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
       end
 
       before do
-        allow(AwsRubyDatabaseDriverWrapper::Utils::HostListUtils).to receive(:writer).and_return(nil)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::HostListUtils).to receive(:writer).and_return(nil)
       end
 
       it 'falls back to the first host in the list' do
@@ -108,13 +108,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::ConnectionService do
       end
 
       before do
-        allow(AwsRubyDatabaseDriverWrapper::Utils::HostListUtils).to receive(:writer).and_return(writer_host)
-        allow(AwsRubyDatabaseDriverWrapper::Utils::HostListUtils).to receive(:contains_url?).and_return(false)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::HostListUtils).to receive(:writer).and_return(writer_host)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::HostListUtils).to receive(:contains_url?).and_return(false)
       end
 
       it 'raises an error' do
         expect { service.current_host_info }
-          .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /not in the list of allowed hosts/)
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /not in the list of allowed hosts/)
       end
     end
   end

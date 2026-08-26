@@ -26,9 +26,9 @@ require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
 require_relative 'utils/test_round_robin_host_selector'
 require_relative 'utils/test_utils'
-require 'aws_ruby_database_driver_wrapper'
-require 'aws_ruby_database_driver_wrapper/db_dialects/dialect_codes'
-require 'aws_ruby_database_driver_wrapper/services/service_utility'
+require 'aws_advanced_ruby_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper/db_dialects/dialect_codes'
+require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
 
 # Integration tests for the InitialConnectionStrategyPlugin.
 #
@@ -39,9 +39,9 @@ require 'aws_ruby_database_driver_wrapper/services/service_utility'
 RSpec.describe 'InitialConnectionStrategy', :integration,
                deployments: [Integration::DatabaseEngineDeployment::AURORA],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
-  let(:rds_utils) { AwsRubyDatabaseDriverWrapper::Utils::RdsUtils }
+  let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
   let(:rds_util) { Integration::RdsTestUtility.utility }
-  let(:props) { AwsRubyDatabaseDriverWrapper::PropertyDefinition }
+  let(:props) { AwsAdvancedRubyDriverWrapper::PropertyDefinition }
 
   let(:initial_connection_props) do
     base_wrapper_props.merge(
@@ -51,8 +51,8 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
 
   let(:explicit_dialect) do
     case env.engine
-    when Integration::DatabaseEngine::PG then AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_PG
-    when Integration::DatabaseEngine::MYSQL then AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_MYSQL
+    when Integration::DatabaseEngine::PG then AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_PG
+    when Integration::DatabaseEngine::MYSQL then AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL
     else raise "Unsupported engine: #{env.engine}"
     end
   end
@@ -105,7 +105,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     it 'substitutes a reader instance endpoint after waiting for topology on a cold cache' do
       # Start from a cold topology cache so the plugin has nothing but the cluster endpoint to work
       # with and must wait for the topology monitor, as during a real application startup.
-      AwsRubyDatabaseDriverWrapper.clear_caches
+      AwsAdvancedRubyDriverWrapper.clear_caches
 
       # The topology monitor will not start until the dialect is final, and on a cold cache the
       # dialect is only guessed from the URL until DefaultPlugin#connect confirms it, which happens
@@ -210,13 +210,13 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     # The registry is per process, so registering once here covers every connection the example opens, and
     # the one selector's rotation advances from one connection to the next.
     before do
-      AwsRubyDatabaseDriverWrapper::Services::HostService.register_host_selector(
+      AwsAdvancedRubyDriverWrapper::Services::HostService.register_host_selector(
         Integration::TestRoundRobinHostSelector::STRATEGY_NAME,
         Integration::TestRoundRobinHostSelector.new
       )
     end
 
-    after { AwsRubyDatabaseDriverWrapper::Services::HostService.reset_host_selectors }
+    after { AwsAdvancedRubyDriverWrapper::Services::HostService.reset_host_selectors }
 
     it 'spreads consecutive connections over every reader instance' do
       # Assigned before anything that can raise so that the ensure block always has a list to close.
@@ -302,7 +302,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       # the cache instead of racing them. Without them the plugin has nothing to substitute and would
       # connect through the given endpoint for the wrong reason.
       cached = Integration::RetryHelper.retry_until(timeout_secs: 30, delay_secs: 0.5) do
-        hosts = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service.get(
+        hosts = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(
           :topology, proxied_cluster_id, register_access: false
         )
         !hosts.nil? && hosts.size >= proxy_info.instances.size &&
@@ -339,7 +339,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       expect do
         conn = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
         Integration::DriverHelper.close(drv, conn) if conn
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Initial connection strategy timed out/)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Initial connection strategy timed out/)
     end
   end
 

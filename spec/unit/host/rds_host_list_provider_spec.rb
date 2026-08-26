@@ -15,17 +15,17 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/host/rds_host_list_provider'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
-require 'aws_ruby_database_driver_wrapper/utils/storage/storage_service'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/services/monitor_service'
+require 'aws_advanced_ruby_driver_wrapper/host/rds_host_list_provider'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_advanced_ruby_driver_wrapper/utils/storage/storage_service'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/services/monitor_service'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
   let(:initial_host_info) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'my-cluster.cluster-abc123.us-east-2.rds.amazonaws.com',
       port: 5432
     )
@@ -58,17 +58,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
     instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_final?: true)
   end
   let(:event_publisher) do
-    AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
+    AwsAdvancedRubyDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
   end
   let(:storage_service) do
-    AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher)
+    AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher)
   end
   let(:monitor_service) do
-    AwsRubyDatabaseDriverWrapper::Services::MonitorService.new(event_publisher: event_publisher)
+    AwsAdvancedRubyDriverWrapper::Services::MonitorService.new(event_publisher: event_publisher)
   end
   let(:plugin_manager) { instance_double('PluginManager', internal_connect: nil) }
   let(:service_container) do
-    AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       event_publisher: event_publisher,
       storage_service: storage_service,
       dialect_service: dialect_service,
@@ -120,12 +120,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
     end
 
     it 'identifies rds_url_type' do
-      expect(provider.rds_url_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType::RDS_WRITER_CLUSTER)
+      expect(provider.rds_url_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::RdsUrlType::RDS_WRITER_CLUSTER)
     end
 
     context 'with proxy host pattern' do
       let(:initial_host_info) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: 'my-proxy.proxy-abc123.us-east-2.rds.amazonaws.com', port: 5432
         )
       end
@@ -133,7 +133,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
 
       it 'raises on proxy pattern' do
         expect { provider }.to raise_error(
-          AwsRubyDatabaseDriverWrapper::Errors::AwsError, /not supported for RDS Proxy/
+          AwsAdvancedRubyDriverWrapper::Errors::AwsError, /not supported for RDS Proxy/
         )
       end
     end
@@ -142,9 +142,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
   describe '#refresh' do
     context 'when topology is cached' do
       let(:cached_topology) do
-        [AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        [AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: 'writer.abc123.us-east-2.rds.amazonaws.com', port: 5432,
-          role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER, id: 'writer-1'
+          role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER, id: 'writer-1'
         )]
       end
 
@@ -212,7 +212,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
 
   describe 'monitoring property prefix mechanism' do
     let(:prefixed_driver_config) do
-      { AwsRubyDatabaseDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { connect_timeout: 3, socket_timeout: 2 } }
+      { AwsAdvancedRubyDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { connect_timeout: 3, socket_timeout: 2 } }
     end
 
     it 'builds monitoring_driver_props with overridden values' do
@@ -229,7 +229,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider do
 
   describe 'monitoring wrapper overrides' do
     let(:prefixed_wrapper_config) do
-      { AwsRubyDatabaseDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_ms: 1000 } }
+      { AwsAdvancedRubyDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_ms: 1000 } }
     end
 
     it 'separates wrapper props from driver props' do

@@ -15,7 +15,7 @@
 #  limitations under the License.
 
 require 'json'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'proxy_info'
@@ -184,9 +184,9 @@ module Integration
     # through the proxies must set CLUSTER_INSTANCE_HOST_PATTERN to the proxied suffix explicitly or
     # substituted instance hosts will bypass the proxies.
     private_class_method def self.init_prepare_host_func
-      AwsRubyDatabaseDriverWrapper.config.prepare_host_func = ->(host) { host&.delete_suffix(PROXIED_SUFFIX) }
+      AwsAdvancedRubyDriverWrapper.config.prepare_host_func = ->(host) { host&.delete_suffix(PROXIED_SUFFIX) }
       # Entries cached before the func was set are keyed by the unprepared host.
-      AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.clear_cache
+      AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.clear_cache
     end
 
     private_class_method def self.init_proxies(environment)

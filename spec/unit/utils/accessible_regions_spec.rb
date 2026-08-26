@@ -16,11 +16,11 @@
 
 require_relative '../../spec_helper'
 require 'concurrent'
-require 'aws_ruby_database_driver_wrapper/utils/accessible_regions'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/utils/accessible_regions'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AccessibleRegions do
-  let(:host_info_class) { AwsRubyDatabaseDriverWrapper::Host::HostInfo }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::AccessibleRegions do
+  let(:host_info_class) { AwsAdvancedRubyDriverWrapper::Host::HostInfo }
 
   describe '.parse' do
     it 'returns nil when the property is not set' do
