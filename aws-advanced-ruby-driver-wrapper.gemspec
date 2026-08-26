@@ -21,7 +21,7 @@ Gem::Specification.new do |spec|
   spec.version = AwsAdvancedRubyDriverWrapper::VERSION
   spec.authors = ['Amazon Web Services']
 
-  spec.summary = 'AWS Ruby Driver Wrapper for MySQL and PostgreSQL'
+  spec.summary = 'AWS Advanced Ruby Driver Wrapper for MySQL and PostgreSQL'
   spec.description = 'A Ruby DB driver wrapper that provides enhanced features for AWS RDS MySQL/PostgreSQL databases'
   # TODO: uncomment URIs
   # spec.homepage = 'github.com/aws/aws-advanced-ruby-driver-wrapper'
@@ -48,7 +48,7 @@ Gem::Specification.new do |spec|
 
   spec.post_install_message = <<~MSG
     ═══════════════════════════════════════════════════════════════
-    AWS Ruby Driver Wrapper installed successfully!
+    AWS Advanced Ruby Driver Wrapper installed successfully!
 
     To use with MySQL:
       gem install mysql2
