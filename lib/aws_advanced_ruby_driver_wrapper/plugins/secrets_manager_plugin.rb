@@ -34,7 +34,7 @@ module AwsAdvancedRubyDriverWrapper
 
       # Entries remain in the shared cache longer than their expiration so expired-but-present
       # entries can be served immediately while a background refresh runs (SWR).
-      CACHE_DISPOSAL_TIME_SEC = 30 * 60
+      CACHE_DISPOSAL_EXTRA_TIME_SEC = 30 * 60
 
       SecretEntry = Data.define(:username, :password, :expires_at) do
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
@@ -78,7 +78,7 @@ module AwsAdvancedRubyDriverWrapper
 
         service_container.storage_service.register(
           SECRETS_MANAGER_CACHE_NAME,
-          ttl: CACHE_DISPOSAL_TIME_SEC
+          ttl: @expiration_sec + CACHE_DISPOSAL_EXTRA_TIME_SEC
         )
         @subscribed_methods = SUBSCRIBED_METHODS
       end
