@@ -16,23 +16,23 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-rds'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/custom_endpoint_monitor'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/info'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/member_list_type'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/role'
-require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/custom_endpoint_monitor'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/info'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/member_list_type'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/role'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor do
-  let(:info_class)       { AwsRubyDriverWrapper::Plugins::CustomEndpoint::Info }
-  let(:member_list_type) { AwsRubyDriverWrapper::Plugins::CustomEndpoint::MemberListType }
-  let(:role_class)       { AwsRubyDriverWrapper::Plugins::CustomEndpoint::Role }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor do
+  let(:info_class)       { AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::Info }
+  let(:member_list_type) { AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::MemberListType }
+  let(:role_class)       { AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::Role }
 
   let(:custom_url)  { 'custom1.cluster-custom-XYZ.us-east-1.rds.amazonaws.com' }
   let(:endpoint_id) { 'custom1' }
   let(:cluster_id)  { 'cluster1' }
   let(:region)      { 'us-east-1' }
 
-  let(:host_info)            { AwsRubyDriverWrapper::Host::HostInfo.new(host: custom_url) }
+  let(:host_info)            { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: custom_url) }
   let(:mock_rds_client)      { instance_double(Aws::RDS::Client).as_null_object }
   let(:mock_storage_service) { double('StorageService', register: nil, get: nil, set: nil, remove: nil, clear: nil) }
   let(:service_container)    { double('ServiceContainer', storage_service: mock_storage_service) }

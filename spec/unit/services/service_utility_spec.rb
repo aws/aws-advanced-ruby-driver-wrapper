@@ -15,31 +15,31 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_ruby_driver_wrapper/services/service_utility'
-require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 
-RSpec.describe AwsRubyDriverWrapper::Services::ServiceUtility do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::ServiceUtility do
   let(:config) do
-    AwsRubyDriverWrapper::Utils::ConnectionConfig.new(
+    AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfig.new(
       driver_name: :postgresql,
       driver_props: { host: 'myhost', port: 5432 },
       wrapper_props: {},
-      initial_host_info: AwsRubyDriverWrapper::Host::HostInfo.new(host: 'myhost', port: 5432)
+      initial_host_info: AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'myhost', port: 5432)
     )
   end
 
-  after { AwsRubyDriverWrapper::Services::CoreServices.reset! }
+  after { AwsAdvancedRubyDriverWrapper::Services::CoreServices.reset! }
 
   describe '.create_standard_container' do
     subject(:container) { described_class.create_standard_container(config) }
 
     it 'returns a ServiceContainer with all services wired' do
-      expect(container).to be_a(AwsRubyDriverWrapper::Services::ServiceContainer)
-      expect(container.connection_service).to be_a(AwsRubyDriverWrapper::Services::ConnectionService)
-      expect(container.dialect_service).to be_a(AwsRubyDriverWrapper::Services::DialectService)
-      expect(container.host_service).to be_a(AwsRubyDriverWrapper::Services::HostService)
-      expect(container.session_state_service).to be_a(AwsRubyDriverWrapper::Services::SessionStateService)
-      expect(container.plugin_manager).to be_a(AwsRubyDriverWrapper::Services::PluginManager)
+      expect(container).to be_a(AwsAdvancedRubyDriverWrapper::Services::ServiceContainer)
+      expect(container.connection_service).to be_a(AwsAdvancedRubyDriverWrapper::Services::ConnectionService)
+      expect(container.dialect_service).to be_a(AwsAdvancedRubyDriverWrapper::Services::DialectService)
+      expect(container.host_service).to be_a(AwsAdvancedRubyDriverWrapper::Services::HostService)
+      expect(container.session_state_service).to be_a(AwsAdvancedRubyDriverWrapper::Services::SessionStateService)
+      expect(container.plugin_manager).to be_a(AwsAdvancedRubyDriverWrapper::Services::PluginManager)
     end
 
     it 'passes config to ConnectionService' do
@@ -49,7 +49,7 @@ RSpec.describe AwsRubyDriverWrapper::Services::ServiceUtility do
 
     it 'resolves the correct driver dialect' do
       expect(container.dialect_service.driver_dialect).to be_a(
-        AwsRubyDriverWrapper::DriverDialects::PgDriverDialect
+        AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect
       )
     end
   end

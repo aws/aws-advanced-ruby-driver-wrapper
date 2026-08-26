@@ -15,17 +15,17 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/info'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/member_list_type'
-require 'aws_ruby_driver_wrapper/plugins/custom_endpoint/role'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/info'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/member_list_type'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/role'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::CustomEndpoint::Info do
-  let(:member_list_type) { AwsRubyDriverWrapper::Plugins::CustomEndpoint::MemberListType }
-  let(:role_class)       { AwsRubyDriverWrapper::Plugins::CustomEndpoint::Role }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::Info do
+  let(:member_list_type) { AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::MemberListType }
+  let(:role_class)       { AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::Role }
 
   def build_info(mlt: nil, role: nil, members: %w[m1 m2])
-    mlt  ||= AwsRubyDriverWrapper::Plugins::CustomEndpoint::MemberListType::STATIC_LIST
-    role ||= AwsRubyDriverWrapper::Plugins::CustomEndpoint::Role::ANY
+    mlt  ||= AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::MemberListType::STATIC_LIST
+    role ||= AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::Role::ANY
     described_class.new(
       endpoint_identifier: 'my-custom',
       cluster_identifier: 'my-cluster',

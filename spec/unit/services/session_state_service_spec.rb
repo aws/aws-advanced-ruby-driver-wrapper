@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_driver_wrapper/services/session_state_service'
+require 'aws_advanced_ruby_driver_wrapper/services/session_state_service'
 
-RSpec.describe AwsRubyDriverWrapper::Services::SessionStateService do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::SessionStateService do
   subject(:service) { described_class.new }
 
   describe '#initialize' do

@@ -14,10 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_driver_wrapper/db_dialects/multi_az_cluster_pg_dialect'
+require 'aws_advanced_ruby_driver_wrapper/db_dialects/multi_az_cluster_pg_dialect'
 
-RSpec.describe AwsRubyDriverWrapper::DbDialects::MultiAzClusterPgDialect do
-  let(:driver_dialect) { AwsRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsAdvancedRubyDriverWrapper::DbDialects::MultiAzClusterPgDialect do
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('PG::Connection') }

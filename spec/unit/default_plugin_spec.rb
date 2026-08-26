@@ -15,28 +15,28 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_driver_wrapper/plugins/default_plugin'
-require 'aws_ruby_driver_wrapper/services/service_container'
-require 'aws_ruby_driver_wrapper/services/connection_service'
-require 'aws_ruby_driver_wrapper/services/dialect_service'
-require 'aws_ruby_driver_wrapper/services/host_service'
-require 'aws_ruby_driver_wrapper/host/host_info'
-require 'aws_ruby_driver_wrapper/host/host_availability'
-require 'aws_ruby_driver_wrapper/utils/connection_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/default_plugin'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/services/connection_service'
+require 'aws_advanced_ruby_driver_wrapper/services/dialect_service'
+require 'aws_advanced_ruby_driver_wrapper/services/host_service'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_availability'
+require 'aws_advanced_ruby_driver_wrapper/utils/connection_config'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::DefaultPlugin do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin do
   let(:mock_connection) { double('Connection', host: 'test-instance.us-east-1.rds.example.com', port: '5432') }
   let(:driver_dialect) { double('DriverDialect') }
-  let(:host_service) { instance_double(AwsRubyDriverWrapper::Services::HostService, set_availability: nil, refresh_host_list: nil) }
+  let(:host_service) { instance_double(AwsAdvancedRubyDriverWrapper::Services::HostService, set_availability: nil, refresh_host_list: nil) }
   let(:db_dialect) { double('DbDialect', create_host_list_provider: nil) }
   let(:dialect_service) do
-    instance_double(AwsRubyDriverWrapper::Services::DialectService,
+    instance_double(AwsAdvancedRubyDriverWrapper::Services::DialectService,
                     driver_dialect: driver_dialect,
                     update_dialect: nil,
                     db_dialect: db_dialect)
   end
   let(:connection_service) do
-    instance_double(AwsRubyDriverWrapper::Services::ConnectionService,
+    instance_double(AwsAdvancedRubyDriverWrapper::Services::ConnectionService,
                     pg?: false,
                     multi_host_url?: false,
                     wrapper_props: wrapper_props,
@@ -44,7 +44,7 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::DefaultPlugin do
   end
   let(:session_state_service) { nil }
   let(:service_container) do
-    AwsRubyDriverWrapper::Services::ServiceContainer.new(
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service: connection_service,
       dialect_service: dialect_service,
       host_service: host_service,
@@ -54,7 +54,7 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::DefaultPlugin do
   let(:wrapper_props) { { plugins: '' } }
   let(:plugin) { described_class.new(service_container, wrapper_props) }
   let(:host_info) do
-    AwsRubyDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'test-instance.abc123.us-east-1.rds.amazonaws.com', port: 5432
     )
   end
@@ -75,7 +75,7 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::DefaultPlugin do
       it 'marks host as available on success' do
         plugin.connect(host_info, driver_props, true, nil)
         expect(host_service).to have_received(:set_availability).with(
-          host_info, AwsRubyDriverWrapper::Host::HostAvailability::AVAILABLE
+          host_info, AwsAdvancedRubyDriverWrapper::Host::HostAvailability::AVAILABLE
         )
       end
 
@@ -107,19 +107,19 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::DefaultPlugin do
 
     context 'multi-host PG initial connection' do
       let(:initial_host_info_obj) do
-        AwsRubyDriverWrapper::Host::HostInfo.new(
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: 'host1,host2',
           port: ',5433'
         )
       end
       let(:mock_config) do
-        instance_double(AwsRubyDriverWrapper::Utils::ConnectionConfig,
+        instance_double(AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfig,
                         initial_host_info: initial_host_info_obj,
                         original_host: 'host1,host2',
                         original_port: ',5433')
       end
       let(:connection_service) do
-        instance_double(AwsRubyDriverWrapper::Services::ConnectionService,
+        instance_double(AwsAdvancedRubyDriverWrapper::Services::ConnectionService,
                         pg?: true,
                         multi_host_url?: true,
                         config: mock_config,

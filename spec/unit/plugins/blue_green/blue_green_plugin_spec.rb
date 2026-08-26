@@ -15,23 +15,23 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/blue_green_plugin'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/status'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/phase'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/role'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/base_routing'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/suspend_connect_routing'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/suspend_execute_routing'
-require 'aws_ruby_driver_wrapper/services/service_container'
-require 'aws_ruby_driver_wrapper/host/host_info'
-require 'aws_ruby_driver_wrapper/ruby_method'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/blue_green_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/status'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/role'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/routing/base_routing'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/routing/suspend_connect_routing'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/routing/suspend_execute_routing'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/ruby_method'
 require 'concurrent'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin do
-  let(:bg)       { AwsRubyDriverWrapper::Plugins::BlueGreen }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin do
+  let(:bg)       { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen }
   let(:phase)    { bg::Phase }
   let(:role)     { bg::Role }
-  let(:host_info_class) { AwsRubyDriverWrapper::Host::HostInfo }
+  let(:host_info_class) { AwsAdvancedRubyDriverWrapper::Host::HostInfo }
 
   let(:bgd_id_val) { 'bgd-test' }
   let(:host_val)   { 'blue-instance.cluster-abc.us-east-1.rds.amazonaws.com' }
@@ -55,7 +55,7 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin do
   let(:plugin_manager) { double('plugin_manager') }
 
   let(:service_container) do
-    AwsRubyDriverWrapper::Services::ServiceContainer.new(
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service, dialect_service, nil,
       host_service, plugin_manager, nil, storage_service, nil
     )
@@ -142,12 +142,12 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin do
       before { allow(storage_service).to receive(:get).and_return(nil) }
 
       it 'bypasses routing for connection.close' do
-        result = plugin.execute(AwsRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name, pipeline)
+        result = plugin.execute(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name, pipeline)
         expect(result).to eq(:query_result)
       end
 
       it 'bypasses routing for statement.close' do
-        result = plugin.execute(AwsRubyDriverWrapper::RubyMethod::STATEMENT_CLOSE.name, pipeline)
+        result = plugin.execute(AwsAdvancedRubyDriverWrapper::RubyMethod::STATEMENT_CLOSE.name, pipeline)
         expect(result).to eq(:query_result)
       end
     end

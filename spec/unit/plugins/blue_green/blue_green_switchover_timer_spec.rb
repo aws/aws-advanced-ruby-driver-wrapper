@@ -15,9 +15,9 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/switchover_timer'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/switchover_timer'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::SwitchoverTimer do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::SwitchoverTimer do
   describe '#expired?' do
     it 'is false before start is called' do
       timer = described_class.new(1_000_000_000)

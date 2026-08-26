@@ -24,12 +24,12 @@ RSpec.shared_context 'integration setup' do
   # in any environment (AURORA or AURORA_GLOBAL). Merge or override as needed.
   let(:base_wrapper_props) do
     props = {
-      AwsRubyDriverWrapper::PropertyDefinition::PLUGINS.name => '',
-      AwsRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => '',
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
       connect_timeout: 3
     }
     if env.global_cluster_endpoint
-      props[AwsRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name] =
+      props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name] =
         "[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{writer.port}"
     end
     props
@@ -38,9 +38,9 @@ RSpec.shared_context 'integration setup' do
   # Base IAM props — extends base_wrapper_props with IAM plugin + region.
   let(:base_iam_props) do
     props = base_wrapper_props.merge(
-      AwsRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam'
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam'
     )
-    props[AwsRubyDriverWrapper::PropertyDefinition::IAM_REGION.name] = env.primary_region if env.global_cluster_endpoint
+    props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_REGION.name] = env.primary_region if env.global_cluster_endpoint
     props
   end
 

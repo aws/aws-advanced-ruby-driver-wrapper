@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_ruby_driver_wrapper/utils/connection_config_parser'
+require 'aws_advanced_ruby_driver_wrapper/utils/connection_config_parser'
 
-RSpec.describe AwsRubyDriverWrapper::Utils::ConnectionConfigParser do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfigParser do
   let(:parser) { described_class }
 
   describe 'URI parsing' do
@@ -466,7 +466,7 @@ RSpec.describe AwsRubyDriverWrapper::Utils::ConnectionConfigParser do
 
     it 'does not run the validator on get after a valid parse' do
       config = parser.parse(:postgresql, host: 'h', failover_timeout_sec: 60)
-      expect { AwsRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.get(config.wrapper_props) }.not_to raise_error
+      expect { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.get(config.wrapper_props) }.not_to raise_error
     end
   end
 

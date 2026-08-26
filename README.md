@@ -47,7 +47,7 @@ The wrapper design allows developers to continue using their preferred Ruby driv
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'aws-ruby-driver-wrapper'
+gem 'aws-advanced-ruby-driver-wrapper'
 ```
 
 For MySQL users, also install the underlying driver:
@@ -76,10 +76,10 @@ Require the appropriate entry point for your database:
 
 ```ruby
 # For MySQL
-require 'aws_ruby_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper/mysql'
 
 # For PostgreSQL
-require 'aws_ruby_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
 ```
 
 Then set the adapter in your database configuration (for example, `config/database.yml` in a Rails application):

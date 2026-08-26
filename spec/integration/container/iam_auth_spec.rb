@@ -21,7 +21,7 @@ require_relative 'utils/test_environment_features'
 require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/connection_utils'
-require 'aws_ruby_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper'
 
 RSpec.describe 'AwsIamAuthentication', :integration,
                features: [Integration::TestEnvironmentFeatures::IAM],
@@ -50,8 +50,8 @@ RSpec.describe 'AwsIamAuthentication', :integration,
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
     begin
-      AwsRubyDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
-        AwsRubyDriverWrapper::Services::CoreServices.storage_service
+      AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
+        AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service
       )
     rescue StandardError
       nil
@@ -87,7 +87,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
 
     expect do
       Integration::DriverHelper.wrapper_connect(drv, **no_user_config, **iam_props)
-    end.to raise_error(AwsRubyDriverWrapper::Errors::IamAuthError)
+    end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError)
   end
 
   it 'connects using IP address with iam_host override' do
@@ -110,7 +110,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     end
 
     props_with_iam_host = iam_props.merge(
-      AwsRubyDriverWrapper::PropertyDefinition::IAM_HOST.name => instance_host
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_HOST.name => instance_host
     )
 
     conn = Integration::DriverHelper.wrapper_connect(drv, **ip_config, **props_with_iam_host)
@@ -129,9 +129,9 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     # Corrupt the cached token to simulate expiry
     sc = conn1.instance_variable_get(:@service_container)
     storage = sc.storage_service
-    cache_name = AwsRubyDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
-    iam_utils = AwsRubyDriverWrapper::Utils::IamAuthUtils
-    rds_utils = AwsRubyDriverWrapper::Utils::RdsUtils
+    cache_name = AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
+    iam_utils = AwsAdvancedRubyDriverWrapper::Utils::IamAuthUtils
+    rds_utils = AwsAdvancedRubyDriverWrapper::Utils::RdsUtils
 
     region = rds_utils.rds_region(writer.host)
     cache_key = iam_utils.cache_key(region, writer.host, writer.port, env.iam_user_name)
@@ -159,7 +159,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       drv,
       **iam_config,
       **iam_props.merge(
-        AwsRubyDriverWrapper::PropertyDefinition::AWS_CREDENTIALS_PROVIDER.name => explicit_creds
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::AWS_CREDENTIALS_PROVIDER.name => explicit_creds
       )
     )
     result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
@@ -187,7 +187,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     # Verify that all connections shared a single cached token
     sc = conns.first.instance_variable_get(:@service_container)
     cache_size = sc.storage_service.size(
-      AwsRubyDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
+      AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
     )
     expect(cache_size).to eq(1)
   ensure
@@ -228,15 +228,15 @@ RSpec.describe 'AwsIamAuthentication', :integration,
 
     it 'raises IamAuthError when iam_region is missing for global endpoint' do
       props_no_region = {
-        AwsRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam',
-        AwsRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
-        AwsRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name =>
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam',
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name =>
           "[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{writer.port}"
       }
 
       expect do
         Integration::DriverHelper.wrapper_connect(drv, **gdb_config, **props_no_region)
-      end.to raise_error(AwsRubyDriverWrapper::Errors::IamAuthError, /unable to determine connection region/)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError, /unable to determine connection region/)
     end
 
     it 'connects to secondary cluster endpoint with IAM' do
@@ -258,7 +258,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       end
 
       secondary_props = iam_props.merge(
-        AwsRubyDriverWrapper::PropertyDefinition::IAM_REGION.name => env.secondary_region
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_REGION.name => env.secondary_region
       )
 
       conn = Integration::DriverHelper.wrapper_connect(drv, **secondary_config, **secondary_props)

@@ -14,10 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_driver_wrapper/db_dialects/mysql_dialect'
+require 'aws_advanced_ruby_driver_wrapper/db_dialects/mysql_dialect'
 
-RSpec.describe AwsRubyDriverWrapper::DbDialects::MysqlDialect do
-  let(:driver_dialect) { AwsRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+RSpec.describe AwsAdvancedRubyDriverWrapper::DbDialects::MysqlDialect do
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }
@@ -61,10 +61,10 @@ RSpec.describe AwsRubyDriverWrapper::DbDialects::MysqlDialect do
   describe '#dialect_update_candidates' do
     it 'returns the expected candidates' do
       expect(dialect.dialect_update_candidates).to include(
-        AwsRubyDriverWrapper::DialectCodes::AURORA_MYSQL,
-        AwsRubyDriverWrapper::DialectCodes::RDS_MYSQL,
-        AwsRubyDriverWrapper::DialectCodes::MULTI_AZ_MYSQL_CLUSTER,
-        AwsRubyDriverWrapper::DialectCodes::GLOBAL_AURORA_MYSQL
+        AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL,
+        AwsAdvancedRubyDriverWrapper::DialectCodes::RDS_MYSQL,
+        AwsAdvancedRubyDriverWrapper::DialectCodes::MULTI_AZ_MYSQL_CLUSTER,
+        AwsAdvancedRubyDriverWrapper::DialectCodes::GLOBAL_AURORA_MYSQL
       )
     end
   end

@@ -15,18 +15,18 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_driver_wrapper/utils/retry_util'
-require 'aws_ruby_driver_wrapper/host/host_info'
-require 'aws_ruby_driver_wrapper/host/host_role'
-require 'aws_ruby_driver_wrapper/host/host_availability'
-require 'aws_ruby_driver_wrapper/host/random_host_selector'
+require 'aws_advanced_ruby_driver_wrapper/utils/retry_util'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/host/host_availability'
+require 'aws_advanced_ruby_driver_wrapper/host/random_host_selector'
 
-RSpec.describe AwsRubyDriverWrapper::Utils::RetryUtil do
-  let(:host_role) { AwsRubyDriverWrapper::Host::HostRole }
-  let(:host_availability) { AwsRubyDriverWrapper::Host::HostAvailability }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RetryUtil do
+  let(:host_role) { AwsAdvancedRubyDriverWrapper::Host::HostRole }
+  let(:host_availability) { AwsAdvancedRubyDriverWrapper::Host::HostAvailability }
 
   let(:writer_host) do
-    AwsRubyDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-instance.xyz.us-east-1.rds.amazonaws.com',
       port: '5432',
       role: host_role::WRITER
@@ -34,7 +34,7 @@ RSpec.describe AwsRubyDriverWrapper::Utils::RetryUtil do
   end
 
   let(:reader_host) do
-    AwsRubyDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-instance.xyz.us-east-1.rds.amazonaws.com',
       port: '5432',
       role: host_role::READER
@@ -52,7 +52,7 @@ RSpec.describe AwsRubyDriverWrapper::Utils::RetryUtil do
 
   # RetryUtil delegates candidate selection to the host service, which applies the configured
   # strategy. The real selector picks from the candidates it is given, so mirror that here.
-  let(:host_selector) { AwsRubyDriverWrapper::Host::RandomHostSelector.new }
+  let(:host_selector) { AwsAdvancedRubyDriverWrapper::Host::RandomHostSelector.new }
 
   let(:host_service) do
     double('host_service',

@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_driver_wrapper/monitoring/monitor_connection'
+require 'aws_advanced_ruby_driver_wrapper/monitoring/monitor_connection'
 
-RSpec.describe AwsRubyDriverWrapper::Monitoring::MonitorConnection do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::MonitorConnection do
   let(:mock_driver_dialect) { double('DriverDialect', close_connection: nil) }
   subject(:monitor_connection) { described_class.new(mock_driver_dialect) }
 

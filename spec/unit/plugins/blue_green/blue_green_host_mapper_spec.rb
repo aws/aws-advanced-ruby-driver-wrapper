@@ -15,17 +15,17 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/host_mapper'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/interim_status'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/phase'
-require 'aws_ruby_driver_wrapper/host/host_info'
-require 'aws_ruby_driver_wrapper/host/host_role'
-require 'aws_ruby_driver_wrapper/utils/rds_utils'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/host_mapper'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/interim_status'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/utils/rds_utils'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::HostMapper do
-  let(:bg) { AwsRubyDriverWrapper::Plugins::BlueGreen }
-  let(:host_role) { AwsRubyDriverWrapper::Host::HostRole }
-  let(:rds_utils) { AwsRubyDriverWrapper::Utils::RdsUtils }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::HostMapper do
+  let(:bg) { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen }
+  let(:host_role) { AwsAdvancedRubyDriverWrapper::Host::HostRole }
+  let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
 
   # Use real RDS-format hostnames so RdsUtils pattern matching works correctly.
   let(:blue_writer)  { 'mydb-instance-1.abc123.us-east-1.rds.amazonaws.com' }
@@ -41,7 +41,7 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::HostMapper do
   before { rds_utils.clear_cache }
 
   def make_host(host, role)
-    AwsRubyDriverWrapper::Host::HostInfo.new(host: host, port: 3306, role: role)
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: host, port: 3306, role: role)
   end
 
   def make_interim(writer_host, reader_host, host_names)

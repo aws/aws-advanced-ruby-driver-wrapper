@@ -15,56 +15,56 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_driver_wrapper/utils/parser/sql_parser'
-require 'aws_ruby_driver_wrapper/utils/parser/query_type'
-require 'aws_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
-require 'aws_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/sql_parser'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/query_type'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 
-RSpec.describe AwsRubyDriverWrapper::Utils::Parser::SqlParser do
-  let(:mysql_dialect) { AwsRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
-  let(:pg_dialect)    { AwsRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
+  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:pg_dialect)    { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:mysql_parser) { described_class.new(mysql_dialect) }
 
   describe '#analyze_sql query_type' do
     it 'returns INSERT for a simple INSERT' do
-      expect(mysql_parser.analyze_sql('INSERT INTO customers (name, email) VALUES (?, ?)').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
+      expect(mysql_parser.analyze_sql('INSERT INTO customers (name, email) VALUES (?, ?)').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
     end
 
     it 'returns UPDATE for a simple UPDATE' do
-      expect(mysql_parser.analyze_sql('UPDATE customers SET email = ? WHERE id = ?').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
+      expect(mysql_parser.analyze_sql('UPDATE customers SET email = ? WHERE id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
     end
 
     it 'returns SELECT for a simple SELECT' do
-      expect(mysql_parser.analyze_sql('SELECT * FROM customers WHERE id = ?').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(mysql_parser.analyze_sql('SELECT * FROM customers WHERE id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
     end
 
     it 'returns DELETE for a simple DELETE' do
-      expect(mysql_parser.analyze_sql('DELETE FROM customers WHERE id = ?').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::DELETE)
+      expect(mysql_parser.analyze_sql('DELETE FROM customers WHERE id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::DELETE)
     end
 
     it 'returns CREATE for CREATE TABLE' do
-      expect(mysql_parser.analyze_sql('CREATE TABLE new_table (id SERIAL PRIMARY KEY, name VARCHAR(100))').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::CREATE)
+      expect(mysql_parser.analyze_sql('CREATE TABLE new_table (id SERIAL PRIMARY KEY, name VARCHAR(100))').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::CREATE)
     end
 
     it 'returns DROP for DROP TABLE' do
-      expect(mysql_parser.analyze_sql('DROP TABLE old_table').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::DROP)
+      expect(mysql_parser.analyze_sql('DROP TABLE old_table').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::DROP)
     end
 
     it 'is case-insensitive' do
-      expect(mysql_parser.analyze_sql('insert into customers (name) values (?)').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
-      expect(mysql_parser.analyze_sql('Update Customers Set Name = ? Where Id = ?').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
+      expect(mysql_parser.analyze_sql('insert into customers (name) values (?)').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
+      expect(mysql_parser.analyze_sql('Update Customers Set Name = ? Where Id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
     end
 
     it 'returns UNKNOWN for empty string' do
-      expect(mysql_parser.analyze_sql('').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(mysql_parser.analyze_sql('').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
 
     it 'returns UNKNOWN for nil' do
-      expect(mysql_parser.analyze_sql(nil).query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(mysql_parser.analyze_sql(nil).query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
 
     it 'returns UNKNOWN for whitespace only' do
-      expect(mysql_parser.analyze_sql("   \n\t  ").query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(mysql_parser.analyze_sql("   \n\t  ").query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
   end
 
@@ -175,11 +175,11 @@ RSpec.describe AwsRubyDriverWrapper::Utils::Parser::SqlParser do
     end
 
     before do
-      require 'aws_ruby_driver_wrapper/utils/parser/pg_statement_analyzer'
+      require 'aws_advanced_ruby_driver_wrapper/utils/parser/pg_statement_analyzer'
       mod = Module.new { def self.parse(_sql) = raise 'not stubbed' }
       mod.const_set(:ParseError, Class.new(StandardError))
       stub_const('PgQuery', mod)
-      allow(AwsRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).with('pg_query')
+      allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).with('pg_query')
     end
 
     describe '#analyze_sql query_type' do
@@ -189,7 +189,7 @@ RSpec.describe AwsRubyDriverWrapper::Utils::Parser::SqlParser do
                                  cols: [{ res_target: { name: 'name' } },
                                         { res_target: { name: 'email' } }] })
         )
-        expect(pg_parser.analyze_sql('INSERT INTO users (name, email) VALUES ($1, $2)').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
+        expect(pg_parser.analyze_sql('INSERT INTO users (name, email) VALUES ($1, $2)').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
       end
 
       it 'returns UPDATE' do
@@ -198,7 +198,7 @@ RSpec.describe AwsRubyDriverWrapper::Utils::Parser::SqlParser do
                                  target_list: [{ res_target: { name: 'name', val: { param_ref: { number: 1 } } } }],
                                  where_clause: nil })
         )
-        expect(pg_parser.analyze_sql('UPDATE users SET name = $1 WHERE id = $2').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
+        expect(pg_parser.analyze_sql('UPDATE users SET name = $1 WHERE id = $2').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
       end
 
       it 'returns SELECT' do
@@ -206,11 +206,11 @@ RSpec.describe AwsRubyDriverWrapper::Utils::Parser::SqlParser do
           pg_stmt(select_stmt: { from_clause: [{ range_var: { relname: 'customers' } }],
                                  where_clause: nil, locking_clause: [] })
         )
-        expect(pg_parser.analyze_sql('SELECT * FROM customers WHERE id = $1').query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
+        expect(pg_parser.analyze_sql('SELECT * FROM customers WHERE id = $1').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
       end
 
       it 'returns UNKNOWN for nil' do
-        expect(pg_parser.analyze_sql(nil).query_type).to eq(AwsRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+        expect(pg_parser.analyze_sql(nil).query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
       end
     end
 

@@ -82,7 +82,7 @@ Naming/PredicateMethod:
   AllowedMethods:
     - to_boolean
   Exclude:
-    - 'lib/aws_ruby_driver_wrapper/errors/error_handler.rb'
+    - 'lib/aws_advanced_ruby_driver_wrapper/errors/error_handler.rb'
 
 Style/OneClassPerFile:
   Exclude:

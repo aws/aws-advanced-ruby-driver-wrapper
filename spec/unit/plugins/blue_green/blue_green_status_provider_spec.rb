@@ -15,17 +15,17 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/status_provider'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/status'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/phase'
-require 'aws_ruby_driver_wrapper/plugins/blue_green/role'
-require 'aws_ruby_driver_wrapper/services/service_container'
-require 'aws_ruby_driver_wrapper/host/host_info'
-require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/status_provider'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/status'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/role'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
 require 'concurrent'
 
-RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::StatusProvider, :blue_green do
-  let(:bg)    { AwsRubyDriverWrapper::Plugins::BlueGreen }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::StatusProvider, :blue_green do
+  let(:bg)    { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen }
   let(:phase) { bg::Phase }
   let(:role)  { bg::Role }
 
@@ -61,7 +61,7 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::StatusProvider, :blue_g
   end
   let(:plugin_manager) { double('plugin_manager', plugin_in_use?: false) }
   let(:service_container) do
-    AwsRubyDriverWrapper::Services::ServiceContainer.new(
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service, dialect_service, event_publisher,
       host_service, plugin_manager, nil, storage_service, nil
     )
@@ -76,12 +76,12 @@ RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::StatusProvider, :blue_g
 
   # Shared topology used across multiple tests
   let(:blue_topology) do
-    [host_info(blue_writer_host, role: AwsRubyDriverWrapper::Host::HostRole::WRITER),
-     host_info(blue_reader_host, role: AwsRubyDriverWrapper::Host::HostRole::READER)]
+    [host_info(blue_writer_host, role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER),
+     host_info(blue_reader_host, role: AwsAdvancedRubyDriverWrapper::Host::HostRole::READER)]
   end
   let(:green_topology) do
-    [host_info(green_writer_host, role: AwsRubyDriverWrapper::Host::HostRole::WRITER),
-     host_info(green_reader_host, role: AwsRubyDriverWrapper::Host::HostRole::READER)]
+    [host_info(green_writer_host, role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER),
+     host_info(green_reader_host, role: AwsAdvancedRubyDriverWrapper::Host::HostRole::READER)]
   end
   let(:blue_ip_map)  { { blue_writer_host => '10.0.0.1', blue_reader_host => '10.0.0.2' } }
   let(:green_ip_map) { { green_writer_host => '10.0.1.1', green_reader_host => '10.0.1.2' } }

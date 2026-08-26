@@ -15,15 +15,15 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_driver_wrapper/mysql'
-require 'aws_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
-require 'aws_ruby_driver_wrapper/services/plugin_manager'
-require 'aws_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
 # Every call that talks to the server has to reach the plugins under a name mysql2 answers to, and a
 # call that can only be made on the connection a statement was sent on has to be refused anywhere
 # else.
-RSpec.describe AwsRubyDriverWrapper::Mysql2WrapperClient do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient do
   let(:mysql_result) { driver_result(Mysql2::Result, 'Mysql2::Result') }
   # A verifying double, so that a call the wrapper makes on a method mysql2 does not define fails
   # here rather than against a real server.
@@ -38,7 +38,7 @@ RSpec.describe AwsRubyDriverWrapper::Mysql2WrapperClient do
     # Which methods go through the pipeline is the dialect's answer, and it is memoized here, so it is
     # set rather than reached for through a service container that is not connected to anything.
     client.instance_variable_set(
-      :@network_bound_methods, AwsRubyDriverWrapper::DriverDialects::MysqlDriverDialect::NETWORK_BOUND_METHODS
+      :@network_bound_methods, AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect::NETWORK_BOUND_METHODS
     )
     client
   end
@@ -82,7 +82,7 @@ RSpec.describe AwsRubyDriverWrapper::Mysql2WrapperClient do
       client.instance_variable_set(:@async_conn, instance_double(Mysql2::Client))
 
       expect { client.async_result }
-        .to raise_error(AwsRubyDriverWrapper::Errors::AwsError, /old connection/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
     end
 
     it 'forgets the connection once the result has been read' do
@@ -171,7 +171,7 @@ RSpec.describe AwsRubyDriverWrapper::Mysql2WrapperClient do
       allow(connection).to receive(:abandon_results!)
 
       expect { client.abandon_results! }
-        .to raise_error(AwsRubyDriverWrapper::Errors::AwsError, /old connection/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
     end
 
     it 'sends a server option through the pipeline' do

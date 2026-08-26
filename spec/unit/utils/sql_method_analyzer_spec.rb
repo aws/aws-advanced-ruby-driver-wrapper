@@ -14,15 +14,15 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_driver_wrapper/utils/sql_method_analyzer'
-require 'aws_ruby_driver_wrapper/ruby_method'
+require 'aws_advanced_ruby_driver_wrapper/utils/sql_method_analyzer'
+require 'aws_advanced_ruby_driver_wrapper/ruby_method'
 
-RSpec.describe AwsRubyDriverWrapper::Utils::SqlMethodAnalyzer do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
   let(:analyzer) { described_class }
-  EXEC   = AwsRubyDriverWrapper::RubyMethod::CONNECTION_EXEC.name
-  QUERY  = AwsRubyDriverWrapper::RubyMethod::CONNECTION_QUERY.name
-  CLOSE  = AwsRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name
-  TXN    = AwsRubyDriverWrapper::RubyMethod::CONNECTION_TRANSACTION.name
+  EXEC   = AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_EXEC.name
+  QUERY  = AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_QUERY.name
+  CLOSE  = AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name
+  TXN    = AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_TRANSACTION.name
 
   # ─── opens_transaction? ──────────────────────────────────────────────
   #   [description, method, args, autocommit, expected]

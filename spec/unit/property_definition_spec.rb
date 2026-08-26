@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_ruby_driver_wrapper/property_definition'
+require 'aws_advanced_ruby_driver_wrapper/property_definition'
 
-RSpec.describe AwsRubyDriverWrapper::PropertyDefinition do
+RSpec.describe AwsAdvancedRubyDriverWrapper::PropertyDefinition do
   describe '.wrapper_property?' do
     it 'returns true for known wrapper properties' do
       expect(described_class.wrapper_property?(:wrapper_plugins)).to be true
@@ -55,7 +55,7 @@ RSpec.describe AwsRubyDriverWrapper::PropertyDefinition do
   end
 
   describe 'WrapperProperty#get_bool' do
-    let(:bool_wrapper_property) { AwsRubyDriverWrapper::WrapperProperty.new(:bool_wrapper_property, 'test', default_value: true) }
+    let(:bool_wrapper_property) { AwsAdvancedRubyDriverWrapper::WrapperProperty.new(:bool_wrapper_property, 'test', default_value: true) }
 
     it 'returns boolean true from boolean value' do
       expect(bool_wrapper_property.get_bool({ bool_wrapper_property: true })).to be true

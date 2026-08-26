@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_driver_wrapper/services/plugin_manager'
-require 'aws_ruby_driver_wrapper/services/service_container'
-require 'aws_ruby_driver_wrapper/plugins/default_plugin'
-require 'aws_ruby_driver_wrapper/plugins/failover_plugin'
-require 'aws_ruby_driver_wrapper/host/host_info'
-require 'aws_ruby_driver_wrapper/errors'
-require 'aws_ruby_driver_wrapper/utils/connection_config'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/plugins/default_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/failover_plugin'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/utils/connection_config'
 
 # Test plugin helpers that track calls in an array to verify plugin pipeline ordering.
 module TestPlugins
@@ -78,28 +78,28 @@ module TestPlugins
 
     def connect(_host_info, _props, _is_initial_connection, pipeline_callable)
       @calls << "#{self.class.name.split('::').last}:before connect"
-      raise AwsRubyDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
+      raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
 
       pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after connect"
-      raise AwsRubyDriverWrapper::Errors::AwsError, 'test error'
+      raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'test error'
     end
 
     def execute(_target_method_name, pipeline_callable, *_args, **_options)
       @calls << "#{self.class.name.split('::').last}:before execute"
-      raise AwsRubyDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
+      raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'test error' if @throw_before_call
 
       pipeline_callable.call
       @calls << "#{self.class.name.split('::').last}:after execute"
-      raise AwsRubyDriverWrapper::Errors::AwsError, 'test error'
+      raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'test error'
     end
   end
 end
 
-RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
   # Helper to build a PluginManager with directly injected plugins (bypassing factory loading).
   def build_manager_with_plugins(plugins)
-    manager = AwsRubyDriverWrapper::Services::PluginManager.allocate
+    manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, plugins)
     manager.instance_variable_set(:@pipeline_cache, {})
     manager
@@ -196,7 +196,7 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
       ]
       manager = build_manager_with_plugins(plugins)
 
-      host_info = AwsRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
+      host_info = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
       result = manager.connect(host_info, nil, true)
 
       expect(result).to eq(mock_conn)
@@ -219,7 +219,7 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
       ]
       manager = build_manager_with_plugins(plugins)
 
-      host_info = AwsRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
+      host_info = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
       result = manager.connect(host_info, nil, true, plugin_to_skip: plugin_one)
 
       expect(result).to eq(mock_conn)
@@ -242,8 +242,8 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        host_info = AwsRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
-        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsRubyDriverWrapper::Errors::AwsError)
+        host_info = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
+        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
 
         expect(calls).to eq([
                               'TestPluginOne:before connect',
@@ -263,8 +263,8 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
         ]
         manager = build_manager_with_plugins(plugins)
 
-        host_info = AwsRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
-        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsRubyDriverWrapper::Errors::AwsError)
+        host_info = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'localhost')
+        expect { manager.connect(host_info, nil, true) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
 
         expect(calls).to eq([
                               'TestPluginOne:before connect',
@@ -316,7 +316,7 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
   end
 
   def service_container_with_wrapper_props(wrapper_props = {})
-    container = AwsRubyDriverWrapper::Services::ServiceContainer.new
+    container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new
     connection_service = double('ConnectionService', wrapper_props: wrapper_props, driver_props: Concurrent::Map.new)
     driver_dialect = double('DriverDialect', network_bound_methods: Set['connect'])
     dialect_service = double('DialectService', driver_dialect: driver_dialect)
@@ -331,7 +331,7 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
       manager = described_class.new(container)
 
       expect(manager.num_plugins).to eq(1)
-      expect(manager.plugin_in_use?(AwsRubyDriverWrapper::Plugins::DefaultPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin)).to be true
     end
 
     it 'loads default plugins (failover + default) when no plugins option specified' do
@@ -339,20 +339,20 @@ RSpec.describe AwsRubyDriverWrapper::Services::PluginManager do
       manager = described_class.new(container)
 
       expect(manager.num_plugins).to eq(2)
-      expect(manager.plugin_in_use?(AwsRubyDriverWrapper::Plugins::FailoverPlugin)).to be true
-      expect(manager.plugin_in_use?(AwsRubyDriverWrapper::Plugins::DefaultPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin)).to be true
     end
 
     it 'raises an error when an invalid plugin code is passed' do
       container = service_container_with_wrapper_props(wrapper_plugins: 'nonexistent_plugin')
       expect { described_class.new(container) }
-        .to raise_error(AwsRubyDriverWrapper::Errors::AwsError, 'Invalid plugin: nonexistent_plugin')
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'Invalid plugin: nonexistent_plugin')
     end
 
     it 'raises an error when duplicate plugin codes are passed' do
       container = service_container_with_wrapper_props(wrapper_plugins: 'failover,failover')
       expect { described_class.new(container) }
-        .to raise_error(AwsRubyDriverWrapper::Errors::AwsError, 'Duplicate plugins detected')
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'Duplicate plugins detected')
     end
 
     it 'does not raise an error when all plugin codes are unique' do

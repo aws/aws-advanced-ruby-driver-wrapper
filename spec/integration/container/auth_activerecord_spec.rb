@@ -23,9 +23,9 @@ require_relative 'utils/test_environment_features'
 require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/connection_utils'
-require 'aws_ruby_driver_wrapper'
-require 'aws_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
-require 'aws_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
+require 'aws_advanced_ruby_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
 
 # ActiveRecord smoke tests for the IAM and Secrets Manager plugins.
 #
@@ -87,8 +87,8 @@ RSpec.describe 'Auth plugins (ActiveRecord)', :integration,
     before do
       skip 'No allowed drivers for this environment' if drv.nil?
       begin
-        AwsRubyDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
-          AwsRubyDriverWrapper::Services::CoreServices.storage_service
+        AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
+          AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service
         )
       rescue StandardError
         nil
@@ -129,7 +129,7 @@ RSpec.describe 'Auth plugins (ActiveRecord)', :integration,
     before do
       skip 'No allowed drivers for this environment' if drv.nil?
       begin
-        AwsRubyDriverWrapper.clear_caches
+        AwsAdvancedRubyDriverWrapper.clear_caches
       rescue StandardError
         nil
       end
@@ -137,10 +137,10 @@ RSpec.describe 'Auth plugins (ActiveRecord)', :integration,
 
     it 'connects with credentials fetched from the secret, overriding the ActiveRecord credentials' do
       sm_props = {
-        AwsRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
-        AwsRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
-        AwsRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => env.aurora_region,
-        AwsRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => env.aurora_region,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
       }
       # Deliberately wrong AR credentials: connecting proves the plugin's fetched username and password
       # replaced them under the key the dialect reads, rather than AR's values being used.
