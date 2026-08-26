@@ -51,7 +51,11 @@ module AwsRubyDatabaseDriverWrapper
     #
     #   conn.exec_params('INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)', ...)
     #
-    # Decrypted values are returned as strings, which is what both drivers return for a text column.
+    # Decrypted values are always returned as strings, whatever type the value had when it was
+    # written. An encrypted column is a binary column (+bytea+ or +VARBINARY+), which is what both
+    # drivers return as a string, so a string keeps the read consistent with the column's real type
+    # and with how ActiveRecord treats it. Cast the value on read when the application needs another
+    # type, for example +row['age'].to_i+.
     # Rows read as arrays rather than hashes cannot be decrypted, because the plugin has no column
     # names to match against the configuration: +PG::Result#each_row+, +#values+, +#column_values+
     # and +#tuple+, and mysql2's +as: :array+ option, all return values as they are stored. Read

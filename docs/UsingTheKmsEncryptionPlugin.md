@@ -1,4 +1,4 @@
-``# KMS Encryption Plugin
+# KMS Encryption Plugin
 
 The KMS Encryption Plugin encrypts individual table columns with data keys held in [AWS KMS](https://aws.amazon.com/kms/), without the application having to know about it. Which columns are encrypted is configured in the database itself, in the `encryption_metadata` table, so it can be changed without redeploying the application. When a statement writes to one of those columns the plugin encrypts the bind parameter on its way to the server, and when a statement reads one back it decrypts the value on its way to the application. The plaintext never reaches the server, and neither does any data key: only a KMS-encrypted copy of each data key is stored, in `key_storage`.
 
@@ -54,7 +54,7 @@ client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123
 - Bind parameters of an `INSERT`, `UPDATE`, or `REPLACE` whose columns the plugin can read from the statement, including a multi-row `VALUES` list and the assignments of an upsert (`ON CONFLICT ... DO UPDATE` on PostgreSQL, `ON DUPLICATE KEY UPDATE` on MySQL). On PostgreSQL this also covers a `MERGE`'s `WHEN MATCHED ... UPDATE` / `WHEN NOT MATCHED ... INSERT` clauses and a data-modifying common table expression, for example `WITH w AS (INSERT INTO users (ssn) VALUES ($1) RETURNING id) SELECT * FROM w`.
 - Bind parameters compared against an encrypted column in a `WHERE` clause. Note that encryption is randomized, with a fresh IV per value, so the ciphertext differs every time and an equality search against an encrypted column will not match anything. Filter on a column that is not encrypted instead.
 - Statements run by name after being prepared, whether prepared by the driver's own `prepare` or by a `PREPARE` sent as a statement. A `PREPARE` is also checked as it is sent, so a plaintext written into the statement it carries is caught at that point.
-- Reads that return rows as hashes or single values: `PG::Result#each`, `#to_a`, `#[]` and `#field_values`, and mysql2's default hash and array-of-hash results.
+- Reads that return rows as hashes or single values: `PG::Result#each`, `#to_a`, `#[]` and `#field_values`, and mysql2's default hash and array-of-hash results. A decrypted value is always returned as a **string**, whatever type it had when it was written: an encrypted column is a binary column (`bytea` or `VARBINARY`), and a string keeps the read consistent with the column's real type and with how ActiveRecord treats it. Cast the value on read when you need another type, for example `row['age'].to_i`. The exception is reads that return rows as **bare arrays** — `PG::Result#each_row`, `#values`, `#column_values` and `#tuple`, mysql2's `as: :array` option, and `COPY ... TO` — which give the plugin no column names to match against the configuration, so they are **not** decrypted and hand back the stored payload as-is; read those columns through one of the hash-returning methods above.
 - A column named explicitly with an annotation, which takes precedence over anything the parser found. This is the escape hatch for a statement the plugin cannot read:
   ```ruby
   conn.exec_params('INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)', ...)
@@ -77,7 +77,6 @@ A write raises rather than storing a value the plugin cannot encrypt. This cover
 - Anything the server runs on the application's behalf: `CALL`, `DO`, a function, a stored routine, a trigger.
 - MySQL's `PREPARE stmt FROM '<statement text>'` together with `EXECUTE stmt USING @vars`, and SQL-level `EXECUTE` with inline literals: the values live in server-side variables the plugin never sees.
 - The second and later statements of a multi-statement string.
-- Reads that return rows as bare arrays, which give the plugin no column names to match against the configuration: `PG::Result#each_row`, `#values`, `#column_values` and `#tuple`, mysql2's `as: :array` option, and `COPY ... TO`. These hand out the stored payload rather than the decrypted value. Read such columns through one of the hash-returning methods instead.
 - Everything that reaches the column without passing through this wrapper: `psql` or the `mysql` client, a migration tool, another service, and whatever was already in the table before the column was configured.
 
 ## Enforce encryption in the database
