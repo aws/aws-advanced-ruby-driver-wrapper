@@ -15,22 +15,22 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/monitoring/global_cluster_topology_monitor'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
-require 'aws_ruby_database_driver_wrapper/utils/storage/storage_service'
+require 'aws_ruby_driver_wrapper/monitoring/global_cluster_topology_monitor'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_ruby_driver_wrapper/utils/storage/storage_service'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMonitor do
+RSpec.describe AwsRubyDriverWrapper::Monitoring::GlobalClusterTopologyMonitor do
   let(:cluster_id) { 'global-test-cluster' }
 
   let(:us_east_template) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: '?.abc123.us-east-2.rds.amazonaws.com', port: 5432
     )
   end
   let(:us_west_template) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: '?.def456.us-west-2.rds.amazonaws.com', port: 5432
     )
   end
@@ -39,34 +39,34 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
   end
 
   let(:writer_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-1.abc123.us-east-2.rds.amazonaws.com', port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER, id: 'writer-1'
+      role: AwsRubyDriverWrapper::Host::HostRole::WRITER, id: 'writer-1'
     )
   end
   let(:reader_east) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-1.abc123.us-east-2.rds.amazonaws.com', port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER, id: 'reader-1'
+      role: AwsRubyDriverWrapper::Host::HostRole::READER, id: 'reader-1'
     )
   end
   let(:reader_west) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-2.def456.us-west-2.rds.amazonaws.com', port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER, id: 'reader-2'
+      role: AwsRubyDriverWrapper::Host::HostRole::READER, id: 'reader-2'
     )
   end
   let(:global_topology) { [writer_host, reader_east, reader_west] }
 
   let(:mock_connection) { instance_double('Connection', close: nil) }
 
-  let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60) }
-  let(:storage_service) { AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
+  let(:event_publisher) { AwsRubyDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60) }
+  let(:storage_service) { AwsRubyDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
 
   let(:db_dialect) { instance_double('DbDialect') }
   let(:driver_dialect) { instance_double('DriverDialect', close_connection: nil, apply_monitoring_defaults: nil, closed?: false) }
   let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect, driver_dialect: driver_dialect) }
-  let(:initial_host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'global.endpoint.rds.amazonaws.com', port: 5432) }
+  let(:initial_host_info) { AwsRubyDriverWrapper::Host::HostInfo.new(host: 'global.endpoint.rds.amazonaws.com', port: 5432) }
   let(:connection_config) do
     instance_double('ConnectionConfig', wrapper_props: {
                       cluster_topology_refresh_rate_ms: 100,
@@ -80,7 +80,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
   end
   let(:plugin_manager) { instance_double('PluginManager') }
   let(:service_container) do
-    AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    AwsRubyDriverWrapper::Services::ServiceContainer.new(
       event_publisher: event_publisher,
       storage_service: storage_service,
       dialect_service: dialect_service,
@@ -106,7 +106,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::GlobalClusterTopologyMo
   before do
     storage_service.register(:topology, ttl: 300)
     allow(topology_utils).to receive(:query_global_topology) { [writer_host, reader_east, reader_west] }
-    allow(db_dialect).to receive(:host_role).and_return(AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER)
+    allow(db_dialect).to receive(:host_role).and_return(AwsRubyDriverWrapper::Host::HostRole::WRITER)
     allow(plugin_manager).to receive(:internal_connect).and_return(mock_connection)
   end
 

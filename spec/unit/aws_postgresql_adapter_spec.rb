@@ -15,8 +15,8 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
+require 'aws_ruby_driver_wrapper/errors'
 
 RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
   describe '#translate_exception' do
@@ -42,7 +42,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
     context 'when exception is a FailoverSuccessError' do
       it 'returns the original exception and reconfigures the connection' do
-        exception = AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError.new
+        exception = AwsRubyDriverWrapper::Errors::FailoverSuccessError.new
         allow(adapter).to receive(:configure_connection)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
@@ -53,7 +53,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
     context 'when exception is a TransactionStateUnknownError' do
       it 'returns the original exception and reconfigures the connection' do
-        exception = AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError.new
+        exception = AwsRubyDriverWrapper::Errors::TransactionStateUnknownError.new
         allow(adapter).to receive(:configure_connection)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
@@ -64,7 +64,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
     context 'when exception is a FailoverFailedError' do
       it 'returns a connection error and sets connection_broken' do
-        exception = AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError.new('')
+        exception = AwsRubyDriverWrapper::Errors::FailoverFailedError.new('')
         pool = double('pool')
         adapter.instance_variable_set(:@pool, pool)
         allow(adapter).to receive(:configure_connection)
@@ -79,7 +79,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
     context 'when exception is a generic AwsError' do
       it 'returns the original exception unchanged' do
-        exception = AwsRubyDatabaseDriverWrapper::Errors::AwsError.new('generic aws error')
+        exception = AwsRubyDriverWrapper::Errors::AwsError.new('generic aws error')
         allow(adapter).to receive(:configure_connection)
 
         result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)

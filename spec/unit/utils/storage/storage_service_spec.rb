@@ -15,11 +15,11 @@
 # limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/storage/storage_service'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_ruby_driver_wrapper/utils/storage/storage_service'
+require 'aws_ruby_driver_wrapper/utils/events/batching_event_publisher'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService do
-  let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 9999) }
+RSpec.describe AwsRubyDriverWrapper::Utils::Storage::StorageService do
+  let(:event_publisher) { AwsRubyDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 9999) }
 
   # Use a large cleanup interval so the thread doesn't interfere with most tests.
   subject(:service) { described_class.new(event_publisher: event_publisher, cleanup_interval: 9999) }

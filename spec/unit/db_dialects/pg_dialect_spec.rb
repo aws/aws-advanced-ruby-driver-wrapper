@@ -14,10 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/db_dialects/pg_dialect'
+require 'aws_ruby_driver_wrapper/db_dialects/pg_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::PgDialect do
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsRubyDriverWrapper::DbDialects::PgDialect do
+  let(:driver_dialect) { AwsRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('PG::Connection') }
@@ -49,10 +49,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::PgDialect do
   describe '#dialect_update_candidates' do
     it 'returns the expected candidates' do
       expect(dialect.dialect_update_candidates).to include(
-        AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_PG,
-        AwsRubyDatabaseDriverWrapper::DialectCodes::AURORA_PG,
-        AwsRubyDatabaseDriverWrapper::DialectCodes::MULTI_AZ_PG_CLUSTER,
-        AwsRubyDatabaseDriverWrapper::DialectCodes::RDS_PG
+        AwsRubyDriverWrapper::DialectCodes::GLOBAL_AURORA_PG,
+        AwsRubyDriverWrapper::DialectCodes::AURORA_PG,
+        AwsRubyDriverWrapper::DialectCodes::MULTI_AZ_PG_CLUSTER,
+        AwsRubyDriverWrapper::DialectCodes::RDS_PG
       )
     end
   end

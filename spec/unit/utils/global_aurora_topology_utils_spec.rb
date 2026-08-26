@@ -15,11 +15,11 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/global_aurora_topology_utils'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/utils/global_aurora_topology_utils'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
+RSpec.describe AwsRubyDriverWrapper::Utils::GlobalAuroraTopologyUtils do
   include ResultSetHelper
 
   let(:dialect) { instance_double('Dialect') }
@@ -27,21 +27,21 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
   let(:subject) { described_class.new(dialect: dialect) }
 
   let(:initial_host_info) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'my-cluster.cluster-xyz.us-east-1.rds.amazonaws.com',
       port: 5432
     )
   end
 
   let(:us_east_template) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: '?.xyz.us-east-1.rds.amazonaws.com',
       port: 5432
     )
   end
 
   let(:eu_west_template) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: '?.xyz.eu-west-1.rds.amazonaws.com',
       port: 5432
     )
@@ -77,8 +77,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         expect(hosts).not_to be_nil
         expect(hosts.size).to eq(2)
 
-        writer = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
-        reader = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::READER }
+        writer = hosts.find { |h| h.role == AwsRubyDriverWrapper::Host::HostRole::WRITER }
+        reader = hosts.find { |h| h.role == AwsRubyDriverWrapper::Host::HostRole::READER }
 
         expect(writer).not_to be_nil
         expect(writer.id).to eq('writer-instance')
@@ -158,7 +158,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
         hosts = subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)
 
         expect(hosts).not_to be_nil
-        writers = hosts.select { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
+        writers = hosts.select { |h| h.role == AwsRubyDriverWrapper::Host::HostRole::WRITER }
         # verify_writer keeps only one writer (the most recent)
         expect(writers.size).to eq(1)
       end
@@ -224,7 +224,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils do
 
         expect(templates.size).to eq(1)
         expect(templates['us-east-1'].host).to eq('?.xyz.us-east-1.rds.amazonaws.com')
-        expect(templates['us-east-1'].port).to eq(AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_PORT)
+        expect(templates['us-east-1'].port).to eq(AwsRubyDriverWrapper::Host::HostInfo::NO_PORT)
       end
     end
 

@@ -14,17 +14,17 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/mysql'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_ruby_driver_wrapper/mysql'
+require 'aws_ruby_driver_wrapper/host/host_info'
 
 require 'concurrent'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect do
+RSpec.describe AwsRubyDriverWrapper::DriverDialects::MysqlDriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }
-  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 3306) }
+  let(:host_info) { AwsRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 3306) }
   let(:config) do
     Concurrent::Map.new.tap do |m|
       m[:database] = 'testdb'
@@ -116,8 +116,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
 
     it 'omits host when not specified (localhost default)' do
-      no_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
-        host: AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_HOST, port: '3306'
+      no_host = AwsRubyDriverWrapper::Host::HostInfo.new(
+        host: AwsRubyDriverWrapper::Host::HostInfo::NO_HOST, port: '3306'
       )
       result = dialect.prepare_connect_config(no_host, config)
       expect(result).not_to have_key(:host)
@@ -125,14 +125,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
 
     it 'omits both host and port when neither specified' do
-      bare = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new
+      bare = AwsRubyDriverWrapper::Host::HostInfo.new
       result = dialect.prepare_connect_config(bare, config)
       expect(result).not_to have_key(:host)
       expect(result).not_to have_key(:port)
     end
 
     it 'omits port when not specified' do
-      no_port = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com')
+      no_port = AwsRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com')
       result = dialect.prepare_connect_config(no_port, config)
       expect(result).not_to have_key(:port)
     end
@@ -152,11 +152,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
 
     it 'includes CONNECTION_QUERY' do
-      expect(dialect.network_bound_methods).to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_QUERY.name)
+      expect(dialect.network_bound_methods).to include(AwsRubyDriverWrapper::RubyMethod::CONNECTION_QUERY.name)
     end
 
     it 'excludes CONNECTION_ESCAPE' do
-      expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
+      expect(dialect.network_bound_methods).not_to include(AwsRubyDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
     end
 
     # A call that is not listed here is handed straight to the driver, which takes it past every
@@ -164,7 +164,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     # missed, so they are checked against the driver itself rather than against a list written out by
     # hand, which is what let async_result go unlisted to begin with.
     it 'covers every mysql2 call that runs a statement or moves its results' do
-      wrapper = AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient
+      wrapper = AwsRubyDriverWrapper::Mysql2WrapperClient
       # The client's own options, and the info libmysql buffered about the last statement, none of
       # which is a call to the server.
       local = %i[query_options query_info query_info_string]
@@ -182,7 +182,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     # from every dialect are left out: reset has no mysql2 counterpart and connect is not a call on a
     # connection at all.
     it 'names a method mysql2 defines for every call it lists of its own' do
-      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      common = AwsRubyDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
       defined_by_mysql2 = [Mysql2::Client, Mysql2::Result, Mysql2::Statement].flat_map(&:instance_methods).to_set
 
       unanswerable = (dialect.network_bound_methods - common).reject do |entry|
@@ -198,8 +198,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect 
     # long ago the statement it is reading was sent. The names inherited from every dialect are left
     # out, as they are above: reset has no mysql2 counterpart and connect is not a call on a connection.
     it 'is answered by a client method or a DYNAMIC_METHODS entry for every call it lists of its own' do
-      wrapper = AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient
-      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      wrapper = AwsRubyDriverWrapper::Mysql2WrapperClient
+      common = AwsRubyDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
       listed = (dialect.network_bound_methods - common).select { |entry| entry.start_with?('connection.') }
 
       unnamed = listed.reject do |entry|

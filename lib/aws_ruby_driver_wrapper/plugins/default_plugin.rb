@@ -1,0 +1,101 @@
+# frozen_string_literal: true
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  You may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+require 'concurrent'
+require_relative '../errors'
+require_relative '../host/host_info'
+require_relative '../host/host_availability'
+
+module AwsRubyDriverWrapper
+  module Plugins
+    class DefaultPlugin
+      SUBSCRIBED_METHODS = Set['*'].freeze
+      HOST_PORT_KEYS = %i[host port].freeze
+
+      def initialize(service_container, _props)
+        @service_container = service_container
+      end
+
+      def subscribed_methods
+        SUBSCRIBED_METHODS
+      end
+
+      def connect(host_info, driver_props, is_initial_connection, _pipeline_callable)
+        connection_service = @service_container.connection_service
+        driver_dialect = @service_container.dialect_service.driver_dialect
+        target_host_info = if is_initial_connection && connection_service.multi_host_url?
+                             # If the user specified a multi-host URL, we should always pass the same hosts/ports they
+                             # specified. Note that host_info may have a different value than initial_host_info.
+                             connection_service.initial_host_info
+                           else
+                             host_info
+                           end
+
+        conn = driver_dialect.connect(target_host_info, driver_props)
+
+        if conn.nil?
+          raise Errors::AwsError,
+                "Failed to connect to #{target_host_info&.host}: driver returned nil connection"
+        end
+
+        # If host was not specified (Unix socket / localhost), fill in from the live connection.
+        if host_info.nil? || !host_info.host_specified?
+          host_info = Host::HostInfo.new(
+            host: conn.respond_to?(:host) && conn.host ? conn.host : Host::HostInfo::NO_HOST,
+            port: conn.respond_to?(:port) && conn.port ? conn.port.to_s : Host::HostInfo::NO_PORT
+          )
+        else
+          @service_container.host_service.set_availability(host_info, Host::HostAvailability::AVAILABLE)
+        end
+
+        connection_service.update_current_connection(conn, host_info)
+
+        if is_initial_connection
+          @service_container.dialect_service.update_dialect(conn)
+          @service_container.host_service.refresh_host_list
+
+          if connection_service.pg? && connection_service.multi_host_url?
+            connection_service.config.initial_host_info = Host::HostInfo.new(
+              host: conn.host,
+              port: conn.port.to_i
+            )
+          end
+        end
+
+        init_func = AwsRubyDriverWrapper.config.connection_init_func
+        init_func&.call(conn, host_info)
+
+        conn
+      end
+
+      def internal_connect(host_info, driver_props, _wrapper_props, _is_initial_connection, _pipeline_callable)
+        driver_dialect = @service_container.dialect_service.driver_dialect
+        driver_dialect.connect(host_info, driver_props)
+      end
+
+      def execute(target_method_name, target_callable, *args, **, &)
+        session = @service_container.session_state_service
+        autocommit_before = session&.autocommit?
+
+        result = target_callable.call(*args, **, &)
+
+        session&.update_transaction_state(target_method_name, args, autocommit_before)
+
+        result
+      end
+    end
+  end
+end

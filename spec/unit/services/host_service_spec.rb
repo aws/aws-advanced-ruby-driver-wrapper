@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/services/host_service'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/random_host_selector'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_ruby_driver_wrapper/services/host_service'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/host/random_host_selector'
+require 'aws_ruby_driver_wrapper/errors'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
+RSpec.describe AwsRubyDriverWrapper::Services::HostService do
   let(:host_permissions) do
     instance_double('HostPermissions', allowed_host_ids: [], blocked_host_ids: [], required_role: nil)
   end
@@ -41,19 +41,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
   let(:service) { described_class.new(service_container) }
 
   let(:writer) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-host',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER,
+      role: AwsRubyDriverWrapper::Host::HostRole::WRITER,
       id: 'writer-id'
     )
   end
 
   let(:reader) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-host',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER,
+      role: AwsRubyDriverWrapper::Host::HostRole::READER,
       id: 'reader-id'
     )
   end
@@ -63,7 +63,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
   describe '#select_host' do
     context 'with a default strategy' do
       it 'delegates to the registered selector' do
-        result = service.select_host([reader], AwsRubyDatabaseDriverWrapper::Host::HostRole::READER, 'random')
+        result = service.select_host([reader], AwsRubyDriverWrapper::Host::HostRole::READER, 'random')
         expect(result).to eq(reader)
       end
     end
@@ -71,7 +71,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     context 'with an unknown strategy' do
       it 'raises an error' do
         expect { service.select_host(hosts, nil, 'nonexistent') }
-          .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Unsupported host selection strategy/)
+          .to raise_error(AwsRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy/)
       end
     end
   end
@@ -104,7 +104,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
       custom_selector = instance_double('CustomSelector')
 
       expect { described_class.register_host_selector('random', custom_selector) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /Cannot override default host selection strategy/)
+        .to raise_error(AwsRubyDriverWrapper::Errors::AwsError, /Cannot override default host selection strategy/)
     end
   end
 
@@ -136,7 +136,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
 
     it 'updates availability when matched by host name (case-insensitive)' do
-      lookup_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+      lookup_host = AwsRubyDriverWrapper::Host::HostInfo.new(
         host: 'READER-HOST',
         port: 5432,
         id: 'different-id'
@@ -146,7 +146,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::HostService do
     end
 
     it 'does nothing when no matching host is found' do
-      unknown_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+      unknown_host = AwsRubyDriverWrapper::Host::HostInfo.new(
         host: 'unknown-host',
         port: 5432,
         id: 'unknown-id'

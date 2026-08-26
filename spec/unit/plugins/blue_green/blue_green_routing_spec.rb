@@ -15,38 +15,38 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/routing/base_routing'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/routing/reject_connect_routing'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/routing/suspend_connect_routing'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/routing/suspend_execute_routing'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/routing/substitute_connect_routing'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/routing/suspend_until_corresponding_host_found_connect_routing'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/phase'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/role'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/status'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
-require 'aws_ruby_database_driver_wrapper/errors'
-require 'aws_ruby_database_driver_wrapper/property_definition'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/base_routing'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/reject_connect_routing'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/suspend_connect_routing'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/suspend_execute_routing'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/substitute_connect_routing'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/routing/suspend_until_corresponding_host_found_connect_routing'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/phase'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/role'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/status'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_availability'
+require 'aws_ruby_driver_wrapper/errors'
+require 'aws_ruby_driver_wrapper/property_definition'
 require 'concurrent'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
-  let(:bg)      { AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen }
+RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::Routing do
+  let(:bg)      { AwsRubyDriverWrapper::Plugins::BlueGreen }
   let(:routing) { bg::Routing }
   let(:phase)   { bg::Phase }
   let(:role)    { bg::Role }
-  let(:errors)  { AwsRubyDatabaseDriverWrapper::Errors }
+  let(:errors)  { AwsRubyDriverWrapper::Errors }
 
   let(:host_val) { 'blue-instance.cluster-abc.us-east-1.rds.amazonaws.com' }
   let(:port_val) { 3306 }
 
-  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: host_val, port: port_val) }
+  let(:host_info) { AwsRubyDriverWrapper::Host::HostInfo.new(host: host_val, port: port_val) }
   let(:props)     { Concurrent::Map.new }
 
   describe 'BaseRouting#match?' do
     # Use RejectConnectRouting as a concrete carrier of BaseRouting
     def make_routing(host: nil, port: nil, role: nil)
-      AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing::RejectConnectRouting.new(host, port, role)
+      AwsRubyDriverWrapper::Plugins::BlueGreen::Routing::RejectConnectRouting.new(host, port, role)
     end
 
     it 'matches when all fields are nil (wildcard)' do
@@ -116,7 +116,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
 
     context 'when status stays IN_PROGRESS past the timeout' do
       before do
-        props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
+        props[AwsRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
         status = instance_double(bg::Status, current_phase: phase::IN_PROGRESS, wait: nil, notify: nil)
         allow(storage_service).to receive(:get).and_return(status)
       end
@@ -147,7 +147,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
 
     context 'when status stays IN_PROGRESS past the timeout' do
       before do
-        props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
+        props[AwsRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
         status = instance_double(bg::Status, current_phase: phase::IN_PROGRESS, wait: nil, notify: nil)
         allow(storage_service).to receive(:get).and_return(status)
       end
@@ -168,7 +168,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
     end
 
     context 'when substitute host is an IP address without IAM' do
-      let(:ip_host) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 3306) }
+      let(:ip_host) { AwsRubyDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 3306) }
 
       before do
         allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
@@ -184,9 +184,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
     end
 
     context 'when substitute host is an IP address with IAM enabled' do
-      let(:ip_host)   { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 3306) }
-      let(:iam_host1) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'green-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306) }
-      let(:iam_host2) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'blue-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306) }
+      let(:ip_host)   { AwsRubyDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 3306) }
+      let(:iam_host1) { AwsRubyDriverWrapper::Host::HostInfo.new(host: 'green-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306) }
+      let(:iam_host2) { AwsRubyDriverWrapper::Host::HostInfo.new(host: 'blue-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306) }
       let(:driver_props) { Concurrent::Map.new }
       let(:connection_service) { double('connection_service', driver_props: driver_props) }
 
@@ -260,7 +260,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
     end
 
     context 'when corresponding host is found on second poll' do
-      let(:green_host) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'green-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306) }
+      let(:green_host) { AwsRubyDriverWrapper::Host::HostInfo.new(host: 'green-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306) }
 
       it 'returns nil once the host is found' do
         waiting_status = instance_double(bg::Status,
@@ -278,7 +278,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Routing do
 
     context 'when timeout elapses before host is found' do
       before do
-        props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
+        props[AwsRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
         status = instance_double(bg::Status,
                                  current_phase: phase::POST,
                                  corresponding_hosts: { host_val => [host_info, nil] },

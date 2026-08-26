@@ -21,7 +21,7 @@ require_relative 'utils/test_environment_features'
 require_relative 'utils/database_engine_deployment'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/driver_helper'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_ruby_driver_wrapper'
 
 RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
                features: [Integration::TestEnvironmentFeatures::BLUE_GREEN_DEPLOYMENT],
@@ -46,7 +46,7 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
   end
 
   after(:all) do
-    AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin.clean_up_providers
+    AwsRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin.clean_up_providers
     @orchestrator&.capturing_logger&.clear_captured_output
   end
 

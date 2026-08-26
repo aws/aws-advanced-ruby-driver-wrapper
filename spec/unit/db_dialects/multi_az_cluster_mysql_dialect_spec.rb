@@ -14,10 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/db_dialects/multi_az_cluster_mysql_dialect'
+require 'aws_ruby_driver_wrapper/db_dialects/multi_az_cluster_mysql_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::MultiAzClusterMysqlDialect do
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+RSpec.describe AwsRubyDriverWrapper::DbDialects::MultiAzClusterMysqlDialect do
+  let(:driver_dialect) { AwsRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }

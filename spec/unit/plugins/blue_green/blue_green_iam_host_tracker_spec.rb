@@ -15,9 +15,9 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/iam_host_tracker'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/iam_host_tracker'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::IamHostTracker do
+RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::IamHostTracker do
   let(:on_all_changed) { double('callback', call: nil) }
   subject(:tracker) { described_class.new(on_all_changed: on_all_changed.method(:call)) }
 

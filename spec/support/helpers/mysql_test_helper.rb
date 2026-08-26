@@ -37,7 +37,7 @@ module MysqlTestHelper
   end
 
   def self.wrapper_connect
-    AwsRubyDatabaseDriverWrapper::Mysql2WrapperClient.new(**native_config)
+    AwsRubyDriverWrapper::Mysql2WrapperClient.new(**native_config)
   end
 
   def self.native_connect

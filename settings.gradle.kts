@@ -1,4 +1,4 @@
-rootProject.name = "aws-ruby-database-driver-wrapper"
+rootProject.name = "aws-ruby-driver-wrapper"
 
 include("integration-testing")
 

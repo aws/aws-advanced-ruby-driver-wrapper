@@ -15,37 +15,37 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/parser/routing_hint_parser'
-require 'aws_ruby_database_driver_wrapper/utils/parser/routing_hint'
+require 'aws_ruby_driver_wrapper/utils/parser/routing_hint_parser'
+require 'aws_ruby_driver_wrapper/utils/parser/routing_hint'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHintParser do
+RSpec.describe AwsRubyDriverWrapper::Utils::Parser::RoutingHintParser do
   subject { described_class }
 
   describe '.parse_routing_hint' do
     it 'returns READER for a reader hint' do
-      expect(subject.parse_routing_hint('/*@reader*/ SELECT * FROM users')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::READER)
+      expect(subject.parse_routing_hint('/*@reader*/ SELECT * FROM users')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::READER)
     end
 
     it 'returns WRITER for a writer hint' do
-      expect(subject.parse_routing_hint('/*@writer*/ SELECT * FROM users FOR UPDATE')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::WRITER)
+      expect(subject.parse_routing_hint('/*@writer*/ SELECT * FROM users FOR UPDATE')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::WRITER)
     end
 
     it 'returns KEEP for a keep hint' do
-      expect(subject.parse_routing_hint('/*@keep*/ SELECT * FROM users')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::KEEP)
+      expect(subject.parse_routing_hint('/*@keep*/ SELECT * FROM users')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::KEEP)
     end
 
     it 'is case-insensitive' do
-      expect(subject.parse_routing_hint('/*@READER*/ SELECT * FROM users')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::READER)
-      expect(subject.parse_routing_hint('/*@Reader*/ SELECT * FROM users')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::READER)
+      expect(subject.parse_routing_hint('/*@READER*/ SELECT * FROM users')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::READER)
+      expect(subject.parse_routing_hint('/*@Reader*/ SELECT * FROM users')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::READER)
     end
 
     it 'handles whitespace around the keyword' do
-      expect(subject.parse_routing_hint('/* @reader */ SELECT * FROM users')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::READER)
-      expect(subject.parse_routing_hint('/* @ reader */ SELECT * FROM users')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::READER)
+      expect(subject.parse_routing_hint('/* @reader */ SELECT * FROM users')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::READER)
+      expect(subject.parse_routing_hint('/* @ reader */ SELECT * FROM users')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::READER)
     end
 
     it 'handles hint at end of sql' do
-      expect(subject.parse_routing_hint('SELECT * FROM users /*@reader*/')).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::RoutingHint::READER)
+      expect(subject.parse_routing_hint('SELECT * FROM users /*@reader*/')).to eq(AwsRubyDriverWrapper::Utils::Parser::RoutingHint::READER)
     end
 
     it 'returns nil when there is no hint' do

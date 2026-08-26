@@ -23,11 +23,11 @@ module Integration
   # real-time subscribers for log-watching threads (e.g., BG readiness detection).
   #
   # Usage:
-  #   original = AwsRubyDatabaseDriverWrapper.logger
+  #   original = AwsRubyDriverWrapper.logger
   #   capturing = Integration::CapturingLogger.new(original)
-  #   AwsRubyDatabaseDriverWrapper.logger = capturing
+  #   AwsRubyDriverWrapper.logger = capturing
   #   # ... run test ...
-  #   AwsRubyDatabaseDriverWrapper.logger = original
+  #   AwsRubyDriverWrapper.logger = original
   #
   class CapturingLogger < Logger
     attr_reader :captured_output

@@ -15,44 +15,44 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/host/random_host_selector'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
+require 'aws_ruby_driver_wrapper/host/random_host_selector'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/host/host_availability'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RandomHostSelector do
+RSpec.describe AwsRubyDriverWrapper::Host::RandomHostSelector do
   let(:selector) { described_class.new }
 
   let(:writer) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-host',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER
+      role: AwsRubyDriverWrapper::Host::HostRole::WRITER
     )
   end
 
   let(:reader1) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-host-1',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER
+      role: AwsRubyDriverWrapper::Host::HostRole::READER
     )
   end
 
   let(:reader2) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-host-2',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER
+      role: AwsRubyDriverWrapper::Host::HostRole::READER
     )
   end
 
   let(:unavailable_reader) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'unavailable-reader',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER,
-      availability: AwsRubyDatabaseDriverWrapper::Host::HostAvailability::UNAVAILABLE
+      role: AwsRubyDriverWrapper::Host::HostRole::READER,
+      availability: AwsRubyDriverWrapper::Host::HostAvailability::UNAVAILABLE
     )
   end
 
@@ -68,16 +68,16 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RandomHostSelector do
     context 'when filtering by reader role' do
       it 'returns only a reader host' do
         hosts = [writer, reader1, reader2]
-        result = selector.select_host(hosts, AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
+        result = selector.select_host(hosts, AwsRubyDriverWrapper::Host::HostRole::READER)
         expect(result).not_to be_nil
-        expect(result.role).to eq(AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
+        expect(result.role).to eq(AwsRubyDriverWrapper::Host::HostRole::READER)
       end
     end
 
     context 'when filtering by writer role' do
       it 'returns the writer host' do
         hosts = [writer, reader1, reader2]
-        result = selector.select_host(hosts, AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER)
+        result = selector.select_host(hosts, AwsRubyDriverWrapper::Host::HostRole::WRITER)
         expect(result).to eq(writer)
       end
     end
@@ -85,14 +85,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RandomHostSelector do
     context 'when no hosts match the requested role' do
       it 'returns nil' do
         hosts = [reader1, reader2]
-        result = selector.select_host(hosts, AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER)
+        result = selector.select_host(hosts, AwsRubyDriverWrapper::Host::HostRole::WRITER)
         expect(result).to be_nil
       end
     end
 
     context 'when hosts list is empty' do
       it 'returns nil' do
-        result = selector.select_host([], AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
+        result = selector.select_host([], AwsRubyDriverWrapper::Host::HostRole::READER)
         expect(result).to be_nil
       end
     end
@@ -100,13 +100,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::RandomHostSelector do
     context 'when hosts are unavailable' do
       it 'excludes unavailable hosts' do
         hosts = [unavailable_reader]
-        result = selector.select_host(hosts, AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
+        result = selector.select_host(hosts, AwsRubyDriverWrapper::Host::HostRole::READER)
         expect(result).to be_nil
       end
 
       it 'returns only available hosts when some are unavailable' do
         hosts = [unavailable_reader, reader1]
-        result = selector.select_host(hosts, AwsRubyDatabaseDriverWrapper::Host::HostRole::READER)
+        result = selector.select_host(hosts, AwsRubyDriverWrapper::Host::HostRole::READER)
         expect(result).to eq(reader1)
       end
     end

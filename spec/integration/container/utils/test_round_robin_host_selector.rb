@@ -14,8 +14,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
+require 'aws_ruby_driver_wrapper'
+require 'aws_ruby_driver_wrapper/host/host_availability'
 
 module Integration
   # A minimal round robin host selector, for tests only. It exists so that load balancing can be
@@ -37,7 +37,7 @@ module Integration
     def select_host(hosts, role, _props = nil)
       eligible_hosts = hosts.select do |host|
         (role.nil? || host.role == role) &&
-          host.availability == AwsRubyDatabaseDriverWrapper::Host::HostAvailability::AVAILABLE
+          host.availability == AwsRubyDriverWrapper::Host::HostAvailability::AVAILABLE
       end
 
       return nil if eligible_hosts.empty?

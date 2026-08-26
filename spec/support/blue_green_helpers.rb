@@ -14,19 +14,19 @@
 
 # frozen_string_literal: true
 
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/interim_status'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/phase'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/role'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/interim_status'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/phase'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/role'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
 
 # Helpers for building BlueGreenConnection objects in unit tests without a real DB connection.
 # The key seam is InterimStatus — it is what StatusMonitor produces after querying the BG status
 # table, and what StatusProvider#prepare_status consumes. Tests build InterimStatus directly and
 # call prepare_status, bypassing all network I/O.
 module BlueGreenHelpers
-  BG = AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen
-  Host = AwsRubyDatabaseDriverWrapper::Host
+  BG = AwsRubyDriverWrapper::Plugins::BlueGreen
+  Host = AwsRubyDriverWrapper::Host
 
   # Builds an InterimStatus for the given phase and role.
   #

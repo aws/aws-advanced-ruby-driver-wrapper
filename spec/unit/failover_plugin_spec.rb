@@ -15,22 +15,22 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/failover_plugin'
-require 'aws_ruby_database_driver_wrapper/plugins/failover_mode'
-require 'aws_ruby_database_driver_wrapper/property_definition'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
-require 'aws_ruby_database_driver_wrapper/ruby_method'
+require 'aws_ruby_driver_wrapper/plugins/failover_plugin'
+require 'aws_ruby_driver_wrapper/plugins/failover_mode'
+require 'aws_ruby_driver_wrapper/property_definition'
+require 'aws_ruby_driver_wrapper/services/service_container'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/host/host_availability'
+require 'aws_ruby_driver_wrapper/ruby_method'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
-  let(:host_role) { AwsRubyDatabaseDriverWrapper::Host::HostRole }
-  let(:host_availability) { AwsRubyDatabaseDriverWrapper::Host::HostAvailability }
-  let(:failover_mode) { AwsRubyDatabaseDriverWrapper::Plugins::FailoverMode }
+RSpec.describe AwsRubyDriverWrapper::Plugins::FailoverPlugin do
+  let(:host_role) { AwsRubyDriverWrapper::Host::HostRole }
+  let(:host_availability) { AwsRubyDriverWrapper::Host::HostAvailability }
+  let(:failover_mode) { AwsRubyDriverWrapper::Plugins::FailoverMode }
 
   let(:writer_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-instance.xyz.us-east-1.rds.amazonaws.com',
       port: '5432',
       role: host_role::WRITER
@@ -38,7 +38,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
   end
 
   let(:reader_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-instance.xyz.us-east-1.rds.amazonaws.com',
       port: '5432',
       role: host_role::READER
@@ -101,7 +101,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
   end
 
   let(:service_container) do
-    AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    AwsRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service,
       dialect_service,
       nil,
@@ -117,7 +117,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
   let(:plugin) { described_class.new(service_container, props) }
 
   before do
-    allow(AwsRubyDatabaseDriverWrapper::Utils::RetryUtil).to receive(:new).and_return(retry_util)
+    allow(AwsRubyDriverWrapper::Utils::RetryUtil).to receive(:new).and_return(retry_util)
   end
 
   describe '#subscribed_methods' do
@@ -137,7 +137,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
     context 'when method can be directly executed' do
       it 'passes through connection.close without failover logic' do
         result = plugin.execute(
-          AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
+          AwsRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
           pipeline_callable
         )
         expect(result).to eq(:result)
@@ -145,7 +145,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
       it 'sets closed_explicitly on connection.close' do
         plugin.execute(
-          AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
+          AwsRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
           pipeline_callable
         )
 
@@ -155,7 +155,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
       it 'passes through connection.close without failover logic' do
         result = plugin.execute(
-          AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
+          AwsRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name,
           pipeline_callable
         )
         expect(result).to eq(:result)
@@ -181,7 +181,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         expect(host_service).to receive(:force_refresh_host_list?)
         expect do
           plugin.execute('connection.exec', pipeline_callable)
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+        end.to raise_error(AwsRubyDriverWrapper::Errors::FailoverSuccessError)
       end
     end
 
@@ -197,7 +197,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(dialect_service).to receive(:network_error?).with(network_error).and_return(true)
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+        writer_result = AwsRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -206,7 +206,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         expect(host_service).to receive(:set_availability).with(writer_host, host_availability::UNAVAILABLE)
         expect do
           plugin.execute('connection.exec', pipeline_callable)
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+        end.to raise_error(AwsRubyDriverWrapper::Errors::FailoverSuccessError)
       end
     end
 
@@ -238,7 +238,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(dialect_service).to receive(:read_only_error?).with(read_only_error).and_return(true)
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+        writer_result = AwsRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -247,7 +247,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         expect(host_service).to receive(:set_availability).with(writer_host, host_availability::UNAVAILABLE)
         expect do
           plugin.execute('connection.exec', pipeline_callable)
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+        end.to raise_error(AwsRubyDriverWrapper::Errors::FailoverSuccessError)
       end
     end
   end
@@ -271,7 +271,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+        writer_result = AwsRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -287,7 +287,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       let(:failing_callable) { -> { raise network_error } }
 
       let(:non_cluster_host) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsRubyDriverWrapper::Host::HostInfo.new(
           host: 'my-instance.xyz.us-east-1.rds.amazonaws.com',
           port: '5432',
           role: host_role::WRITER
@@ -301,7 +301,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
         allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
         allow(connection_service).to receive(:current_connection).and_return(new_connection)
         allow(connection_service).to receive(:update_current_connection)
-        writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+        writer_result = AwsRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
         allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       end
 
@@ -325,7 +325,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
     context 'when writer cluster resolves to the writer' do
       let(:writer_cluster_host) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsRubyDriverWrapper::Host::HostInfo.new(
           host: 'my-cluster.cluster-xyz.us-east-1.rds.amazonaws.com',
           port: '5432',
           role: host_role::WRITER
@@ -346,7 +346,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
     context 'when writer cluster resolves to a reader (stale DNS)' do
       let(:writer_cluster_host) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsRubyDriverWrapper::Host::HostInfo.new(
           host: 'my-cluster.cluster-xyz.us-east-1.rds.amazonaws.com',
           port: '5432',
           role: host_role::WRITER
@@ -388,7 +388,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       expect(connection_service).to receive(:update_current_connection).with(new_connection, anything)
       expect do
         plugin.send(:failover)
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+      end.to raise_error(AwsRubyDriverWrapper::Errors::FailoverSuccessError)
     end
   end
 
@@ -400,7 +400,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       plugin.connect(writer_host, props, true, -> { connection })
 
       allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
-      writer_result = AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+      writer_result = AwsRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
       allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
       allow(connection_service).to receive(:update_current_connection)
       allow(connection_service).to receive(:current_connection).and_return(new_connection)
@@ -410,7 +410,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       expect(connection_service).to receive(:update_current_connection).with(new_connection, anything)
       expect do
         plugin.send(:failover)
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+      end.to raise_error(AwsRubyDriverWrapper::Errors::FailoverSuccessError)
     end
 
     context 'when in a transaction' do
@@ -422,14 +422,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
       it 'raises TransactionStateUnknownError' do
         expect do
           plugin.send(:failover)
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError)
+        end.to raise_error(AwsRubyDriverWrapper::Errors::TransactionStateUnknownError)
       end
 
       it 'resets the transaction state' do
         expect(session_state_service).to receive(:in_transaction=).with(false)
         begin
           plugin.send(:failover)
-        rescue AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError
+        rescue AwsRubyDriverWrapper::Errors::TransactionStateUnknownError
           nil
         end
       end
@@ -449,7 +449,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin do
 
     context 'when failover_mode is not set and connecting to a reader cluster' do
       let(:reader_cluster_host) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsRubyDriverWrapper::Host::HostInfo.new(
           host: 'my-cluster.cluster-ro-xyz.us-east-1.rds.amazonaws.com',
           port: '5432',
           role: host_role::READER

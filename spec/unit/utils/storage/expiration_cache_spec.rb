@@ -15,9 +15,9 @@
 # limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/storage/expiration_cache'
+require 'aws_ruby_driver_wrapper/utils/storage/expiration_cache'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Storage::ExpirationCache do
+RSpec.describe AwsRubyDriverWrapper::Utils::Storage::ExpirationCache do
   subject(:cache) { described_class.new(ttl: 1) }
 
   describe '#put and #get' do

@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/monitoring/monitor'
-require 'aws_ruby_database_driver_wrapper/services/monitor_service'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_ruby_driver_wrapper/monitoring/monitor'
+require 'aws_ruby_driver_wrapper/services/monitor_service'
+require 'aws_ruby_driver_wrapper/utils/events/batching_event_publisher'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::MonitorService do
+RSpec.describe AwsRubyDriverWrapper::Services::MonitorService do
   let(:test_monitor_class) do
-    Class.new(AwsRubyDatabaseDriverWrapper::Monitoring::Monitor) do
+    Class.new(AwsRubyDriverWrapper::Monitoring::Monitor) do
       def monitor
         sleep(0.01) until stopped?
       end
@@ -29,7 +29,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::MonitorService do
   end
 
   let(:service_container) { double('service_container') }
-  let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 0.1) }
+  let(:event_publisher) { AwsRubyDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 0.1) }
 
   let(:monitor_service) do
     described_class.new(event_publisher: event_publisher)

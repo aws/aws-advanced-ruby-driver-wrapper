@@ -22,7 +22,7 @@ require_relative 'utils/test_environment_features'
 require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/connection_utils'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_ruby_driver_wrapper'
 
 RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
                features: [Integration::TestEnvironmentFeatures::SECRETS_MANAGER],
@@ -54,7 +54,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
     begin
-      AwsRubyDatabaseDriverWrapper.clear_caches
+      AwsRubyDriverWrapper.clear_caches
     rescue StandardError
       nil
     end
@@ -88,7 +88,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     # Cache entry should be the same object (not re-fetched)
     cached_entry_after = storage.get(:secrets_manager, cache_key)
     expect(cached_entry_after.expires_at).to eq(cached_entry.expires_at)
-    expect(AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes).to be_empty
+    expect(AwsRubyDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes).to be_empty
   ensure
     Integration::DriverHelper.close(drv, conn1) if conn1
     Integration::DriverHelper.close(drv, conn2) if conn2
@@ -127,7 +127,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     cache_key = "#{@secret_id}:#{region}"
     current_entry = storage.get(:secrets_manager, cache_key)
 
-    expired_entry = AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin::SecretEntry.new(
+    expired_entry = AwsRubyDriverWrapper::Plugins::SecretsManagerPlugin::SecretEntry.new(
       username: current_entry.username,
       password: current_entry.password,
       expires_at: Process.clock_gettime(Process::CLOCK_MONOTONIC) - 10
@@ -182,7 +182,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     expect(expires_at_values.size).to eq(1)
 
     # Verify pending_refreshes is clean (all futures resolved)
-    pending = AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes
+    pending = AwsRubyDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes
     expect(pending).to be_empty
   ensure
     conns&.each { |c| Integration::DriverHelper.close(drv, c) if c }
@@ -193,7 +193,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     Integration::DriverHelper.execute(drv, conn1, 'SELECT 1')
 
     sc = conn1.instance_variable_get(:@service_container)
-    AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin.clear_cache(sc.storage_service)
+    AwsRubyDriverWrapper::Plugins::SecretsManagerPlugin.clear_cache(sc.storage_service)
 
     # Next connection must fetch from Secrets Manager again
     conn2 = create_sm_wrapper_connection(secret_id: @secret_id)
@@ -213,7 +213,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     storage = sc.storage_service
     cache_key = "#{@secret_id}:#{region}"
 
-    bad_entry = AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin::SecretEntry.new(
+    bad_entry = AwsRubyDriverWrapper::Plugins::SecretsManagerPlugin::SecretEntry.new(
       username: 'invalid_user_does_not_exist',
       password: 'invalid_password',
       expires_at: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 9999
@@ -235,7 +235,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     conn = create_sm_wrapper_connection(
       secret_id: @secret_id,
       extra_props: {
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::AWS_CREDENTIALS_PROVIDER.name => explicit_creds
+        AwsRubyDriverWrapper::PropertyDefinition::AWS_CREDENTIALS_PROVIDER.name => explicit_creds
       }
     )
     result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
@@ -257,11 +257,11 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     )
 
     sm_props = {
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id,
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+      AwsRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
+      AwsRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id,
+      AwsRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
     }
-    sm_props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::SECRET_REGION.name] = region if region
+    sm_props[AwsRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name] = region if region
 
     Integration::DriverHelper.wrapper_connect(drv, **config, **sm_props, **extra_props)
   end

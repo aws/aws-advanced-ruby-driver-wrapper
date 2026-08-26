@@ -15,17 +15,17 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/host/global_aurora_host_list_provider'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
-require 'aws_ruby_database_driver_wrapper/utils/storage/storage_service'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/services/monitor_service'
+require 'aws_ruby_driver_wrapper/host/global_aurora_host_list_provider'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_ruby_driver_wrapper/utils/storage/storage_service'
+require 'aws_ruby_driver_wrapper/services/service_container'
+require 'aws_ruby_driver_wrapper/services/monitor_service'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider do
+RSpec.describe AwsRubyDriverWrapper::Host::GlobalAuroraHostListProvider do
   let(:initial_host_info) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'x.global-abc123.global.rds.amazonaws.com',
       port: 5432
     )
@@ -66,17 +66,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
     instance_double('DialectService', driver_dialect: driver_dialect, db_dialect: db_dialect, dialect_final?: true)
   end
   let(:event_publisher) do
-    AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
+    AwsRubyDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60)
   end
   let(:storage_service) do
-    AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher)
+    AwsRubyDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher)
   end
   let(:monitor_service) do
-    AwsRubyDatabaseDriverWrapper::Services::MonitorService.new(event_publisher: event_publisher)
+    AwsRubyDriverWrapper::Services::MonitorService.new(event_publisher: event_publisher)
   end
   let(:plugin_manager) { instance_double('PluginManager', internal_connect: nil) }
   let(:service_container) do
-    AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    AwsRubyDriverWrapper::Services::ServiceContainer.new(
       event_publisher: event_publisher,
       storage_service: storage_service,
       dialect_service: dialect_service,
@@ -86,8 +86,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
     )
   end
   let(:topology_utils) do
-    require 'aws_ruby_database_driver_wrapper/utils/global_aurora_topology_utils'
-    AwsRubyDatabaseDriverWrapper::Utils::GlobalAuroraTopologyUtils.new(dialect: db_dialect)
+    require 'aws_ruby_driver_wrapper/utils/global_aurora_topology_utils'
+    AwsRubyDriverWrapper::Utils::GlobalAuroraTopologyUtils.new(dialect: db_dialect)
   end
 
   before do
@@ -127,7 +127,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
 
       it 'raises an error' do
         expect { provider }.to raise_error(
-          AwsRubyDatabaseDriverWrapper::Errors::AwsError,
+          AwsRubyDriverWrapper::Errors::AwsError,
           /global_cluster_instance_host_patterns is required/
         )
       end
@@ -151,7 +151,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Host::GlobalAuroraHostListProvider 
     end
 
     it 'is a kind of RdsHostListProvider' do
-      expect(provider).to be_a(AwsRubyDatabaseDriverWrapper::Host::RdsHostListProvider)
+      expect(provider).to be_a(AwsRubyDriverWrapper::Host::RdsHostListProvider)
     end
   end
 end

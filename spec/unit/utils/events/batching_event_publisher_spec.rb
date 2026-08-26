@@ -15,17 +15,17 @@
 # limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
-require 'aws_ruby_database_driver_wrapper/utils/events/data_access_event'
-require 'aws_ruby_database_driver_wrapper/utils/events/monitor_reset_event'
+require 'aws_ruby_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_ruby_driver_wrapper/utils/events/data_access_event'
+require 'aws_ruby_driver_wrapper/utils/events/monitor_reset_event'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher do
+RSpec.describe AwsRubyDriverWrapper::Utils::Events::BatchingEventPublisher do
   subject(:publisher) { described_class.new(message_interval_sec: 0.1) }
 
   let(:subscriber) { instance_double('EventSubscriber', process_event: nil) }
-  let(:data_access_event) { AwsRubyDatabaseDriverWrapper::Utils::Events::DataAccessEvent.new(data_type: :topology, key: 'k1') }
+  let(:data_access_event) { AwsRubyDriverWrapper::Utils::Events::DataAccessEvent.new(data_type: :topology, key: 'k1') }
   let(:monitor_reset_event) do
-    AwsRubyDatabaseDriverWrapper::Utils::Events::MonitorResetEvent.new(cluster_id: 'c1', endpoints: Set['host-a'])
+    AwsRubyDriverWrapper::Utils::Events::MonitorResetEvent.new(cluster_id: 'c1', endpoints: Set['host-a'])
   end
 
   after { publisher.release_resources }
@@ -44,7 +44,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublish
 
     it 'deduplicates batched events' do
       publisher.subscribe(subscriber, Set[data_access_event.class])
-      duplicate = AwsRubyDatabaseDriverWrapper::Utils::Events::DataAccessEvent.new(data_type: :topology, key: 'k1')
+      duplicate = AwsRubyDriverWrapper::Utils::Events::DataAccessEvent.new(data_type: :topology, key: 'k1')
 
       publisher.publish(data_access_event)
       publisher.publish(duplicate)

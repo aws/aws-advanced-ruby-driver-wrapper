@@ -15,18 +15,18 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/retry_util'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
-require 'aws_ruby_database_driver_wrapper/host/random_host_selector'
+require 'aws_ruby_driver_wrapper/utils/retry_util'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/host/host_role'
+require 'aws_ruby_driver_wrapper/host/host_availability'
+require 'aws_ruby_driver_wrapper/host/random_host_selector'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
-  let(:host_role) { AwsRubyDatabaseDriverWrapper::Host::HostRole }
-  let(:host_availability) { AwsRubyDatabaseDriverWrapper::Host::HostAvailability }
+RSpec.describe AwsRubyDriverWrapper::Utils::RetryUtil do
+  let(:host_role) { AwsRubyDriverWrapper::Host::HostRole }
+  let(:host_availability) { AwsRubyDriverWrapper::Host::HostAvailability }
 
   let(:writer_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer-instance.xyz.us-east-1.rds.amazonaws.com',
       port: '5432',
       role: host_role::WRITER
@@ -34,7 +34,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
   end
 
   let(:reader_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader-instance.xyz.us-east-1.rds.amazonaws.com',
       port: '5432',
       role: host_role::READER
@@ -52,7 +52,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RetryUtil do
 
   # RetryUtil delegates candidate selection to the host service, which applies the configured
   # strategy. The real selector picks from the candidates it is given, so mirror that here.
-  let(:host_selector) { AwsRubyDatabaseDriverWrapper::Host::RandomHostSelector.new }
+  let(:host_selector) { AwsRubyDriverWrapper::Host::RandomHostSelector.new }
 
   let(:host_service) do
     double('host_service',

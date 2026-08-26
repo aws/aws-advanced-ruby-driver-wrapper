@@ -26,9 +26,9 @@ require_relative 'utils/connection_utils'
 require_relative 'utils/database_engine'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
-require 'aws_ruby_database_driver_wrapper'
-require 'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
-require 'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
+require 'aws_ruby_driver_wrapper'
+require 'aws_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+require 'aws_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
 
 # ActiveRecord failover integration tests.
 #
@@ -64,9 +64,9 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
       password: proxy_info.password,
       database: proxy_info.default_dbname,
       connect_timeout: 10,
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
+      AwsRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
+      AwsRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+      AwsRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
         "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}"
     }
     config[:variables] = variables if variables
@@ -148,7 +148,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
 
       # The adapter re-raises FailoverSuccessError so the caller learns the in-flight query was lost.
       expect { current_instance_id }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       # The next query on the same leased connection reaches the new writer: the failover plugin has
@@ -188,7 +188,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
           rds_util.crash_instance(current_writer)
           conn.execute("INSERT INTO ar_test_failover_transaction VALUES (2, 'value2')")
         end
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError)
+      end.to raise_error(AwsRubyDriverWrapper::Errors::TransactionStateUnknownError)
 
       # After failover the connection is reconfigured against the new writer. The transaction was
       # never committed, so the new writer must not have any of its rows.
@@ -226,7 +226,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
         expect(conn.select_value(probe[:read_sql])).to eq(probe[:expected])
         rds_util.crash_instance(current_writer)
         expect { instance_id_via(conn) }.to raise_error(
-          AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+          AwsRubyDriverWrapper::Errors::FailoverSuccessError
         )
       end
 
@@ -247,7 +247,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
 
       initial_writer_instance = proxy_info.instances.first
       config = failover_adapter_config(host: initial_writer_instance.host, port: initial_writer_instance.port)
-      config[AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name] = 30
+      config[AwsRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name] = 30
 
       ActiveRecord::Base.connection_handler.clear_all_connections!
       ActiveRecord::Base.establish_connection(config)
@@ -279,7 +279,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
       Integration::ProxyHelper.disable_connectivity(reader_instance.instance_id)
 
       expect { current_instance_id }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       new_connection_id = current_instance_id

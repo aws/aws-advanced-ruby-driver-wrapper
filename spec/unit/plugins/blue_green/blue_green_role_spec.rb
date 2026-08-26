@@ -15,9 +15,9 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/role'
+require 'aws_ruby_driver_wrapper/plugins/blue_green/role'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Role do
+RSpec.describe AwsRubyDriverWrapper::Plugins::BlueGreen::Role do
   let(:role) { described_class }
 
   describe '.parse_role' do

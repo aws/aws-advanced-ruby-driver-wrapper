@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/rds_utils'
-require 'aws_ruby_database_driver_wrapper/utils/rds_url_type'
+require 'aws_ruby_driver_wrapper/utils/rds_utils'
+require 'aws_ruby_driver_wrapper/utils/rds_url_type'
 
-URL_TYPE = AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType
+URL_TYPE = AwsRubyDriverWrapper::Utils::RdsUrlType
 
 # Endpoint fixture table. Each entry defines a host and its expected properties.
 # Adding a new region variant is a single entry here.
@@ -234,7 +234,7 @@ METADATA_METHODS = {
   rds_instance_host_pattern: :host_pattern
 }.freeze
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RdsUtils do
+RSpec.describe AwsRubyDriverWrapper::Utils::RdsUtils do
   subject(:utils) { described_class }
 
   let(:url_type) { URL_TYPE }
@@ -596,7 +596,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RdsUtils do
   end
 end
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType do
+RSpec.describe AwsRubyDriverWrapper::Utils::RdsUrlType do
   let(:url_type) { described_class }
 
   it 'has correct attributes' do

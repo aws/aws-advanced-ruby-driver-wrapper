@@ -16,16 +16,16 @@
 
 require_relative '../../spec_helper'
 require 'aws-sdk-secretsmanager'
-require 'aws_ruby_database_driver_wrapper/plugins/secrets_manager_plugin'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_ruby_driver_wrapper/plugins/secrets_manager_plugin'
+require 'aws_ruby_driver_wrapper/host/host_info'
+require 'aws_ruby_driver_wrapper/errors'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin do
+RSpec.describe AwsRubyDriverWrapper::Plugins::SecretsManagerPlugin do
   let(:secret_json) { '{"username":"dbuser","password":"dbpass"}' }
   let(:secret_response) { double('GetSecretValueResponse', secret_string: secret_json) }
   let(:mock_sm_client) { instance_double(Aws::SecretsManager::Client) }
   let(:mock_credentials) { instance_double(Aws::Credentials, access_key_id: 'AKID', secret_access_key: 'SECRET') }
-  let(:mock_storage_service) { instance_double(AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService) }
+  let(:mock_storage_service) { instance_double(AwsRubyDriverWrapper::Utils::Storage::StorageService) }
   let(:mock_driver_dialect) { double('DriverDialect', user_property_key: :user) }
   let(:mock_dialect_service) { double('DialectService', login_error?: false, driver_dialect: mock_driver_dialect) }
   let(:mock_service_container) do
@@ -42,7 +42,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin do
   end
 
   let(:host_info) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: '5432')
+    AwsRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: '5432')
   end
 
   before do
@@ -69,14 +69,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin do
     it 'raises when secret_id is missing' do
       base_props.delete(:secret_id)
       expect { build_plugin }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::SecretsManagerAuthError, /secret_id is required/
+        AwsRubyDriverWrapper::Errors::SecretsManagerAuthError, /secret_id is required/
       )
     end
 
     it 'raises when region cannot be determined' do
       base_props.delete(:secret_region)
       expect { build_plugin }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::SecretsManagerAuthError, /Unable to determine region/
+        AwsRubyDriverWrapper::Errors::SecretsManagerAuthError, /Unable to determine region/
       )
     end
 
@@ -245,7 +245,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::SecretsManagerPlugin do
 
       expect do
         plugin.connect(host_info, props, true, -> {})
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::SecretsManagerAuthError, /missing required keys/)
+      end.to raise_error(AwsRubyDriverWrapper::Errors::SecretsManagerAuthError, /missing required keys/)
     end
   end
 

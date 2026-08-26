@@ -21,7 +21,7 @@ require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/proxy_helper'
 require_relative 'utils/connection_utils'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_ruby_driver_wrapper'
 require 'timeout'
 
 RSpec.describe 'BasicConnectivity', :integration,

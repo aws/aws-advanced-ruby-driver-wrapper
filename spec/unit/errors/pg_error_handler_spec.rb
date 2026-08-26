@@ -14,11 +14,11 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/errors/pg_error_handler'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_ruby_driver_wrapper/errors/pg_error_handler'
+require 'aws_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsRubyDriverWrapper::Errors::PgErrorHandler do
+  let(:driver_dialect) { AwsRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
   describe '#network_error_by_sql_state?' do

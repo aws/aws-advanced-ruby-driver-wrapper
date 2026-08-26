@@ -16,15 +16,15 @@
 
 require_relative '../../spec_helper'
 require 'aws-sdk-rds'
-require 'aws_ruby_database_driver_wrapper/utils/iam_auth_utils'
-require 'aws_ruby_database_driver_wrapper/utils/rds_utils'
-require 'aws_ruby_database_driver_wrapper/utils/rds_url_type'
+require 'aws_ruby_driver_wrapper/utils/iam_auth_utils'
+require 'aws_ruby_driver_wrapper/utils/rds_utils'
+require 'aws_ruby_driver_wrapper/utils/rds_url_type'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
+RSpec.describe AwsRubyDriverWrapper::Utils::IamAuthUtils do
   subject(:utils) { described_class }
 
-  let(:rds_utils) { AwsRubyDatabaseDriverWrapper::Utils::RdsUtils }
-  let(:rds_url_type) { AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType }
+  let(:rds_utils) { AwsRubyDriverWrapper::Utils::RdsUtils }
+  let(:rds_url_type) { AwsRubyDriverWrapper::Utils::RdsUrlType }
 
   describe '.parse_token_expiry' do
     it 'returns the X-Amz-Expires integer when present' do
@@ -259,7 +259,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
   end
 
   describe '.resolve_host' do
-    let(:host_info) { instance_double('AwsRubyDatabaseDriverWrapper::Utils::HostInfo', host: 'info.host.com') }
+    let(:host_info) { instance_double('AwsRubyDriverWrapper::Utils::HostInfo', host: 'info.host.com') }
 
     it 'returns iam_host when non-nil and non-empty' do
       expect(utils.resolve_host('override.host.com', host_info)).to eq 'override.host.com'
@@ -275,7 +275,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
   end
 
   describe '.resolve_port' do
-    let(:host_info) { instance_double('AwsRubyDatabaseDriverWrapper::Utils::HostInfo') }
+    let(:host_info) { instance_double('AwsRubyDriverWrapper::Utils::HostInfo') }
 
     context 'when iam_default_port is positive' do
       it 'returns iam_default_port' do

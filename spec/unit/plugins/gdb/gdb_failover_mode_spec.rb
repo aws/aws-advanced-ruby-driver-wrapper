@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/gdb/gdb_failover_mode'
+require 'aws_ruby_driver_wrapper/plugins/gdb/gdb_failover_mode'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverMode do
+RSpec.describe AwsRubyDriverWrapper::Plugins::Gdb::GdbFailoverMode do
   describe '.from_value' do
     it 'returns nil for nil' do
       expect(described_class.from_value(nil)).to be_nil
