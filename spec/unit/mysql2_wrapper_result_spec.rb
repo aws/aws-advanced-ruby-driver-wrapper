@@ -15,20 +15,20 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/mysql'
-require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/plugins/default_plugin'
-require 'aws_ruby_database_driver_wrapper/errors'
-require 'aws_ruby_database_driver_wrapper/utils/connection_config'
+require 'aws_advanced_ruby_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/plugins/default_plugin'
+require 'aws_advanced_ruby_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/utils/connection_config'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
   def build_service_container_with_plugins(plugins, current_connection = nil)
-    plugin_manager = AwsRubyDatabaseDriverWrapper::Services::PluginManager.allocate
+    plugin_manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     plugin_manager.instance_variable_set(:@pipeline_cache, {})
     plugin_manager.instance_variable_set(:@plugins, plugins)
     connection_service = double('ConnectionService', current_connection: current_connection)
-    container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new
+    container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new
     container.plugin_manager = plugin_manager
     container.connection_service = connection_service
     container
@@ -233,7 +233,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
       other = described_class.new(result, build_service_container_with_plugins([plugin], connection),
                                   instance_double(Mysql2::Client))
 
-      expect { other.free }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+      expect { other.free }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
       expect(result).not_to have_received(:free)
     end
   end

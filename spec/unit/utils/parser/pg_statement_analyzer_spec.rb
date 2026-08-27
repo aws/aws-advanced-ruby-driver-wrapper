@@ -15,11 +15,11 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/parser/pg_statement_analyzer'
-require 'aws_ruby_database_driver_wrapper/utils/parser/query_type'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/pg_statement_analyzer'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/query_type'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer do
-  QueryType = AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer do
+  QueryType = AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType
 
   before { require 'pg_query' }
 
@@ -92,12 +92,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
   end
 
   describe '.analyze column_parameter_mapping (via SqlParser)' do
-    let(:pg_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
-    subject(:pg_parser) { AwsRubyDatabaseDriverWrapper::Utils::Parser::SqlParser.new(pg_dialect) }
+    let(:pg_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+    subject(:pg_parser) { AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser.new(pg_dialect) }
 
     before do
-      require 'aws_ruby_database_driver_wrapper/utils/parser/sql_parser'
-      require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
+      require 'aws_advanced_ruby_driver_wrapper/utils/parser/sql_parser'
+      require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
     end
     it 'maps INSERT columns in order' do
       expect(pg_parser.column_parameter_mapping('INSERT INTO users (name, email) VALUES ($1, $2)')).to eq({ 1 => 'name', 2 => 'email' })

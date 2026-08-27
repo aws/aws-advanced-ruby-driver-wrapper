@@ -14,10 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/db_dialects/global_mysql_dialect'
+require 'aws_advanced_ruby_driver_wrapper/db_dialects/global_mysql_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::GlobalMysqlDialect do
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+RSpec.describe AwsAdvancedRubyDriverWrapper::DbDialects::GlobalMysqlDialect do
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }

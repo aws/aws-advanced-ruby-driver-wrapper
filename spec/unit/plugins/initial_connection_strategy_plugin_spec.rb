@@ -16,19 +16,19 @@
 
 require_relative '../../spec_helper'
 require 'concurrent'
-require 'aws_ruby_database_driver_wrapper/plugins/initial_connection_strategy_plugin'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
-require 'aws_ruby_database_driver_wrapper/utils/rds_url_type'
-require 'aws_ruby_database_driver_wrapper/errors'
-require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
+require 'aws_advanced_ruby_driver_wrapper/plugins/initial_connection_strategy_plugin'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/host/host_availability'
+require 'aws_advanced_ruby_driver_wrapper/utils/rds_url_type'
+require 'aws_advanced_ruby_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyPlugin do
-  let(:host_info_class) { AwsRubyDatabaseDriverWrapper::Host::HostInfo }
-  let(:host_role) { AwsRubyDatabaseDriverWrapper::Host::HostRole }
-  let(:host_availability) { AwsRubyDatabaseDriverWrapper::Host::HostAvailability }
-  let(:errors) { AwsRubyDatabaseDriverWrapper::Errors }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyPlugin do
+  let(:host_info_class) { AwsAdvancedRubyDriverWrapper::Host::HostInfo }
+  let(:host_role) { AwsAdvancedRubyDriverWrapper::Host::HostRole }
+  let(:host_availability) { AwsAdvancedRubyDriverWrapper::Host::HostAvailability }
+  let(:errors) { AwsAdvancedRubyDriverWrapper::Errors }
 
   let(:writer_cluster_host) { 'mydb.cluster-xyz.us-east-1.rds.amazonaws.com' }
   let(:reader_cluster_host) { 'mydb.cluster-ro-xyz.us-east-1.rds.amazonaws.com' }
@@ -94,18 +94,18 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::InitialConnectionStrategyP
 
   describe 'registration' do
     it 'is registered in PluginManager with code initial_connection' do
-      plugin_classes = AwsRubyDatabaseDriverWrapper::Services::PluginManager.plugin_classes
+      plugin_classes = AwsAdvancedRubyDriverWrapper::Services::PluginManager.plugin_classes
       expect(plugin_classes['initial_connection']).to eq(described_class)
     end
 
     it 'has weight 300' do
-      plugin_weights = AwsRubyDatabaseDriverWrapper::Services::PluginManager.plugin_weights
+      plugin_weights = AwsAdvancedRubyDriverWrapper::Services::PluginManager.plugin_weights
       expect(plugin_weights[described_class]).to eq(300)
     end
 
     it 'runs before FailoverPlugin (weight 400)' do
-      plugin_weights = AwsRubyDatabaseDriverWrapper::Services::PluginManager.plugin_weights
-      expect(plugin_weights[described_class]).to be < plugin_weights[AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin]
+      plugin_weights = AwsAdvancedRubyDriverWrapper::Services::PluginManager.plugin_weights
+      expect(plugin_weights[described_class]).to be < plugin_weights[AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin]
     end
   end
 

@@ -14,17 +14,17 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
 
 require 'concurrent'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
+RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('PG::Connection', finished?: false) }
-  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+  let(:host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
   let(:config) do
     Concurrent::Map.new.tap do |m|
       m[:database] = 'testdb'
@@ -106,8 +106,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
 
     it 'omits host when not specified (Unix socket)' do
-      no_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
-        host: AwsRubyDatabaseDriverWrapper::Host::HostInfo::NO_HOST, port: '5432'
+      no_host = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
+        host: AwsAdvancedRubyDriverWrapper::Host::HostInfo::NO_HOST, port: '5432'
       )
       result = dialect.prepare_connect_config(no_host, config)
       expect(result).not_to have_key(:host)
@@ -115,7 +115,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
 
     it 'omits both host and port when neither specified' do
-      bare = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new
+      bare = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new
       result = dialect.prepare_connect_config(bare, config)
       expect(result).not_to have_key(:host)
       expect(result).not_to have_key(:port)
@@ -202,11 +202,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     end
 
     it 'includes CONNECTION_EXEC' do
-      expect(dialect.network_bound_methods).to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_EXEC.name)
+      expect(dialect.network_bound_methods).to include(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_EXEC.name)
     end
 
     it 'excludes CONNECTION_ESCAPE' do
-      expect(dialect.network_bound_methods).not_to include(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
+      expect(dialect.network_bound_methods).not_to include(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
     end
 
     # A call that is not listed here is handed straight to the driver, which takes it past every
@@ -214,7 +214,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     # missed, so they are checked against the driver itself rather than against a list written out by
     # hand, which is what let several spellings of exec go unlisted to begin with.
     it 'covers every pg call that runs a statement or moves its results' do
-      wrapper = AwsRubyDatabaseDriverWrapper::WrapperPgConnection
+      wrapper = AwsAdvancedRubyDriverWrapper::WrapperPgConnection
       # Accessors for the coder a COPY call uses, which do not talk to the server.
       local = %i[decoder_for_get_copy_data decoder_for_get_copy_data= encoder_for_put_copy_data encoder_for_put_copy_data=]
       statement_calls = PG::Connection.instance_methods(false).grep(
@@ -233,7 +233,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect do
     # match. The names inherited from every dialect are left out: pg has no
     # prepared statement object of its own, and connect is not a call on a connection at all.
     it 'names a method pg defines for every call it lists of its own' do
-      common = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
+      common = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
       defined_by_pg = [PG::Connection, PG::Result].flat_map(&:instance_methods).to_set
 
       unanswerable = (dialect.network_bound_methods - common).reject do |entry|

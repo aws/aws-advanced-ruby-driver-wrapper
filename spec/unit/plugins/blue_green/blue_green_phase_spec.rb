@@ -15,9 +15,9 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/phase'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Phase do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Phase do
   let(:phase) { described_class }
 
   describe 'ordering' do

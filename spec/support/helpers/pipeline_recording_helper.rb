@@ -62,15 +62,15 @@ module PipelineRecordingHelper
   # @return [Array(Services::ServiceContainer, PipelineRecordingPlugin)]
   def build_recording_container(connection)
     plugin = PipelineRecordingPlugin.new
-    manager = AwsRubyDatabaseDriverWrapper::Services::PluginManager.allocate
+    manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, [plugin])
     manager.instance_variable_set(:@pipeline_cache, {})
     plugin.manager = manager
 
-    container = AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new
+    container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new
     container.plugin_manager = manager
     container.connection_service = instance_double(
-      AwsRubyDatabaseDriverWrapper::Services::ConnectionService, current_connection: connection
+      AwsAdvancedRubyDriverWrapper::Services::ConnectionService, current_connection: connection
     )
 
     [container, plugin]

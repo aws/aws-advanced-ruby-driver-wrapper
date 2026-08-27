@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/parser/encryption_annotation_parser'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/encryption_annotation_parser'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::EncryptionAnnotationParser do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::EncryptionAnnotationParser do
   subject { described_class }
 
   describe '.parse_annotations' do

@@ -140,19 +140,19 @@ module Integration
     private
 
     def rds_utils
-      AwsRubyDatabaseDriverWrapper::Utils::RdsUtils
+      AwsAdvancedRubyDriverWrapper::Utils::RdsUtils
     end
 
     def setup_capturing_logger
-      @original_logger = AwsRubyDatabaseDriverWrapper.logger
+      @original_logger = AwsAdvancedRubyDriverWrapper.logger
       @capturing_logger = CapturingLogger.new(@original_logger)
-      AwsRubyDatabaseDriverWrapper.logger = @capturing_logger
+      AwsAdvancedRubyDriverWrapper.logger = @capturing_logger
     end
 
     def restore_logger
       return unless @original_logger
 
-      AwsRubyDatabaseDriverWrapper.logger = @original_logger
+      AwsAdvancedRubyDriverWrapper.logger = @original_logger
       @original_logger = nil
     end
 

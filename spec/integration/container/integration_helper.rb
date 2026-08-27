@@ -15,8 +15,8 @@
 #  limitations under the License.
 
 require 'resolv'
-require 'aws_ruby_database_driver_wrapper/postgresql'
-require 'aws_ruby_database_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/mysql'
 
 require_relative 'utils/condition_checker'
 require_relative 'utils/connection_utils'
@@ -29,7 +29,7 @@ require_relative 'utils/test_environment_features'
 
 module Integration
   module IntegrationHelper
-    AwsRubyDatabaseDriverWrapper.logger.level = Logger::DEBUG
+    AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG
     $stderr.sync = true
     $stdout.sync = true
 
@@ -82,7 +82,7 @@ module Integration
     end
 
     def self.reset_caches
-      AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.clear_cache
+      AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.clear_cache
     end
     private_class_method :reset_caches
 

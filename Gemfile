@@ -25,7 +25,6 @@ gem 'pg_query', '>= 5.1'
 
 group :development do
   gem 'bundler'
-  gem 'bundler-audit'
   gem 'rdoc'
   gem 'rubocop', '~> 1.86'
   gem 'rubocop-performance', '~> 1.26'

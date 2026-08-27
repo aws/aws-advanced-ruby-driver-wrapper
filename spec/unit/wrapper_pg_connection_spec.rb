@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/postgresql'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
 # Every call that talks to the server has to reach the plugins, and a call that can only be made on
 # the connection an earlier one left something on has to be refused anywhere else. pg gives most of
@@ -29,7 +29,7 @@ require 'aws_ruby_database_driver_wrapper/services/service_container'
 # either: a prepared statement carries only the name it was prepared under, and an asynchronous result
 # is read by a call of its own. The connection publishes it separately, so that a plugin which has to
 # inspect the statement can still read it.
-RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
+RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
   let(:pg_result) { driver_result(PG::Result, 'PgResult') }
   # A verifying double, so that a call the wrapper makes on a method pg does not define fails here
   # rather than against a real server.
@@ -53,7 +53,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
     # Which methods go through the pipeline is the dialect's answer, and it is memoized here, so it is
     # set rather than reached for through a service container that is not connected to anything.
     wrapper.instance_variable_set(
-      :@network_bound_methods, AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect::NETWORK_BOUND_METHODS
+      :@network_bound_methods, AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::NETWORK_BOUND_METHODS
     )
     wrapper
   end
@@ -520,7 +520,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
       wrapper.instance_variable_set(:@lo_conn, double('PG::Connection'))
 
       expect { wrapper.sync_lo_read(0, 4) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
       expect(connection).not_to have_received(:sync_lo_read)
     end
   end
@@ -531,7 +531,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
   describe 'OPERATIONS' do
     let(:operations) { described_class::OPERATIONS }
     let(:listed) do
-      AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect::NETWORK_BOUND_METHODS
+      AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::NETWORK_BOUND_METHODS
         .select { |entry| entry.start_with?('connection.') }
         .map { |entry| entry.delete_prefix('connection.').to_sym }
     end
@@ -546,7 +546,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
 
     it 'gives every operation a name the pipeline can check the bounded connection against' do
       expect(operations.values.map { |spec| spec[:method] })
-        .to all(be_a(AwsRubyDatabaseDriverWrapper::MethodInfo))
+        .to all(be_a(AwsAdvancedRubyDriverWrapper::MethodInfo))
     end
 
     # An operation that reads what an earlier call left behind has to be checked against the connection
@@ -604,7 +604,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
       allow(connection).to receive(:close_prepared)
 
       expect { wrapper.close_prepared('insert_user') }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
     end
 
     it 'forgets a statement it closed' do
@@ -633,7 +633,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
       wrapper.instance_variable_set(:@lo_conn, instance_double(PG::Connection))
       allow(connection).to receive(:loread)
 
-      expect { wrapper.loread(0, 4) }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+      expect { wrapper.loread(0, 4) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
     end
 
     it 'allows a large object read on the connection it was opened on' do
@@ -684,7 +684,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgConnection do
       wrapper.instance_variable_set(:@async_conn, instance_double(PG::Connection))
       allow(connection).to receive(:pipeline_sync)
 
-      expect { wrapper.pipeline_sync }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /old connection/)
+      expect { wrapper.pipeline_sync }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/)
     end
 
     it 'drops a pending exchange whose results were discarded' do

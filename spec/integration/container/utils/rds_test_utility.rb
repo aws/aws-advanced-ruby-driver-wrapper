@@ -173,7 +173,7 @@ module Integration
             when DatabaseEngine::PG    then 'SELECT pg_catalog.pg_is_in_recovery()'
             end
       driver  = Integration::RdsTestUtility.driver_for_engine(engine)
-      dialect = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager
+      dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
       value = row.is_a?(Hash) ? row.values.first : row[0]
@@ -248,7 +248,7 @@ module Integration
             when DatabaseEngine::MYSQL then "CREATE USER #{username} IDENTIFIED BY '#{escaped_password}'"
             end
       driver  = Integration::RdsTestUtility.driver_for_engine(engine)
-      dialect = AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager
+      dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       dialect.execute(conn, sql)
     end
@@ -435,7 +435,7 @@ module Integration
       green_instance_ids = aurora_instance_ids(green_cluster.endpoint)
       raise "Can't find green cluster instances for #{green_cluster.endpoint}" if green_instance_ids.empty?
 
-      instance_pattern = AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.rds_instance_host_pattern(green_cluster.endpoint)
+      instance_pattern = AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.rds_instance_host_pattern(green_cluster.endpoint)
       green_instance_ids.each do |instance_id|
         endpoints << instance_pattern.sub('?', instance_id)
       end
@@ -464,7 +464,7 @@ module Integration
     end
 
     def execute(conn, sql, driver)
-      AwsRubyDatabaseDriverWrapper::DriverDialects::DriverDialectManager
+      AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
         .get_dialect(self.class.dialect_for_driver(driver))
         .execute(conn, sql)
     end

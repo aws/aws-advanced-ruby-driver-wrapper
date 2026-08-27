@@ -15,14 +15,14 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/switchover_state'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/phase'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/role'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/interim_status'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/iam_host_tracker'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/switchover_state'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/role'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/interim_status'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/iam_host_tracker'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::SwitchoverState do
-  let(:bg)    { AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::SwitchoverState do
+  let(:bg)    { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen }
   let(:phase) { bg::Phase }
   let(:role)  { bg::Role }
 
