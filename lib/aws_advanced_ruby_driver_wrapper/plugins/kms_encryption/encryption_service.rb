@@ -250,12 +250,22 @@ module AwsAdvancedRubyDriverWrapper
             cipher.auth_tag = body.byteslice(body.bytesize - GCM_TAG_LENGTH, GCM_TAG_LENGTH)
             cipher.update(body.byteslice(0, body.bytesize - GCM_TAG_LENGTH)) + cipher.final
           rescue OpenSSL::OpenSSLError => e
-            # OpenSSL reports a failed GCM tag check with an empty message.
-            reason = e.message.to_s.empty? ? 'the authentication tag does not match this data key' : e.message
+            # The payload's HMAC has already been checked by the time unseal runs, so a GCM failure
+            # here means the data key is wrong rather than the data being corrupt. OpenSSL words that
+            # failure differently across versions - an empty message on older ones, "AEAD
+            # authentication tag verification failed" on newer - so both are reported the same way.
             raise Errors::EncryptionError
-              .decryption_failed("Failed to decrypt value: #{reason}")
+              .decryption_failed("Failed to decrypt value: #{gcm_failure_reason(e)}")
               .with_algorithm(algorithm)
               .with_data_type(TypeMarker.name_for(marker))
+          end
+
+          # @return [String] the reason to report for an OpenSSL failure during decryption
+          def gcm_failure_reason(error)
+            message = error.message.to_s
+            return message unless message.empty? || message.match?(/auth|tag|verif/i)
+
+            'the authentication tag does not match this data key'
           end
 
           def coerce(value, target_type)
