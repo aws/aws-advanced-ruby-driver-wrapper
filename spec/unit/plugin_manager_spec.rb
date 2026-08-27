@@ -514,7 +514,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
     end
 
     it 'loads the KMS kms_encryption plugin for the kms_encryption code' do
-      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption')
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption', encryption_kms_region: 'us-east-1')
       manager = described_class.new(container)
 
       expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin)).to be true
@@ -523,7 +523,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
     # The kms_encryption plugin has to see the parameters and the rows last on the way out and first on
     # the way back, so that everything before it works with plaintext.
     it 'orders the KMS kms_encryption plugin after the failover plugin' do
-      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption,failover')
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption,failover', encryption_kms_region: 'us-east-1')
       manager = described_class.new(container)
 
       plugin_classes = manager.instance_variable_get(:@plugins).map(&:class)

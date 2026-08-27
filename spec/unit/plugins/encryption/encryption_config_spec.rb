@@ -119,7 +119,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
     end
 
     it 'rejects a value that is out of range' do
-      expect { described_class.from_props(props(encryption_data_key_cache_max_size: 0)) }
+      expect { described_class.from_props(props(encryption_kms_region: 'us-east-1', encryption_data_key_cache_max_size: 0)) }
         .to raise_error(ArgumentError, /encryption_data_key_cache_max_size must be a positive integer/)
     end
   end
