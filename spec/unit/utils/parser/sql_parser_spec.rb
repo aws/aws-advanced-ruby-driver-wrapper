@@ -263,7 +263,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
         allow(PgQuery).to receive(:parse).and_return(
           pg_stmt(insert_stmt: { relation: { relname: 'users' },
                                  cols: [{ res_target: { name: 'name' } },
-                                        { res_target: { name: 'email' } }] })
+                                        { res_target: { name: 'email' } }],
+                                 select_stmt: { select_stmt: { values_lists: [
+                                   { list: { items: [{ param_ref: { number: 1 } },
+                                                     { param_ref: { number: 2 } }] } }
+                                 ] } } })
         )
         expect(pg_parser.column_parameter_mapping('INSERT INTO users (name, email) VALUES ($1, $2)')).to eq({ 1 => 'name', 2 => 'email' })
       end
@@ -313,6 +317,43 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
 
       it 'returns empty for nil' do
         expect(pg_parser.column_parameter_mapping(nil)).to eq({})
+      end
+    end
+  end
+
+  # The write-side fail-closed logic keys off unbound_write_columns and write_columns_complete.
+  # These exercise the real pg_query analyzer end-to-end (no stubbed AST) to lock in that behavior.
+  context 'with PostgreSQL dialect (write-side fail-closed fields)' do
+    subject(:pg_parser) { described_class.new(pg_dialect) }
+
+    describe '#analyze_sql write_columns_complete' do
+      it 'is false for an INSERT with no column list' do
+        expect(pg_parser.analyze_sql('INSERT INTO customers VALUES ($1, $2)').write_columns_complete).to be(false)
+      end
+
+      it 'is false for a multi-statement string' do
+        sql = 'INSERT INTO customers (name) VALUES ($1); UPDATE customers SET email = $2 WHERE id = $3'
+        expect(pg_parser.analyze_sql(sql).write_columns_complete).to be(false)
+      end
+    end
+
+    describe '#analyze_sql unbound_write_columns' do
+      it 'includes a column filled with DEFAULT rather than a bind parameter' do
+        result = pg_parser.analyze_sql('INSERT INTO customers (name, created_at) VALUES ($1, DEFAULT)')
+        expect(result.unbound_write_columns.map(&:column_name)).to include('created_at')
+      end
+
+      it 'includes a column filled with an expression around a bind parameter' do
+        result = pg_parser.analyze_sql('INSERT INTO customers (name, score) VALUES ($1, $2 + 1)')
+        expect(result.unbound_write_columns.map(&:column_name)).to include('score')
+      end
+    end
+
+    describe '#analyze_sql for COPY ... FROM' do
+      it 'reports query_type COPY with its named columns as unbound writes' do
+        result = pg_parser.analyze_sql('COPY customers (name, email) FROM STDIN')
+        expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::COPY)
+        expect(result.unbound_write_columns.map(&:column_name)).to include('name', 'email')
       end
     end
   end

@@ -50,6 +50,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(subject.analyze('DROP TABLE t').query_type).to eq(QueryType::DROP)
     end
 
+    it 'returns COPY for a COPY that stores rows' do
+      expect(subject.analyze('COPY users (name, ssn) FROM STDIN').query_type).to eq(QueryType::COPY)
+    end
+
+    # A COPY that reads is no more a write than the SELECT it stands in for.
+    it 'returns SELECT for a COPY that reads rows' do
+      expect(subject.analyze('COPY users TO STDOUT').query_type).to eq(QueryType::SELECT)
+    end
+
     it 'returns UNKNOWN for nil' do
       expect(subject.analyze(nil).query_type).to eq(QueryType::UNKNOWN)
     end
@@ -101,6 +110,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer 
 
     it 'maps WHERE columns for SELECT' do
       expect(pg_parser.column_parameter_mapping('SELECT * FROM users WHERE name = $1')).to eq({ 1 => 'name' })
+    end
+
+    # The column can sit on either side of the operator; a parameter on the left maps just the same.
+    it 'maps a WHERE column when the parameter is on the left of the operator' do
+      expect(pg_parser.column_parameter_mapping('SELECT * FROM users WHERE $1 = name')).to eq({ 1 => 'name' })
     end
 
     it 'maps WHERE IN list params positionally' do
@@ -179,6 +193,289 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer 
     it 'does not emit entries for subquery params — they are not outer positional params' do
       result = subject.analyze('SELECT * FROM t WHERE id IN (SELECT id FROM u WHERE x = $1)')
       expect(result.where_columns).to be_empty
+    end
+  end
+
+  # A caller that substitutes a parameter has to know which parameter fills which column, and has to
+  # know when a column is filled by something it cannot substitute at all.
+  describe 'write columns' do
+    it 'pairs a column with the parameter that fills it, not with its position' do
+      result = subject.analyze("INSERT INTO t (a, b, c) VALUES ($1, 'literal', $2)")
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['a', 1], ['c', 2]])
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['b'])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'follows explicit parameter numbers rather than the order the columns are declared in' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($2, $1)')
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['a', 2], ['b', 1]])
+    end
+
+    it 'reports every row of a multi-row INSERT' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, $2), ($3, $4)')
+
+      expect(result.write_columns.map(&:parameter_index)).to eq([1, 2, 3, 4])
+      expect(result.write_columns.map(&:column_name)).to eq(%w[a b a b])
+    end
+
+    it 'reports the assignments of an upsert as well as its values' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, $2) ON CONFLICT (a) DO UPDATE SET b = $3')
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] })
+        .to eq([['a', 1], ['b', 2], ['b', 3]])
+    end
+
+    it 'treats a DEFAULT as a value it cannot substitute' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, DEFAULT)')
+
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['b'])
+    end
+
+    # A NULL is left out: there is nothing to encrypt in one, and a column set to NULL reads back as
+    # NULL whether the plugin saw it or not.
+    it 'passes over a column set to NULL' do
+      result = subject.analyze('INSERT INTO t (a, b) VALUES ($1, NULL)')
+
+      expect(result.unbound_write_columns).to be_empty
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reports an INSERT with no column list as not enumerable' do
+      result = subject.analyze('INSERT INTO t VALUES ($1, $2)')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+      expect(result.tables).to eq(['t'])
+    end
+
+    it 'reports an INSERT from a SELECT as not enumerable' do
+      result = subject.analyze('INSERT INTO t (a, b) SELECT x, y FROM u')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reports an expression around a parameter as a value it cannot substitute' do
+      result = subject.analyze('UPDATE t SET a = upper($1) WHERE id = $2')
+
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['a'])
+    end
+
+    it 'reports SQL it cannot parse as not enumerable' do
+      result = subject.analyze('INSERT INTO ((( $1')
+
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    # Only the first statement of a multi-statement string is analyzed, so what the rest write is
+    # unknown, and their tables have to be reported for a caller to decide anything about them.
+    it 'collects the tables of a multi-statement string and reports it as not enumerable' do
+      result = subject.analyze('INSERT INTO t (a) VALUES ($1); INSERT INTO u (b) VALUES ($2)')
+
+      expect(result.tables).to include('t', 'u')
+      expect(result.write_columns_complete).to be(false)
+    end
+  end
+
+  # A COPY's rows are a stream on the connection rather than bind parameters, so every column it
+  # writes is one a caller cannot substitute a value for.
+  describe 'a COPY' do
+    it 'reports the table it writes and the columns it names, none of them substitutable' do
+      result = subject.analyze('COPY users (name, ssn) FROM STDIN')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map { |c| [c.table_name, c.column_name] }).to eq([%w[users name], %w[users ssn]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reads the columns of a COPY however it is spelled' do
+      ['COPY users (name, ssn) FROM STDIN WITH (FORMAT csv, HEADER)',
+       "COPY users (name, ssn) FROM '/tmp/users.csv'",
+       "COPY users (name, ssn) FROM PROGRAM 'cat /tmp/users.csv'",
+       'copy users (name, ssn) from stdin'].each do |sql|
+        result = subject.analyze(sql)
+
+        expect(result.query_type).to eq(QueryType::COPY)
+        expect(result.unbound_write_columns.map(&:column_name)).to eq(%w[name ssn]), "for #{sql}"
+      end
+    end
+
+    # Without a column list the stream fills the table's columns in the order the table declares
+    # them, which the statement does not carry.
+    it 'reports a COPY that names no columns as not enumerable' do
+      result = subject.analyze('COPY users FROM STDIN')
+
+      expect(result.tables).to eq(['users'])
+      expect(result.unbound_write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reports the table a COPY reads without treating it as a write' do
+      result = subject.analyze('COPY users TO STDOUT')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+      expect(result.tables).to eq(['users'])
+      expect(result.unbound_write_columns).to be_empty
+    end
+
+    # A COPY of a query reads whatever the query reads, which is what a caller has to know about.
+    it 'reports the tables of the query a COPY reads' do
+      result = subject.analyze('COPY (SELECT u.name FROM users u JOIN accounts a ON a.uid = u.id) TO STDOUT')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+      expect(result.tables).to include('users', 'accounts')
+    end
+  end
+
+  # A PREPARE writes nothing itself, but the statement it carries is the one a later EXECUTE runs, and
+  # the PREPARE is the only place its text appears.
+  describe 'a PREPARE' do
+    it 'reads the statement it carries as the statement it is' do
+      result = subject.analyze('PREPARE ins AS INSERT INTO users (name, ssn) VALUES ($1, $2)')
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
+      expect(result.write_columns_complete).to be(true)
+      expect(result.parameterized).to be(true)
+    end
+
+    it 'reads it past the parameter types it declares' do
+      result = subject.analyze('prepare ins (text, text) as insert into users (name, ssn) values ($1, $2)')
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.write_columns.map(&:column_name)).to eq(%w[name ssn])
+    end
+
+    # A value written into the body is a value no caller can substitute for, which is the whole reason
+    # for reading the body at all.
+    it 'reports a value written into the statement it carries as not substitutable' do
+      result = subject.analyze("PREPARE ins AS INSERT INTO users (ssn) VALUES ('123-45-6789')")
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map { |c| [c.table_name, c.column_name] }).to eq([%w[users ssn]])
+    end
+
+    it 'reports a PREPARE that carries a read as a read' do
+      result = subject.analyze('PREPARE q AS SELECT ssn FROM users WHERE id = $1')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
+      expect(result.tables).to eq(['users'])
+      expect(result.where_columns.map(&:column_name)).to eq(['id'])
+    end
+
+    it 'reports a PREPARE whose body says nothing about what it writes as unknown' do
+      result = subject.analyze('PREPARE d AS DEALLOCATE ALL')
+
+      expect(result.query_type).to eq(QueryType::UNKNOWN)
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'collects the table of a PREPARE sent alongside another statement' do
+      result = subject.analyze("PREPARE ins AS INSERT INTO users (ssn) VALUES ($1); INSERT INTO logs (note) VALUES ('x')")
+
+      expect(result.tables).to include('users', 'logs')
+      expect(result.write_columns_complete).to be(false)
+    end
+  end
+
+  # A MERGE writes through its WHEN clauses, so it is reported as a write rather than being refused
+  # wholesale, and its bound values are paired with the columns they fill.
+  describe 'a MERGE' do
+    it 'reads the columns its UPDATE and INSERT clauses write and the parameters that fill them' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct ' \
+        'WHEN MATCHED THEN UPDATE SET ssn = $1 ' \
+        'WHEN NOT MATCHED THEN INSERT (id, ssn) VALUES ($2, $3)'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['accounts'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1], ['id', 2], ['ssn', 3]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reports a value written by an expression as one it cannot substitute' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct ' \
+        'WHEN MATCHED THEN UPDATE SET ssn = upper($1)'
+      )
+
+      expect(result.write_columns).to be_empty
+      expect(result.unbound_write_columns.map(&:column_name)).to eq(['ssn'])
+    end
+
+    # An INSERT clause with no column list fills the table's columns in its own order, which the
+    # statement does not carry, so the write cannot be enumerated and must fail closed.
+    it 'reports an INSERT clause with no column list as not enumerable' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct ' \
+        'WHEN NOT MATCHED THEN INSERT VALUES ($1, $2)'
+      )
+
+      expect(result.tables).to eq(['accounts'])
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    # A clause that only deletes stores nothing, so there is nothing to enumerate and nothing to fail
+    # closed over.
+    it 'treats a MERGE whose only action deletes as enumerable with no written columns' do
+      result = subject.analyze(
+        'MERGE INTO accounts USING txns ON accounts.id = txns.acct WHEN MATCHED THEN DELETE'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(true)
+    end
+  end
+
+  # A data-modifying CTE writes through the statement that carries it, even when the top-level
+  # statement is a SELECT, so it must be seen as a write rather than mistaken for a read.
+  describe 'a data-modifying CTE' do
+    it 'reports the write of an INSERT CTE under a SELECT, with its parameter mapped' do
+      result = subject.analyze(
+        'WITH w AS (INSERT INTO users (ssn) VALUES ($1) RETURNING id) SELECT * FROM w'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reports an UPDATE CTE under a SELECT as a write' do
+      result = subject.analyze(
+        'WITH w AS (UPDATE users SET ssn = $1 WHERE id = $2 RETURNING id) SELECT * FROM w'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns.map(&:column_name)).to eq(['ssn'])
+    end
+
+    # A CTE the analyzer cannot read column-by-column must fail closed, not be taken for a read.
+    it 'reports a CTE INSERT ... SELECT as not enumerable' do
+      result = subject.analyze(
+        'WITH w AS (INSERT INTO users (ssn) SELECT secret FROM staging RETURNING id) SELECT * FROM w'
+      )
+
+      expect(result.query_type).to eq(QueryType::INSERT)
+      expect(result.tables).to eq(['users'])
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    # A CTE that only reads leaves the statement a plain SELECT.
+    it 'leaves a read-only CTE as a SELECT' do
+      result = subject.analyze('WITH w AS (SELECT id FROM users) SELECT * FROM w')
+
+      expect(result.query_type).to eq(QueryType::SELECT)
     end
   end
 end

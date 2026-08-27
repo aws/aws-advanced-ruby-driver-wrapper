@@ -24,6 +24,10 @@ module AwsAdvancedRubyDriverWrapper
         DELETE  = :delete
         CREATE  = :create
         DROP    = :drop
+        # A COPY that stores rows. It is a kind of its own rather than an INSERT because its values
+        # reach the server as a stream instead of as bind parameters, so what a caller can do about
+        # a column it writes is not the same.
+        COPY    = :copy
         UNKNOWN = :unknown
       end
     end
