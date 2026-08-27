@@ -485,29 +485,33 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def each(&)
-      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) }, bounded_conn: @connection, sql: @sql, &)
+      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
     end
 
     def each_row(&)
       pm.execute(RubyMethod::RESULT_EACH_ROW, current_conn, ->(&blk) { @result.each_row(&blk) },
-                 bounded_conn: @connection, sql: @sql, &)
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
     end
 
     def to_a
-      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection, sql: @sql)
+      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def [](index)
-      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection, sql: @sql)
+      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def values
-      pm.execute(RubyMethod::RESULT_VALUES, current_conn, -> { @result.values }, bounded_conn: @connection, sql: @sql)
+      pm.execute(RubyMethod::RESULT_VALUES, current_conn, -> { @result.values },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def column_values(index)
       pm.execute(RubyMethod::RESULT_COLUMN_VALUES, current_conn, ->(*a) { @result.column_values(*a) }, index,
-                 bounded_conn: @connection, sql: @sql)
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def field_values(field_name)
@@ -516,7 +520,8 @@ module AwsRubyDatabaseDriverWrapper
     end
 
     def tuple(index)
-      pm.execute(RubyMethod::RESULT_TUPLE, current_conn, ->(*a) { @result.tuple(*a) }, index, bounded_conn: @connection, sql: @sql)
+      pm.execute(RubyMethod::RESULT_TUPLE, current_conn, ->(*a) { @result.tuple(*a) }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     # Delegate non-network methods directly

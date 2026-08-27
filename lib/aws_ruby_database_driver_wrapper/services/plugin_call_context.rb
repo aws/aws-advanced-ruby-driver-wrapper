@@ -39,10 +39,24 @@ module AwsRubyDatabaseDriverWrapper
       # @param sql [String, nil]
       # @param args [Array]
       # @param block [Proc, nil]
-      def initialize(sql, args, block = nil)
+      # @param field_names [Array<String>, Proc, nil] the result's column names in order, or a
+      #   callable that produces them; see {#field_names}
+      def initialize(sql, args, block = nil, field_names = nil)
         @sql = sql
         @args = args
         @block = block
+        @field_names = field_names
+      end
+
+      # The result's column names, in order, for a plugin that reads rows as bare arrays of values
+      # and has to match each position back to a column. Only result methods supply it, and only
+      # when a plugin might need it, so it is resolved lazily and remembered: a call that never asks
+      # pays nothing, and one that asks more than once pays once.
+      #
+      # @return [Array<String>, nil] nil when the call carries no column names
+      def field_names
+        @field_names = @field_names.call if @field_names.respond_to?(:call)
+        @field_names
       end
     end
   end

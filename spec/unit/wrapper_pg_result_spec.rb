@@ -86,6 +86,25 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgResult do
     expect(plugin.sql_for('result.tuple')).to eq([sql])
   end
 
+  # The array-reading paths hinge on the result's column names reaching the plugin, so every read
+  # that can hand back bare arrays publishes them, resolved from the result's own field list.
+  it 'publishes the result column names for every read that can return arrays' do
+    allow(pg_result).to receive_messages(fields: %w[ssn], each: nil, each_row: nil, to_a: [], values: [],
+                                         column_values: [], tuple: {}, :[] => {})
+
+    result.each { |row| row }
+    result.each_row { |row| row }
+    result.to_a
+    result[0]
+    result.values
+    result.column_values(0)
+    result.tuple(0)
+
+    %w[result.each result.each_row result.to_a result.[] result.values result.column_values result.tuple].each do |method|
+      expect(plugin.field_names_for(method)).to eq([%w[ssn]]), method
+    end
+  end
+
   it 'publishes the SQL of the statement for every read of the same result' do
     allow(pg_result).to receive(:to_a).and_return([])
     result.to_a

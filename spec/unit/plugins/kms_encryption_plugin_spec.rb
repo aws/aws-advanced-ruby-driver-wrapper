@@ -68,8 +68,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
   # Stands in for the pipeline: it publishes the call context the plugin reads the SQL, the
   # arguments and the block from, then calls the plugin with a callable standing in for the driver.
-  def call(method_name, args: [], sql: nil, block: nil, returns: nil, &callable)
-    @context = services::PluginCallContext.new(sql, args, block)
+  def call(method_name, args: [], sql: nil, block: nil, field_names: nil, returns: nil, &callable)
+    @context = services::PluginCallContext.new(sql, args, block, field_names)
     allow(plugin_manager).to receive(:current_call_context).and_return(@context)
     plugin.execute(method_name, callable || -> { returns }, *args)
   end
@@ -113,7 +113,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     it 'subscribes to the statement, result and connection methods it has to intercept' do
       expect(plugin.subscribed_methods).to include('connection.exec_params', 'connection.exec', 'statement.execute',
                                                    'connection.query', 'connection.copy_data', 'result.each',
-                                                   'result.to_a', 'result.[]', 'result.field_values',
+                                                   'result.each_row', 'result.to_a', 'result.[]', 'result.values',
+                                                   'result.field_values', 'result.column_values', 'result.tuple',
                                                    'connection.close')
     end
 
@@ -353,6 +354,62 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     it 'leaves the values of a column that is not encrypted alone' do
       values = %w[Jo Sam]
       expect(call('result.field_values', args: ['name'], sql: select, returns: values)).to be(values)
+    end
+
+    # ActiveRecord reads rows as arrays of bare values rather than hashes, so those have to decrypt
+    # too, matched to their columns by the field list the result reports.
+    it 'decrypts the encrypted position of a row read as an array of values' do
+      row = ['Jo', bytea(ciphertext('123-45-6789'))]
+      expect(call('result.[]', args: [0], sql: select, field_names: %w[name ssn], returns: row))
+        .to eq(%w[Jo 123-45-6789])
+    end
+
+    it 'decrypts the arrays to_a returns when the rows come back as arrays' do
+      rows = [['Jo', bytea(ciphertext('123-45-6789'))], ['Sam', bytea(ciphertext('987-65-4321'))]]
+      expect(call('result.to_a', sql: select, field_names: %w[name ssn], returns: rows))
+        .to eq([%w[Jo 123-45-6789], %w[Sam 987-65-4321]])
+    end
+
+    it 'decrypts the arrays values returns' do
+      rows = [['Jo', bytea(ciphertext('123-45-6789'))], ['Sam', bytea(ciphertext('987-65-4321'))]]
+      expect(call('result.values', sql: select, field_names: %w[name ssn], returns: rows))
+        .to eq([%w[Jo 123-45-6789], %w[Sam 987-65-4321]])
+    end
+
+    it 'decrypts every array row handed to the block of each_row' do
+      rows = []
+      call('result.each_row', sql: select, field_names: %w[name ssn], block: ->(row) { rows << row }) do
+        @context.block.call(['Jo', bytea(ciphertext('123-45-6789'))])
+      end
+
+      expect(rows).to eq([%w[Jo 123-45-6789]])
+    end
+
+    it 'decrypts the rows of the enumerator each_row returns when called without a block' do
+      rows = [['Jo', bytea(ciphertext('123-45-6789'))]].each
+      enumerator = call('result.each_row', sql: select, field_names: %w[name ssn], returns: rows)
+
+      expect(enumerator.to_a).to eq([%w[Jo 123-45-6789]])
+    end
+
+    it 'decrypts the values of a column read by its position in the result' do
+      values = [bytea(ciphertext('123-45-6789')), bytea(ciphertext('987-65-4321'))]
+      expect(call('result.column_values', args: [1], sql: select, field_names: %w[name ssn], returns: values))
+        .to eq(%w[123-45-6789 987-65-4321])
+    end
+
+    it 'leaves the values of a column read by position that is not encrypted alone' do
+      values = %w[Jo Sam]
+      expect(call('result.column_values', args: [0], sql: select, field_names: %w[name ssn], returns: values)).to be(values)
+    end
+
+    # Only the encrypted position is touched; the rest of the array is the driver's own.
+    it 'leaves the other positions of an array row as they were' do
+      row = ['Jo', bytea(ciphertext('123-45-6789'))]
+      result = call('result.to_a', sql: select, field_names: %w[name ssn], returns: [row])
+
+      expect(result.first.first).to eq('Jo')
+      expect(row[1]).to start_with('\\x')
     end
 
     # Two of the statement's tables can encrypt a column of the same name, and the row does not say

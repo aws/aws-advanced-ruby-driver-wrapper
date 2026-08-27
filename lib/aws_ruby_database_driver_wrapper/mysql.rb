@@ -257,15 +257,17 @@ module AwsRubyDatabaseDriverWrapper
 
     def each(*args, &block)
       pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(*args, &blk) },
-                 bounded_conn: @connection, sql: @sql, &block)
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &block)
     end
 
     def to_a
-      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection, sql: @sql)
+      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def [](index)
-      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection, sql: @sql)
+      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     # A buffered result is already in client memory, so letting it go is local. An unbuffered one,

@@ -28,7 +28,7 @@ class PipelineRecordingPlugin
   end
 
   def execute(method_name, target_callable, ...)
-    @calls << [method_name, @manager&.current_sql]
+    @calls << [method_name, @manager&.current_sql, @manager&.current_call_context]
     target_callable.call(...)
   end
 
@@ -42,7 +42,16 @@ class PipelineRecordingPlugin
   #
   # @return [Array<String, nil>] the SQL published for every call of the method, in order
   def sql_for(method_name)
-    @calls.select { |name, _sql| name == method_name }.map(&:last)
+    @calls.select { |name, _sql, _ctx| name == method_name }.map { |_name, sql, _ctx| sql }
+  end
+
+  # The field names the driver wrapper published for every call of the method, resolved the way a
+  # plugin that reads rows as arrays reads them. Left unresolved for calls this is never asked
+  # about, so a result stub only needs to answer +fields+ when the test cares.
+  #
+  # @return [Array<Array<String>, nil>]
+  def field_names_for(method_name)
+    @calls.select { |name, _sql, _ctx| name == method_name }.map { |_name, _sql, ctx| ctx&.field_names }
   end
 end
 

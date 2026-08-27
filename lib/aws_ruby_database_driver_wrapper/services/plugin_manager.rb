@@ -117,7 +117,9 @@ module AwsRubyDatabaseDriverWrapper
 
       # @param sql [String, nil] the SQL the call originated from, for plugins that inspect
       #   statements; it is consumed here and never forwarded to the target driver method
-      def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, sql: nil, **kwargs, &block)
+      # @param field_names [Array<String>, Proc, nil] the result's column names in order, for a
+      #   plugin that reads rows as arrays; like +sql+, it is consumed here rather than forwarded
+      def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, sql: nil, field_names: nil, **kwargs, &block)
         if ruby_method.is_a?(MethodInfo)
           method_name = ruby_method.name
 
@@ -129,7 +131,7 @@ module AwsRubyDatabaseDriverWrapper
           method_name = ruby_method.to_s
         end
 
-        context = PluginCallContext.new(sql, args, block)
+        context = PluginCallContext.new(sql, args, block, field_names)
         previous_context = Thread.current[CURRENT_CALL_CONTEXT_KEY]
         Thread.current[CURRENT_CALL_CONTEXT_KEY] = context
 

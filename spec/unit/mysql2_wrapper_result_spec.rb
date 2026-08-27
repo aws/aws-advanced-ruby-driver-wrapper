@@ -161,6 +161,20 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Mysql2WrapperResult do
       expect(plugin.sql_for('result.to_a')).to eq([sql, sql])
     end
 
+    # In ActiveRecord's array mode the rows come back without column names, so the reads publish the
+    # result's field list for a plugin to match each position against.
+    it 'publishes the result column names when the rows can come back as arrays' do
+      allow(mysql_result).to receive_messages(fields: %w[ssn], each: nil, to_a: [], :[] => {})
+
+      wrapper_result.each { |row| row }
+      wrapper_result.to_a
+      wrapper_result[0]
+
+      %w[result.each result.to_a result.[]].each do |method|
+        expect(plugin.field_names_for(method)).to eq([%w[ssn]]), method
+      end
+    end
+
     # A result built by a call whose SQL the wrapper does not know, such as one that went through
     # method_missing, publishes nothing rather than the SQL of some other statement.
     it 'publishes no SQL when it was built without any' do

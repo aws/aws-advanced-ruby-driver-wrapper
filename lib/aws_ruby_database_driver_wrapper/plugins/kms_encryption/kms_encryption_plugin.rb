@@ -28,8 +28,9 @@ module AwsRubyDatabaseDriverWrapper
     # Encrypts and decrypts individual table columns with keys held in AWS KMS, without the
     # application having to know about it.
     #
-    # Which columns are encrypted is configured in the database itself, in the
-    # +encryption_metadata+ table, so it can be changed without redeploying the application. When a
+    # Which columns are encrypted is configured in the database rather than in application code, so
+    # it can change without redeploying the application. That configuration is managed through
+    # {Encryption::KeyManagementUtility} rather than by editing the tables by hand. When a
     # statement writes to one of those columns the plugin encrypts the bind parameter on its way to
     # the server, and when a statement reads one back it decrypts the value on its way to the
     # application. The plaintext never reaches the server, and the data keys never reach it either:
@@ -56,12 +57,14 @@ module AwsRubyDatabaseDriverWrapper
     # drivers return as a string, so a string keeps the read consistent with the column's real type
     # and with how ActiveRecord treats it. Cast the value on read when the application needs another
     # type, for example +row['age'].to_i+.
-    # Rows read as arrays rather than hashes cannot be decrypted, because the plugin has no column
-    # names to match against the configuration: +PG::Result#each_row+, +#values+, +#column_values+
-    # and +#tuple+, and mysql2's +as: :array+ option, all return values as they are stored. Read
-    # such columns through +#each+, +#to_a+, +#[]+ or +PG::Result#field_values+ instead. A
-    # +COPY ... TO+ hands out what the column holds as well, since its rows are a stream rather than
-    # values the plugin can replace.
+    #
+    # A row is decrypted however it is read. A row read as a hash is matched to its columns by name;
+    # a row read as an array of bare values is matched by position, through the field list the
+    # result reports, which is what lets ActiveRecord's reads decrypt even though it fetches rows as
+    # arrays. This covers +PG::Result+'s +#each+, +#each_row+, +#to_a+, +#[]+, +#values+,
+    # +#field_values+, +#column_values+ and +#tuple+, and mysql2's hash and array results alike. A
+    # +COPY ... TO+ is the exception: its rows are a stream rather than values the plugin can
+    # replace, so it hands out what the column holds.
     #
     # A read and a write behave differently when the kms_encryption configuration itself cannot be
     # read. A read is lenient: the column is handed to the application exactly as the database
@@ -133,15 +136,33 @@ module AwsRubyDatabaseDriverWrapper
         RubyMethod::CONNECTION_COPY_DATA.name
       ].freeze
 
-      # Result methods that hand out whole rows, keyed by column name.
-      ROW_METHODS = Set[
+      # Result methods that yield rows to a block, one at a time.
+      ROW_BLOCK_METHODS = Set[
         RubyMethod::RESULT_EACH.name,
-        RubyMethod::RESULT_TO_A.name,
-        RubyMethod::RESULT_BRACKET.name
+        RubyMethod::RESULT_EACH_ROW.name
       ].freeze
 
-      # The result method that hands out every value of one named column.
-      COLUMN_VALUES_METHOD = RubyMethod::RESULT_FIELD_VALUES.name
+      # Result methods that return every row at once, as an array of rows.
+      ROW_COLLECTION_METHODS = Set[
+        RubyMethod::RESULT_TO_A.name,
+        RubyMethod::RESULT_VALUES.name
+      ].freeze
+
+      # Result methods that return a single row.
+      ROW_SINGLE_METHODS = Set[
+        RubyMethod::RESULT_BRACKET.name,
+        RubyMethod::RESULT_TUPLE.name
+      ].freeze
+
+      # Every result method that hands out whole rows, however it does so. A row may arrive as a hash
+      # keyed by column name or as an array of bare values, and either is decrypted: a hash by name,
+      # an array by matching each position to a column through the result's field list.
+      ROW_METHODS = (ROW_BLOCK_METHODS + ROW_COLLECTION_METHODS + ROW_SINGLE_METHODS).freeze
+
+      # Result methods that hand out every value of one column. One names the column; the other gives
+      # its position in the result, which is matched to a name through the field list.
+      COLUMN_BY_NAME_METHOD = RubyMethod::RESULT_FIELD_VALUES.name
+      COLUMN_BY_INDEX_METHOD = RubyMethod::RESULT_COLUMN_VALUES.name
 
       # Statement types that store values. A configuration lookup that fails while one of these is
       # being prepared cannot be shrugged off: the plugin would let the plaintext through to a column
@@ -168,7 +189,7 @@ module AwsRubyDatabaseDriverWrapper
       }imx
 
       SUBSCRIBED_METHODS = (
-        Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_VALUES_METHOD] +
+        Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_BY_NAME_METHOD, COLUMN_BY_INDEX_METHOD] +
           PARAMETER_METHODS.keys + WRITE_CHECK_METHODS + ROW_METHODS
       ).freeze
 
@@ -207,8 +228,10 @@ module AwsRubyDatabaseDriverWrapper
           pipeline_callable.call
         elsif ROW_METHODS.include?(method_name)
           read_rows(method_name, pipeline_callable, context, sql)
-        elsif method_name == COLUMN_VALUES_METHOD
-          read_column_values(pipeline_callable, args.first, sql)
+        elsif method_name == COLUMN_BY_NAME_METHOD
+          read_named_column(pipeline_callable, args.first, sql)
+        elsif method_name == COLUMN_BY_INDEX_METHOD
+          read_indexed_column(pipeline_callable, args.first, context, sql)
         else
           pipeline_callable.call
         end
@@ -317,34 +340,52 @@ module AwsRubyDatabaseDriverWrapper
         return pipeline_callable.call if columns.empty?
 
         cipher = new_cipher
+        # A row read as an array of values is matched to its columns by position; a row read as a
+        # hash is matched by name and never needs this. It is worked out once for the whole result.
+        positions = encrypted_positions(columns, context&.field_names)
         caller_block = context&.block
 
         begin
-          if method_name == RubyMethod::RESULT_EACH.name && caller_block
-            # each yields the rows rather than returning them, so the block is what has to be
-            # decrypted through. Replacing it in the call context leaves the caller's own block
-            # untouched.
-            context.block = proc { |row, *rest| caller_block.call(decrypt_row(row, columns, cipher), *rest) }
+          if ROW_BLOCK_METHODS.include?(method_name) && caller_block
+            # each and each_row yield the rows rather than returning them, so the block is what has
+            # to be decrypted through. Replacing it in the call context leaves the caller's own block
+            # untouched. A lambda is used rather than a proc so that a row yielded as an array of
+            # values is passed on whole, instead of being splatted across the block's parameters.
+            context.block = ->(row, *rest) { caller_block.call(decrypt_row(row, columns, positions, cipher), *rest) }
             pipeline_callable.call
-          elsif method_name == RubyMethod::RESULT_EACH.name
-            # each called without a block returns an Enumerator over the rows. The rows are decrypted
-            # eagerly and handed back as an enumerator over the results, because the cipher is released
-            # as soon as this method returns and a lazy wrapper would decrypt with a spent cipher.
+          elsif ROW_BLOCK_METHODS.include?(method_name)
+            # Called without a block, each and each_row return an Enumerator over the rows. The rows
+            # are decrypted eagerly and handed back as an enumerator over the results, because the
+            # cipher is released as soon as this method returns and a lazy wrapper would decrypt with
+            # a spent cipher.
             result = pipeline_callable.call
-            result.respond_to?(:map) ? result.map { |row| decrypt_row(row, columns, cipher) }.each : result
-          elsif method_name == RubyMethod::RESULT_TO_A.name
+            result.respond_to?(:map) ? result.map { |row| decrypt_row(row, columns, positions, cipher) }.each : result
+          elsif ROW_COLLECTION_METHODS.include?(method_name)
             rows = pipeline_callable.call
-            rows.is_a?(Array) ? rows.map { |row| decrypt_row(row, columns, cipher) } : rows
+            rows.is_a?(Array) ? rows.map { |row| decrypt_row(row, columns, positions, cipher) } : rows
           else
-            decrypt_row(pipeline_callable.call, columns, cipher)
+            decrypt_row(pipeline_callable.call, columns, positions, cipher)
           end
         ensure
           cipher.release
         end
       end
 
-      def read_column_values(pipeline_callable, field_name, sql)
+      # field_values hands back one named column's values, so the column is looked up by name.
+      def read_named_column(pipeline_callable, field_name, sql)
         config = field_name.nil? ? nil : column_configs(sql)[field_name.to_s]
+        decrypt_column(pipeline_callable, config)
+      end
+
+      # column_values hands back one column's values by position, so the position is matched to a
+      # column name through the result's field list before the values are decrypted.
+      def read_indexed_column(pipeline_callable, index, context, sql)
+        columns = column_configs(sql)
+        config = columns.empty? ? nil : column_at(index, context&.field_names, columns)
+        decrypt_column(pipeline_callable, config)
+      end
+
+      def decrypt_column(pipeline_callable, config)
         return pipeline_callable.call if config.nil?
 
         cipher = new_cipher
@@ -358,11 +399,21 @@ module AwsRubyDatabaseDriverWrapper
       end
 
       # @param columns [Hash{String => ColumnEncryptionConfig}] the encrypted columns of the
-      #   statement, by column name
-      # @return [Object] the row, with a new hash substituted only when something was decrypted
-      def decrypt_row(row, columns, cipher)
-        return row unless row.is_a?(Hash)
+      #   statement, by name, for a row read as a hash
+      # @param positions [Array<Array(Integer, ColumnEncryptionConfig)>] the encrypted columns by
+      #   position, for a row read as an array of values
+      # @return [Object] the row, with a new hash or array substituted only when something was
+      #   decrypted
+      def decrypt_row(row, columns, positions, cipher)
+        case row
+        when Hash then decrypt_named_row(row, columns, cipher)
+        when Array then decrypt_indexed_row(row, positions, cipher)
+        else pg_tuple?(row) ? decrypt_tuple(row, columns, cipher) : row
+        end
+      end
 
+      # A row read as a hash: the encrypted columns are found by name.
+      def decrypt_named_row(row, columns, cipher)
         decrypted = nil
         columns.each do |column_name, config|
           next unless row.key?(column_name)
@@ -378,6 +429,74 @@ module AwsRubyDatabaseDriverWrapper
         end
 
         decrypted || row
+      end
+
+      # A row read as an array of values: the encrypted columns are found by position.
+      def decrypt_indexed_row(row, positions, cipher)
+        decrypted = nil
+        positions.each do |index, config|
+          raw = row[index]
+          next unless cipher.encrypted_payload?(raw)
+
+          value = decrypt_value(raw, config, cipher)
+          next if value.equal?(raw)
+
+          decrypted ||= row.dup
+          decrypted[index] = value
+        end
+
+        decrypted || row
+      end
+
+      # A pg tuple is read-only and keyed by column name, so a decrypted copy is handed back as a
+      # plain hash, and only when a column was actually decrypted so an unaffected tuple keeps its
+      # type.
+      def decrypt_tuple(row, columns, cipher)
+        keys = row.keys
+        copy = nil
+        columns.each do |column_name, config|
+          next unless keys.include?(column_name)
+
+          raw = row[column_name]
+          next unless cipher.encrypted_payload?(raw)
+
+          value = decrypt_value(raw, config, cipher)
+          next if value.equal?(raw)
+
+          copy ||= keys.zip(row.values).to_h
+          copy[column_name] = value
+        end
+
+        copy || row
+      end
+
+      # Matches each encrypted column to its position in a result read as arrays of values, so a row
+      # can be decrypted by index. Empty when the call carried no field list (a row read as a hash
+      # never needs it) or none of the result's columns is encrypted.
+      #
+      # @param columns [Hash{String => ColumnEncryptionConfig}] encrypted columns by name
+      # @param field_names [Array<String>, nil] the result's columns in order
+      # @return [Array<Array(Integer, ColumnEncryptionConfig)>]
+      def encrypted_positions(columns, field_names)
+        return [] if field_names.nil? || columns.empty?
+
+        field_names.each_with_index.with_object([]) do |(name, index), positions|
+          config = columns[name.to_s]
+          positions << [index, config] if config
+        end
+      end
+
+      # @return [ColumnEncryptionConfig, nil] the encrypted column at a position in the result, nil
+      #   when the position is out of range or the column there is not encrypted
+      def column_at(index, field_names, columns)
+        return nil unless index.is_a?(Integer) && field_names
+
+        name = field_names[index]
+        name.nil? ? nil : columns[name.to_s]
+      end
+
+      def pg_tuple?(row)
+        defined?(PG::Tuple) && row.is_a?(PG::Tuple)
       end
 
       def decrypt_value(raw, config, cipher)

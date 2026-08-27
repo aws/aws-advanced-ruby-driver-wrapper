@@ -50,4 +50,30 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginCallContext do
   it 'does not let the SQL be replaced' do
     expect(context).not_to respond_to(:sql=)
   end
+
+  describe '#field_names' do
+    it 'has none when the call carried none' do
+      expect(described_class.new('SELECT 1', []).field_names).to be_nil
+    end
+
+    it 'returns a plain list as it was given' do
+      expect(described_class.new('SELECT 1', [], nil, %w[name ssn]).field_names).to eq(%w[name ssn])
+    end
+
+    # Only result reads supply the column names, and only when a plugin might need them, so the
+    # callable that produces them is resolved lazily and only once.
+    it 'resolves a callable lazily and remembers the result' do
+      calls = 0
+      provider = lambda do
+        calls += 1
+        %w[name ssn]
+      end
+      context = described_class.new('SELECT 1', [], nil, provider)
+
+      expect(calls).to eq(0)
+      expect(context.field_names).to eq(%w[name ssn])
+      expect(context.field_names).to eq(%w[name ssn])
+      expect(calls).to eq(1)
+    end
+  end
 end
