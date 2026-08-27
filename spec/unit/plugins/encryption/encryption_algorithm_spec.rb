@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_algorithm'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_algorithm'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionAlgorithm do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionAlgorithm do
   subject(:algorithm) { described_class }
 
   # These names are stored in encryption_metadata.encryption_algorithm and are shared with the
@@ -45,7 +45,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionAlgo
 
     it 'raises for an unsupported algorithm' do
       expect { algorithm.key_length('AES_256_GCM') }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm: "AES_256_GCM"/
+        AwsAdvancedRubyDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm: "AES_256_GCM"/
       )
     end
   end
@@ -58,7 +58,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionAlgo
 
     it 'raises for an unsupported algorithm' do
       expect { algorithm.cipher_name('rot13') }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm/
+        AwsAdvancedRubyDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm/
       )
     end
   end
@@ -79,7 +79,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionAlgo
     subject(:error) { algorithm.unsupported('rot13') }
 
     it 'builds an invalid algorithm error' do
-      expect(error.code).to eq(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError::INVALID_ALGORITHM)
+      expect(error.code).to eq(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError::INVALID_ALGORITHM)
     end
 
     it 'names the supported algorithms' do

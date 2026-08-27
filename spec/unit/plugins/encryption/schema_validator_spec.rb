@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/schema_validator'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/schema_validator'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaValidator do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaValidator do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
   let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true) }
   let(:connection) { double('Connection') }
   # What a correctly created schema looks like: both tables exist with all their columns, the
@@ -40,8 +40,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaValidato
   end
   # The foreign-key query now comes from the driver dialect; build the real ones so the stub stays
   # in step with what the dialects actually produce.
-  let(:pg_foreign_key_sql) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new.foreign_key_query }
-  let(:mysql_foreign_key_sql) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new.foreign_key_query }
+  let(:pg_foreign_key_sql) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new.foreign_key_query }
+  let(:mysql_foreign_key_sql) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new.foreign_key_query }
   subject(:validator) { described_class.new('encrypt', sql_runner) }
 
   # information_schema is queried for four different things, so the runner answers by SQL shape.

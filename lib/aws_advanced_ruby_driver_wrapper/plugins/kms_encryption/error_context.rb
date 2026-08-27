@@ -16,7 +16,7 @@
 
 require_relative 'sanitizer'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Builds the human-readable, redacted message that goes with a kms_encryption failure.

@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/column_encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/column_encryption_config'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnEncryptionConfig do
-  let(:key_metadata_class) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyMetadata }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnEncryptionConfig do
+  let(:key_metadata_class) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyMetadata }
   let(:key_metadata) do
     key_metadata_class.new(master_key_arn: 'arn:aws:kms:us-east-1:123456789012:key/abcd',
                            encrypted_data_key: 'AQIDAHj...', hmac_key: 'h' * 32)
@@ -29,7 +29,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnEncrypti
   end
 
   it 'defaults to the default algorithm' do
-    expect(config.algorithm).to eq(AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionAlgorithm::DEFAULT)
+    expect(config.algorithm).to eq(AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionAlgorithm::DEFAULT)
   end
 
   it 'needs only a table and a column' do

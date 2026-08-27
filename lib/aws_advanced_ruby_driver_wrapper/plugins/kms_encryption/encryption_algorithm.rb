@@ -16,7 +16,7 @@
 
 require_relative 'errors'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # The symmetric algorithms the plugin can use to encrypt column values. The names are

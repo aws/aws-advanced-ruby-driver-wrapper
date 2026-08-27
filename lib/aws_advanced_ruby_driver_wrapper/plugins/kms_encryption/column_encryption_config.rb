@@ -17,7 +17,7 @@
 require_relative 'encryption_algorithm'
 require_relative 'key_metadata'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # One row of the +encryption_metadata+ table joined with the key it points at: the

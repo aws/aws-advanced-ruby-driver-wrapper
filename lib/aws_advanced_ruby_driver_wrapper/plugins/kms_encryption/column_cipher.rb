@@ -17,7 +17,7 @@
 require_relative 'encryption_service'
 require_relative 'errors'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Encrypts and decrypts single column values for the duration of one call.

@@ -15,15 +15,15 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/audit_logger'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/audit_logger'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::AuditLogger do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::AuditLogger do
   subject(:audit) { described_class.new(true) }
 
   let(:written) { [] }
 
   before do
-    logger = AwsRubyDatabaseDriverWrapper.logger
+    logger = AwsAdvancedRubyDriverWrapper.logger
     %i[debug info warn].each do |level|
       allow(logger).to receive(level) { |line| written << [level, line] }
     end

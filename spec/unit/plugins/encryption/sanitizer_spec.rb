@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sanitizer'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sanitizer'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::Sanitizer do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::Sanitizer do
   subject(:sanitizer) { described_class }
 
   describe '.arn' do

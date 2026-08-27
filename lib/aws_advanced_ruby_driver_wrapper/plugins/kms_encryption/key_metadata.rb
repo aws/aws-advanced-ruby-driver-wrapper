@@ -16,7 +16,7 @@
 
 require_relative 'sanitizer'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # One row of the +key_storage+ table: an encrypted data key, the master key that wraps

@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../spec_helper'
-require 'aws_ruby_database_driver_wrapper/postgresql'
-require 'aws_ruby_database_driver_wrapper/services/plugin_manager'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
 # The rows are read after the call that produced them has returned, so a plugin which has to know
 # which columns a row holds can only learn it from the SQL the result carries.
-RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgResult do
+RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgResult do
   let(:sql) { 'SELECT ssn FROM users' }
   let(:pg_result) { double('PG::Result') }
   let(:connection) { double('PgConnection') }

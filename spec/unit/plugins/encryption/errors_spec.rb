@@ -15,16 +15,16 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/errors'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/errors'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
-  let(:errors) { AwsRubyDatabaseDriverWrapper::Errors }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError do
+  let(:errors) { AwsAdvancedRubyDriverWrapper::Errors }
 
   describe 'the shared behaviour' do
     subject(:error) { errors::EncryptionError.new('Cipher rejected the key') }
 
     it 'is a wrapper error, so a caller that rescues StandardError still catches it' do
-      expect(error).to be_a(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
+      expect(error).to be_a(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
       expect(error).to be_a(StandardError)
     end
 
@@ -69,7 +69,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
     end
   end
 
-  describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionError do
+  describe AwsAdvancedRubyDriverWrapper::Errors::EncryptionError do
     it 'gives each failure a stable code' do
       expect(described_class.encryption_failed('x').code).to eq('ENC01')
       expect(described_class.decryption_failed('x').code).to eq('ENC02')
@@ -95,7 +95,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
     end
   end
 
-  describe AwsRubyDatabaseDriverWrapper::Errors::KeyManagementError do
+  describe AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError do
     it 'gives each failure a stable code' do
       expect(described_class.key_creation_failed('x').code).to eq('KEY01')
       expect(described_class.key_retrieval_failed('x').code).to eq('KEY02')
@@ -126,7 +126,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
     end
   end
 
-  describe AwsRubyDatabaseDriverWrapper::Errors::MetadataError do
+  describe AwsAdvancedRubyDriverWrapper::Errors::MetadataError do
     it 'gives each failure a stable code' do
       expect(described_class.load_failed('x').code).to eq('META01')
       expect(described_class.cache_failed('x').code).to eq('META02')
@@ -155,7 +155,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::EncryptionPluginError do
     end
   end
 
-  describe AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError do
+  describe AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError do
     it 'describes the failure on its own' do
       expect(described_class.new.message).to eq('Independent connection creation failed')
     end

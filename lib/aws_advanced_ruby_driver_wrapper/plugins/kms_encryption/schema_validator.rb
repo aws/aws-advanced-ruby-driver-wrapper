@@ -16,7 +16,7 @@
 
 require_relative 'schema_name'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Checks that the +encryption_metadata+ and +key_storage+ tables exist and look the way the

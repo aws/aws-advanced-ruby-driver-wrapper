@@ -19,7 +19,7 @@ require_relative '../../logging'
 require_relative 'error_context'
 require_relative 'errors'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Opens the plugin's own connections to the kms_encryption metadata and key storage tables.

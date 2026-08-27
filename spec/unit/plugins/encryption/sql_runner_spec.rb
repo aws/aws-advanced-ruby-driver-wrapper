@@ -15,13 +15,13 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SqlRunner do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SqlRunner do
   # The runner picks its behaviour from the dialect class, so these have to be real dialects
   # rather than doubles.
-  let(:pg_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
-  let(:mysql_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:pg_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   let(:pg_runner) { described_class.new(pg_dialect) }
   let(:mysql_runner) { described_class.new(mysql_dialect) }
   let(:connection) { double('Connection') }

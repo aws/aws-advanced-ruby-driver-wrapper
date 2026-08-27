@@ -18,12 +18,12 @@ require_relative '../../../spec_helper'
 require 'bigdecimal'
 require 'date'
 require 'openssl'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_service'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_service'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionService do
-  let(:type_marker) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption::TypeMarker }
-  let(:algorithms) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionAlgorithm }
-  let(:encryption_error) { AwsRubyDatabaseDriverWrapper::Errors::EncryptionError }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionService do
+  let(:type_marker) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption::TypeMarker }
+  let(:algorithms) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionAlgorithm }
+  let(:encryption_error) { AwsAdvancedRubyDriverWrapper::Errors::EncryptionError }
   let(:data_key) { OpenSSL::Random.random_bytes(32) }
   let(:hmac_key) { OpenSSL::Random.random_bytes(32) }
 
@@ -258,7 +258,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionServ
   describe '.serialize_value' do
     it 'raises for a marker it cannot write' do
       expect { described_class.serialize_value('x', 12_345) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError,
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError,
                         /Unsupported value type: String/) do |error|
         expect(error.context[:data_type]).to eq('String')
       end

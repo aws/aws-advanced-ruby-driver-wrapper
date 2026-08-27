@@ -16,7 +16,7 @@
 
 require_relative '../../driver_dialects/pg_driver_dialect'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Runs the plugin's own metadata and key storage queries against either driver.

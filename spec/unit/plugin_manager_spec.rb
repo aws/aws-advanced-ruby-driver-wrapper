@@ -322,9 +322,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       manager = build_manager_with_plugins([TestPlugins::TestPluginOne.new([])])
 
       expect do
-        manager.execute('test_call_a', nil, -> { raise AwsRubyDatabaseDriverWrapper::Errors::AwsError, 'test error' },
+        manager.execute('test_call_a', nil, -> { raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'test error' },
                         sql: 'SELECT 1')
-      end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
 
       expect(manager.current_call_context).to be_nil
     end
@@ -517,7 +517,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption')
       manager = described_class.new(container)
 
-      expect(manager.plugin_in_use?(AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin)).to be true
     end
 
     # The kms_encryption plugin has to see the parameters and the rows last on the way out and first on
@@ -527,8 +527,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       manager = described_class.new(container)
 
       plugin_classes = manager.instance_variable_get(:@plugins).map(&:class)
-      expect(plugin_classes.index(AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin))
-        .to be > plugin_classes.index(AwsRubyDatabaseDriverWrapper::Plugins::FailoverPlugin)
+      expect(plugin_classes.index(AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin))
+        .to be > plugin_classes.index(AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin)
     end
 
     it 'does not raise an error when all plugin codes are unique' do

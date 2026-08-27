@@ -15,14 +15,14 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/metadata_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/metadata_manager'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::MetadataManager do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManager do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
   let(:connection) { double('Connection') }
   let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
   let(:sql_runner) { instance_double(encryption::SqlRunner) }

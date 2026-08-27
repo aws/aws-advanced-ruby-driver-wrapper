@@ -17,7 +17,7 @@
 require_relative '../../logging'
 require_relative 'encryption_service'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # An in-memory cache of plaintext data keys, so that reading an encrypted column does

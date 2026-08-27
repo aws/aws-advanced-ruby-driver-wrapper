@@ -21,7 +21,7 @@ require_relative 'encryption_algorithm'
 require_relative 'errors'
 require_relative 'key_metadata'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Reads the +encryption_metadata+ table, which says which columns are encrypted and with

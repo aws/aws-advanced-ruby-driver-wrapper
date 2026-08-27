@@ -27,7 +27,7 @@ require_relative 'metadata_manager'
 require_relative 'schema_validator'
 require_relative 'sql_runner'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Wires up everything the kms_encryption plugin needs and owns its lifecycle.

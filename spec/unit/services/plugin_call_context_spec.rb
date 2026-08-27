@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/services/plugin_call_context'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_call_context'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Services::PluginCallContext do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginCallContext do
   let(:block) { proc { |row| row } }
   subject(:context) { described_class.new('SELECT 1', ['SELECT 1', []], block) }
 

@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/data_key_cache'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/data_key_cache'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::DataKeyCache do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::DataKeyCache do
   let(:data_key) { 'a' * 32 }
 
   # Every cache is shut down so that its cleanup thread does not outlive the example.
@@ -54,14 +54,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::DataKeyCache d
       borrowed = cache.get('datakey_abc')
       expect(borrowed).not_to be(data_key)
 
-      AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionService.wipe(borrowed)
+      AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionService.wipe(borrowed)
       expect(cache.get('datakey_abc')).to eq(data_key)
     end
 
     it 'stores a copy, so a caller wiping its key does not empty the cache either' do
       mutable = +'a' * 32
       cache.put('datakey_abc', mutable)
-      AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionService.wipe(mutable)
+      AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionService.wipe(mutable)
 
       expect(cache.get('datakey_abc')).to eq('a' * 32)
     end

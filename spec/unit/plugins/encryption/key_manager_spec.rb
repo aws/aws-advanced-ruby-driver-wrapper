@@ -16,15 +16,15 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/data_key_cache'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/data_key_cache'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_manager'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:key_error) { AwsRubyDatabaseDriverWrapper::Errors::KeyManagementError }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:key_error) { AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError }
   let(:kms_client) { instance_double(Aws::KMS::Client) }
   let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
   let(:sql_runner) { instance_double(encryption::SqlRunner) }
@@ -204,8 +204,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManager do
     # Validation is a pre-flight check, so a KMS failure is a false rather than a raise.
     it 'rejects a key it could not describe' do
       allow(kms_client).to receive(:describe_key).and_raise(StandardError, 'AccessDeniedException')
-      expect(manager).to receive(:logger).and_return(AwsRubyDatabaseDriverWrapper.logger)
-      expect(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn).with(/Master key validation failed/)
+      expect(manager).to receive(:logger).and_return(AwsAdvancedRubyDriverWrapper.logger)
+      expect(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn).with(/Master key validation failed/)
 
       expect(manager.validate_master_key('arn:aws:kms:us-east-1:1:key/abcd')).to be(false)
     end

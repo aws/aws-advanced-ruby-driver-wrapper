@@ -16,17 +16,17 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_management_utility'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/metadata_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_management_utility'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_manager'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/metadata_manager'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementUtility do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:key_error) { AwsRubyDatabaseDriverWrapper::Errors::KeyManagementError }
-  let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementUtility do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:key_error) { AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError }
+  let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
   let(:master_key_arn) { 'arn:aws:kms:us-east-1:123456789012:key/abcd' }
   let(:kms_client) { instance_double(Aws::KMS::Client) }
   let(:key_manager) { instance_double(encryption::KeyManager) }
@@ -53,8 +53,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
     allow(key_manager).to receive(:store_key_metadata) { |metadata| metadata.with(id: 7) }
     allow(sql_runner).to receive(:update).and_return(1)
     allow(sql_runner).to receive(:upsert_clause).and_return('ON CONFLICT (table_name, column_name) DO UPDATE')
-    allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:info)
-    allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn)
+    allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:info)
+    allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
   end
 
   describe '#create_master_key' do
@@ -97,7 +97,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
       allow(kms_client).to receive(:create_alias).and_raise(StandardError, 'AlreadyExistsException')
 
       expect(utility.create_master_key('column kms_encryption')).to eq(master_key_arn)
-      expect(AwsRubyDatabaseDriverWrapper.logger).to have_received(:warn)
+      expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
         .with(/could not create an alias for it: AlreadyExistsException/)
     end
 
@@ -236,7 +236,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
 
     it 'refuses an algorithm it cannot encrypt with' do
       expect { utility.generate_and_store_data_key('users', 'ssn', master_key_arn, 'rot13') }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError, /Unsupported kms_encryption algorithm/)
       expect(key_manager).not_to have_received(:generate_data_key)
     end
 
@@ -340,7 +340,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyManagementU
       allow(sql_runner).to receive(:update).and_return(0)
 
       expect(utility.remove_encryption_for_column('users', 'ssn')).to be(false)
-      expect(AwsRubyDatabaseDriverWrapper.logger).to have_received(:warn)
+      expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
         .with(/No kms_encryption configuration existed for users\.ssn/)
     end
 

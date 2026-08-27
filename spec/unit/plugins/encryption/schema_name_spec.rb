@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/schema_name'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/schema_name'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaName do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaName do
   describe '.of' do
     it 'validates a string' do
       expect(described_class.of('encrypt').value).to eq('encrypt')

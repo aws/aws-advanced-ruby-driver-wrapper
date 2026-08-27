@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_metadata'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_metadata'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KeyMetadata do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyMetadata do
   subject(:metadata) do
     described_class.new(
       id: 1,

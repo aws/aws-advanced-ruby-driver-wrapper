@@ -22,7 +22,7 @@ require_relative '../../utils/conversion_utils'
 require_relative 'errors'
 require_relative 'key_metadata'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Owns the data keys: generates them through KMS, stores them in +key_storage+, and

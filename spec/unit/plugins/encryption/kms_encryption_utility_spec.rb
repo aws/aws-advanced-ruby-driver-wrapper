@@ -16,16 +16,16 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionUtility do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:services) { AwsRubyDatabaseDriverWrapper::Services }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionUtility do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:services) { AwsAdvancedRubyDriverWrapper::Services }
   let(:kms_client) { instance_double(Aws::KMS::Client) }
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
-  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+  let(:host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
   # The dialect asks whether a connection is already finished before closing it, so a connection that
   # the utility opened for itself has to answer that as an open one would.
   let(:connection) { double('Connection', finished?: false, close: nil) }
@@ -97,17 +97,17 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
       # Disabling the cache makes the plugin open a metadata connection per statement, so it is worth
       # a warning - but only once, not on every connection.
       it 'warns once per process when the metadata cache is disabled' do
-        allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn)
+        allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
 
         described_class.new(service_container, props, kms_client: kms_client)
         described_class.new(service_container, props, kms_client: kms_client)
 
-        expect(AwsRubyDatabaseDriverWrapper.logger)
+        expect(AwsAdvancedRubyDriverWrapper.logger)
           .to have_received(:warn).with(/metadata cache is disabled/).once
       end
 
       it 'does not warn when the metadata cache is enabled' do
-        allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn)
+        allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
 
         enabled_props = Concurrent::Map.new
         enabled_props[:encryption_kms_region] = 'us-west-2'
@@ -115,7 +115,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
         enabled_props[:encryption_data_key_cache_enabled] = false
         described_class.new(service_container, enabled_props, kms_client: kms_client)
 
-        expect(AwsRubyDatabaseDriverWrapper.logger)
+        expect(AwsAdvancedRubyDriverWrapper.logger)
           .not_to have_received(:warn).with(/metadata cache is disabled/)
       end
     end
@@ -181,11 +181,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
     it 'reports a metadata load that failed' do
       metadata_manager = instance_double(encryption::MetadataManager, shutdown: nil)
       allow(metadata_manager).to receive(:start)
-        .and_raise(AwsRubyDatabaseDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
+        .and_raise(AwsAdvancedRubyDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
       allow(encryption::MetadataManager).to receive(:new).and_return(metadata_manager)
 
       expect { utility.ensure_initialized }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /relation does not exist/)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::MetadataError, /relation does not exist/)
       expect(utility).not_to be_initialized
     end
   end

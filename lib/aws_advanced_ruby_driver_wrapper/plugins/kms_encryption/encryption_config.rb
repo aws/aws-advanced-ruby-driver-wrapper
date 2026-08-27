@@ -17,7 +17,7 @@
 require_relative '../../property_definition'
 require_relative 'schema_name'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # The plugin's own configuration, resolved once from the wrapper properties.

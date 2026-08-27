@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionConfig do
-  let(:schema_name_class) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption::SchemaName }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConfig do
+  let(:schema_name_class) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaName }
 
   def props(values = {})
     map = Concurrent::Map.new

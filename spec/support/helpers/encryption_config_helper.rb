@@ -24,7 +24,7 @@ module EncryptionConfigHelper
     props = Concurrent::Map.new
     props[:encryption_kms_region] = 'us-east-1'
     props[:encryption_metadata_schema] = 'encrypt'
-    config = AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionConfig.from_props(props)
+    config = AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConfig.from_props(props)
     overrides.empty? ? config : config.with(**overrides)
   end
 end

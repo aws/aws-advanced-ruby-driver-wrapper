@@ -17,7 +17,7 @@
 require_relative '../../errors'
 require_relative 'sanitizer'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Errors
     # Base class for every failure raised by the kms_encryption plugin. Carries a stable
     # error code and an ordered context hash that is appended to the message, so that a

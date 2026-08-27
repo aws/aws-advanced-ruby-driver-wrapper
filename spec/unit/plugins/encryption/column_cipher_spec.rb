@@ -15,17 +15,17 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/column_cipher'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/column_encryption_config'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/key_manager'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/sql_runner'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/column_cipher'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/column_encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_manager'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ColumnCipher do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:encryption_error) { AwsRubyDatabaseDriverWrapper::Errors::EncryptionError }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:encryption_error) { AwsAdvancedRubyDriverWrapper::Errors::EncryptionError }
   let(:key_manager) { instance_double(encryption::KeyManager) }
   # A real runner over the mysql2 dialect, so that read_binary behaves as it does in production.
-  let(:sql_runner) { encryption::SqlRunner.new(AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new) }
+  let(:sql_runner) { encryption::SqlRunner.new(AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new) }
   let(:data_key) { +('a' * 32) }
   let(:hmac_key) { 'h' * 32 }
   let(:key_metadata) do

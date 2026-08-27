@@ -17,7 +17,7 @@
 require 'bigdecimal'
 require 'date'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # The single byte written ahead of the ciphertext that records how the plaintext was

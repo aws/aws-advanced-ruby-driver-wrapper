@@ -15,18 +15,18 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentConnectionProvider do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:services) { AwsRubyDatabaseDriverWrapper::Services }
-  let(:host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::IndependentConnectionProvider do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:services) { AwsAdvancedRubyDriverWrapper::Services }
+  let(:host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
   let(:driver_props) { { host: 'db.example.com', dbname: 'app' } }
   let(:wrapper_props) { Concurrent::Map.new }
   let(:connection) { double('Connection') }
-  let(:driver_dialect) { instance_double(AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect) }
+  let(:driver_dialect) { instance_double(AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect) }
   let(:plugin_manager) { instance_double(services::PluginManager) }
   let(:connection_service) do
     instance_double(services::ConnectionService, current_host_info: host_info, driver_props: driver_props,
@@ -72,7 +72,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
       allow(plugin_manager).to receive(:internal_connect).and_return(nil)
 
       expect { provider.open_connection('GET_KEY_METADATA') }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError,
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError,
                         /The connect pipeline returned no connection/) do |error|
         expect(error.connection_attempt).to eq('GET_KEY_METADATA')
         expect(error.attempted_parameters).to eq('db.example.com:5432/')
@@ -83,7 +83,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED)
 
       expect { provider.open_connection('METADATA_QUERY') }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError) do |error|
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError) do |error|
           expect(error.connection_attempt).to eq('METADATA_QUERY')
           expect(error.failure_reason).to eq('Errno::ECONNREFUSED')
         end
@@ -125,7 +125,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
       ran = false
 
       expect { provider.with_connection { ran = true } }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
       expect(ran).to be(false)
     end
   end
@@ -167,7 +167,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
     it 'count a failure' do
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED)
 
-      expect { provider.open_connection }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+      expect { provider.open_connection }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
       expect(provider.request_count).to eq(1)
       expect(provider.failed_connection_count).to eq(1)
       expect(provider.last_failed_connection_time).to be_a(Float)
@@ -183,7 +183,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
     it 'is the share of attempts that succeeded' do
       provider.open_connection
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED)
-      expect { provider.open_connection }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+      expect { provider.open_connection }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
 
       expect(provider.connection_success_rate).to eq(0.5)
     end
@@ -194,7 +194,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED)
       count.times do
         expect { provider.open_connection }
-          .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
       end
       allow(plugin_manager).to receive(:internal_connect).and_return(connection)
     end
@@ -237,7 +237,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
 
     it 'reports how long ago the last failure was' do
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED)
-      expect { provider.open_connection }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+      expect { provider.open_connection }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
 
       expect(provider.health_status).to include('failed=1', 'success_rate=0.00%', 'last_failure=')
     end
@@ -252,7 +252,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
     it 'logs an unhealthy provider at warn level' do
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED)
       allow(provider.send(:logger)).to receive(:debug)
-      expect { provider.open_connection }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+      expect { provider.open_connection }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
 
       expect(provider.send(:logger)).to receive(:warn).with(/healthy=false/)
       provider.log_health_status
@@ -302,7 +302,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
       allow(plugin_manager).to receive(:internal_connect).and_raise(Errno::ECONNREFUSED, 'db.example.com')
       allow(provider.send(:logger)).to receive(:debug)
 
-      expect { provider.open_connection }.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+      expect { provider.open_connection }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
       expect(audit_logger).to have_received(:log_independent_connection_creation)
         .with(hash_including(target: 'db.example.com:5432/', success: false))
     end
@@ -313,7 +313,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::IndependentCon
       expect(provider.send(:logger)).to receive(:debug)
         .with(/Independent connection creation failed.*\[Context: operation=STORE_KEY_METADATA\]/)
       expect { provider.open_connection('STORE_KEY_METADATA') }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::IndependentConnectionError)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError)
     end
   end
 end

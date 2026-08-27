@@ -21,7 +21,7 @@ require_relative 'errors'
 require_relative 'key_metadata'
 require_relative 'sanitizer'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # The administrative side of the plugin: creates master keys, turns kms_encryption on or off for a

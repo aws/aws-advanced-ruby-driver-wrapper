@@ -15,17 +15,17 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/kms_encryption_plugin'
-require 'aws_ruby_database_driver_wrapper/services/plugin_call_context'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_plugin'
+require 'aws_advanced_ruby_driver_wrapper/services/plugin_call_context'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
-  let(:encryption) { AwsRubyDatabaseDriverWrapper::Plugins::Encryption }
-  let(:services) { AwsRubyDatabaseDriverWrapper::Services }
-  let(:ruby_method) { AwsRubyDatabaseDriverWrapper::RubyMethod }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
+  let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
+  let(:services) { AwsAdvancedRubyDriverWrapper::Services }
+  let(:ruby_method) { AwsAdvancedRubyDriverWrapper::RubyMethod }
   let(:props) { Concurrent::Map.new }
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   # A real runner and a real cipher over the pg dialect, so that what the plugin binds and what it
   # reads back go through the same binary handling as in production.
   let(:sql_runner) { encryption::SqlRunner.new(driver_dialect) }
@@ -265,11 +265,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
     it 'records a failed kms_encryption in the audit trail and lets the failure through' do
       allow(key_manager).to receive(:decrypt_data_key)
-        .and_raise(AwsRubyDatabaseDriverWrapper::Errors::KeyManagementError.kms_connection_failed('AccessDenied'))
+        .and_raise(AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError.kms_connection_failed('AccessDenied'))
       allow(audit_logger).to receive(:log_encryption)
 
       expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::KeyManagementError)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError)
       expect(audit_logger).to have_received(:log_encryption)
         .with(hash_including(table_name: 'users', column_name: 'ssn', success: false))
     end
@@ -479,7 +479,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       allow(key_manager).to receive(:decrypt_data_key) { +('b' * 32) }
 
       expect { call('result.to_a', sql: select, returns: [row]) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::EncryptionError)
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError)
       expect(audit_logger).to have_received(:log_decryption)
         .with(hash_including(table_name: 'users', column_name: 'ssn', success: false))
     end
@@ -488,7 +488,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   # mysql2 binds every parameter positionally, writes binary columns as plain binary strings, and
   # reads them back the same way, so both halves of the plugin have to be checked over it too.
   describe 'with the mysql2 driver' do
-    let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
 
     it 'encrypts the parameters of a statement bound with question marks' do
       call('statement.execute', args: %w[Jo 123-45-6789], sql: 'INSERT INTO users (name, ssn) VALUES (?, ?)')
@@ -622,14 +622,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     let(:select) { 'SELECT name, ssn FROM users WHERE name = $1' }
     let(:insert) { 'INSERT INTO users (name, ssn) VALUES ($1, $2)' }
     let(:unreadable) do
-      AwsRubyDatabaseDriverWrapper::Errors::MetadataError.lookup_failed('relation does not exist')
+      AwsAdvancedRubyDriverWrapper::Errors::MetadataError.lookup_failed('relation does not exist')
     end
 
     # The application's statement is not the place to report that the plugin's own tables are
     # unreadable, so every column is left as the database holds it.
     it 'leaves the columns alone when the plugin cannot be initialized' do
       allow(encryption_utility).to receive(:ensure_initialized)
-        .and_raise(AwsRubyDatabaseDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
+        .and_raise(AwsAdvancedRubyDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
       allow(plugin.send(:logger)).to receive(:warn)
       rows = [{ 'ssn' => bytea(ciphertext('123-45-6789')) }]
 
@@ -680,7 +680,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     # other INSERT, so it leaves it to the database rather than refusing it.
     it 'passes an INSERT through when the plugin cannot be initialized' do
       allow(encryption_utility).to receive(:ensure_initialized)
-        .and_raise(AwsRubyDatabaseDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
+        .and_raise(AwsAdvancedRubyDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
       allow(plugin.send(:logger)).to receive(:warn)
 
       call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert)
@@ -717,7 +717,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   # leaves to the database rather than refusing, so as not to reject statements that touch no
   # encrypted column.
   describe 'a write it cannot encrypt' do
-    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+    let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
 
     it 'refuses a literal written into an encrypted column' do
       sql = "INSERT INTO users (name, ssn) VALUES ($1, '123-45-6789')"
@@ -879,7 +879,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   # has, and the PREPARE is the only time its text is in hand: by the time an EXECUTE runs it, the
   # statement is the server's and a value written into it has already gone across in the clear.
   describe 'a statement sent to be prepared' do
-    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+    let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
 
     it 'refuses a value written into the statement it carries' do
       sql = "PREPARE ins AS INSERT INTO users (ssn) VALUES ('123-45-6789')"
@@ -930,7 +930,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   # alone); one that names no columns is left to the database with a warning, like any write whose
   # columns cannot be enumerated.
   describe 'a COPY that would store a plaintext' do
-    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+    let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
 
     it 'refuses a COPY that names an encrypted column' do
       sql = 'COPY users (name, ssn) FROM STDIN'

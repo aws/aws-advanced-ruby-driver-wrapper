@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/kms_encryption/error_context'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/error_context'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::ErrorContext do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ErrorContext do
   subject(:context) { described_class.builder }
 
   describe '.builder' do

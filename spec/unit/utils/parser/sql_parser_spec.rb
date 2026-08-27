@@ -352,7 +352,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
     describe '#analyze_sql for COPY ... FROM' do
       it 'reports query_type COPY with its named columns as unbound writes' do
         result = pg_parser.analyze_sql('COPY customers (name, email) FROM STDIN')
-        expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::COPY)
+        expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::COPY)
         expect(result.unbound_write_columns.map(&:column_name)).to include('name', 'email')
       end
     end

@@ -23,7 +23,7 @@ require_relative 'column_cipher'
 require_relative 'errors'
 require_relative 'kms_encryption_utility'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     # Encrypts and decrypts individual table columns with keys held in AWS KMS, without the
     # application having to know about it.

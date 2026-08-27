@@ -346,7 +346,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
   # A caller that substitutes a parameter has to know which parameter fills which column, and has to
   # know when a column is filled by something it cannot substitute at all.
   describe '.analyze write columns' do
-    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+    let(:query_type) { AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType }
 
     it 'pairs a column with the parameter that fills it, not with its position' do
       result = subject.analyze("INSERT INTO users (name, email, ssn) VALUES (?, 'x@y.z', ?)")
@@ -452,7 +452,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
   # of them its qualifier names. Attributing one to the first table named would be a guess, and a
   # caller that acts on the answer needs the difference between an answer and a guess.
   describe '.analyze an UPDATE of more than one table' do
-    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+    let(:query_type) { AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType }
 
     it 'reports every table it names and attributes no column to any of them' do
       result = subject.analyze('UPDATE users u JOIN accounts a ON a.uid = u.id SET a.ssn = ? WHERE u.id = ?')
@@ -505,7 +505,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
   # writes. Stopping at one of them would leave the table unread, and a statement whose table is
   # unknown is one whose parameters go to the database as they are.
   describe '.analyze past the modifiers of a statement' do
-    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+    let(:query_type) { AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType }
 
     it 'reads the table of an UPDATE past its modifiers' do
       ['UPDATE LOW_PRIORITY users SET ssn = ? WHERE id = ?',
@@ -549,7 +549,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
   # writes as readily as in front of one that reads. Reading either as an unrecognized statement
   # would leave a write looking like a read, and its parameters would go to the database as they are.
   describe '.analyze past what precedes the keyword' do
-    let(:query_type) { AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType }
+    let(:query_type) { AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType }
 
     it 'reads an INSERT behind a block comment' do
       result = subject.analyze('/* app:checkout,controller:orders */ INSERT INTO users (name, ssn) VALUES (?, ?)')

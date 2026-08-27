@@ -23,7 +23,7 @@ require_relative 'encryption_algorithm'
 require_relative 'errors'
 require_relative 'type_marker'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Encrypts and decrypts single column values with AES-GCM, signed with a separate

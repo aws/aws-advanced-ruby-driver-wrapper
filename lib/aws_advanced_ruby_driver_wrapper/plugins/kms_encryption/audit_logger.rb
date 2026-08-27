@@ -18,7 +18,7 @@ require 'time'
 require_relative '../../logging'
 require_relative 'sanitizer'
 
-module AwsRubyDatabaseDriverWrapper
+module AwsAdvancedRubyDriverWrapper
   module Plugins
     module Encryption
       # Emits one audit record per key management, kms_encryption, decryption, and metadata
