@@ -59,12 +59,13 @@ module AwsRubyDatabaseDriverWrapper
     # type, for example +row['age'].to_i+.
     #
     # A row is decrypted however it is read. A row read as a hash is matched to its columns by name;
-    # a row read as an array of bare values is matched by position, through the field list the
+    # a row (or single cell) read as bare values is matched by position, through the field list the
     # result reports, which is what lets ActiveRecord's reads decrypt even though it fetches rows as
     # arrays. This covers +PG::Result+'s +#each+, +#each_row+, +#to_a+, +#[]+, +#values+,
-    # +#field_values+, +#column_values+ and +#tuple+, and mysql2's hash and array results alike. A
-    # +COPY ... TO+ is the exception: its rows are a stream rather than values the plugin can
-    # replace, so it hands out what the column holds.
+    # +#field_values+, +#column_values+, +#tuple+, +#tuple_values+ and +#getvalue+, its single-row
+    # streaming +#stream_each+ / +#stream_each_row+ / +#stream_each_tuple+, and mysql2's hash and
+    # array results alike. A +COPY ... TO+ is the exception: its rows are a stream rather than values
+    # the plugin can replace, so it hands out what the column holds.
     #
     # The plugin does not try to guarantee that an encrypted column never holds a plaintext - it
     # cannot, since it only sees the statements this wrapper sends over a connection that has it
@@ -127,10 +128,15 @@ module AwsRubyDatabaseDriverWrapper
         RubyMethod::CONNECTION_COPY_DATA.name
       ].freeze
 
-      # Result methods that yield rows to a block, one at a time.
+      # Result methods that yield rows to a block, one at a time. The +stream_+ variants are the
+      # single-row-mode iterators, which read rows off the wire one at a time but hand out the same
+      # row shapes.
       ROW_BLOCK_METHODS = Set[
         RubyMethod::RESULT_EACH.name,
-        RubyMethod::RESULT_EACH_ROW.name
+        RubyMethod::RESULT_EACH_ROW.name,
+        RubyMethod::RESULT_STREAM_EACH.name,
+        RubyMethod::RESULT_STREAM_EACH_ROW.name,
+        RubyMethod::RESULT_STREAM_EACH_TUPLE.name
       ].freeze
 
       # Result methods that return every row at once, as an array of rows.
@@ -142,7 +148,8 @@ module AwsRubyDatabaseDriverWrapper
       # Result methods that return a single row.
       ROW_SINGLE_METHODS = Set[
         RubyMethod::RESULT_BRACKET.name,
-        RubyMethod::RESULT_TUPLE.name
+        RubyMethod::RESULT_TUPLE.name,
+        RubyMethod::RESULT_TUPLE_VALUES.name
       ].freeze
 
       # Every result method that hands out whole rows, however it does so. A row may arrive as a hash
@@ -154,6 +161,9 @@ module AwsRubyDatabaseDriverWrapper
       # its position in the result, which is matched to a name through the field list.
       COLUMN_BY_NAME_METHOD = RubyMethod::RESULT_FIELD_VALUES.name
       COLUMN_BY_INDEX_METHOD = RubyMethod::RESULT_COLUMN_VALUES.name
+
+      # The result method that hands out a single cell by row and column position.
+      VALUE_BY_INDEX_METHOD = RubyMethod::RESULT_GETVALUE.name
 
       # Statement types that store values. These are the ones run through the write check, which
       # refuses a statement that writes a confirmed encrypted column with a value it cannot encrypt
@@ -178,7 +188,7 @@ module AwsRubyDatabaseDriverWrapper
       }imx
 
       SUBSCRIBED_METHODS = (
-        Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_BY_NAME_METHOD, COLUMN_BY_INDEX_METHOD] +
+        Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_BY_NAME_METHOD, COLUMN_BY_INDEX_METHOD, VALUE_BY_INDEX_METHOD] +
           PARAMETER_METHODS.keys + WRITE_CHECK_METHODS + ROW_METHODS
       ).freeze
 
@@ -221,6 +231,8 @@ module AwsRubyDatabaseDriverWrapper
           read_named_column(pipeline_callable, args.first, sql)
         elsif method_name == COLUMN_BY_INDEX_METHOD
           read_indexed_column(pipeline_callable, args.first, context, sql)
+        elsif method_name == VALUE_BY_INDEX_METHOD
+          read_indexed_value(pipeline_callable, args, context, sql)
         else
           pipeline_callable.call
         end
@@ -369,6 +381,22 @@ module AwsRubyDatabaseDriverWrapper
         columns = column_configs(sql)
         config = columns.empty? ? nil : column_at(index, context&.field_names, columns)
         decrypt_column(pipeline_callable, config)
+      end
+
+      # getvalue hands back a single cell by row and column position (+args+ is +[row, column]+), so
+      # the column position is matched to a name through the field list before the value is decrypted.
+      def read_indexed_value(pipeline_callable, args, context, sql)
+        columns = column_configs(sql)
+        config = columns.empty? ? nil : column_at(args[1], context&.field_names, columns)
+        return pipeline_callable.call if config.nil?
+
+        cipher = new_cipher
+
+        begin
+          decrypt_value(pipeline_callable.call, config, cipher)
+        ensure
+          cipher.release
+        end
       end
 
       def decrypt_column(pipeline_callable, config)

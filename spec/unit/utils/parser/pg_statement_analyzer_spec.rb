@@ -112,6 +112,11 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(pg_parser.column_parameter_mapping('SELECT * FROM users WHERE name = $1')).to eq({ 1 => 'name' })
     end
 
+    # The column can sit on either side of the operator; a parameter on the left maps just the same.
+    it 'maps a WHERE column when the parameter is on the left of the operator' do
+      expect(pg_parser.column_parameter_mapping('SELECT * FROM users WHERE $1 = name')).to eq({ 1 => 'name' })
+    end
+
     it 'maps WHERE IN list params positionally' do
       expect(pg_parser.column_parameter_mapping('SELECT * FROM users WHERE name IN ($1, $2)')).to eq({ 1 => 'name', 2 => 'name' })
     end

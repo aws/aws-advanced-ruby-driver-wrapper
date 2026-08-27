@@ -524,6 +524,33 @@ module AwsRubyDatabaseDriverWrapper
                  bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
+    def tuple_values(index)
+      pm.execute(RubyMethod::RESULT_TUPLE_VALUES, current_conn, ->(*a) { @result.tuple_values(*a) }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+    end
+
+    def getvalue(row, column)
+      pm.execute(RubyMethod::RESULT_GETVALUE, current_conn, ->(*a) { @result.getvalue(*a) }, row, column,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+    end
+
+    # The single-row-mode iterators, which read rows off the wire one at a time rather than from a
+    # buffered result; they hand out the same row shapes as +each+, +each_row+ and +tuple+.
+    def stream_each(&)
+      pm.execute(RubyMethod::RESULT_STREAM_EACH, current_conn, ->(&blk) { @result.stream_each(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
+    end
+
+    def stream_each_row(&)
+      pm.execute(RubyMethod::RESULT_STREAM_EACH_ROW, current_conn, ->(&blk) { @result.stream_each_row(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
+    end
+
+    def stream_each_tuple(&)
+      pm.execute(RubyMethod::RESULT_STREAM_EACH_TUPLE, current_conn, ->(&blk) { @result.stream_each_tuple(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
+    end
+
     # Delegate non-network methods directly
     def fields
       @result.fields

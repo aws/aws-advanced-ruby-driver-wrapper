@@ -73,12 +73,15 @@ module AwsRubyDatabaseDriverWrapper
         /imx
         FOR_UPDATE = /\bFOR\s+(?:UPDATE|SHARE|NO\s+KEY\s+UPDATE|KEY\s+SHARE)\b/i
 
-        # Single capture group 1 = column name; group 2 = :between sentinel when BETWEEN matched
+        # Captured column-name group per alternative: 1 = BETWEEN col (2 = BETWEEN sentinel),
+        # 3 = +col OP ?+, 4 = +? OP col+ (the parameter on the left), 5 = IN col, 6 = LIKE col.
         WHERE_PATTERN = /
           (#{IDENTIFIER_NC})
           \s+(?:NOT\s+)?BETWEEN\s*\?\s+AND\s*\?()
           |
           (#{IDENTIFIER_NC})\s*[=<>!]+\s*\?
+          |
+          \?\s*[=<>!]+\s*(#{IDENTIFIER_NC})
           |
           (#{IDENTIFIER_NC})\s+IN\s*\([^)]*\?[^)]*\)
           |
@@ -457,8 +460,8 @@ module AwsRubyDatabaseDriverWrapper
           pos = 0
           while (m = WHERE_PATTERN.match(where_body, pos))
             pos = m.end(0)
-            # Groups: 1=BETWEEN col, 2=BETWEEN sentinel, 3=PARAM col, 4=IN col, 5=LIKE col
-            col = strip_quotes((m[1] || m[3] || m[4] || m[5]).to_s)
+            # Groups: 1=BETWEEN col, 2=BETWEEN sentinel, 3=+col OP ?+, 4=+? OP col+, 5=IN col, 6=LIKE col
+            col = strip_quotes((m[1] || m[3] || m[4] || m[5] || m[6]).to_s)
             index = base + placeholder_count(where_body[0...m.begin(0)])
             # One entry per bound parameter the predicate consumes: one for +=+ or +LIKE+, two for a
             # +BETWEEN+, and one per placeholder for an +IN (?, ?, ...)+.

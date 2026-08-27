@@ -115,6 +115,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
                                                    'connection.query', 'connection.copy_data', 'result.each',
                                                    'result.each_row', 'result.to_a', 'result.[]', 'result.values',
                                                    'result.field_values', 'result.column_values', 'result.tuple',
+                                                   'result.tuple_values', 'result.getvalue', 'result.stream_each',
+                                                   'result.stream_each_row', 'result.stream_each_tuple',
                                                    'connection.close')
     end
 
@@ -411,6 +413,51 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
       expect(result.first.first).to eq('Jo')
       expect(row[1]).to start_with('\\x')
+    end
+
+    # getvalue reads a single cell by row and column position, matched to a column through the field
+    # list - the pg analogue of a plain column read, which JDBC decrypts.
+    it 'decrypts a single cell read by position when its column is encrypted' do
+      value = bytea(ciphertext('123-45-6789'))
+      expect(call('result.getvalue', args: [0, 1], sql: select, field_names: %w[name ssn], returns: value))
+        .to eq('123-45-6789')
+    end
+
+    it 'leaves a single cell read by position alone when its column is not encrypted' do
+      expect(call('result.getvalue', args: [0, 0], sql: select, field_names: %w[name ssn], returns: 'Jo')).to eq('Jo')
+    end
+
+    it 'decrypts the encrypted position of a single row read as an array by tuple_values' do
+      row = ['Jo', bytea(ciphertext('123-45-6789'))]
+      expect(call('result.tuple_values', args: [0], sql: select, field_names: %w[name ssn], returns: row))
+        .to eq(%w[Jo 123-45-6789])
+    end
+
+    it 'decrypts every row handed to the block of stream_each' do
+      rows = []
+      call('result.stream_each', sql: select, field_names: %w[name ssn], block: ->(row) { rows << row }) do
+        @context.block.call(encrypted_row)
+      end
+
+      expect(rows).to eq([{ 'name' => 'Jo', 'ssn' => '123-45-6789' }])
+    end
+
+    it 'decrypts every array row handed to the block of stream_each_row' do
+      rows = []
+      call('result.stream_each_row', sql: select, field_names: %w[name ssn], block: ->(row) { rows << row }) do
+        @context.block.call(['Jo', bytea(ciphertext('123-45-6789'))])
+      end
+
+      expect(rows).to eq([%w[Jo 123-45-6789]])
+    end
+
+    it 'decrypts the rows handed to the block of stream_each_tuple' do
+      rows = []
+      call('result.stream_each_tuple', sql: select, field_names: %w[name ssn], block: ->(row) { rows << row }) do
+        @context.block.call(encrypted_row)
+      end
+
+      expect(rows).to eq([{ 'name' => 'Jo', 'ssn' => '123-45-6789' }])
     end
 
     # Two of the statement's tables can encrypt a column of the same name, and the row does not say

@@ -258,6 +258,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       result = subject.analyze('UPDATE users SET name = ?, email = ? WHERE ssn = ?')
       expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 3]])
     end
+
+    # The column can sit on either side of the operator; a parameter on the left maps just the same.
+    it 'extracts a WHERE column when the parameter is on the left of the operator' do
+      result = subject.analyze('SELECT * FROM users WHERE ? = ssn')
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+    end
   end
 
   describe '.analyze for_update' do

@@ -87,10 +87,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgResult do
   end
 
   # The array-reading paths hinge on the result's column names reaching the plugin, so every read
-  # that can hand back bare arrays publishes them, resolved from the result's own field list.
+  # that can hand back bare arrays (or a cell matched by position) publishes them, resolved from the
+  # result's own field list.
   it 'publishes the result column names for every read that can return arrays' do
     allow(pg_result).to receive_messages(fields: %w[ssn], each: nil, each_row: nil, to_a: [], values: [],
-                                         column_values: [], tuple: {}, :[] => {})
+                                         column_values: [], tuple: {}, tuple_values: [], getvalue: nil,
+                                         stream_each: nil, stream_each_row: nil, stream_each_tuple: nil, :[] => {})
 
     result.each { |row| row }
     result.each_row { |row| row }
@@ -99,8 +101,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::WrapperPgResult do
     result.values
     result.column_values(0)
     result.tuple(0)
+    result.tuple_values(0)
+    result.getvalue(0, 0)
+    result.stream_each { |row| row }
+    result.stream_each_row { |row| row }
+    result.stream_each_tuple { |row| row }
 
-    %w[result.each result.each_row result.to_a result.[] result.values result.column_values result.tuple].each do |method|
+    %w[result.each result.each_row result.to_a result.[] result.values result.column_values result.tuple
+       result.tuple_values result.getvalue result.stream_each result.stream_each_row result.stream_each_tuple].each do |method|
       expect(plugin.field_names_for(method)).to eq([%w[ssn]]), method
     end
   end

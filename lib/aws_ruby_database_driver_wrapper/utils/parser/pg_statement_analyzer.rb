@@ -410,19 +410,36 @@ module AwsRubyDatabaseDriverWrapper
         def extract_param_columns_from_a_expr(a_expr, cols)
           lexpr = a_expr[:lexpr]
           rexpr = a_expr[:rexpr]
-          col_name = lexpr&.dig(:column_ref, :fields, -1, :string, :sval)
-          return unless col_name
 
           case a_expr[:kind]
           when :AEXPR_IN, :AEXPR_BETWEEN, :AEXPR_BETWEEN_SYM
-            # rexpr is a list — emit one entry per param_ref item
+            # These read as +column IN/BETWEEN (params...)+, so the column is on the left and rexpr is
+            # the list of parameters.
+            col_name = column_ref_name(lexpr)
+            return unless col_name
+
             Array(rexpr.dig(:list, :items)).each do |item|
               cols << ColumnInfo.new(table_name: nil, column_name: col_name, parameter_index: param_number(item)) if param_ref?(item)
             end
           else
-            # AEXPR_OP, AEXPR_OP_ANY, AEXPR_OP_ALL — rexpr is a single node
-            cols << ColumnInfo.new(table_name: nil, column_name: col_name, parameter_index: param_number(rexpr)) if param_ref?(rexpr)
+            # AEXPR_OP, AEXPR_OP_ANY, AEXPR_OP_ALL — a single node on each side. The column can be on
+            # either side of the operator, so +$1 = ssn+ maps just as +ssn = $1+ does.
+            map_operator_param(lexpr, rexpr, cols)
+            map_operator_param(rexpr, lexpr, cols)
           end
+        end
+
+        # Maps +param_expr+ to +column_expr+ when the one is a bind parameter and the other a column
+        # reference; a no-op otherwise, so a comparison of two columns or two parameters maps nothing.
+        def map_operator_param(column_expr, param_expr, cols)
+          col_name = column_ref_name(column_expr)
+          return unless col_name && param_ref?(param_expr)
+
+          cols << ColumnInfo.new(table_name: nil, column_name: col_name, parameter_index: param_number(param_expr))
+        end
+
+        def column_ref_name(expr)
+          expr&.dig(:column_ref, :fields, -1, :string, :sval)
         end
 
         def param_ref?(expr)

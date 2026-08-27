@@ -110,6 +110,11 @@ module AwsRubyDatabaseDriverWrapper
     RESULT_COLUMN_VALUES           = define('result.column_values', check_bounded_connection: true)
     RESULT_FIELD_VALUES            = define('result.field_values', check_bounded_connection: true)
     RESULT_TUPLE                   = define('result.tuple', check_bounded_connection: true)
+    RESULT_TUPLE_VALUES            = define('result.tuple_values', check_bounded_connection: true)
+    RESULT_GETVALUE                = define('result.getvalue', check_bounded_connection: true)
+    RESULT_STREAM_EACH             = define('result.stream_each', check_bounded_connection: true)
+    RESULT_STREAM_EACH_ROW         = define('result.stream_each_row', check_bounded_connection: true)
+    RESULT_STREAM_EACH_TUPLE       = define('result.stream_each_tuple', check_bounded_connection: true)
     # Freeing an unbuffered result has to read whatever rows are still on the wire before it can let
     # the result go, so it is a call to the server on the connection the statement was sent on.
     RESULT_FREE                    = define('result.free', check_bounded_connection: true)
