@@ -1,6 +1,6 @@
 # KMS Encryption Plugin
 
-The KMS Encryption Plugin encrypts individual table columns with data keys held in [AWS KMS](https://aws.amazon.com/kms/), without the application having to know about it. Which columns are encrypted is configured in the database itself, in the `encryption_metadata` table, so it can be changed without redeploying the application. When a statement writes to one of those columns the plugin encrypts the bind parameter on its way to the server, and when a statement reads one back it decrypts the value on its way to the application. The plaintext never reaches the server, and neither does any data key: only a KMS-encrypted copy of each data key is stored, in `key_storage`.
+The KMS Encryption Plugin encrypts individual table columns with data keys held in [AWS KMS](https://aws.amazon.com/kms/), without the application having to know about it. Which columns are encrypted is configured in the database rather than in application code, so it can change without redeploying the application. That configuration is managed through `Plugins::Encryption::KeyManagementUtility`, which records the column and stores its data key together; editing the `encryption_metadata` and `key_storage` tables by hand is not recommended, since a column is only usable once a matching data key exists in `key_storage`. When a statement writes to one of those columns the plugin encrypts the bind parameter on its way to the server, and when a statement reads one back it decrypts the value on its way to the application. The plaintext never reaches the server, and neither does any data key: only a KMS-encrypted copy of each data key is stored, in `key_storage`.
 
 > [!IMPORTANT]
 > The plugin only sees the statements this wrapper sends over a connection that has the plugin enabled, so on its own it cannot guarantee that an encrypted column never holds a plaintext. To guarantee that plaintext values are never written to an encrypted column, server-side encryption enforcement in the database is required — see [Enforce encryption in the database](#enforce-encryption-in-the-database). Read [Paths that are not covered](#paths-that-are-not-covered) as well before relying on the plugin.
@@ -31,7 +31,7 @@ The plugin expects two tables in the schema named by `encryption_metadata_schema
 | `encryption_metadata_cache_enabled` | Boolean | No | Cache the encryption metadata in memory. Leave it enabled in production: when disabled, the plugin opens a short-lived metadata connection for **every** statement that touches an encrypted column. If you need fresher metadata, lower `encryption_metadata_cache_refresh_interval_sec` rather than disabling the cache. | `false` | `true` |
 | `encryption_metadata_cache_expiration_sec` | Integer | No | How long cached encryption metadata stays valid, in seconds. | `600` | `3600` |
 | `encryption_metadata_cache_refresh_interval_sec` | Integer | No | How often the encryption metadata is refreshed in the background, in seconds. Set to `0` to disable background refresh. | `60` | `300` |
-| `encryption_data_key_cache_enabled` | Boolean | No | Cache decrypted data keys in memory to avoid a KMS `Decrypt` call per statement. | `false` | `true` |
+| `encryption_data_key_cache_enabled` | Boolean | No | Cache decrypted data keys in memory. Leave it enabled in production: when disabled, the plugin makes a KMS `Decrypt` call for **every** statement that touches an encrypted column, which adds latency and cost and can hit KMS request-rate limits. Disabling it does shorten how long a plaintext data key stays in memory, so treat it as a deliberate throughput-versus-key-exposure tradeoff rather than an off-by-default setting. | `false` | `true` |
 | `encryption_data_key_cache_max_size` | Integer | No | Maximum number of decrypted data keys held in memory. | `100` | `1000` |
 | `encryption_data_key_cache_expiration_sec` | Integer | No | How long a decrypted data key stays cached, in seconds. | `600` | `300` |
 | `encryption_key_management_max_retries` | Integer | No | Maximum number of retries for throttled or failed KMS calls. | `5` | `3` |
@@ -71,7 +71,7 @@ A write raises rather than storing a value the plugin cannot encrypt. This cover
 ### Not seen at all, so a plaintext is stored silently
 
 > [!WARNING]
-> On the paths below the plugin cannot tell that an encrypted column is being written, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged.
+> On the paths below the plugin cannot tell that an encrypted column is being written, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged. The server-side HMAC-validation trigger (see [Enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from silently storing a plaintext.
 
 - `LOAD DATA INFILE` on MySQL, and a `COPY ... FROM` whose statement text cannot be parsed.
 - Anything the server runs on the application's behalf: `CALL`, `DO`, a function, a stored routine, a trigger.
@@ -91,7 +91,8 @@ The trigger needs no help from the application, because the HMAC key that signs 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Refuses any value that was not written by the kms_encryption plugin.
+-- Refuses any value that does not carry a valid HMAC tag for this column: a plaintext,
+-- or a value that was tampered with or written under a different key.
 -- Replace 'encrypt' below if encryption_metadata_schema is set to something else.
 CREATE OR REPLACE FUNCTION enforce_encrypted_column() RETURNS trigger AS $$
 DECLARE
@@ -123,7 +124,7 @@ BEGIN
   -- Payload: [ HMAC-SHA256 tag : 32 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
   IF length(col_value) < 61
      OR substring(col_value from 1 for 32) <> hmac(substring(col_value from 33), hmac_key, 'sha256') THEN
-    RAISE EXCEPTION 'Column %.% was not written by the kms_encryption plugin', TG_TABLE_NAME, col_name;
+    RAISE EXCEPTION 'Column %.% does not carry a valid HMAC tag (plaintext or tampered value)', TG_TABLE_NAME, col_name;
   END IF;
 
   RETURN NEW;

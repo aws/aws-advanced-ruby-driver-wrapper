@@ -97,7 +97,7 @@ BEGIN
 
         IF NOT verify_encrypted_data_hmac(column_value, v_hmac_key) THEN
             SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT = 'Column was not written by the kms_encryption plugin';
+            SET MESSAGE_TEXT = 'Column does not carry a valid HMAC tag (plaintext or tampered value)';
         END IF;
     END IF;
 END$$
