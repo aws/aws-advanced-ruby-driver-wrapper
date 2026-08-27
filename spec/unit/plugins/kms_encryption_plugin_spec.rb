@@ -250,14 +250,15 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(encryption_utility).not_to have_received(:ensure_initialized)
     end
 
-    # Encrypting with half a configuration would write a value nothing could read back, and going
-    # ahead without encrypting would store the plaintext. Neither is a safe fallback, so the
-    # statement fails instead.
-    it 'refuses to store a value in a column whose configuration has no key material' do
+    # A column configured for encryption but with no usable key material cannot be encrypted, so the
+    # value is left for the database's enforcement to reject rather than the statement being refused.
+    it 'passes a value through when its column configuration has no key material' do
       configs['users.ssn'] = column_config('users', 'ssn', nil)
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /users\.ssn is incomplete/)
+      call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert)
+
+      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
     end
 
     it 'records a failed kms_encryption in the audit trail and lets the failure through' do
@@ -481,12 +482,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect_encrypted(bound_args.last, '123-45-6789')
     end
 
-    it 'refuses a write behind a clause it could not read' do
+    it 'passes a write it could not read through, leaving it to the database' do
       sql = 'WITH t AS (SELECT ((( INSERT INTO users (name, ssn) VALUES (?, ?)'
+      args = %w[Jo 123-45-6789]
 
-      expect { call('statement.execute', args: %w[Jo 123-45-6789], sql: sql) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError,
-                        /neither the tables nor the columns it writes/)
+      call('statement.execute', args: args, sql: sql)
+
+      expect(bound_args).to be(args)
     end
 
     # MySQL lets the target of an assignment carry the table it belongs to, or an alias for it, and
@@ -530,17 +532,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
 
     # MySQL lets an UPDATE write more than one table, and which of them +SET a.ssn = ?+ writes depends
-    # on the aliases the reference list handed out. Guessing the first table named would encrypt for
-    # the wrong column as readily as for the right one, so a statement that could be writing an
-    # encrypted column is refused instead.
+    # on the aliases the reference list handed out. The plugin does not confidently map such an
+    # assignment to a column, so it neither encrypts it (guessing the table could encrypt for the
+    # wrong column) nor refuses the statement; it warns and leaves it to the database.
     describe 'an UPDATE of more than one table' do
-      let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
-
-      it 'is refused when any table it names has an encrypted column' do
+      it 'is let through with a warning when any table it names has an encrypted column' do
         sql = 'UPDATE users u JOIN accounts a ON a.uid = u.id SET a.ssn = ? WHERE u.id = ?'
+        args = ['123-45-6789', 7]
+        allow(plugin.send(:logger)).to receive(:warn)
 
-        expect { call('statement.execute', args: ['123-45-6789', 7], sql: sql) }
-          .to raise_error(metadata_error, /which of them this statement writes could not be established/)
+        call('statement.execute', args: args, sql: sql)
+
+        expect(bound_args).to be(args)
+        expect(plugin.send(:logger)).to have_received(:warn).with(/which of them this statement writes could not be established/)
       end
 
       it 'is let through when none of the tables it names has one' do
@@ -564,9 +568,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
   end
 
-  # A read has a safe fallback and a write does not, so the two behave differently here: a read
-  # hands the column over as the database holds it, while a statement that would store a parameter
-  # raises rather than store the plaintext in a column that is configured to be encrypted.
+  # When the plugin cannot read its own tables it cannot encrypt anything, so it leaves every column
+  # as the database holds it - reads and writes alike - and relies on the required server-side
+  # enforcement to reject a plaintext, rather than taking the application's statement down.
   describe 'when the kms_encryption tables cannot be read' do
     let(:select) { 'SELECT name, ssn FROM users WHERE name = $1' }
     let(:insert) { 'INSERT INTO users (name, ssn) VALUES ($1, $2)' }
@@ -584,7 +588,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
 
       expect(call('result.to_a', sql: select, returns: rows)).to be(rows)
       expect(plugin.send(:logger)).to have_received(:warn)
-        .with(/The KMS kms_encryption plugin is not ready, leaving columns as they are/)
+        .with(/The kms_encryption plugin is not ready, leaving columns as they are/)
     end
 
     it 'leaves the columns alone when the metadata manager was never built' do
@@ -606,36 +610,44 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
         .with(/Could not read the kms_encryption configuration of users/)
     end
 
-    it 'fails an INSERT whose column configuration cannot be looked up' do
+    it 'passes an INSERT through when its column configuration cannot be looked up' do
       allow(metadata_manager).to receive(:column_config).and_raise(unreadable)
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /relation does not exist/)
+      call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert)
+
+      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
     end
 
-    it 'fails an UPDATE whose column configuration cannot be looked up' do
+    it 'passes an UPDATE through when its column configuration cannot be looked up' do
       sql = 'UPDATE users SET ssn = $1 WHERE name = $2'
       allow(metadata_manager).to receive(:column_config).and_raise(unreadable)
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [sql, %w[123-45-6789 Jo]], sql: sql) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError)
+      call('connection.exec_params', args: [sql, %w[123-45-6789 Jo]], sql: sql)
+
+      expect(bound_args[1]).to eq(%w[123-45-6789 Jo])
     end
 
-    # The plugin cannot tell an INSERT into an encrypted column from any other INSERT without the
-    # configuration, so it cannot let one through either.
-    it 'fails an INSERT when the plugin cannot be initialized' do
+    # Without the configuration the plugin cannot tell an INSERT into an encrypted column from any
+    # other INSERT, so it leaves it to the database rather than refusing it.
+    it 'passes an INSERT through when the plugin cannot be initialized' do
       allow(encryption_utility).to receive(:ensure_initialized)
         .and_raise(AwsRubyDatabaseDriverWrapper::Errors::MetadataError.load_failed('relation does not exist'))
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /relation does not exist/)
+      call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert)
+
+      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
     end
 
-    it 'fails an INSERT when the metadata manager was never built' do
+    it 'passes an INSERT through when the metadata manager was never built' do
       allow(encryption_utility).to receive(:metadata_manager).and_return(nil)
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /could not be built/)
+      call('connection.exec_params', args: [insert, %w[Jo 123-45-6789]], sql: insert)
+
+      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
     end
 
     # A parameter of a SELECT is compared, not stored, so there is nothing to leak by letting it
@@ -652,11 +664,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
   end
 
-  # The plugin can only encrypt a value that arrives as a bind parameter, and only when it knows
-  # which column that parameter fills. Anything else it can see writing an encrypted column has to
-  # be refused, since a plaintext stored in one reads back as a plaintext ever after and nothing
-  # would surface it.
-  describe 'refusing a write it cannot encrypt' do
+  # The plugin can only encrypt a value that arrives as a bind parameter it can map to a column. A
+  # value it can see writing a confirmed encrypted column another way - a literal, an expression, a
+  # DEFAULT - it refuses, since that is almost always a mistake. A write it cannot read that far it
+  # leaves to the database rather than refusing, so as not to reject statements that touch no
+  # encrypted column.
+  describe 'a write it cannot encrypt' do
     let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
 
     it 'refuses a literal written into an encrypted column' do
@@ -680,26 +693,34 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
         .to raise_error(metadata_error, /ssn is configured for kms_encryption/)
     end
 
-    it 'refuses an INSERT that does not name the columns it writes' do
+    it 'passes an INSERT that does not name its columns through, with a warning' do
       sql = 'INSERT INTO users VALUES ($1, $2)'
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql) }
-        .to raise_error(metadata_error, /which of them this statement writes could not be established/)
+      call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
+
+      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
+      expect(plugin.send(:logger)).to have_received(:warn).with(/which of them this statement writes could not be established/)
     end
 
-    it 'refuses an INSERT whose values come from a nested SELECT' do
+    it 'passes an INSERT whose values come from a nested SELECT through, with a warning' do
       sql = 'INSERT INTO users (name, ssn) SELECT name, ssn FROM imported'
+      args = [sql]
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec', args: [sql], sql: sql) }
-        .to raise_error(metadata_error, /could not be established/)
+      call('connection.exec', args: args, sql: sql)
+
+      expect(bound_args).to be(args)
+      expect(plugin.send(:logger)).to have_received(:warn).with(/which of them this statement writes could not be established/)
     end
 
-    it 'refuses a write it could not parse' do
+    it 'passes a write it could not parse through, leaving it to the database' do
       sql = 'INSERT INTO ((( $1'
       allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql) }
-        .to raise_error(metadata_error, /neither the tables nor the columns it writes/)
+      call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql)
+
+      expect(bound_args[1]).to eq(['123-45-6789'])
     end
 
     it 'lets a write of a table with no encrypted column through' do
@@ -750,13 +771,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
 
     # An annotation that names no table cannot be resolved against a statement whose tables are
-    # unknown, so it does not stand in for one that would have said which column to encrypt.
-    it 'refuses a write it could not parse even when it carries an annotation' do
+    # unknown, so the value is left to the database like any other unparseable write.
+    it 'passes a write it could not parse through even when it carries an annotation' do
       sql = 'INSERT INTO ((( /*@encrypt:ssn*/ $1'
       allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql) }
-        .to raise_error(metadata_error, /neither the tables nor the columns it writes/)
+      call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql)
+
+      expect(bound_args[1]).to eq(['123-45-6789'])
     end
 
     # An application that aliases its tables annotates with the alias, since that is what the rest of
@@ -779,27 +801,29 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   end
 
   # A prepared statement is run by name, and the connection publishes the statement it was prepared
-  # with. A name it has no statement for is one prepared somewhere it could not read, and there is
-  # then no telling which column a value belongs to, or whether the statement writes at all.
+  # with. A name it has no statement for is one prepared somewhere it could not read: the plugin
+  # cannot tell which column a value belongs to, so it leaves the values to the database rather than
+  # refusing the call.
   describe 'binding values to a statement it never saw' do
-    let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
+    it 'passes a prepared statement it has no statement for through' do
+      call('connection.exec_prepared', args: ['prepared_elsewhere', ['123-45-6789']])
 
-    it 'refuses a prepared statement it has no statement for' do
-      expect { call('connection.exec_prepared', args: ['prepared_elsewhere', ['123-45-6789']]) }
-        .to raise_error(metadata_error, /prepared statement whose text this connection never saw/)
+      expect(bound_args).to eq(['prepared_elsewhere', ['123-45-6789']])
     end
 
-    it 'refuses one sent asynchronously as well' do
-      expect { call('connection.send_query_prepared', args: ['prepared_elsewhere', ['123-45-6789']]) }
-        .to raise_error(metadata_error, /never saw/)
+    it 'passes one sent asynchronously through as well' do
+      call('connection.send_query_prepared', args: ['prepared_elsewhere', ['123-45-6789']])
+
+      expect(bound_args).to eq(['prepared_elsewhere', ['123-45-6789']])
     end
 
-    it 'refuses a mysql2 prepared statement it has no statement for' do
-      expect { call('statement.execute', args: ['123-45-6789']) }
-        .to raise_error(metadata_error, /never saw/)
+    it 'passes a mysql2 prepared statement it has no statement for through' do
+      call('statement.execute', args: ['123-45-6789'])
+
+      expect(bound_args).to eq(['123-45-6789'])
     end
 
-    it 'lets one that binds nothing through, there being nothing to store in the clear' do
+    it 'lets one that binds nothing through' do
       expect { call('connection.exec_prepared', args: ['prepared_elsewhere', []]) }.not_to raise_error
     end
   end
@@ -854,25 +878,29 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   end
 
   # A COPY feeds its rows to the server as a stream, so there is no bind parameter to replace and no
-  # way to encrypt any column it writes. It is refused when it opens, which is why the calls that
-  # feed it are left alone: there is no COPY to feed by then.
-  describe 'refusing a COPY that would store a plaintext' do
+  # way to encrypt any column it writes. A COPY that names a confirmed encrypted column is refused
+  # when it opens (there is no COPY to feed by then, which is why the calls that feed it are left
+  # alone); one that names no columns is left to the database with a warning, like any write whose
+  # columns cannot be enumerated.
+  describe 'a COPY that would store a plaintext' do
     let(:metadata_error) { AwsRubyDatabaseDriverWrapper::Errors::MetadataError }
 
     it 'refuses a COPY that names an encrypted column' do
       sql = 'COPY users (name, ssn) FROM STDIN'
 
       expect { call('connection.copy_data', args: [sql], sql: sql) }
-        .to raise_error(metadata_error, /users\.ssn is configured for kms_encryption.*as a stream/m)
+        .to raise_error(metadata_error, /ssn is configured for kms_encryption.*as a stream/m)
     end
 
     # Without a column list the stream fills the table's columns in the order the table declares
-    # them, so an encrypted one could be among them.
-    it 'refuses a COPY into a table with encrypted columns when it names none of them' do
+    # them, so an encrypted one could be among them - but which cannot be enumerated, so it is left
+    # to the database.
+    it 'passes a COPY that names none of a table with encrypted columns through, with a warning' do
       sql = 'COPY users FROM STDIN'
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.copy_data', args: [sql], sql: sql) }
-        .to raise_error(metadata_error, /users has columns configured for kms_encryption/)
+      expect(call('connection.copy_data', args: [sql], sql: sql, returns: :copied)).to be(:copied)
+      expect(plugin.send(:logger)).to have_received(:warn).with(/which of them this statement writes could not be established/)
     end
 
     # The convenience form opens its COPY on the driver's own connection, so the statement is only
@@ -881,7 +909,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       sql = "COPY users (ssn) FROM '/tmp/users.csv'"
 
       expect { call('connection.exec', args: [sql], sql: sql) }
-        .to raise_error(metadata_error, /users\.ssn is configured for kms_encryption/)
+        .to raise_error(metadata_error, /ssn is configured for kms_encryption/)
     end
 
     # An annotation names the column a parameter belongs to, and a COPY has no parameters, so unlike
@@ -890,7 +918,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
       sql = 'COPY users (name, ssn) FROM STDIN /*@encrypt:users.ssn*/'
 
       expect { call('connection.copy_data', args: [sql], sql: sql) }
-        .to raise_error(metadata_error, /users\.ssn is configured for kms_encryption/)
+        .to raise_error(metadata_error, /ssn is configured for kms_encryption/)
     end
 
     it 'lets a COPY into a table with no encrypted column through' do
@@ -917,15 +945,19 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::KmsEncryptionPlugin do
   end
 
   # An encryption_metadata row whose key_storage row is gone comes back with no key material. The
-  # column is still configured for kms_encryption, so it cannot be written in the clear.
+  # plugin cannot encrypt the column, so it leaves the value to the database rather than the column
+  # being treated as encrypted at all.
   describe 'when a column has no key material' do
     let(:configs) { { 'users.ssn' => column_config('users', 'ssn', nil) } }
 
-    it 'refuses to write it' do
+    it 'passes a write of it through, leaving it to the database' do
       sql = 'INSERT INTO users (name, ssn) VALUES ($1, $2)'
+      allow(plugin.send(:logger)).to receive(:warn)
 
-      expect { call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql) }
-        .to raise_error(AwsRubyDatabaseDriverWrapper::Errors::MetadataError, /configuration of users.ssn is incomplete/)
+      call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
+
+      expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
+      expect(plugin.send(:logger)).to have_received(:warn).with(/users.ssn: its kms_encryption configuration is incomplete/)
     end
 
     it 'leaves it alone on a read' do

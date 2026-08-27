@@ -60,18 +60,24 @@ client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123
   conn.exec_params('INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)', ...)
   ```
 
-A read and a write behave differently when the plugin cannot do its job. A read is **lenient**: a value whose integrity check does not pass is handed to the application exactly as the database holds it, which is what the application would have got without the plugin. A write **fails closed** and raises `Errors::MetadataError`, because leaving the column alone there means storing a plaintext in a column configured to be encrypted.
+When the plugin cannot do its job it mostly stays out of the way and leaves the value to the [server-side enforcement](#enforce-encryption-in-the-database), which is what actually guarantees an encrypted column never holds a plaintext. A read is **lenient**: a value whose integrity check does not pass is handed to the application exactly as the database holds it, which is what the application would have got without the plugin. A write is lenient too, with one exception: it **fails closed** and raises `Errors::MetadataError` only when it can confirm a column is encrypted and sees the statement writing it with something other than a bind parameter, which cannot be encrypted and is almost always a mistake. Everything else it cannot fully read, it passes through - see [Paths that are not covered](#paths-that-are-not-covered).
 
 ## Paths that are not covered
 
+Only the required [server-side enforcement](#enforce-encryption-in-the-database) guarantees an encrypted column never holds a plaintext. The plugin encrypts what it can confidently identify and, apart from the one refusal below, leaves everything else to that enforcement rather than refusing statements it cannot fully read - which would reject legitimate statements that never touch an encrypted column.
+
 ### Refused, so the plaintext is not stored
 
-A write raises rather than storing a value the plugin cannot encrypt. This covers a value written into the SQL text, an expression around a parameter, a `DEFAULT`, a nested `SELECT`, an `INSERT` that does not name its columns, a `COPY ... FROM`, an `UPDATE` naming more than one table (which of them an assignment belongs to cannot be established), and a statement prepared somewhere the connection could not read. The same applies inside a `MERGE` clause or a data-modifying CTE: when its written columns cannot be enumerated the whole statement is refused. An annotation overrides this wherever there is a parameter for it to name, which a `COPY` does not have.
+A write **raises `Errors::MetadataError`** in one case: the plugin can confirm a column is encrypted, but the statement writes it with something other than a bind parameter - a value in the SQL text, an expression around a parameter, a `DEFAULT`, or a `COPY ... FROM` that names the column. None of these can be encrypted, and it is almost always a mistake, so the write is refused with advice to bind the value (or, for a `COPY`, use `INSERT`). An annotation naming the column overrides this wherever there is a parameter for it to name, which a `COPY` does not have.
+
+### Passed through, relying on the database
+
+When the plugin can see a statement writes but cannot establish which columns - so it cannot be sure an encrypted column is even involved - it lets the statement through and leaves any plaintext for the database to reject, rather than refusing a statement that may touch no encrypted column at all. This covers an `INSERT` that does not name its columns, an `INSERT` whose values come from a nested `SELECT`, an `UPDATE` naming more than one table (which of them an assignment belongs to cannot be established), a `MERGE` clause or data-modifying CTE whose written columns cannot be enumerated, a `COPY ... FROM` that names no columns, a statement prepared somewhere the connection could not read, a write the parser could not read at all, and any statement while the plugin's own metadata tables are unreadable. It is logged - at `warn` when the target table is known to have encrypted columns, at `debug` otherwise.
 
 ### Not seen at all, so a plaintext is stored silently
 
 > [!WARNING]
-> On the paths below the plugin cannot tell that an encrypted column is being written, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged. The server-side HMAC-validation trigger (see [Enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from silently storing a plaintext.
+> On the paths below the plugin never sees the value at all, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged. The server-side HMAC-validation trigger (see [Enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from silently storing a plaintext.
 
 - `LOAD DATA INFILE` on MySQL, and a `COPY ... FROM` whose statement text cannot be parsed.
 - Anything the server runs on the application's behalf: `CALL`, `DO`, a function, a stored routine, a trigger.
