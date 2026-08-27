@@ -129,6 +129,72 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#translate_placeholders' do
+    it 'numbers the placeholders' do
+      expect(dialect.translate_placeholders('INSERT INTO t (a, b) VALUES (?, ?)'))
+        .to eq('INSERT INTO t (a, b) VALUES ($1, $2)')
+    end
+
+    it 'leaves SQL without placeholders alone' do
+      expect(dialect.translate_placeholders('SELECT 1')).to eq('SELECT 1')
+    end
+  end
+
+  describe '#binary_param' do
+    it 'tags the bytes with binary format 1' do
+      expect(dialect.binary_param("\x00\xff".b)).to eq({ value: "\x00\xff".b, format: 1 })
+    end
+  end
+
+  describe '#read_binary' do
+    it 'unescapes a hex bytea value' do
+      bytes = "\x00\x01\xfe\xff".b
+      expect(dialect.read_binary("\\x#{bytes.unpack1('H*')}")).to eq(bytes)
+    end
+
+    it 'unescapes an octal bytea value' do
+      expect(dialect.read_binary('\000\001\376\377')).to eq("\x00\x01\xfe\xff".b)
+    end
+  end
+
+  describe '#affected_rows' do
+    it 'reads cmd_tuples from the result' do
+      expect(dialect.affected_rows(connection, double('Result', cmd_tuples: 3))).to eq(3)
+    end
+
+    it 'is zero when the result cannot report a count' do
+      expect(dialect.affected_rows(connection, double('Result'))).to eq(0)
+    end
+  end
+
+  describe '#insert_returning_id' do
+    it 'appends RETURNING and reads the generated id' do
+      allow(connection).to receive(:exec_params)
+        .with('INSERT INTO t (a) VALUES ($1) RETURNING id', ['x']).and_return([{ 'id' => '7' }])
+      expect(dialect.insert_returning_id(connection, 'INSERT INTO t (a) VALUES ($1)', ['x'], 'id')).to eq(7)
+    end
+
+    it 'is nil when no row is returned' do
+      allow(connection).to receive(:exec_params).and_return([])
+      expect(dialect.insert_returning_id(connection, 'INSERT INTO t (a) VALUES ($1)', ['x'], 'id')).to be_nil
+    end
+  end
+
+  describe '#upsert_clause' do
+    it 'builds an ON CONFLICT DO UPDATE clause reading from EXCLUDED' do
+      expect(dialect.upsert_clause(%w[table_name column_name], %w[algorithm key_id]))
+        .to eq('ON CONFLICT (table_name, column_name) DO UPDATE SET algorithm = EXCLUDED.algorithm, key_id = EXCLUDED.key_id')
+    end
+  end
+
+  describe '#foreign_key_query' do
+    it 'reads foreign keys from information_schema with schema and table placeholders' do
+      sql = dialect.foreign_key_query
+      expect(sql).to include('FOREIGN KEY')
+      expect(sql).to include('tc.table_schema = ? AND tc.table_name = ?')
+    end
+  end
+
   describe '#network_bound_methods' do
     it 'returns a frozen Set' do
       expect(dialect.network_bound_methods).to be_a(Set)

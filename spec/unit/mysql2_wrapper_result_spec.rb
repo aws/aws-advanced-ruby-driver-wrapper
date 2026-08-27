@@ -121,6 +121,79 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
     end
   end
 
+  # The rows are read after the call that produced them has returned, so a plugin which has to know
+  # which columns a row holds can only learn it from the SQL the result carries.
+  describe 'the SQL it publishes to the plugins' do
+    let(:sql) { 'SELECT ssn FROM users' }
+    let(:mysql_result) { double('Mysql2::Result') }
+    let(:connection) { double('Mysql2::Client') }
+    let(:recorded) { build_recording_container(connection) }
+    let(:container) { recorded.first }
+    let(:plugin) { recorded.last }
+    subject(:wrapper_result) { described_class.new(mysql_result, container, connection, sql) }
+
+    it 'publishes the SQL of the statement when the rows are iterated' do
+      allow(mysql_result).to receive(:each)
+      wrapper_result.each { |row| row }
+
+      expect(plugin.sql_for('result.each')).to eq([sql])
+    end
+
+    it 'publishes the SQL of the statement when the rows are collected' do
+      allow(mysql_result).to receive(:to_a).and_return([])
+      wrapper_result.to_a
+
+      expect(plugin.sql_for('result.to_a')).to eq([sql])
+    end
+
+    it 'publishes the SQL of the statement when a single row is read' do
+      allow(mysql_result).to receive(:[]).and_return({})
+      wrapper_result[0]
+
+      expect(plugin.sql_for('result.[]')).to eq([sql])
+    end
+
+    it 'publishes the SQL of the statement for every read of the same result' do
+      allow(mysql_result).to receive(:to_a).and_return([])
+      wrapper_result.to_a
+      wrapper_result.to_a
+
+      expect(plugin.sql_for('result.to_a')).to eq([sql, sql])
+    end
+
+    # In ActiveRecord's array mode the rows come back without column names, so the reads publish the
+    # result's field list for a plugin to match each position against.
+    it 'publishes the result column names when the rows can come back as arrays' do
+      allow(mysql_result).to receive_messages(fields: %w[ssn], each: nil, to_a: [], :[] => {})
+
+      wrapper_result.each { |row| row }
+      wrapper_result.to_a
+      wrapper_result[0]
+
+      %w[result.each result.to_a result.[]].each do |method|
+        expect(plugin.field_names_for(method)).to eq([%w[ssn]]), method
+      end
+    end
+
+    # A result built by a call whose SQL the wrapper does not know, such as one that went through
+    # method_missing, publishes nothing rather than the SQL of some other statement.
+    it 'publishes no SQL when it was built without any' do
+      allow(mysql_result).to receive(:to_a).and_return([])
+      described_class.new(mysql_result, container, connection).to_a
+
+      expect(plugin.sql_for('result.to_a')).to eq([nil])
+    end
+
+    # Draining an unbuffered result reads whatever rows are still on the wire, which belong to the
+    # statement the result came from.
+    it 'publishes the SQL of the statement when the result is freed' do
+      allow(mysql_result).to receive(:free)
+      wrapper_result.free
+
+      expect(plugin.sql_for('result.free')).to eq([sql])
+    end
+  end
+
   # Freeing a buffered result is local, but an unbuffered one still has whatever was not read on the
   # wire and libmysql drains it before letting the result go. mysql2 says so itself, at
   # ext/mysql2/result.c: "this may call flush_use_result, which can hit the socket". This used

@@ -45,6 +45,58 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # Rewrites +?+ placeholders into the driver's native placeholder syntax.
+      # @param sql [String] SQL written with +?+ placeholders
+      # @return [String]
+      def translate_placeholders(sql)
+        raise NotImplementedError
+      end
+
+      # Wraps binary data as the bind value the driver needs for a bytea/blob parameter.
+      # @param bytes [String] binary data
+      # @return [Object] the driver-specific bind value
+      def binary_param(bytes)
+        raise NotImplementedError
+      end
+
+      # Reads a bytea/blob column value back into binary data.
+      # @param value [String] the raw column value
+      # @return [String] binary data
+      def read_binary(value)
+        raise NotImplementedError
+      end
+
+      # The number of rows an INSERT, UPDATE, or DELETE changed.
+      # @param connection [Object] the driver connection
+      # @param result [Object] the value the statement returned
+      # @return [Integer]
+      def affected_rows(connection, result)
+        raise NotImplementedError
+      end
+
+      # Runs an INSERT and returns the id it generated.
+      # @param sql [String] native SQL for the INSERT, without a RETURNING clause
+      # @param id_column [String] the generated column to return
+      # @return [Integer, nil]
+      def insert_returning_id(connection, sql, params, id_column)
+        raise NotImplementedError
+      end
+
+      # The trailing upsert clause for an INSERT, in the driver's own grammar.
+      # @param conflict_columns [Array<String>] the columns whose conflict triggers the update
+      # @param update_columns [Array<String>] the columns to overwrite from the incoming row
+      # @return [String]
+      def upsert_clause(conflict_columns, update_columns)
+        raise NotImplementedError
+      end
+
+      # A query returning a table's foreign keys as rows with +from_column+, +to_table+, and
+      # +to_column+, using +?+ placeholders for the schema and table names.
+      # @return [String]
+      def foreign_key_query
+        raise NotImplementedError
+      end
+
       def ping(connection)
         raise NotImplementedError
       end

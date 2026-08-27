@@ -60,6 +60,45 @@ module AwsAdvancedRubyDriverWrapper
         stmt&.close
       end
 
+      # mysql2 uses +?+ placeholders, so the SQL is already in its native form.
+      def translate_placeholders(sql)
+        sql
+      end
+
+      # mysql2 binds a blob parameter as raw binary bytes.
+      def binary_param(bytes)
+        bytes.b
+      end
+
+      # mysql2 hands back a blob column as a string that only needs its encoding forced to binary.
+      def read_binary(value)
+        value.b
+      end
+
+      # mysql2 reports the affected row count on the connection rather than the result.
+      def affected_rows(connection, _result)
+        connection.affected_rows.to_i
+      end
+
+      # mysql2 has no RETURNING clause, so the generated id is read from the connection afterwards.
+      def insert_returning_id(connection, sql, params, _id_column)
+        execute_with_params(connection, sql, params)
+        id = connection.last_id
+        id&.positive? ? id : nil
+      end
+
+      # mysql2 upserts with ON DUPLICATE KEY UPDATE, reading the incoming row from VALUES().
+      def upsert_clause(_conflict_columns, update_columns)
+        assignments = update_columns.map { |column| "#{column} = VALUES(#{column})" }.join(', ')
+        "ON DUPLICATE KEY UPDATE #{assignments}"
+      end
+
+      def foreign_key_query
+        'SELECT column_name AS from_column, referenced_table_name AS to_table, ' \
+          'referenced_column_name AS to_column FROM information_schema.key_column_usage ' \
+          'WHERE table_schema = ? AND table_name = ? AND referenced_table_name IS NOT NULL'
+      end
+
       def ping(connection)
         connection.ping
       rescue StandardError

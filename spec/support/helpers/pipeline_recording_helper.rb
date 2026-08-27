@@ -14,20 +14,44 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# Records the name every call entered the plugin pipeline under. It is the only plugin of its
+# Records the name every call entered the plugin pipeline under, and the SQL the driver wrapper
+# published for it, the way a plugin which inspects statements reads it. It is the only plugin of its
 # pipeline, so its pipeline callable is the target driver method and the arguments and the block it
 # was given are handed straight to it.
 class PipelineRecordingPlugin
-  attr_reader :subscribed_methods, :method_names
+  attr_reader :subscribed_methods, :calls
+  attr_accessor :manager
 
   def initialize
     @subscribed_methods = Set['*']
-    @method_names = []
+    @calls = []
   end
 
   def execute(method_name, target_callable, ...)
-    @method_names << method_name
+    @calls << [method_name, @manager&.current_sql, @manager&.current_call_context]
     target_callable.call(...)
+  end
+
+  # @return [Array<String>] the methods the plugin was called for, in order
+  def method_names
+    @calls.map(&:first)
+  end
+
+  # A call that published no SQL is kept as a nil entry, since that is what has to be asserted for a
+  # call whose statement the wrapper does not know.
+  #
+  # @return [Array<String, nil>] the SQL published for every call of the method, in order
+  def sql_for(method_name)
+    @calls.select { |name, _sql, _ctx| name == method_name }.map { |_name, sql, _ctx| sql }
+  end
+
+  # The field names the driver wrapper published for every call of the method, resolved the way a
+  # plugin that reads rows as arrays reads them. Left unresolved for calls this is never asked
+  # about, so a result stub only needs to answer +fields+ when the test cares.
+  #
+  # @return [Array<Array<String>, nil>]
+  def field_names_for(method_name)
+    @calls.select { |name, _sql, _ctx| name == method_name }.map { |_name, _sql, ctx| ctx&.field_names }
   end
 end
 
@@ -41,6 +65,7 @@ module PipelineRecordingHelper
     manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, [plugin])
     manager.instance_variable_set(:@pipeline_cache, {})
+    plugin.manager = manager
 
     container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new
     container.plugin_manager = manager
