@@ -41,7 +41,9 @@ module AwsAdvancedRubyDriverWrapper
         # statement whose table went unread is one whose columns go unencrypted.
         # REPLACE writes exactly like INSERT does, so it is read the same way.
         INSERT_START = /\b(?:INSERT|REPLACE)\s+(?:(?:LOW_PRIORITY|HIGH_PRIORITY|DELAYED)\s+)?(?:IGNORE\s+)?INTO\s+/i
-        UPDATE_START = /\bUPDATE\s+(?:LOW_PRIORITY\s+)?(?:IGNORE\s+)?/i
+        # Whitespace runs are possessive so they cannot be given back to a following +(.*?)+, which
+        # would make UPDATE_REFERENCES quadratic on an UPDATE with a long run of whitespace and no SET.
+        UPDATE_START = /\bUPDATE\s++(?:LOW_PRIORITY\s++)?(?:IGNORE\s++)?/i
 
         INSERT_INTO  = /#{INSERT_START}#{IDENTIFIER_CAP}/i
         UPDATE_TABLE = /#{UPDATE_START}#{IDENTIFIER_CAP}/i
@@ -100,7 +102,10 @@ module AwsAdvancedRubyDriverWrapper
 
         # Whitespace and comments in front of a statement. Query instrumentation and ORMs prepend a
         # comment routinely, and it says nothing about what the statement does.
-        LEADING_NOISE  = %r{\A(?:\s+|/\*.*?\*/|--[^\n]*|#[^\n]*)+}m
+        # Wrapped in an atomic group, and matching whitespace one character at a time rather than in
+        # +\s++ runs, so that leading whitespace and comments cannot be re-partitioned on backtracking
+        # - which would be quadratic on input like "/* /* /* ...".
+        LEADING_NOISE  = %r{\A(?>(?:\s|/\*.*?\*/|--[^\n]*|#[^\n]*)+)}m
         CTE_START      = /\AWITH\s+(?:RECURSIVE\s+)?/i
         CTE_NAME       = /\A#{IDENTIFIER_NC}\s*/
         CTE_AS         = /\AAS\s+(?:(?:NOT\s+)?MATERIALIZED\s*)?/i

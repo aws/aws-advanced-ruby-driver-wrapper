@@ -29,7 +29,10 @@ module AwsAdvancedRubyDriverWrapper
         KMS_ARN_PATTERN = %r{arn:aws:kms:[^:]+:[^:]+:key/[a-f0-9-]+}i
         URL_PASSWORD_PATTERN = /[?&]password=[^&]*/i
         URL_PWD_PATTERN = /[?&]pwd=[^&]*/i
-        URL_USER_INFO_PATTERN = %r{://[^:/@]+:[^@]+@}
+        # The password run excludes '/' and whitespace as well as '@', so it cannot scan past the
+        # start of the next authority; without that a string of "://x:" segments is quadratic to
+        # match. A URL's userinfo cannot contain an unencoded '/' anyway.
+        URL_USER_INFO_PATTERN = %r{://[^:/@\s]+:[^@/\s]+@}
         SQL_STRING_LITERAL_PATTERN = /'[^']*'/
         SQL_NUMERIC_LITERAL_PATTERN = /\b\d+\b/
 
