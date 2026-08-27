@@ -91,6 +91,35 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::KmsEncryptionU
       expect(utility.connection_provider).to be_nil
     end
 
+    describe 'the metadata cache warning' do
+      before { described_class.metadata_cache_warning_logged = false }
+
+      # Disabling the cache makes the plugin open a metadata connection per statement, so it is worth
+      # a warning - but only once, not on every connection.
+      it 'warns once per process when the metadata cache is disabled' do
+        allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn)
+
+        described_class.new(service_container, props, kms_client: kms_client)
+        described_class.new(service_container, props, kms_client: kms_client)
+
+        expect(AwsRubyDatabaseDriverWrapper.logger)
+          .to have_received(:warn).with(/metadata cache is disabled/).once
+      end
+
+      it 'does not warn when the metadata cache is enabled' do
+        allow(AwsRubyDatabaseDriverWrapper.logger).to receive(:warn)
+
+        enabled_props = Concurrent::Map.new
+        enabled_props[:encryption_kms_region] = 'us-west-2'
+        enabled_props[:encryption_metadata_schema] = 'encrypt'
+        enabled_props[:encryption_data_key_cache_enabled] = false
+        described_class.new(service_container, enabled_props, kms_client: kms_client)
+
+        expect(AwsRubyDatabaseDriverWrapper.logger)
+          .not_to have_received(:warn).with(/metadata cache is disabled/)
+      end
+    end
+
     it 'is named after the plugin it belongs to' do
       expect(utility.plugin_name).to eq('KmsEncryptionPlugin')
       expect(described_class::PLUGIN_NAME).to eq('KmsEncryptionPlugin')

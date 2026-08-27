@@ -49,6 +49,13 @@ module AwsRubyDatabaseDriverWrapper
 
         PLUGIN_NAME = 'KmsEncryptionPlugin'
 
+        # Logged at most once per process, so disabling the metadata cache does not warn on every
+        # connection.
+        @metadata_cache_warning_logged = false
+        class << self
+          attr_accessor :metadata_cache_warning_logged
+        end
+
         attr_reader :config, :audit_logger, :data_key_cache
 
         # @param service_container [Services::ServiceContainer]
@@ -78,6 +85,8 @@ module AwsRubyDatabaseDriverWrapper
               "schema=#{@config.metadata_schema}, metadata cache=#{@config.metadata_cache_enabled}, " \
               "max retries=#{@config.key_management_max_retries}"
           end
+
+          warn_if_metadata_cache_disabled
         end
 
         # @return [String] the name the plugin is known by
@@ -246,6 +255,21 @@ module AwsRubyDatabaseDriverWrapper
 
           @metadata_manager.start
           logger.debug('The kms_encryption plugin is ready to encrypt and decrypt column values')
+        end
+
+        # Warns once per process when the metadata cache is off, since that makes the plugin open a
+        # short-lived metadata connection for every statement that touches an encrypted column.
+        def warn_if_metadata_cache_disabled
+          return if @config.metadata_cache_enabled
+          return if self.class.metadata_cache_warning_logged
+
+          self.class.metadata_cache_warning_logged = true
+          logger.warn(
+            'The kms_encryption metadata cache is disabled (encryption_metadata_cache_enabled=false): the ' \
+            'plugin opens a short-lived metadata connection for every statement that touches an encrypted ' \
+            'column. Enable it in production and lower encryption_metadata_cache_refresh_interval_sec if ' \
+            'you need fresher metadata.'
+          )
         end
 
         def create_kms_client
