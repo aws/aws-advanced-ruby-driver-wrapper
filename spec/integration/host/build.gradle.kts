@@ -236,6 +236,63 @@ tasks.register<Test>("test-mysql-aurora") {
     }
 }
 
+// KMS encryption integration tests. These run in a dedicated "encryption-only" environment
+// (test-encryption-only=true) so they never run alongside the normal aurora suite, mirroring the
+// JDBC wrapper's test-kms-encryption task. They require a KMS master key id in the KMS_KEY_ID
+// environment variable and AWS credentials; specs skip themselves when KMS_KEY_ID is unset.
+// A single-instance cluster is enough: the specs only use the writer.
+tasks.register<Test>("test-encryption") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("test-encryption-only", "true")
+        systemProperty("exclude-instances-1", "false")
+        systemProperty("exclude-instances-3", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
+tasks.register<Test>("test-pg-encryption") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("test-encryption-only", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-mysql-engine", "true")
+        systemProperty("exclude-instances-1", "false")
+        systemProperty("exclude-instances-3", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
+tasks.register<Test>("test-mysql-encryption") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("test-encryption-only", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-instances-1", "false")
+        systemProperty("exclude-instances-3", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
 tasks.register<Test>("test-multi-az") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")

@@ -103,6 +103,15 @@ RSpec.configure do |config|
     config.filter_run_excluding(blue_green: true)
   end
 
+  # KMS encryption specs run in a dedicated "encryption-only" environment (the test-encryption-only
+  # gradle property, surfaced to the container as RUN_ENCRYPTION_ONLY), never alongside the normal
+  # aurora suite. When that mode is on, run only kms_encryption-tagged specs; otherwise exclude them.
+  if ENV['RUN_ENCRYPTION_ONLY'] == 'true'
+    config.filter_run_including(kms_encryption: true)
+  else
+    config.filter_run_excluding(kms_encryption: true)
+  end
+
   config.before(:each, :integration) do |example|
     if (deployments = example.metadata[:deployments])
       enable_on_deployments(*deployments)

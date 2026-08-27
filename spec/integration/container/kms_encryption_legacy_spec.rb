@@ -1,0 +1,89 @@
+# frozen_string_literal: true
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License").
+#  You may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
+require 'securerandom'
+require_relative 'integration_helper'
+require_relative 'utils/test_environment'
+require_relative 'utils/test_environment_features'
+require_relative 'utils/test_driver'
+require_relative 'utils/driver_helper'
+require_relative 'utils/kms_encryption_helper'
+require 'aws_advanced_ruby_driver_wrapper'
+
+# Legacy and mixed data. The read path is lenient: a value that does not carry a valid integrity tag
+# is handed back exactly as the database holds it, so a column that already held data before it was
+# configured for encryption keeps reading back as it was written, and a tampered or wrong-key value
+# is passed through rather than raising. Both are proven by comparing a plugin read to a plain read
+# of the same stored bytes.
+RSpec.describe 'KmsEncryption legacy and mixed data', :integration, :kms_encryption,
+               enable_on_engines: [Integration::DatabaseEngine::MYSQL, Integration::DatabaseEngine::PG],
+               disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
+  include Integration::KmsEncryptionHelper
+
+  let(:table) { 'enc_legacy' }
+  let(:admin_conn) { native_connect }
+  let(:conn) { encryption_connect }
+
+  before do
+    require_kms!
+    provision(admin_conn, table: table, encrypted_columns: ['ssn'], plain_columns: ['name'])
+  end
+
+  after do
+    conn && Integration::DriverHelper.close(drv, conn)
+    teardown_encryption(admin_conn, table: table)
+    admin_conn && Integration::DriverHelper.close(drv, admin_conn)
+  rescue StandardError
+    nil
+  end
+
+  it 'reads a pre-encryption plaintext value back untouched' do
+    # A short value that is not a valid encrypted payload, written before/around the plugin.
+    insert_raw(admin_conn, 'Legacy', 'plain-legacy-value')
+
+    expect(read_ssn(conn, 'Legacy')).to eq(stored_value(admin_conn, table, 'ssn', 'name', 'Legacy'))
+  end
+
+  it 'passes a tampered or wrong-key value through without raising' do
+    # 80 random bytes: long enough to look like a payload by length, but its HMAC will not verify.
+    insert_raw(admin_conn, 'Tampered', SecureRandom.bytes(80))
+
+    read = nil
+    expect { read = read_ssn(conn, 'Tampered') }.not_to raise_error
+    expect(read).to eq(stored_value(admin_conn, table, 'ssn', 'name', 'Tampered'))
+  end
+
+  # Writes a raw value straight into the encrypted (binary) column over a plain connection, the way
+  # data would arrive without the plugin.
+  def insert_raw(conn, name, bytes)
+    case drv
+    when Integration::TestDriver::PG
+      conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)",
+                       [name, { value: bytes.b, format: 1 }])
+    when Integration::TestDriver::MYSQL
+      conn.query("INSERT INTO #{table} (name, ssn) VALUES ('#{conn.escape(name)}', X'#{hex(bytes)}')")
+    end
+  end
+
+  def read_ssn(conn, name)
+    case drv
+    when Integration::TestDriver::PG
+      conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
+    when Integration::TestDriver::MYSQL
+      conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
+    end
+  end
+end

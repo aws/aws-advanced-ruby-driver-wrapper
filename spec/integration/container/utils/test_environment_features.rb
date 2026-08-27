@@ -28,5 +28,6 @@ module Integration
     TELEMETRY_METRICS_ENABLED = :telemetry_metrics_enabled
     BLUE_GREEN_DEPLOYMENT = :blue_green_deployment
     GLOBAL_DATABASE = :global_database
+    RUN_ENCRYPTION_TESTS_ONLY = :run_encryption_tests_only
   end
 end
