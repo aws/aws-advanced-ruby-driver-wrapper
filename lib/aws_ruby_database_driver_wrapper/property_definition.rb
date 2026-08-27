@@ -335,7 +335,7 @@ module AwsRubyDatabaseDriverWrapper
     ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC = WrapperProperty.new(
       :encryption_data_key_cache_expiration_sec,
       'How long a decrypted data key stays cached, in seconds',
-      default_value: 3600, type: Integer, validator: POSITIVE_INTEGER
+      default_value: 300, type: Integer, validator: POSITIVE_INTEGER
     )
 
     # Built once at load time from constants — used by parser to split props

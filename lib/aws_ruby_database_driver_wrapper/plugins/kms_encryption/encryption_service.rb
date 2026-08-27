@@ -17,6 +17,7 @@
 require 'bigdecimal'
 require 'date'
 require 'openssl'
+require 'securerandom'
 require 'time'
 require_relative 'encryption_algorithm'
 require_relative 'errors'
@@ -225,7 +226,7 @@ module AwsRubyDatabaseDriverWrapper
 
           # @return [String] the type marker, IV, ciphertext, and GCM tag, without the HMAC
           def seal(plaintext, marker, data_key, algorithm)
-            iv = OpenSSL::Random.random_bytes(GCM_IV_LENGTH)
+            iv = SecureRandom.bytes(GCM_IV_LENGTH)
             cipher = OpenSSL::Cipher.new(EncryptionAlgorithm.cipher_name(algorithm))
             cipher.encrypt
             cipher.key = data_key

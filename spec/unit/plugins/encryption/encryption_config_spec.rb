@@ -51,7 +51,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(config.audit_logging_enabled).to be(false)
       expect(config.data_key_cache_enabled).to be(true)
       expect(config.data_key_cache_max_size).to eq(1000)
-      expect(config.data_key_cache_expiration_sec).to eq(3600)
+      expect(config.data_key_cache_expiration_sec).to eq(300)
     end
 
     it 'reads every setting from the properties' do
