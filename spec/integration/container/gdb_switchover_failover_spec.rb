@@ -27,7 +27,7 @@ require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
 require 'securerandom'
 require 'aws-sdk-secretsmanager'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper'
 
 RSpec.describe 'GDB Switchover Failover', :integration,
                features: [Integration::TestEnvironmentFeatures::GLOBAL_DATABASE,
@@ -65,14 +65,14 @@ RSpec.describe 'GDB Switchover Failover', :integration,
       accessible_regions: accessible_regions,
       instance_host_patterns: Integration::RdsTestUtility.global_instance_host_patterns,
       extra_props: {
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => failover_timeout_sec,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => failover_timeout_sec,
         connect_timeout: 10
       }.merge(extra_props)
     )
   end
 
   def scenario_connect(scenario, instance:, db_info:, sm_secret_id: nil)
-    pd = AwsRubyDatabaseDriverWrapper::PropertyDefinition
+    pd = AwsAdvancedRubyDriverWrapper::PropertyDefinition
     case scenario.auth
     when :iam
       props = gdb_props(**scenario.props_args,
@@ -121,19 +121,13 @@ RSpec.describe 'GDB Switchover Failover', :integration,
                else config
                end
     end
-    dialect_code = if drv == Integration::TestDriver::PG
-                     AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_PG
-                   else
-                     AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_MYSQL
-                   end
-    config = config.merge(AwsRubyDatabaseDriverWrapper::PropertyDefinition::DIALECT.name => dialect_code)
     Integration::IntegrationHelper::LOGGER.info(
       "GDB connect: instance_id=#{instance.instance_id} host=#{instance.host}:#{instance.port} " \
       "home_region=#{home_region} " \
-      "host_patterns=#{props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name]}"
+      "host_patterns=#{props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name]}"
     )
     conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
-    cluster_id = props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name]
+    cluster_id = props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name]
     expect(wait_for_full_topology(cluster_id: cluster_id)).to be(true),
                                                               'Topology was not fully discovered after establishing a connection'
     conn
@@ -145,7 +139,7 @@ RSpec.describe 'GDB Switchover Failover', :integration,
   def wait_for_full_topology(cluster_id:, timeout_secs: 60, delay_secs: 0.5)
     expected_count = primary_db_info.instances.size + env.secondary_instances.size
     Integration::RetryHelper.retry_until(timeout_secs: timeout_secs, delay_secs: delay_secs) do
-      hosts = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service.get(
+      hosts = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(
         :topology,
         cluster_id,
         register_access: false
@@ -178,9 +172,9 @@ RSpec.describe 'GDB Switchover Failover', :integration,
     loop do
       begin
         rds_util.query_instance_id(conn)
-      rescue AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError => e
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError => e
         return { outcome: :success, error: e, landed_id: settled_instance_id(conn, deadline: deadline) }
-      rescue AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError => e
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
         return { outcome: :failed, error: e, landed_id: nil }
       end
       return { outcome: :timeout, error: nil, landed_id: nil } if Time.now > deadline
@@ -189,12 +183,12 @@ RSpec.describe 'GDB Switchover Failover', :integration,
     end
   end
 
-  # Reads the instance id of the connection after a failover signal has been observed, tolerating a
-  # single follow-up FailoverSuccessError. Retries until a real id is returned or the deadline passes.
+  # Reads the instance id of the connection after a failover signal has been observed, tolerating
+  # follow-up FailoverSuccessErrors. Retries until a real id is returned or the deadline passes.
   def settled_instance_id(conn, deadline:)
     loop do
       return rds_util.query_instance_id(conn)
-    rescue AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+    rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       return nil if Time.now > deadline
 
       sleep(1)
@@ -210,7 +204,7 @@ RSpec.describe 'GDB Switchover Failover', :integration,
             "#{env.secondary_instances.map(&:instance_id)}")
   end
 
-  # A scenario: a distinct connection + mode config, plus a matcher describing the  outcome and (for
+  # A scenario: a distinct connection + mode config, plus a matcher describing the outcome and (for
   # reconnecting scenarios) the set of `[region, role]` pairs the connection is allowed to land on.
   Scenario = Struct.new(
     :id, :description, :props_args, :expected_outcome, :allowed, :auth
@@ -319,8 +313,9 @@ RSpec.describe 'GDB Switchover Failover', :integration,
   # Drives one connection with an open transaction across the transition. An open transaction
   # interrupted by the switchover must surface TransactionStateUnknownError (not FailoverSuccessError)
   # on the next statement, proving the transaction is not silently committed. After that, it records
-  # the settled instance id (captured here in the driver, tolerating a follow-up FailoverSuccessError)
-  # so the caller can classify the recovery target without racing an in-progress reconnect.
+  # the settled instance id (captured via settled_instance_id, which tolerates follow-up
+  # FailoverSuccessErrors) so the caller can classify the recovery target without racing an
+  # in-progress reconnect.
   #
   # @return [Hash] { outcome: :txn_unknown|:timeout, error: <exception or nil>, landed_id: <id or nil> }
   def drive_txn_until_terminal(conn, timeout_secs:)
@@ -328,7 +323,7 @@ RSpec.describe 'GDB Switchover Failover', :integration,
     loop do
       begin
         rds_util.query_instance_id(conn)
-      rescue AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError => e
+      rescue AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError => e
         return { outcome: :txn_unknown, error: e, landed_id: settled_instance_id(conn, deadline: deadline) }
       end
       return { outcome: :timeout, error: nil, landed_id: nil } if Time.now > deadline

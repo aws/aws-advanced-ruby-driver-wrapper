@@ -516,7 +516,7 @@ module Integration
     # @param extra_props [Hash] additional/override props
     def self.gdb_wrapper_props(cluster_id:, home_region:, in_home_mode: nil, out_of_home_mode: nil,
                                accessible_regions: nil, instance_host_patterns: nil, extra_props: {})
-      pd = AwsRubyDatabaseDriverWrapper::PropertyDefinition
+      pd = AwsAdvancedRubyDriverWrapper::PropertyDefinition
       props = {
         pd::PLUGINS.name => 'gdb_failover',
         pd::CLUSTER_ID.name => cluster_id,

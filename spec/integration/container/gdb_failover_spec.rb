@@ -27,7 +27,7 @@ require_relative 'utils/database_engine_deployment'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
 require 'securerandom'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper'
 
 # GDB in-home failover integration suite: failover triggered purely by Toxiproxy connectivity
 # manipulation on a proxied primary-region instance. No server-side failover happens here.
@@ -81,7 +81,7 @@ RSpec.describe 'GDB Failover', :integration,
       accessible_regions: accessible_regions,
       instance_host_patterns: Integration::RdsTestUtility.global_proxy_instance_host_patterns,
       extra_props: {
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
         connect_timeout: 10
       }.merge(extra_props)
     )
@@ -99,19 +99,13 @@ RSpec.describe 'GDB Failover', :integration,
       password: proxy_db_info.password,
       dbname: proxy_db_info.default_dbname
     )
-    dialect_code = if drv == Integration::TestDriver::PG
-                     AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_PG
-                   else
-                     AwsRubyDatabaseDriverWrapper::DialectCodes::GLOBAL_AURORA_MYSQL
-                   end
-    config = config.merge(AwsRubyDatabaseDriverWrapper::PropertyDefinition::DIALECT.name => dialect_code)
     Integration::IntegrationHelper::LOGGER.info(
       "GDB connect: instance_id=#{instance.instance_id} host=#{instance.host}:#{instance.port} " \
       "(proxied=#{instance.host.include?('proxied')}) " \
-      "host_patterns=#{props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name]}"
+      "host_patterns=#{props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name]}"
     )
     conn = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
-    cluster_id = props[AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.name]
+    cluster_id = props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name]
     expect(wait_for_full_topology(cluster_id: cluster_id)).to be(true),
                                                               'Topology was not fully discovered after establishing a connection'
     conn
@@ -123,7 +117,7 @@ RSpec.describe 'GDB Failover', :integration,
   def wait_for_full_topology(cluster_id:, timeout_secs: 60, delay_secs: 0.5)
     expected_count = primary_db_info.instances.size + env.secondary_instances.size
     Integration::RetryHelper.retry_until(timeout_secs: timeout_secs, delay_secs: delay_secs) do
-      hosts = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service.get(
+      hosts = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(
         :topology,
         cluster_id,
         register_access: false
@@ -143,7 +137,7 @@ RSpec.describe 'GDB Failover', :integration,
       rds_util.simulate_temporary_failure(current_writer, 0, failure_duration_secs)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -151,6 +145,7 @@ RSpec.describe 'GDB Failover', :integration,
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end
+
     # Writer failover on a connection-bound object (mysql2 prepared statement).
     it 'fails over on connection bound object invocation (mysql2 prepared statement)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
@@ -163,7 +158,7 @@ RSpec.describe 'GDB Failover', :integration,
       rds_util.simulate_temporary_failure(current_writer, 0, failure_duration_secs)
 
       expect { stmt.execute }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -191,7 +186,7 @@ RSpec.describe 'GDB Failover', :integration,
       expect do
         Integration::DriverHelper.execute(drv, conn, "INSERT INTO test_gdb_failover_transaction VALUES (2, 'value2')")
       end.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError
+        AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -215,14 +210,14 @@ RSpec.describe 'GDB Failover', :integration,
         instance: writer_instance,
         props: gdb_props(
           in_home_mode: 'strict_writer',
-          extra_props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 30 }
+          extra_props: { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 30 }
         )
       )
 
       Integration::ProxyHelper.disable_all_connectivity
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError
       )
     ensure
       Integration::ProxyHelper.enable_all_connectivity
@@ -251,7 +246,7 @@ RSpec.describe 'GDB Failover', :integration,
 
       results = threads.map(&:value)
       results.each do |result|
-        expect(result[:error]).to be_a(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+        expect(result[:error]).to be_a(AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError)
       end
 
       connections.each do |conn|
@@ -263,10 +258,11 @@ RSpec.describe 'GDB Failover', :integration,
     end
   end
 
-  describe 'reader / mode failover' do
-    # Reader -> writer when no other reader (home_reader_or_writer).
-    # Connected to the region-A reader; disable it; plugin falls back to the (still-reachable) writer.
-    it 'fails over from reader to writer when no other home reader is available (home_reader_or_writer)',
+  describe 'home_reader_or_writer failover' do
+    # Reader -> another home-region member (home_reader_or_writer).
+    # Connected to a region-A reader; disable it; the plugin falls back to another reachable
+    # home-region member (the writer, or another home-region reader if one exists).
+    it 'fails over from a home reader to another home-region member (home_reader_or_writer)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2)
 
@@ -275,7 +271,7 @@ RSpec.describe 'GDB Failover', :integration,
       rds_util.simulate_temporary_failure(reader_instance.instance_id, 0, failure_duration_secs)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       # home_reader_or_writer permits either the writer or a home-region reader, so accept either
@@ -297,8 +293,8 @@ RSpec.describe 'GDB Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    # home_reader_or_writer mode failover from writer.
-    it 'fails over with home_reader_or_writer mode',
+    # home_reader_or_writer mode failover triggered from the writer.
+    it 'fails over from the writer to a home-region member (home_reader_or_writer)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2)
 
@@ -307,16 +303,30 @@ RSpec.describe 'GDB Failover', :integration,
       rds_util.simulate_temporary_failure(current_writer, 0, failure_duration_secs)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
-      # The landed host must be the writer or a home-region (region A) reader.
+      # home_reader_or_writer permits the writer or a home-region reader; assert region explicitly
+      # and accept either role.
       current_connection_id = rds_util.query_instance_id(conn)
-      expect(rds_util.region_of_instance(current_connection_id)).to eq(:primary)
+      landed_region = rds_util.region_of_instance(current_connection_id)
+      landed_role = rds_util.instance_role(current_connection_id, cluster_id: env.cluster_name)
+      expect(landed_region).to(
+        eq(:primary),
+        'expected home_reader_or_writer to land on a region-A (:primary) member, ' \
+        "landed on #{current_connection_id} (region #{landed_region.inspect}, role #{landed_role})"
+      )
+      expect(%i[writer reader]).to(
+        include(landed_role),
+        'expected home_reader_or_writer to land on a region-A writer or reader, ' \
+        "landed on #{current_connection_id} (role #{landed_role})"
+      )
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end
+  end
 
+  describe 'strict reader failover' do
     # strict_home_reader in-home from writer.
     it 'fails over with strict_home_reader mode to a home-region reader (constrained)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
@@ -328,14 +338,14 @@ RSpec.describe 'GDB Failover', :integration,
         instance: writer_instance,
         props: gdb_props(
           in_home_mode: 'strict_home_reader',
-          extra_props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 120 }
+          extra_props: { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 120 }
         )
       )
 
       rds_util.simulate_temporary_failure(current_writer, 0, failure_duration_secs)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       # The landed host must be a reader in the home region (region A).
@@ -355,14 +365,14 @@ RSpec.describe 'GDB Failover', :integration,
         instance: writer_instance,
         props: gdb_props(
           in_home_mode: 'strict_any_reader',
-          extra_props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 120 }
+          extra_props: { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 120 }
         )
       )
 
       rds_util.simulate_temporary_failure(current_writer, 0, failure_duration_secs)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       # The landed host must be a reader (in either region).
@@ -385,7 +395,7 @@ RSpec.describe 'GDB Failover', :integration,
       )
 
       expect { execute_write_probe(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
