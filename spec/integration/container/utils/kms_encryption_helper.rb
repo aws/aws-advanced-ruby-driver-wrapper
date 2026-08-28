@@ -100,9 +100,14 @@ module Integration
     # A plain driver connection with no plugins, used for administrative setup and for reading a value
     # at rest (to prove it is stored as ciphertext).
     #
+    # On PostgreSQL, notices are quieted to warnings so the idempotent DROP TABLE IF EXISTS statements
+    # in setup and teardown do not print a "table ... does not exist, skipping" NOTICE for every table.
+    #
     # @return [Object] a pg or mysql2 connection
     def native_connect
-      DriverHelper.native_connect(drv, **native_params)
+      conn = DriverHelper.native_connect(drv, **native_params)
+      conn.exec('SET client_min_messages TO warning') if drv == TestDriver::PG
+      conn
     end
 
     # The wrapper properties that turn the kms_encryption plugin on for an application connection.
