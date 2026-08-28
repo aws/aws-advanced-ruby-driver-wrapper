@@ -26,6 +26,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
   let(:encryption_error) { AwsAdvancedRubyDriverWrapper::Errors::EncryptionError }
   let(:data_key) { OpenSSL::Random.random_bytes(32) }
   let(:hmac_key) { OpenSSL::Random.random_bytes(32) }
+  let(:key_id) { 7 }
+
+  # Every value is tagged with the key_storage id it was encrypted under. Tests that do not care
+  # about the id use a fixed one; the helper keeps the required key_id keyword out of every call.
+  def encrypt_value(value, dkey = data_key, hkey = hmac_key, algorithm = nil, kid: key_id)
+    if algorithm
+      described_class.encrypt(value, dkey, hkey, algorithm, key_id: kid)
+    else
+      described_class.encrypt(value, dkey, hkey, key_id: kid)
+    end
+  end
 
   # Re-signs a payload whose body has been edited, so that a test can get past the integrity
   # check and exercise the decryption path itself.
@@ -35,23 +46,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
   end
 
   def round_trip(value, target_type: nil)
-    described_class.decrypt(described_class.encrypt(value, data_key, hmac_key), data_key, hmac_key,
+    described_class.decrypt(encrypt_value(value, data_key, hmac_key), data_key, hmac_key,
                             target_type: target_type)
   end
 
   describe 'the payload layout' do
-    subject(:encrypted) { described_class.encrypt('hello', data_key, hmac_key) }
+    subject(:encrypted) { encrypt_value('hello', data_key, hmac_key) }
 
-    it 'reserves 61 bytes for the framing' do
-      expect(described_class::MIN_ENCRYPTED_LENGTH).to eq(61)
+    it 'reserves 65 bytes for the framing' do
+      expect(described_class::MIN_ENCRYPTED_LENGTH).to eq(65)
     end
 
     it 'is binary' do
       expect(encrypted.encoding).to eq(Encoding::BINARY)
     end
 
-    it 'is the HMAC, the type marker, the IV, the ciphertext, and the GCM tag' do
-      expect(encrypted.bytesize).to eq(32 + 1 + 12 + 'hello'.bytesize + 16)
+    it 'is the HMAC, the key id, the type marker, the IV, the ciphertext, and the GCM tag' do
+      expect(encrypted.bytesize).to eq(32 + 4 + 1 + 12 + 'hello'.bytesize + 16)
     end
 
     it 'signs everything after the HMAC' do
@@ -59,13 +70,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
         .to eq(OpenSSL::HMAC.digest('SHA256', hmac_key, encrypted.byteslice(32..)))
     end
 
-    it 'records the type marker ahead of the IV' do
-      expect(encrypted.getbyte(32)).to eq(type_marker::STRING)
+    it 'records the key id ahead of the type marker' do
+      expect(encrypted.byteslice(32, 4).unpack1('N')).to eq(key_id)
+    end
+
+    it 'records the type marker after the key id, ahead of the IV' do
+      expect(encrypted.getbyte(32 + 4)).to eq(type_marker::STRING)
     end
 
     it 'uses a fresh IV for every value, so the same plaintext never repeats' do
-      expect(described_class.encrypt('hello', data_key, hmac_key))
-        .not_to eq(described_class.encrypt('hello', data_key, hmac_key))
+      expect(encrypt_value('hello', data_key, hmac_key))
+        .not_to eq(encrypt_value('hello', data_key, hmac_key))
     end
   end
 
@@ -128,7 +143,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     end
 
     it 'passes nil straight through' do
-      expect(described_class.encrypt(nil, data_key, hmac_key)).to be_nil
+      expect(encrypt_value(nil, data_key, hmac_key)).to be_nil
       expect(described_class.decrypt(nil, data_key, hmac_key)).to be_nil
     end
 
@@ -138,13 +153,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
 
     it 'works with AES-128-GCM and a 16 byte key' do
       short_key = OpenSSL::Random.random_bytes(16)
-      encrypted = described_class.encrypt('ssn', short_key, hmac_key, algorithms::AES_128_GCM)
+      encrypted = encrypt_value('ssn', short_key, hmac_key, algorithms::AES_128_GCM)
       expect(described_class.decrypt(encrypted, short_key, hmac_key, algorithms::AES_128_GCM)).to eq('ssn')
     end
 
     it 'leaves the value it was given alone' do
       value = +'123-45-6789'
-      described_class.encrypt(value, data_key, hmac_key)
+      encrypt_value(value, data_key, hmac_key)
       expect(value).to eq('123-45-6789')
     end
   end
@@ -152,13 +167,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
   describe 'rejecting bad payloads' do
     it 'rejects a payload that is too short to hold the framing' do
       expect { described_class.decrypt('x' * 60, data_key, hmac_key) }
-        .to raise_error(encryption_error, /too short: 60 bytes, expected at least 61/) do |error|
+        .to raise_error(encryption_error, /too short: 60 bytes, expected at least 65/) do |error|
           expect(error.code).to eq(encryption_error::DECRYPTION_FAILED)
         end
     end
 
     it 'rejects a payload whose ciphertext has been edited' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
       encrypted.setbyte(50, encrypted.getbyte(50) ^ 0xff)
 
       expect { described_class.decrypt(encrypted, data_key, hmac_key) }
@@ -166,7 +181,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     end
 
     it 'rejects a payload signed with a different HMAC key' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
 
       expect { described_class.decrypt(encrypted, data_key, OpenSSL::Random.random_bytes(32)) }
         .to raise_error(encryption_error, /Integrity check failed/)
@@ -174,7 +189,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
 
     # The HMAC key alone does not prove the data key is right: GCM catches that.
     it 'rejects a correctly signed payload that was encrypted with a different data key' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
 
       expect { described_class.decrypt(encrypted, OpenSSL::Random.random_bytes(32), hmac_key) }
         .to raise_error(encryption_error, /the authentication tag does not match this data key/) do |error|
@@ -183,28 +198,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     end
 
     it 'rejects a payload carrying an unknown type marker' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
-      encrypted.setbyte(described_class::HMAC_TAG_LENGTH, 77)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
+      # The marker sits after the HMAC tag and the key id.
+      encrypted.setbyte(described_class::HMAC_TAG_LENGTH + described_class::KEY_ID_LENGTH, 77)
 
       expect { described_class.decrypt(resign(encrypted, hmac_key), data_key, hmac_key) }
         .to raise_error(encryption_error, /Unknown type marker: 77/)
     end
 
     it 'rejects a data key of the wrong length' do
-      expect { described_class.encrypt('x', OpenSSL::Random.random_bytes(16), hmac_key) }
+      expect { encrypt_value('x', OpenSSL::Random.random_bytes(16), hmac_key) }
         .to raise_error(encryption_error, /Data key must be 32 bytes for AES-256-GCM, got 16/) do |error|
           expect(error.code).to eq(encryption_error::INVALID_KEY)
         end
     end
 
     it 'rejects a missing data key' do
-      expect { described_class.encrypt('x', nil, hmac_key) }
+      expect { encrypt_value('x', nil, hmac_key) }
         .to raise_error(encryption_error, /Data key must be 32 bytes for AES-256-GCM, got nil/)
     end
 
     # The decrypt path validates the data key too, past the length check but before decrypting.
     it 'rejects a data key of the wrong length on the decrypt path' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
 
       expect { described_class.decrypt(encrypted, OpenSSL::Random.random_bytes(16), hmac_key) }
         .to raise_error(encryption_error, /Data key must be 32 bytes for AES-256-GCM, got 16/) do |error|
@@ -213,32 +229,32 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     end
 
     it 'rejects a missing HMAC key' do
-      expect { described_class.encrypt('x', data_key, nil) }
+      expect { encrypt_value('x', data_key, nil) }
         .to raise_error(encryption_error, /An HMAC key is required to protect encrypted values/)
-      expect { described_class.encrypt('x', data_key, '') }
+      expect { encrypt_value('x', data_key, '') }
         .to raise_error(encryption_error, /An HMAC key is required/)
     end
 
     it 'rejects an unsupported algorithm' do
-      expect { described_class.encrypt('x', data_key, hmac_key, 'AES_256_GCM') }
+      expect { encrypt_value('x', data_key, hmac_key, 'AES_256_GCM') }
         .to raise_error(encryption_error, /Unsupported kms_encryption algorithm/)
     end
   end
 
   describe '.encrypted_data_valid?' do
     it 'is true for an untouched payload' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
       expect(described_class.encrypted_data_valid?(encrypted, hmac_key)).to be(true)
     end
 
     it 'is false once the payload has been edited' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
       encrypted.setbyte(60, encrypted.getbyte(60) ^ 0xff)
       expect(described_class.encrypted_data_valid?(encrypted, hmac_key)).to be(false)
     end
 
     it 'is false for a different HMAC key' do
-      encrypted = described_class.encrypt('123-45-6789', data_key, hmac_key)
+      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
       expect(described_class.encrypted_data_valid?(encrypted, OpenSSL::Random.random_bytes(32))).to be(false)
     end
 
@@ -252,6 +268,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
       expect(described_class.encrypted_data_valid?(nil, hmac_key)).to be(false)
       expect(described_class.encrypted_data_valid?('x' * 61, nil)).to be(false)
       expect(described_class.encrypted_data_valid?('x' * 61, '')).to be(false)
+    end
+  end
+
+  describe '.key_id_from_payload' do
+    it 'reads back the key id a value was encrypted with' do
+      expect(described_class.key_id_from_payload(encrypt_value('123-45-6789', data_key, hmac_key, kid: 4242)))
+        .to eq(4242)
+    end
+
+    it 'is nil for a value too short to carry a key id' do
+      expect(described_class.key_id_from_payload('x' * 20)).to be_nil
+    end
+
+    it 'is nil for nil' do
+      expect(described_class.key_id_from_payload(nil)).to be_nil
     end
   end
 

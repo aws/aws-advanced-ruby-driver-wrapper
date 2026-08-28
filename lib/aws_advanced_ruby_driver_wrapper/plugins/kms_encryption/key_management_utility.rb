@@ -35,8 +35,10 @@ module AwsAdvancedRubyDriverWrapper
       #   utility.initialize_encryption_for_column('users', 'ssn', arn)
       #
       # Rotating a data key only changes the key that new writes use. Values already written with
-      # the previous key stay readable, because each stored value records the key it was written
-      # with, but re-encrypting them is the application's job.
+      # the previous key stay readable, because each stored value records the id of the key it was
+      # written with and the read path resolves that key from +key_storage+ (which keeps the old
+      # key). Re-encrypting old values under the new key is optional, and is the application's job;
+      # until it is done, retiring the old key from +key_storage+ would make them unreadable.
       class KeyManagementUtility
         include Logging
 

@@ -67,7 +67,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     end
 
     it 'accepts a value written in the plugin encrypted format' do
-      payload = encryption_service.encrypt(plaintext, keys[:data_key], keys[:hmac_key])
+      payload = encryption_service.encrypt(plaintext, keys[:data_key], keys[:hmac_key], key_id: keys[:key_id])
       expect { insert_binary(admin_conn, payload) }.not_to raise_error
       expect(user_count(admin_conn)).to eq(1)
     end
@@ -96,7 +96,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     end
 
     it 'accepts a value written in the plugin encrypted format' do
-      payload = encryption_service.encrypt(plaintext, keys[:data_key], keys[:hmac_key])
+      payload = encryption_service.encrypt(plaintext, keys[:data_key], keys[:hmac_key], key_id: keys[:key_id])
       expect { insert_binary(admin_conn, payload) }.not_to raise_error
       expect(user_count(admin_conn)).to eq(1)
     end

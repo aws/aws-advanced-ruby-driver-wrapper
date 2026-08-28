@@ -127,8 +127,8 @@ BEGIN
     PERFORM set_config(cache_key, encode(hmac_key, 'hex'), true);
   END;
 
-  -- Payload: [ HMAC-SHA256 tag : 32 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
-  IF length(col_value) < 61
+  -- Payload: [ HMAC-SHA256 tag : 32 ][ key id : 4 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
+  IF length(col_value) < 65
      OR substring(col_value from 1 for 32) <> hmac(substring(col_value from 33), hmac_key, 'sha256') THEN
     RAISE EXCEPTION 'Column %.% does not carry a valid HMAC tag (plaintext or tampered value)', TG_TABLE_NAME, col_name;
   END IF;

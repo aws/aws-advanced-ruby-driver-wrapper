@@ -115,6 +115,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
 
       expect(key_manager).to have_received(:decrypt_data_key).once
     end
+
+    # After a key rotation the column's current key differs from the one an existing value was
+    # written with. The value's payload names its own key, so the cipher resolves that key from
+    # key_storage and still decrypts it, rather than failing against the current key.
+    it 'decrypts a value written under a rotated-away key by resolving the key its payload names' do
+      encrypted = cipher.encrypt('123-45-6789', config) # written under key id 1
+
+      rotated_key = encryption::KeyMetadata.new(id: 2, key_id: 'new-uuid',
+                                                master_key_arn: 'arn:aws:kms:us-east-1:1:key/efgh',
+                                                encrypted_data_key: 'BQIDAHj...', hmac_key: 'H' * 32)
+      rotated_config = config.with(key_metadata: rotated_key)
+      allow(key_manager).to receive(:key_metadata_by_id).with(1).and_return(key_metadata)
+
+      expect(cipher.decrypt(encrypted, rotated_config)).to eq('123-45-6789')
+      expect(key_manager).to have_received(:key_metadata_by_id).with(1)
+    end
   end
 
   describe '#encrypted_payload?' do

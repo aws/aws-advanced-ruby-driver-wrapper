@@ -26,11 +26,9 @@ require 'aws_advanced_ruby_driver_wrapper'
 # validating the metadata schema, and rotating a data key. This drives the administrative side over
 # its own connections, exactly as a migration or setup script would.
 #
-# NOTE on rotation: the Ruby plugin looks a column's key up by the current encryption_metadata row,
-# and the stored payload records no key id, so a value written before a rotation does NOT decrypt
-# after it - it reads back as raw ciphertext. Rotation changes only which key new writes use;
-# re-encrypting existing values is the application's job. The examples below assert that actual
-# behavior.
+# Rotation changes only which key new writes use. A value written before a rotation still decrypts
+# afterwards, because its payload records the id of the key it was written with and the read path
+# resolves that key from key_storage (which retains the old key).
 RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
                enable_on_engines: [Integration::DatabaseEngine::MYSQL, Integration::DatabaseEngine::PG],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
@@ -85,7 +83,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     conn && Integration::DriverHelper.close(drv, conn)
   end
 
-  it 'rotates the data key so new writes use the new key' do
+  it 'rotates the data key, keeping old values readable while new writes use the new key' do
     original_key_id = @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
 
     # A value written before the rotation.
@@ -102,9 +100,9 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     write_ssn(after_conn, 'After', '222-22-2222')
     expect(read_ssn(after_conn, 'After')).to eq('222-22-2222')
 
-    # The pre-rotation value is no longer decryptable under the new key: rotation does not
-    # re-encrypt existing data, so it reads back as raw ciphertext rather than its plaintext.
-    expect(read_ssn(after_conn, 'Before')).not_to eq('111-11-1111')
+    # The pre-rotation value still decrypts: its payload names the key it was written with, and
+    # rotation leaves that key in key_storage.
+    expect(read_ssn(after_conn, 'Before')).to eq('111-11-1111')
   ensure
     after_conn && Integration::DriverHelper.close(drv, after_conn)
   end
