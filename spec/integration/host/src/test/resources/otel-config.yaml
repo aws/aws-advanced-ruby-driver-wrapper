@@ -22,7 +22,7 @@ processors:
 exporters:
   awsxray:
   awsemf:
-    log_group_name: "aws_ruby_database_driver_wrapper"
+    log_group_name: "aws_advanced_ruby_driver_wrapper"
 
 service:
   pipelines:

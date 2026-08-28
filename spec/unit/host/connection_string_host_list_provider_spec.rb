@@ -15,16 +15,16 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/host/connection_string_host_list_provider'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/services/connection_service'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/host/connection_string_host_list_provider'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/services/connection_service'
+require 'aws_advanced_ruby_driver_wrapper/errors'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Host::ConnectionStringHostListProvider do
-  let(:host_info_class) { AwsRubyDatabaseDriverWrapper::Host::HostInfo }
-  let(:host_role) { AwsRubyDatabaseDriverWrapper::Host::HostRole }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Host::ConnectionStringHostListProvider do
+  let(:host_info_class) { AwsAdvancedRubyDriverWrapper::Host::HostInfo }
+  let(:host_role) { AwsAdvancedRubyDriverWrapper::Host::HostRole }
 
   let(:initial_host_info) do
     host_info_class.new(host: 'myhost', port: '5432')

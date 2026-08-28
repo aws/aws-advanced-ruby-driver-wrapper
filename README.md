@@ -1,8 +1,8 @@
-# Amazon Web Services (AWS) Advanced Ruby Database Driver Wrapper
+# Amazon Web Services (AWS) Advanced Ruby Driver Wrapper
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-The **AWS Advanced Ruby Database Driver Wrapper** is complementary to an existing Ruby database driver and aims to extend the functionality of the driver to enable applications to take full advantage of the features of clustered databases such as Amazon Aurora. In other words, the AWS Advanced Ruby Database Driver Wrapper does not connect directly to any database, but enables support of AWS and Aurora functionalities on top of an underlying Ruby driver of the user's choice. This approach enables service-specific enhancements without requiring users to change their workflow with their existing Ruby drivers and tooling.
+The **AWS Advanced Ruby Driver Wrapper** is complementary to an existing Ruby database driver and aims to extend the functionality of the driver to enable applications to take full advantage of the features of clustered databases such as Amazon Aurora. In other words, the AWS Advanced Ruby Driver Wrapper does not connect directly to any database, but enables support of AWS and Aurora functionalities on top of an underlying Ruby driver of the user's choice. This approach enables service-specific enhancements without requiring users to change their workflow with their existing Ruby drivers and tooling.
 
 The wrapper integrates with [ActiveRecord](https://guides.rubyonrails.org/active_record_basics.html) by providing drop-in `aws_mysql2` and `aws_postgresql` adapters that sit on top of the community [`mysql2`](https://rubygems.org/gems/mysql2) and [`pg`](https://rubygems.org/gems/pg) drivers.
 
@@ -10,15 +10,15 @@ The wrapper integrates with [ActiveRecord](https://guides.rubyonrails.org/active
 
 Hosting a database cluster in the cloud via Aurora provides users with sets of features and configurations to obtain maximum performance and availability, such as database failover. However, at the moment, most existing drivers do not currently support those functionalities or are not able to entirely take advantage of them.
 
-The main idea behind the AWS Advanced Ruby Database Driver Wrapper is to add a software layer on top of an existing Ruby driver that would enable all the enhancements brought by Aurora, without requiring users to change their workflow with their databases and existing Ruby drivers.
+The main idea behind the AWS Advanced Ruby Driver Wrapper is to add a software layer on top of an existing Ruby driver that would enable all the enhancements brought by Aurora, without requiring users to change their workflow with their databases and existing Ruby drivers.
 
 ### What is Failover?
 
-In an Amazon Aurora database cluster, **failover** is a mechanism by which Aurora automatically repairs the cluster status when a primary DB instance becomes unavailable. It achieves this goal by electing an Aurora Replica to become the new primary DB instance, so that the DB cluster can provide maximum availability to a primary read-write DB instance. The AWS Advanced Ruby Database Driver Wrapper is designed to understand the situation and coordinate with the cluster in order to provide minimal downtime and allow connections to be very quickly restored in the event of a DB instance failure.
+In an Amazon Aurora database cluster, **failover** is a mechanism by which Aurora automatically repairs the cluster status when a primary DB instance becomes unavailable. It achieves this goal by electing an Aurora Replica to become the new primary DB instance, so that the DB cluster can provide maximum availability to a primary read-write DB instance. The AWS Advanced Ruby Driver Wrapper is designed to understand the situation and coordinate with the cluster in order to provide minimal downtime and allow connections to be very quickly restored in the event of a DB instance failure.
 
-### Benefits of the AWS Advanced Ruby Database Driver Wrapper
+### Benefits of the AWS Advanced Ruby Driver Wrapper
 
-Although Aurora is able to provide maximum availability through the use of failover, existing client drivers do not currently support this functionality. This is partially due to the time required for the DNS of the new primary DB instance to be fully resolved in order to properly direct the connection. The AWS Advanced Ruby Database Driver Wrapper allows customers to continue using their existing community drivers in addition to having the wrapper fully exploit failover behavior by maintaining a cache of the Aurora cluster topology and each DB instance's role (Aurora Replica or primary DB instance). This topology is provided via a direct query to the Aurora DB, essentially providing a shortcut to bypass the delays caused by DNS resolution. With this knowledge, the wrapper can more closely monitor the Aurora DB cluster status so that a connection to the new primary DB instance can be established as fast as possible.
+Although Aurora is able to provide maximum availability through the use of failover, existing client drivers do not currently support this functionality. This is partially due to the time required for the DNS of the new primary DB instance to be fully resolved in order to properly direct the connection. The AWS Advanced Ruby Driver Wrapper allows customers to continue using their existing community drivers in addition to having the wrapper fully exploit failover behavior by maintaining a cache of the Aurora cluster topology and each DB instance's role (Aurora Replica or primary DB instance). This topology is provided via a direct query to the Aurora DB, essentially providing a shortcut to bypass the delays caused by DNS resolution. With this knowledge, the wrapper can more closely monitor the Aurora DB cluster status so that a connection to the new primary DB instance can be established as fast as possible.
 
 ### Seamless AWS Authentication Service Integration
 
@@ -47,7 +47,7 @@ The wrapper design allows developers to continue using their preferred Ruby driv
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'aws-ruby-database-driver-wrapper'
+gem 'aws-advanced-ruby-driver-wrapper'
 ```
 
 For MySQL users, also install the underlying driver:
@@ -76,10 +76,10 @@ Require the appropriate entry point for your database:
 
 ```ruby
 # For MySQL
-require 'aws_ruby_database_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper/mysql'
 
 # For PostgreSQL
-require 'aws_ruby_database_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
 ```
 
 Then set the adapter in your database configuration (for example, `config/database.yml` in a Rails application):
@@ -104,7 +104,7 @@ production:
 
 ## Documentation
 
-Technical documentation regarding the functionality of the AWS Advanced Ruby Database Driver Wrapper is maintained in this GitHub repository under the [`docs`](./docs) folder. Since the wrapper requires an underlying Ruby driver, please refer to the individual driver's documentation for driver-specific information.
+Technical documentation regarding the functionality of the AWS Advanced Ruby Driver Wrapper is maintained in this GitHub repository under the [`docs`](./docs) folder. Since the wrapper requires an underlying Ruby driver, please refer to the individual driver's documentation for driver-specific information.
 
 | Topic                                | Documentation                                                              |
 |--------------------------------------|----------------------------------------------------------------------------|
@@ -121,12 +121,12 @@ Support for Blue/Green deployments using the wrapper requires specific metadata 
 
 ## Getting Help and Opening Issues
 
-If you encounter a bug with the AWS Advanced Ruby Database Driver Wrapper, we would like to hear about it.
-Please search the [existing issues](https://github.com/aws/aws-advanced-ruby-database-driver-wrapper/issues) to see if others are also experiencing the issue before reporting the problem in a new issue. GitHub issues are intended for bug reports and feature requests.
+If you encounter a bug with the AWS Advanced Ruby Driver Wrapper, we would like to hear about it.
+Please search the [existing issues](https://github.com/aws/aws-advanced-ruby-driver-wrapper/issues) to see if others are also experiencing the issue before reporting the problem in a new issue. GitHub issues are intended for bug reports and feature requests.
 
 When opening a new issue, please fill in all required fields in the issue template to help expedite the investigation process.
 
-For all other questions, please use [GitHub discussions](https://github.com/aws/aws-advanced-ruby-database-driver-wrapper/discussions).
+For all other questions, please use [GitHub discussions](https://github.com/aws/aws-advanced-ruby-driver-wrapper/discussions).
 
 ## How to Contribute
 
@@ -139,7 +139,7 @@ For all other questions, please use [GitHub discussions](https://github.com/aws/
 
 ## Other AWS Advanced Wrapper Drivers
 
-The AWS Advanced Ruby Database Driver Wrapper is part of a broader family of AWS "wrapper" drivers that bring the same advanced functionality, such as failover support and IAM authentication, to other languages and database connectivity standards. If you are working outside of Ruby, you may find one of the following drivers useful:
+The AWS Advanced Ruby Driver Wrapper is part of a broader family of AWS "wrapper" drivers that bring the same advanced functionality, such as failover support and IAM authentication, to other languages and database connectivity standards. If you are working outside of Ruby, you may find one of the following drivers useful:
 
 | Driver                          | Repository                                                       |
 |---------------------------------|------------------------------------------------------------------|

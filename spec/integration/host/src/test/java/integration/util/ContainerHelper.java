@@ -287,7 +287,7 @@ public class ContainerHelper {
       .withFileSystemBind(toDockerPath("../../../Gemfile.lock"), "/app/Gemfile.lock", BindMode.READ_WRITE)
       .withFileSystemBind(toDockerPath("../../../lib"), "/app/lib", BindMode.READ_WRITE)
       .withFileSystemBind(toDockerPath("../../../spec"), "/app/spec", BindMode.READ_WRITE)
-      .withFileSystemBind(toDockerPath("../../../aws-ruby-database-driver-wrapper.gemspec"), "/app/aws-ruby-database-driver-wrapper.gemspec", BindMode.READ_ONLY)
+      .withFileSystemBind(toDockerPath("../../../aws-advanced-ruby-driver-wrapper.gemspec"), "/app/aws-advanced-ruby-driver-wrapper.gemspec", BindMode.READ_ONLY)
       .withPrivilegedMode(true);
   }
 

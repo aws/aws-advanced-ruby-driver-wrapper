@@ -15,34 +15,34 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/monitoring/cluster_topology_monitor'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
-require 'aws_ruby_database_driver_wrapper/utils/events/monitor_reset_event'
-require 'aws_ruby_database_driver_wrapper/utils/events/batching_event_publisher'
-require 'aws_ruby_database_driver_wrapper/utils/storage/storage_service'
+require 'aws_advanced_ruby_driver_wrapper/monitoring/cluster_topology_monitor'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/host/host_availability'
+require 'aws_advanced_ruby_driver_wrapper/utils/events/monitor_reset_event'
+require 'aws_advanced_ruby_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_advanced_ruby_driver_wrapper/utils/storage/storage_service'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor do
   let(:cluster_id) { 'test-cluster' }
   let(:writer_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'writer.cluster.us-east-1.rds.amazonaws.com',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER,
+      role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER,
       id: 'writer-instance'
     )
   end
   let(:reader_host) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'reader.cluster.us-east-1.rds.amazonaws.com',
       port: 5432,
-      role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER,
+      role: AwsAdvancedRubyDriverWrapper::Host::HostRole::READER,
       id: 'reader-instance'
     )
   end
   let(:instance_template) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: '?.cluster.us-east-1.rds.amazonaws.com',
       port: 5432
     )
@@ -50,8 +50,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
   let(:topology) { [writer_host, reader_host] }
   let(:mock_connection) { instance_double('Connection', close: nil) }
 
-  let(:event_publisher) { AwsRubyDatabaseDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60) }
-  let(:storage_service) { AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
+  let(:event_publisher) { AwsAdvancedRubyDriverWrapper::Utils::Events::BatchingEventPublisher.new(message_interval_sec: 60) }
+  let(:storage_service) { AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService.new(event_publisher: event_publisher) }
 
   let(:db_dialect) { instance_double('DbDialect') }
   let(:driver_dialect) { instance_double('DriverDialect', close_connection: nil, apply_monitoring_defaults: nil, closed?: false) }
@@ -69,7 +69,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
   end
   let(:plugin_manager) { instance_double('PluginManager') }
   let(:service_container) do
-    AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       event_publisher: event_publisher,
       storage_service: storage_service,
       dialect_service: dialect_service,
@@ -95,7 +95,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
     storage_service.register(:topology, ttl: 300)
     allow(topology_utils).to receive(:query_topology) { [writer_host, reader_host] }
     allow(topology_utils).to receive(:writer_instance?).and_return(true)
-    allow(db_dialect).to receive(:host_role).and_return(AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER)
+    allow(db_dialect).to receive(:host_role).and_return(AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER)
     allow(plugin_manager).to receive(:internal_connect).and_return(mock_connection)
   end
 
@@ -165,10 +165,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
     # verified-writer state and drive the wait loop directly to keep the tests deterministic.
     context 'when verify_writer is true and the cached writer is stale' do
       let(:new_writer_host) do
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: 'new-writer.cluster.us-east-1.rds.amazonaws.com',
           port: 5432,
-          role: AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER,
+          role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER,
           id: 'new-writer-instance'
         )
       end
@@ -187,7 +187,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
         result = monitor.send(:wait_for_topology_update, 2.0, true)
         updater.join
-        expect(result.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }.host)
+        expect(result.find { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }.host)
           .to eq(new_writer_host.host)
       end
 
@@ -219,7 +219,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
         result = monitor.send(:wait_for_topology_update, 2.0, false)
         updater.join
-        expect(result.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }.host)
+        expect(result.find { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }.host)
           .to eq(writer_host.host)
       end
     end
@@ -272,10 +272,10 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
     it 'caps host threads at max_host_threads' do
       many_hosts = Array.new(20) do |i|
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: "host-#{i}.cluster.us-east-1.rds.amazonaws.com",
           port: 5432,
-          role: AwsRubyDatabaseDriverWrapper::Host::HostRole::READER,
+          role: AwsAdvancedRubyDriverWrapper::Host::HostRole::READER,
           id: "instance-#{i}"
         )
       end
@@ -283,7 +283,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       # Make host_role slow so threads stay alive
       allow(db_dialect).to receive(:host_role) do
         sleep(0.5)
-        AwsRubyDatabaseDriverWrapper::Host::HostRole::READER
+        AwsAdvancedRubyDriverWrapper::Host::HostRole::READER
       end
 
       monitor.start
@@ -299,7 +299,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       monitor.instance_variable_get(:@monitoring_connection).set(mock_connection, close_old: false)
       monitor.instance_variable_set(:@verified_writer, true)
 
-      event = AwsRubyDatabaseDriverWrapper::Utils::Events::MonitorResetEvent.new(
+      event = AwsAdvancedRubyDriverWrapper::Utils::Events::MonitorResetEvent.new(
         cluster_id: cluster_id,
         endpoints: Set[instance_template.host]
       )
@@ -312,7 +312,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       monitor.instance_variable_get(:@monitoring_connection).set(mock_connection, close_old: false)
       monitor.instance_variable_set(:@verified_writer, true)
 
-      event = AwsRubyDatabaseDriverWrapper::Utils::Events::MonitorResetEvent.new(
+      event = AwsAdvancedRubyDriverWrapper::Utils::Events::MonitorResetEvent.new(
         cluster_id: 'other-cluster',
         endpoints: Set[instance_template.host]
       )
@@ -372,9 +372,9 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
     it 'accepts topology when cluster has more hosts than max_instance_monitors' do
       # Simulate a cluster with 20 hosts but max_instance_monitors is 16 (default)
       extra_hosts = (1..20).map do |i|
-        AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: "host-#{i}.cluster.us-east-1.rds.amazonaws.com", port: 5432,
-          role: i == 1 ? AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER : AwsRubyDatabaseDriverWrapper::Host::HostRole::READER,
+          role: i == 1 ? AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER : AwsAdvancedRubyDriverWrapper::Host::HostRole::READER,
           id: "host-#{i}"
         )
       end
@@ -385,7 +385,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::ClusterTopologyMonitor 
       monitor.instance_variable_set(:@completed_one_cycle, completed)
 
       # All monitored readers report the same topology
-      reader_topos = extra_hosts.first(16).reject { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
+      reader_topos = extra_hosts.first(16).reject { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }
                                           .to_h { |h| [h.id, extra_hosts] }
       monitor.instance_variable_set(:@instance_monitor_topologies, reader_topos)
 

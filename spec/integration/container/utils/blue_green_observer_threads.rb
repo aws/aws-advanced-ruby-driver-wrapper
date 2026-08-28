@@ -343,8 +343,8 @@ module Integration
                 role_val = row_value(row, 'role')
                 version_val = row_value(row, 'version')
                 status_val = row_value(row, 'status')
-                is_green = AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Role.parse_role(role_val, version_val) ==
-                           AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Role::TARGET
+                is_green = AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Role.parse_role(role_val, version_val) ==
+                           AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Role::TARGET
 
                 status_map = is_green ? results.green_status_times : results.blue_status_times
                 status_map.compute_if_absent(status_val) do
@@ -464,7 +464,7 @@ module Integration
       Thread.new do
         Thread.current.name = 'RollbackDetection'
         begin
-          storage_service = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service
+          storage_service = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service
           start_latch.count_down
           start_latch.wait(300)
 
@@ -473,7 +473,7 @@ module Integration
           until stop.true?
             begin
               status = storage_service.get(
-                AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin::BLUE_GREEN_NAME,
+                AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin::BLUE_GREEN_NAME,
                 bgd_id
               )
             rescue ArgumentError
@@ -593,13 +593,13 @@ module Integration
                 results.failover_post_reconnect_successes << TimeHolder.new(start_time: nano_time,
                                                                             end_time: nano_time)
               end
-            rescue AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError => e
+            rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError => e
               failover_occurred = true
               results.failover_success_errors << { timestamp: nano_time, message: e.message }
               LOGGER.debug { "[WrapperBGFailover@#{host_id}] FailoverSuccessError — reconnected" }
-            rescue AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError => e
+            rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
               results.failover_failed_errors << { timestamp: nano_time, message: e.message }
-            rescue AwsRubyDatabaseDriverWrapper::Errors::BlueGreenTimeoutError => e
+            rescue AwsAdvancedRubyDriverWrapper::Errors::BlueGreenTimeoutError => e
               results.bg_timeout_errors << { timestamp: nano_time, message: e.message }
             rescue StandardError => e
               # Other errors during transition — log but don't record as specific failures
@@ -625,9 +625,9 @@ module Integration
         case deployment
         when DatabaseEngineDeployment::AURORA
           "SELECT id, SPLIT_PART(endpoint, '.', 1) as hostId, endpoint, port, role, status, version " \
-          "FROM pg_catalog.get_blue_green_fast_switchover_metadata('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')"
+          "FROM pg_catalog.get_blue_green_fast_switchover_metadata('aws_advanced_ruby_driver_wrapper-#{AwsAdvancedRubyDriverWrapper::VERSION}')"
         when DatabaseEngineDeployment::RDS_MULTI_AZ_INSTANCE
-          "SELECT * FROM rds_tools.show_topology('aws_ruby_database_driver_wrapper-#{AwsRubyDatabaseDriverWrapper::VERSION}')"
+          "SELECT * FROM rds_tools.show_topology('aws_advanced_ruby_driver_wrapper-#{AwsAdvancedRubyDriverWrapper::VERSION}')"
         else
           raise "Unsupported PG deployment for topology: #{deployment}"
         end

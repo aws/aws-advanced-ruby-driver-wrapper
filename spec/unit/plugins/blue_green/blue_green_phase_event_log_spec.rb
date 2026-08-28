@@ -15,11 +15,11 @@
 # frozen_string_literal: true
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/phase_event_log'
-require 'aws_ruby_database_driver_wrapper/plugins/blue_green/phase'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase_event_log'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::PhaseEventLog do
-  let(:phase) { AwsRubyDatabaseDriverWrapper::Plugins::BlueGreen::Phase }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::PhaseEventLog do
+  let(:phase) { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Phase }
 
   subject(:log) { described_class.new }
 

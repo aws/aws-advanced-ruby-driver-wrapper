@@ -14,10 +14,10 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/db_dialects/global_pg_dialect'
+require 'aws_advanced_ruby_driver_wrapper/db_dialects/global_pg_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::DbDialects::GlobalPgDialect do
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsAdvancedRubyDriverWrapper::DbDialects::GlobalPgDialect do
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('PG::Connection') }
