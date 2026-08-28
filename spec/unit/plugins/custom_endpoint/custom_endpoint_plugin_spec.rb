@@ -16,22 +16,22 @@
 
 require_relative '../../../spec_helper'
 require 'aws-sdk-rds'
-require 'aws_ruby_database_driver_wrapper/plugins/custom_endpoint/custom_endpoint_plugin'
-require 'aws_ruby_database_driver_wrapper/plugins/custom_endpoint/custom_endpoint_monitor'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/errors'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/custom_endpoint_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/custom_endpoint/custom_endpoint_monitor'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/errors'
 require 'concurrent'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::CustomEndpoint::CustomEndpointPlugin do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndpointPlugin do
   CUSTOM_ENDPOINT_URL   = 'my-custom.cluster-custom-XYZ.us-east-1.rds.amazonaws.com'
   WRITER_CLUSTER_URL    = 'writer.cluster-XYZ.us-east-1.rds.amazonaws.com'
   MONITOR_TYPE          = described_class::MONITOR_TYPE
-  ENDPOINT_INFO_CACHE   = AwsRubyDatabaseDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor::ENDPOINT_INFO_CACHE_NAME
+  ENDPOINT_INFO_CACHE   = AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor::ENDPOINT_INFO_CACHE_NAME
 
-  let(:custom_host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: CUSTOM_ENDPOINT_URL) }
-  let(:writer_host_info) { AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: WRITER_CLUSTER_URL) }
+  let(:custom_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: CUSTOM_ENDPOINT_URL) }
+  let(:writer_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: WRITER_CLUSTER_URL) }
 
-  let(:mock_monitor)         { instance_double(AwsRubyDatabaseDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor) }
+  let(:mock_monitor)         { instance_double(AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor) }
   let(:mock_storage_service) { double('StorageService', register: nil, get: nil, set: nil, clear: nil) }
   let(:mock_monitor_service) { double('MonitorService', register_type: nil) }
   let(:mock_driver_dialect)  { double('DriverDialect', network_bound_methods: Set['connection.query']) }
@@ -128,29 +128,29 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::CustomEndpoint::CustomEndp
         pipeline = -> { :connected }
         expect do
           plugin.connect(custom_host_info, {}, true, pipeline)
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /timed out/)
+        end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /timed out/)
       end
 
       it 'raises AwsError when endpoint ID cannot be parsed from host' do
-        bad_host = AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+        bad_host = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
           host: 'not-a-custom-endpoint.cluster-custom-XYZ.us-east-1.rds.amazonaws.com'
         )
-        allow(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils).to receive(:rds_custom_cluster_dns?).and_return(true)
-        allow(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils).to receive(:rds_cluster_id).and_return(nil)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils).to receive(:rds_custom_cluster_dns?).and_return(true)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils).to receive(:rds_cluster_id).and_return(nil)
         plugin = build_plugin
         expect do
           plugin.connect(bad_host, {}, true, -> {})
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /endpoint identifier/)
+        end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /endpoint identifier/)
       end
 
       it 'raises AwsError when region cannot be determined' do
-        allow(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils).to receive(:rds_custom_cluster_dns?).and_return(true)
-        allow(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils).to receive(:rds_cluster_id).and_return('my-custom')
-        allow(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils).to receive(:rds_region).and_return(nil)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils).to receive(:rds_custom_cluster_dns?).and_return(true)
+        allow(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils).to receive(:rds_cluster_id).and_return('my-custom')
+        allow(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils).to receive(:rds_region).and_return(nil)
         plugin = build_plugin
         expect do
           plugin.connect(custom_host_info, {}, true, -> {})
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /region/)
+        end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /region/)
       end
 
       it 'uses custom_endpoint_region prop when set' do
@@ -203,7 +203,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::CustomEndpoint::CustomEndp
 
         expect do
           plugin.execute('connection.query', -> {})
-        end.to raise_error(AwsRubyDatabaseDriverWrapper::Errors::AwsError, /timed out/)
+        end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /timed out/)
       end
     end
   end

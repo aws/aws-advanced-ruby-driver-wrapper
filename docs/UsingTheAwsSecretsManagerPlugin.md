@@ -1,6 +1,6 @@
 # AWS Secrets Manager Plugin
 
-The AWS Ruby Database Driver Wrapper supports usage of database credentials stored as secrets in [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/) through the Secrets Manager Plugin. When you create a new connection with this plugin enabled, the plugin will retrieve the secret and the connection will be created with the credentials inside that secret.
+The AWS Advanced Ruby Driver Wrapper supports usage of database credentials stored as secrets in [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/) through the Secrets Manager Plugin. When you create a new connection with this plugin enabled, the plugin will retrieve the secret and the connection will be created with the credentials inside that secret.
 
 ## Enabling the Plugin
 

@@ -15,11 +15,11 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/aurora_topology_utils'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/utils/aurora_topology_utils'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::AuroraTopologyUtils do
   include ResultSetHelper
 
   let(:dialect) { instance_double('Dialect') }
@@ -27,14 +27,14 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
   let(:subject) { described_class.new(dialect: dialect) }
 
   let(:initial_host_info) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: 'my-cluster.cluster-xyz.us-east-1.rds.amazonaws.com',
       port: 5432
     )
   end
 
   let(:instance_template) do
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
       host: '?.xyz.us-east-1.rds.amazonaws.com',
       port: 5432
     )
@@ -113,8 +113,8 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
         expect(hosts).not_to be_nil
         expect(hosts.size).to eq(2)
 
-        writer = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
-        reader = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::READER }
+        writer = hosts.find { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }
+        reader = hosts.find { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::READER }
 
         expect(writer).not_to be_nil
         expect(writer.id).to eq('writer-instance')
@@ -193,7 +193,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::AuroraTopologyUtils do
         hosts = subject.query_topology(conn, initial_host_info, instance_template)
 
         expect(hosts).not_to be_nil
-        writer = hosts.find { |h| h.role == AwsRubyDatabaseDriverWrapper::Host::HostRole::WRITER }
+        writer = hosts.find { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }
         expect(writer.id).to eq('new-writer')
       end
     end

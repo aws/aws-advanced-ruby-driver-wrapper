@@ -15,12 +15,12 @@
 #  limitations under the License.
 
 require 'rspec'
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Configuration do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Configuration do
   subject(:config) { described_class.new }
 
-  after { AwsRubyDatabaseDriverWrapper.config.reset! }
+  after { AwsAdvancedRubyDriverWrapper.config.reset! }
 
   describe '#update' do
     it 'sets multiple keys at once' do
@@ -57,12 +57,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Configuration do
       func = lambda(&:upcase)
       config.prepare_host_func = func
 
-      expect(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.prepare_host_func).to eq(func)
+      expect(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.prepare_host_func).to eq(func)
     end
 
     it 'reads from RdsUtils' do
       func = ->(host) { host }
-      AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.prepare_host_func = func
+      AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.prepare_host_func = func
 
       expect(config.prepare_host_func).to eq(func)
     end
@@ -71,7 +71,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Configuration do
       config.prepare_host_func = ->(h) { h }
       config.reset!
 
-      expect(AwsRubyDatabaseDriverWrapper::Utils::RdsUtils.prepare_host_func).to be_nil
+      expect(AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.prepare_host_func).to be_nil
     end
   end
 
@@ -103,12 +103,12 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Configuration do
   end
 end
 
-RSpec.describe AwsRubyDatabaseDriverWrapper do
+RSpec.describe AwsAdvancedRubyDriverWrapper do
   after { described_class.config.reset! }
 
   describe '.config' do
     it 'returns a Configuration instance' do
-      expect(described_class.config).to be_a(AwsRubyDatabaseDriverWrapper::Configuration)
+      expect(described_class.config).to be_a(AwsAdvancedRubyDriverWrapper::Configuration)
     end
 
     it 'returns the same instance on repeated calls' do

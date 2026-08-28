@@ -15,71 +15,71 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/utils/parser/mysql_statement_analyzer'
-require 'aws_ruby_database_driver_wrapper/utils/parser/query_type'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/mysql_statement_analyzer'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/query_type'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyzer do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyzer do
   subject { described_class }
 
   describe '.analyze query_type' do
     it 'returns SELECT for a plain SELECT' do
-      expect(subject.analyze('SELECT name, age FROM users WHERE id = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(subject.analyze('SELECT name, age FROM users WHERE id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
     end
 
     it 'returns SELECT for a backtick SELECT' do
-      expect(subject.analyze('SELECT `user_id`, `email` FROM `users` WHERE `id` = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(subject.analyze('SELECT `user_id`, `email` FROM `users` WHERE `id` = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
     end
 
     it 'returns SELECT for lowercase select' do
-      expect(subject.analyze('select `name` from `users` where `id` = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(subject.analyze('select `name` from `users` where `id` = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
     end
 
     it 'returns INSERT' do
-      expect(subject.analyze('INSERT INTO users (name, email) VALUES (?, ?)').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::INSERT)
+      expect(subject.analyze('INSERT INTO users (name, email) VALUES (?, ?)').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
     end
 
     it 'returns INSERT for backtick INSERT' do
-      expect(subject.analyze('INSERT INTO `users` (`name`, `email`) VALUES (?, ?)').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::INSERT)
+      expect(subject.analyze('INSERT INTO `users` (`name`, `email`) VALUES (?, ?)').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
     end
 
     it 'returns UPDATE' do
-      expect(subject.analyze('UPDATE users SET name = ?, email = ? WHERE id = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::UPDATE)
+      expect(subject.analyze('UPDATE users SET name = ?, email = ? WHERE id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
     end
 
     it 'returns UPDATE for backtick UPDATE' do
-      expect(subject.analyze('UPDATE `users` SET `name` = ?, `email` = ? WHERE `id` = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::UPDATE)
+      expect(subject.analyze('UPDATE `users` SET `name` = ?, `email` = ? WHERE `id` = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UPDATE)
     end
 
     it 'returns DELETE' do
-      expect(subject.analyze('DELETE FROM users WHERE id = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::DELETE)
+      expect(subject.analyze('DELETE FROM users WHERE id = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::DELETE)
     end
 
     it 'returns DELETE for backtick DELETE' do
-      expect(subject.analyze('DELETE FROM `users` WHERE `id` = ?').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::DELETE)
+      expect(subject.analyze('DELETE FROM `users` WHERE `id` = ?').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::DELETE)
     end
 
     it 'returns CREATE for CREATE TABLE' do
-      expect(subject.analyze('CREATE TABLE new_table (id INT PRIMARY KEY, name VARCHAR(100))').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::CREATE)
+      expect(subject.analyze('CREATE TABLE new_table (id INT PRIMARY KEY, name VARCHAR(100))').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::CREATE)
     end
 
     it 'returns DROP for DROP TABLE' do
-      expect(subject.analyze('DROP TABLE old_table').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::DROP)
+      expect(subject.analyze('DROP TABLE old_table').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::DROP)
     end
 
     it 'returns UNKNOWN for unrecognized SQL' do
-      expect(subject.analyze('INVALID SQL STATEMENT').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(subject.analyze('INVALID SQL STATEMENT').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
 
     it 'returns UNKNOWN for nil' do
-      expect(subject.analyze(nil).query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(subject.analyze(nil).query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
 
     it 'returns UNKNOWN for empty string' do
-      expect(subject.analyze('').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(subject.analyze('').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
 
     it 'returns UNKNOWN for whitespace only' do
-      expect(subject.analyze('   ').query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
+      expect(subject.analyze('   ').query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::UNKNOWN)
     end
   end
 
@@ -265,13 +265,13 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
   describe 'MySQL-specific syntax' do
     it 'handles LIMIT' do
       result = subject.analyze('SELECT `name` FROM `users` WHERE `active` = ? LIMIT 10')
-      expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
       expect(result.tables).to include('users')
     end
 
     it 'handles LIMIT OFFSET' do
       result = subject.analyze('SELECT `name` FROM `users` WHERE `active` = ? LIMIT 10 OFFSET 20')
-      expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
     end
 
     it 'handles GROUP BY' do
@@ -281,24 +281,24 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::Parser::MysqlStatementAnalyz
 
     it 'handles HAVING' do
       result = subject.analyze('SELECT `department`, COUNT(*) as cnt FROM `employees` GROUP BY `department` HAVING cnt > ?')
-      expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
     end
 
     it 'handles ON DUPLICATE KEY UPDATE' do
       result = subject.analyze('INSERT INTO `users` (`id`, `name`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `name` = ?')
-      expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::INSERT)
+      expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::INSERT)
       expect(result.tables).to include('users')
     end
 
     it 'handles reserved keyword as backtick column' do
       result = subject.analyze('SELECT `order`, `date` FROM `orders` WHERE `id` = ?')
-      expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
       expect(result.tables).to include('orders')
     end
 
     it 'handles mixed quoting' do
       result = subject.analyze('SELECT `name`, email FROM users WHERE `id` = ?')
-      expect(result.query_type).to eq(AwsRubyDatabaseDriverWrapper::Utils::Parser::QueryType::SELECT)
+      expect(result.query_type).to eq(AwsAdvancedRubyDriverWrapper::Utils::Parser::QueryType::SELECT)
       expect(result.tables).to include('users')
     end
   end

@@ -15,18 +15,18 @@
 #  limitations under the License.
 
 require_relative '../../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/plugins/gdb/gdb_failover_plugin'
-require 'aws_ruby_database_driver_wrapper/plugins/gdb/gdb_failover_mode'
-require 'aws_ruby_database_driver_wrapper/property_definition'
-require 'aws_ruby_database_driver_wrapper/services/service_container'
-require 'aws_ruby_database_driver_wrapper/host/host_info'
-require 'aws_ruby_database_driver_wrapper/host/host_role'
-require 'aws_ruby_database_driver_wrapper/host/host_availability'
+require 'aws_advanced_ruby_driver_wrapper/plugins/gdb/gdb_failover_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/gdb/gdb_failover_mode'
+require 'aws_advanced_ruby_driver_wrapper/property_definition'
+require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/host/host_info'
+require 'aws_advanced_ruby_driver_wrapper/host/host_role'
+require 'aws_advanced_ruby_driver_wrapper/host/host_availability'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
-  let(:host_role) { AwsRubyDatabaseDriverWrapper::Host::HostRole }
-  let(:mode) { AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverMode }
-  let(:errors) { AwsRubyDatabaseDriverWrapper::Errors }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
+  let(:host_role) { AwsAdvancedRubyDriverWrapper::Host::HostRole }
+  let(:mode) { AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverMode }
+  let(:errors) { AwsAdvancedRubyDriverWrapper::Errors }
 
   # Home region is us-east-1 throughout; us-west-2 is the out-of-home region.
   let(:home_writer) { host_info('writer-1.xyz.us-east-1.rds.amazonaws.com', host_role::WRITER) }
@@ -38,7 +38,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
   let(:global_endpoint) { host_info('gdb-name.global-xyz.global.rds.amazonaws.com', host_role::WRITER) }
 
   def host_info(host, role)
-    AwsRubyDatabaseDriverWrapper::Host::HostInfo.new(host: host, port: '5432', role: role)
+    AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: host, port: '5432', role: role)
   end
 
   let(:connection) { double('connection') }
@@ -93,7 +93,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
   let(:retry_util) { double('retry_util') }
 
   let(:service_container) do
-    AwsRubyDatabaseDriverWrapper::Services::ServiceContainer.new(
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service,
       dialect_service,
       nil,
@@ -109,7 +109,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
   let(:plugin) { described_class.new(service_container, props) }
 
   before do
-    allow(AwsRubyDatabaseDriverWrapper::Utils::RetryUtil).to receive(:new).and_return(retry_util)
+    allow(AwsAdvancedRubyDriverWrapper::Utils::RetryUtil).to receive(:new).and_return(retry_util)
   end
 
   # Runs the (private) mode initialization that normally happens on the first connect.
@@ -436,7 +436,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
   end
 
   describe '#failover' do
-    let(:result) { AwsRubyDatabaseDriverWrapper::Utils::RetryUtil::Result.new(new_connection, home_writer) }
+    let(:result) { AwsAdvancedRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, home_writer) }
 
     context 'in strict_writer mode' do
       before do
@@ -564,7 +564,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
 
     it 'is skipped when the connection was explicitly closed' do
       init
-      plugin.execute(AwsRubyDatabaseDriverWrapper::RubyMethod::CONNECTION_CLOSE.name, -> { :closed })
+      plugin.execute(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_CLOSE.name, -> { :closed })
       expect(host_service).not_to receive(:force_refresh_host_list?)
       expect(plugin.send(:failover)).to be_nil
     end
