@@ -34,9 +34,13 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   include Integration::KmsEncryptionHelper
 
-  let(:key_error) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption::Errors::KeyManagementError }
+  let(:key_error) { AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError }
   let(:table) { 'enc_key_mgmt' }
   let(:admin_conn) { native_connect }
+  # The administrative interface (create/rotate keys, enable columns) lives on KeyManagementUtility,
+  # reached through the KmsEncryptionUtility that build_encryption_utility returns. Schema validation
+  # stays on the KmsEncryptionUtility itself.
+  let(:kmu) { @utility.key_management_utility }
 
   before do
     require_kms!
@@ -62,7 +66,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
 
   it 'creates a KMS master key when permitted' do
     arn = begin
-      @utility.create_master_key('aws-advanced-ruby-driver-wrapper integration test key')
+      kmu.create_master_key('aws-advanced-ruby-driver-wrapper integration test key')
     rescue key_error => e
       skip "master key creation is not permitted in this environment: #{e.message}"
     end
@@ -73,7 +77,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'turns encryption on for a column and round-trips a value through it' do
-    @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    kmu.initialize_encryption_for_column(table, 'ssn', kms_key_id)
 
     conn = encryption_connect
     write_ssn(conn, 'Enabled', '111-11-1111')
@@ -84,7 +88,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'rotates the data key, keeping old values readable while new writes use the new key' do
-    original_key_id = @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    original_key_id = kmu.initialize_encryption_for_column(table, 'ssn', kms_key_id)
 
     # A value written before the rotation.
     before_conn = encryption_connect
@@ -92,7 +96,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     expect(read_ssn(before_conn, 'Before')).to eq('111-11-1111')
     Integration::DriverHelper.close(drv, before_conn)
 
-    new_key_id = @utility.rotate_data_key(table, 'ssn', kms_key_id)
+    new_key_id = kmu.rotate_data_key(table, 'ssn', kms_key_id)
     expect(new_key_id).not_to eq(original_key_id)
 
     # A value written after the rotation round-trips through the new key.
@@ -108,8 +112,8 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'reports the columns a stored key is used by' do
-    key_id = @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
-    expect(@utility.columns_using_key(key_id)).to include("#{table}.ssn")
+    key_id = kmu.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    expect(kmu.columns_using_key(key_id)).to include("#{table}.ssn")
   end
 
   def schedule_key_deletion(arn)

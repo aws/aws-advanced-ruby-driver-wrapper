@@ -87,17 +87,20 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
 
   it 'encrypts an upsert assignment' do
     insert(conn, 'Upsert', '111-11-1111')
+    # The update branch binds the new value directly. EXCLUDED.ssn / VALUES(ssn) are not bind
+    # parameters, so the plugin (correctly) cannot encrypt through them and fails closed; the
+    # supported upsert form assigns a bound value.
     case drv
     when Integration::TestDriver::PG
       conn.exec_params(
         "INSERT INTO #{table} (name, ssn) VALUES ($1, $2) " \
-        'ON CONFLICT (name) DO UPDATE SET ssn = EXCLUDED.ssn',
-        %w[Upsert 666-66-6666]
+        'ON CONFLICT (name) DO UPDATE SET ssn = $3',
+        %w[Upsert 000-00-0000 666-66-6666]
       )
     when Integration::TestDriver::MYSQL
       conn.prepare(
-        "INSERT INTO #{table} (name, ssn) VALUES (?, ?) ON DUPLICATE KEY UPDATE ssn = VALUES(ssn)"
-      ).execute('Upsert', '666-66-6666')
+        "INSERT INTO #{table} (name, ssn) VALUES (?, ?) ON DUPLICATE KEY UPDATE ssn = ?"
+      ).execute('Upsert', '000-00-0000', '666-66-6666')
     end
     expect(read_ssn(conn, 'Upsert')).to eq('666-66-6666')
   end
@@ -117,11 +120,14 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
       server_version = conn.exec('SHOW server_version_num').first['server_version_num'].to_i
       skip 'MERGE requires PostgreSQL 15+' if server_version < 150_000
 
+      # The INSERT clause binds name and ssn directly ($2, $3); the source only supplies the join
+      # key. Referencing s.ssn instead would not be a bind parameter, so the plugin could not encrypt
+      # it and would fail closed.
       conn.exec_params(
-        "MERGE INTO #{table} AS t USING (SELECT $1::text AS name, $2::text AS ssn) AS s " \
-        'ON t.name = s.name ' \
-        'WHEN NOT MATCHED THEN INSERT (name, ssn) VALUES (s.name, s.ssn)',
-        %w[Merge 888-88-8888]
+        "MERGE INTO #{table} AS t USING (VALUES ($1::text)) AS s(join_name) " \
+        'ON t.name = s.join_name ' \
+        'WHEN NOT MATCHED THEN INSERT (name, ssn) VALUES ($2, $3)',
+        %w[Merge Merge 888-88-8888]
       )
       expect(read_ssn(conn, 'Merge')).to eq('888-88-8888')
     end

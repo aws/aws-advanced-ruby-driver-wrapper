@@ -175,6 +175,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
       end
     end
 
+    # A prepared-statement result reads its column names from the statement's metadata rather than
+    # from Mysql2::Result#fields: mysql2 leaves the result's field pointer NULL for a prepared
+    # statement that returned no rows, so reading it there would segfault.
+    it 'reads column names from the statement when the result came from one' do
+      statement = double('Mysql2::Statement', fields: %w[ssn])
+      allow(mysql_result).to receive(:to_a).and_return([])
+
+      # mysql_result is a plain double with no :fields stub, so if the result's fields were read
+      # instead of the statement's, this would raise rather than return the statement's columns.
+      described_class.new(mysql_result, container, connection, sql, statement).to_a
+
+      expect(plugin.field_names_for('result.to_a')).to eq([%w[ssn]])
+    end
+
     # A result built by a call whose SQL the wrapper does not know, such as one that went through
     # method_missing, publishes nothing rather than the SQL of some other statement.
     it 'publishes no SQL when it was built without any' do

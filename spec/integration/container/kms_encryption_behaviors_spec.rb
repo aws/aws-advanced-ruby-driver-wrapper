@@ -89,6 +89,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
     expect(count_rows(admin_conn, 'Literal')).to eq(0)
   end
 
+  # TODO: do we have a test that ensures the encryption trigger fires in this scenario?
   it 'passes an unreadable write (values from a nested SELECT) through to the database' do
     insert(conn, 'Seed', '111-11-1111')
 
