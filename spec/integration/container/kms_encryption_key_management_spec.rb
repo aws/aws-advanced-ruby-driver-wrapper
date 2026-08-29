@@ -21,6 +21,7 @@ require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/kms_encryption_helper'
 require 'aws_advanced_ruby_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
 
 # KeyManagementUtility against real KMS: creating a master key, turning encryption on for a column,
 # validating the metadata schema, and rotating a data key. This drives the administrative side over
@@ -34,23 +35,38 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   include Integration::KmsEncryptionHelper
 
+  let(:enc) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
   let(:key_error) { AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError }
   let(:table) { 'enc_key_mgmt' }
   let(:admin_conn) { native_connect }
-  # The administrative interface (create/rotate keys, enable columns) lives on KeyManagementUtility,
-  # reached through the KmsEncryptionUtility that build_encryption_utility returns. Schema validation
-  # stays on the KmsEncryptionUtility itself.
-  let(:kmu) { @utility.key_management_utility }
 
   before do
     require_kms!
     create_metadata_tables(admin_conn)
     create_app_table(admin_conn, table, encrypted_columns: ['ssn'], plain_columns: ['name'])
-    @container, @utility = build_encryption_utility
+
+    # Assemble the administrative KeyManagementUtility from its components, the way an application
+    # would (the Ruby equivalent of the JDBC KmsEncryptionPluginGuide's manual construction). Ruby
+    # reads the metadata tables over short-lived connections, so KeyManager/MetadataManager take an
+    # IndependentConnectionProvider plus a SqlRunner instead of a raw connection.
+    @container = encryption_service_container
+    config = enc::EncryptionConfig.from_props(@container.connection_service.wrapper_props)
+    sql_runner = enc::SqlRunner.new(@container.dialect_service.driver_dialect)
+    @connection_provider = enc::IndependentConnectionProvider.new(@container)
+    data_key_cache = enc::DataKeyCache.new(max_size: config.data_key_cache_max_size,
+                                           ttl_sec: config.data_key_cache_expiration_sec,
+                                           enabled: config.data_key_cache_enabled)
+    key_manager = enc::KeyManager.new(kms_client: kms_client, connection_provider: @connection_provider,
+                                      sql_runner: sql_runner, config: config, data_key_cache: data_key_cache)
+    metadata_manager = enc::MetadataManager.new(connection_provider: @connection_provider,
+                                                sql_runner: sql_runner, config: config)
+    @utility = enc::KeyManagementUtility.new(key_manager: key_manager, metadata_manager: metadata_manager,
+                                             connection_provider: @connection_provider, sql_runner: sql_runner,
+                                             kms_client: kms_client, config: config)
+    @schema_validator = enc::SchemaValidator.new(config.metadata_schema, sql_runner)
   end
 
   after do
-    @utility&.cleanup
     container_conn = @container&.connection_service&.current_connection
     container_conn && Integration::DriverHelper.close(drv, container_conn)
     teardown_encryption(admin_conn, table: table)
@@ -60,13 +76,13 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'validates a well-formed metadata schema' do
-    result = @utility.validate_schema
+    result = @connection_provider.with_connection { |conn| @schema_validator.validate(conn) }
     expect(result.valid?).to be(true), -> { "schema validation failed: #{result.issues.join(', ')}" }
   end
 
   it 'creates a KMS master key when permitted' do
     arn = begin
-      kmu.create_master_key('aws-advanced-ruby-driver-wrapper integration test key')
+      @utility.create_master_key('aws-advanced-ruby-driver-wrapper integration test key')
     rescue key_error => e
       skip "master key creation is not permitted in this environment: #{e.message}"
     end
@@ -77,7 +93,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'turns encryption on for a column and round-trips a value through it' do
-    kmu.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
 
     conn = encryption_connect
     write_ssn(conn, 'Enabled', '111-11-1111')
@@ -88,7 +104,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'rotates the data key, keeping old values readable while new writes use the new key' do
-    original_key_id = kmu.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    original_key_id = @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
 
     # A value written before the rotation.
     before_conn = encryption_connect
@@ -96,7 +112,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     expect(read_ssn(before_conn, 'Before')).to eq('111-11-1111')
     Integration::DriverHelper.close(drv, before_conn)
 
-    new_key_id = kmu.rotate_data_key(table, 'ssn', kms_key_id)
+    new_key_id = @utility.rotate_data_key(table, 'ssn', kms_key_id)
     expect(new_key_id).not_to eq(original_key_id)
 
     # A value written after the rotation round-trips through the new key.
@@ -112,8 +128,8 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'reports the columns a stored key is used by' do
-    key_id = kmu.initialize_encryption_for_column(table, 'ssn', kms_key_id)
-    expect(kmu.columns_using_key(key_id)).to include("#{table}.ssn")
+    key_id = @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    expect(@utility.columns_using_key(key_id)).to include("#{table}.ssn")
   end
 
   def schedule_key_deletion(arn)

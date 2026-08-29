@@ -51,6 +51,16 @@ conn.exec_params('SELECT ssn FROM users WHERE name = $1', ['Jo']).each { |row| r
 client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123-45-6789')
 ```
 
+> [!IMPORTANT]
+> **On MySQL with ActiveRecord, set `prepared_statements: true` on the connection.** The `aws_mysql2` adapter (like the underlying `mysql2` adapter) defaults prepared statements **off**, and with them off ActiveRecord writes a value into the SQL text as a literal rather than binding it. The plugin cannot encrypt a literal, so a write to an encrypted column is refused (`Errors::MetadataError`, see [below](#refused-so-the-plaintext-is-not-stored)). Enable them in `database.yml` so values are bound and can be encrypted:
+> ```yaml
+> production:
+>   adapter: aws_mysql2
+>   prepared_statements: true
+>   # ...
+> ```
+> The `aws_postgresql` adapter already defaults prepared statements on, so PostgreSQL needs no change.
+
 - Bind parameters of an `INSERT`, `UPDATE`, or `REPLACE` whose columns the plugin can read from the statement, including a multi-row `VALUES` list and the assignments of an upsert (`ON CONFLICT ... DO UPDATE` on PostgreSQL, `ON DUPLICATE KEY UPDATE` on MySQL). On PostgreSQL this also covers a `MERGE`'s `WHEN MATCHED ... UPDATE` / `WHEN NOT MATCHED ... INSERT` clauses and a data-modifying common table expression, for example `WITH w AS (INSERT INTO users (ssn) VALUES ($1) RETURNING id) SELECT * FROM w`.
 - Bind parameters compared against an encrypted column in a `WHERE` clause. Note that encryption is randomized, with a fresh IV per value, so the ciphertext differs every time and an equality search against an encrypted column will not match anything — it silently returns no rows rather than matching, and nothing leaks through deterministic ciphertext. In an ActiveRecord app the same applies to finders and validations that compare an encrypted column: `where(ssn: x)`, `find_by(ssn: x)`, and `validates_uniqueness_of :ssn` never match an existing row, so a uniqueness validation silently passes even when a duplicate exists. Filter, look up, and enforce uniqueness on a column that is not encrypted instead.
 - Statements run by name after being prepared, whether prepared by the driver's own `prepare` or by a `PREPARE` sent as a statement. A `PREPARE` is also checked as it is sent, so a plaintext written into the statement it carries is caught at that point.

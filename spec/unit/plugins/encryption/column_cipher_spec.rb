@@ -131,6 +131,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
       expect(cipher.decrypt(encrypted, rotated_config)).to eq('123-45-6789')
       expect(key_manager).to have_received(:key_metadata_by_id).with(1)
     end
+
+    # A value that is not really an encrypted payload (legacy data, tampered bytes) can still be long
+    # enough to carry an embedded key id, which resolves to nothing or errors. A lenient read must
+    # return it untouched rather than surfacing the lookup failure.
+    it 'returns the value untouched when the key its payload names cannot be looked up' do
+      encrypted = cipher.encrypt('123-45-6789', config) # written under key id 1
+
+      rotated_config = config.with(key_metadata: key_metadata.with(id: 2, hmac_key: 'H' * 32))
+      allow(key_manager).to receive(:key_metadata_by_id).with(1)
+                                                        .and_raise(AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError.key_retrieval_failed('boom'))
+
+      result = nil
+      expect { result = cipher.decrypt(encrypted, rotated_config) }.not_to raise_error
+      expect(result).to be(encrypted)
+    end
   end
 
   describe '#encrypted_payload?' do

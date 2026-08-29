@@ -114,7 +114,18 @@ module AwsAdvancedRubyDriverWrapper
           key_id = EncryptionService.key_id_from_payload(bytes)
           return current if key_id.nil? || (current && current.id == key_id)
 
-          @key_metadata_by_id[key_id] ||= @key_manager.key_metadata_by_id(key_id) || current
+          @key_metadata_by_id[key_id] ||= resolve_key_metadata(key_id) || current
+        end
+
+        # Looks a key up by the id embedded in a value. The read is lenient, so this is opportunistic:
+        # a value that is not really an encrypted payload (legacy data, tampered bytes) can carry an
+        # arbitrary id, and a value written before this format carries none, so a lookup that finds
+        # nothing or fails must not surface as an error - the caller falls back to the current key and
+        # the value fails its integrity check and is returned untouched.
+        def resolve_key_metadata(key_id)
+          @key_manager.key_metadata_by_id(key_id)
+        rescue Errors::EncryptionPluginError
+          nil
         end
 
         def data_key_for(metadata)

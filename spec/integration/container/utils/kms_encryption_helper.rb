@@ -128,13 +128,16 @@ module Integration
       DriverHelper.wrapper_connect(drv, **native_params, **encryption_props)
     end
 
-    # Builds the administrative KeyManagementUtility over its own service container, the way a
-    # migration or setup script would. The container is created with no application plugins (the
-    # utility opens its own independent connections for the metadata tables), connected, and returned
-    # alongside the utility so the caller can clean both up.
+    # A connected service container with no application plugins, standing in for the "connection" an
+    # administrator already has when building the KeyManagementUtility from its components. Ruby's
+    # KeyManager/MetadataManager read the metadata tables over their own short-lived connections, so
+    # they take an IndependentConnectionProvider (built from this container) plus a SqlRunner rather
+    # than a raw driver connection. Requiring kms_encryption_utility pulls in every encryption
+    # component the caller assembles (EncryptionConfig, KeyManager, MetadataManager, SqlRunner,
+    # IndependentConnectionProvider, DataKeyCache, SchemaValidator, KeyManagementUtility).
     #
-    # @return [Array(Services::ServiceContainer, Plugins::Encryption::KmsEncryptionUtility)]
-    def build_encryption_utility
+    # @return [Services::ServiceContainer]
+    def encryption_service_container
       require 'aws_advanced_ruby_driver_wrapper/utils/connection_config_parser'
       require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
       require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
@@ -149,9 +152,7 @@ module Integration
       container.host_service.refresh_host_list
       cs = container.connection_service
       container.plugin_manager.connect(cs.initial_host_info, cs.driver_props, true)
-
-      utility = AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionUtility.new(container, cs.wrapper_props)
-      [container, utility]
+      container
     end
 
     # @return [Symbol] the driver name ConnectionConfigParser expects
@@ -165,13 +166,20 @@ module Integration
 
     # An ActiveRecord connection configuration with the kms_encryption plugin enabled.
     #
+    # The SSL option matches what {DriverHelper.native_config} applies for the raw-driver path, so
+    # the AR connection can reach an Aurora cluster with require_secure_transport / rds.force_ssl on.
+    #
+    # prepared_statements is forced on because the plugin can only encrypt a bound parameter: with it
+    # off, the mysql2 adapter inlines the value as a literal in the INSERT, which the plugin (rightly)
+    # cannot encrypt and refuses. The PostgreSQL adapter already defaults it on; MySQL defaults it off.
+    #
     # @return [Hash]
     def encryption_adapter_config
-      adapter = case drv
-                when TestDriver::PG    then 'aws_postgresql'
-                when TestDriver::MYSQL then 'aws_mysql2'
-                else raise "Unsupported driver: #{drv}"
-                end
+      adapter, ssl = case drv
+                     when TestDriver::PG    then ['aws_postgresql', { sslmode: 'require' }]
+                     when TestDriver::MYSQL then ['aws_mysql2', { ssl_mode: :required }]
+                     else raise "Unsupported driver: #{drv}"
+                     end
 
       {
         adapter: adapter,
@@ -179,8 +187,9 @@ module Integration
         port: writer.port,
         username: info.username,
         password: info.password,
-        database: info.default_dbname
-      }.merge(encryption_props)
+        database: info.default_dbname,
+        prepared_statements: true
+      }.merge(ssl).merge(encryption_props)
     end
 
     # -- Schema setup --
