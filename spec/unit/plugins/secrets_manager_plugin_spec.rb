@@ -63,7 +63,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
   describe '#initialize' do
     it 'registers the secrets cache partition' do
       build_plugin
-      default_expiration = AwsRubyDatabaseDriverWrapper::PropertyDefinition::SECRET_EXPIRATION_SEC.default_value
+      default_expiration = AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_EXPIRATION_SEC.default_value
       expect(mock_storage_service).to have_received(:register).with(
         :secrets_manager, ttl: default_expiration + described_class::CACHE_DISPOSAL_EXTRA_TIME_SEC
       )
@@ -436,7 +436,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
     end
 
     it 'serves a stale entry and refreshes in the background through the real storage layer' do
-      real_storage = AwsRubyDatabaseDriverWrapper::Utils::Storage::StorageService.new(event_publisher: nil)
+      real_storage = AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService.new(event_publisher: nil)
       allow(mock_service_container).to receive(:storage_service).and_return(real_storage)
 
       plugin = build_plugin(base_props)
