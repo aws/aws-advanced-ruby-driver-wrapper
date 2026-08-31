@@ -22,8 +22,8 @@ SimpleCov.start do
   self.formatters = [SimpleCov::Formatter::HTMLFormatter, SimpleCov::Formatter::CoberturaFormatter]
 
   # Filter out test files and vendor code from coverage analysis
-  add_filter '/spec/'
-  add_filter '/vendor/'
+  skip '/spec/'
+  skip '/vendor/'
 
   # Only enforce coverage for files with complex business logic, eg:
   # add_group "Failover", "lib/plugins/failover"
