@@ -46,7 +46,8 @@ module Integration
     # @param instance_suffix [String, nil] when set, every cached host must end with this suffix
     #   (used to assert proxied instance hosts rather than real ones)
     # @return [Boolean] true if the criteria were met within the timeout, false otherwise
-    def wait_for_topology(cluster_id:, min_instances: 1, require_instance_hosts: true, instance_suffix: nil,
+    def wait_for_topology(cluster_id: AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value,
+                          min_instances: 1, require_instance_hosts: true, instance_suffix: nil,
                           timeout_secs: 30, delay_secs: 0.5)
       Integration::RetryHelper.retry_until(timeout_secs: timeout_secs, delay_secs: delay_secs) do
         hosts = cached_hosts(cluster_id)
@@ -68,8 +69,9 @@ module Integration
     # @param cluster_id [String] the cluster id the topology is cached under
     # @param (see #wait_for_topology) for the remaining discovery criteria
     # @return [Boolean] true if the topology was discovered within the timeout, false otherwise
-    def warm_topology_cache(drv:, config:, props:, cluster_id:, min_instances: 1, require_instance_hosts: true,
-                            instance_suffix: nil, timeout_secs: 30, delay_secs: 0.5)
+    def warm_topology_cache(drv:, config:, props:, cluster_id:
+          AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value, min_instances: 1,
+                            require_instance_hosts: true, instance_suffix: nil, timeout_secs: 30, delay_secs: 0.5)
       warmup = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
       Integration::DriverHelper.close(drv, warmup)
 

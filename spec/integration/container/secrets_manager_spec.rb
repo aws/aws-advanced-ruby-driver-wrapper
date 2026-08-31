@@ -279,7 +279,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
       enable_on_num_instances(min_instances: 2)
 
       discovered = Integration::TopologyHelper.warm_topology_cache(
-        drv: drv, config: writer_cluster_config, props: sm_initial_connection_props, cluster_id: env.cluster_name
+        drv: drv, config: writer_cluster_config, props: sm_initial_connection_props
       )
       expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
 
@@ -312,8 +312,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
 
     sm_props = {
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id,
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id
     }
     sm_props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name] = region if region
 

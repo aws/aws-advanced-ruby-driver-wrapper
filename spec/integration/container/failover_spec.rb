@@ -67,7 +67,6 @@ RSpec.describe 'Failover', :integration,
   # topology monitor has completed a full discovery through the cluster endpoint.
   def wait_for_full_topology(timeout_secs: 30, delay_secs: 0.5)
     Integration::TopologyHelper.wait_for_topology(
-      cluster_id: AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value,
       min_instances: proxy_info.instances.size,
       require_instance_hosts: false,
       timeout_secs: timeout_secs,
@@ -77,9 +76,9 @@ RSpec.describe 'Failover', :integration,
 
   # Warms the topology cache (and finalizes the dialect) with a throwaway connection so initial_connection
   # can substitute a concrete instance for the cluster endpoint, then asserts the topology was discovered.
-  def warm_failover_topology(config, props, cluster_id: env.cluster_name)
+  def warm_failover_topology(config, props)
     discovered = Integration::TopologyHelper.warm_topology_cache(
-      drv: drv, config: config, props: props, cluster_id: cluster_id
+      drv: drv, config: config, props: props
     )
     expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
   end
@@ -510,7 +509,6 @@ RSpec.describe 'Failover', :integration,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => plugins,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => env.aurora_region,
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
         connect_timeout: 10
       }

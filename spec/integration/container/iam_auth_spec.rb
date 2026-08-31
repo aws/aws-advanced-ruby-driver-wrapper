@@ -232,7 +232,6 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     it 'raises IamAuthError when iam_region is missing for global endpoint' do
       props_no_region = {
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam',
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name =>
           "[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{writer.port}"
       }
@@ -324,7 +323,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       enable_on_num_instances(min_instances: 2)
 
       discovered = Integration::TopologyHelper.warm_topology_cache(
-        drv: drv, config: reader_cluster_config, props: iam_initial_connection_props, cluster_id: env.cluster_name
+        drv: drv, config: reader_cluster_config, props: iam_initial_connection_props
       )
       expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
 
