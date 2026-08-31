@@ -21,6 +21,9 @@ require_relative 'utils/test_environment_features'
 require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/connection_utils'
+require_relative 'utils/database_engine_deployment'
+require_relative 'utils/rds_test_utility'
+require_relative 'utils/topology_helper'
 require 'aws_advanced_ruby_driver_wrapper'
 
 RSpec.describe 'AwsIamAuthentication', :integration,
@@ -284,6 +287,60 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       expect(values).to all(eq(1))
     ensure
       conns&.each { |c| Integration::DriverHelper.close(drv, c) if c }
+    end
+  end
+
+  describe 'with initial connection strategy',
+           deployments: [Integration::DatabaseEngineDeployment::AURORA] do
+    let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+    let(:reader_cluster_config) do
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: info.cluster_read_only_endpoint,
+        port: info.cluster_read_only_endpoint_port,
+        user: env.iam_user_name,
+        password: 'anything',
+        dbname: info.default_dbname
+      )
+      case drv
+      when Integration::TestDriver::PG    then config.merge(sslmode: 'require')
+      when Integration::TestDriver::MYSQL then config.merge(ssl_mode: :required)
+      else config
+      end
+    end
+
+    let(:iam_initial_connection_props) do
+      base_iam_props.merge(
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,iam'
+      )
+    end
+
+    def connected_host(conn)
+      conn.instance_variable_get(:@service_container).connection_service.current_host_info.host
+    end
+
+    it 'substitutes a reader instance endpoint and authenticates with IAM against it' do
+      enable_on_num_instances(min_instances: 2)
+
+      discovered = Integration::TopologyHelper.warm_topology_cache(
+        drv: drv, config: reader_cluster_config, props: iam_initial_connection_props, cluster_id: env.cluster_name
+      )
+      expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **reader_cluster_config, **iam_initial_connection_props)
+
+      # initial_connection substituted the reader cluster endpoint for a concrete reader instance, and
+      # the IAM authentication succeeded for that substituted host.
+      host = connected_host(conn)
+      expect(host).not_to eq(info.cluster_read_only_endpoint)
+      expect(rds_utils.rds_instance?(host)).to be true
+      expect(Integration::RdsTestUtility.query_host_role(conn, env.engine)).to eq(:reader)
+
+      result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
+      expect(result.first['val'].to_i).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
     end
   end
 end
