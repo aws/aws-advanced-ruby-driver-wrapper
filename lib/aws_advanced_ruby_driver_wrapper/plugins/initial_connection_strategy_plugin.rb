@@ -425,7 +425,7 @@ module AwsAdvancedRubyDriverWrapper
                 "#{PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.name}: 'reader' is invalid for writer or global cluster endpoints"
         end
 
-        # A custom endpoint can only be of type 'reader' or 'any', so it never resolves to a writer.
+        # A custom endpoint can only be of type 'reader' or 'any', so writer verification is not allowed.
         return unless role == Host::HostRole::WRITER &&
                       [Utils::RdsUrlType::RDS_READER_CLUSTER, Utils::RdsUrlType::RDS_CUSTOM_CLUSTER].include?(url_type)
 
