@@ -41,8 +41,8 @@ module AwsAdvancedRubyDriverWrapper
       SQL
 
       DIALECT_UPDATE_CANDIDATES = [
-        AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL,
         AwsAdvancedRubyDriverWrapper::DialectCodes::GLOBAL_AURORA_MYSQL,
+        AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL,
         AwsAdvancedRubyDriverWrapper::DialectCodes::MULTI_AZ_MYSQL_CLUSTER
       ].freeze
 
