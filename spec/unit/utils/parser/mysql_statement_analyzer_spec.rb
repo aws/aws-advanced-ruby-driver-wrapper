@@ -264,6 +264,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       result = subject.analyze('SELECT * FROM users WHERE ? = ssn')
       expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
     end
+
+    # A trailing-clause keyword inside a string literal must not end the WHERE clause early, or a
+    # predicate after the literal is dropped and its parameter miscounted.
+    it 'does not end the WHERE clause at a LIMIT inside a string literal' do
+      result = subject.analyze("SELECT * FROM users WHERE note = 'end LIMIT 1' AND ssn = ?")
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+    end
+
+    it 'does not end the WHERE clause at an ORDER BY inside a string literal' do
+      result = subject.analyze("SELECT * FROM users WHERE note = 'a ORDER BY b' AND ssn = ?")
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+    end
   end
 
   describe '.analyze for_update' do
@@ -374,6 +386,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
 
       expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] })
         .to eq([['name', 1], ['ssn', 2], ['ssn', 3]])
+    end
+
+    # A WHERE inside a string value assigned in the SET clause must not be read as the start of the
+    # WHERE clause, or the assignments after it are dropped.
+    it 'does not end the SET clause at a WHERE inside a string literal' do
+      result = subject.analyze("UPDATE users SET note = 'say WHERE now', ssn = ? WHERE id = ?")
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['id', 2]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    # A semicolon inside a string value is not the statement terminator, so the SET clause runs past it.
+    it 'does not end the SET clause at a semicolon inside a string literal' do
+      result = subject.analyze("UPDATE users SET note = 'a;b', ssn = ? WHERE id = ?")
+
+      expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['id', 2]])
+      expect(result.write_columns_complete).to be(true)
     end
 
     it 'reports an INSERT with no column list as not enumerable' do

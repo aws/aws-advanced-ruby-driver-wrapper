@@ -62,12 +62,19 @@ module AwsAdvancedRubyDriverWrapper
         LEADING_IDENTIFIER = /\A\s*#{IDENTIFIER_CAP}/
 
         INSERT_COLUMNS = /#{INSERT_START}#{IDENTIFIER_NC}\s*\(([^)]+)\)/i
+        # The body of a SET clause, ended at the WHERE that follows it, at the statement terminator, or
+        # at the end of the text. Matched against a copy with every quoted literal blanked (see
+        # +mask_quoted_literals+), so a +WHERE+ or +;+ that is only part of a string value does not end
+        # the clause early; the offsets it reports still index the original text.
         SET_CLAUSE     = /\bSET\b([^;]+?)(?:\bWHERE\b|\z)/im
         VALUES_CLAUSE  = /\A\s*VALUES?\s*/i
         ON_DUPLICATE   = /\AON\s+DUPLICATE\s+KEY\s+UPDATE\b/i
         ASSIGNMENT     = /\A#{IDENTIFIER_CAP}\s*=\s*(.+)\z/m
         NULL_VALUE     = /\ANULL\z/i
         QUOTES         = ["'", '"', '`'].freeze
+        # The body of a WHERE clause, ended at the first trailing-clause keyword or at the end of the
+        # text. Like SET_CLAUSE, matched against a quote-blanked copy so a keyword that is only part of
+        # a string value - +WHERE note = 'a ORDER BY b'+ - does not end the clause early.
         WHERE_CLAUSE   = /
           \bWHERE\b([^;]+?)
           (?:\bGROUP\s+BY\b|\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b|
@@ -384,10 +391,12 @@ module AwsAdvancedRubyDriverWrapper
         # @param first_index [Integer] the number the statement's first bind parameter has
         # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] as extract_insert_columns
         def extract_set_columns(sql, table_name, first_index = 1)
-          match = SET_CLAUSE.match(sql)
+          match = SET_CLAUSE.match(mask_quoted_literals(sql))
           return [[], [], false] unless match
 
-          bound, unbound, complete, = extract_assignments(match[1], table_name, first_index)
+          # The offsets come from the masked copy; the clause read from them is the original text.
+          clause = sql[match.begin(1)...match.end(1)]
+          bound, unbound, complete, = extract_assignments(clause, table_name, first_index)
           [bound, unbound, complete]
         end
 
@@ -453,10 +462,11 @@ module AwsAdvancedRubyDriverWrapper
         #
         # @param first_index [Integer] the number the statement's first bind parameter has
         def extract_where_columns(sql, first_index = 1)
-          match = WHERE_CLAUSE.match(sql)
+          match = WHERE_CLAUSE.match(mask_quoted_literals(sql))
           return [].freeze unless match
 
-          where_body = match[1]
+          # The offsets come from the masked copy; the clause read from them is the original text.
+          where_body = sql[match.begin(1)...match.end(1)]
           return [].freeze unless where_body.include?('?')
 
           base = first_index + placeholder_count(sql[0...match.begin(1)])
@@ -584,6 +594,16 @@ module AwsAdvancedRubyDriverWrapper
           count = 0
           each_unquoted_char(text) { |char, _index| count += 1 if char == '?' }
           count
+        end
+
+        # The text with the contents of every quoted literal, and the quote marks themselves, replaced
+        # by spaces. Length and every offset are left unchanged, so a clause boundary found here with a
+        # pattern slices the original text exactly, while a keyword or terminator that was only part of
+        # a string value is no longer there to be found.
+        def mask_quoted_literals(text)
+          masked = ' ' * text.length
+          each_unquoted_char(text) { |char, index| masked[index] = char }
+          masked
         end
 
         # Walks the text once, yielding every character that is not inside a quoted literal along

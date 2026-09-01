@@ -121,6 +121,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::EncryptionAnnotation
       expect(subject.parse_annotations('INSERT INTO t (ssn) VALUES (/*@encrypt:ssn*/ ?)')).to eq({ 1 => 'ssn' })
     end
 
+    # A question mark inside a string literal is not a bind placeholder, so it must not shift the
+    # count of the placeholder an annotation points at.
+    it 'does not count a question mark inside a string literal' do
+      sql = "INSERT INTO users (note, ssn) VALUES ('a?b', /*@encrypt:users.ssn*/ ?)"
+      expect(subject.parse_annotations(sql)).to eq({ 1 => 'users.ssn' })
+    end
+
+    it 'does not count a question mark inside a double-quoted literal' do
+      sql = 'UPDATE users SET note = "why? because", ssn = /*@encrypt:users.ssn*/ ? WHERE id = ?'
+      expect(subject.parse_annotations(sql)).to eq({ 1 => 'users.ssn' })
+    end
+
     it 'returns empty hash for nil' do
       expect(subject.parse_annotations(nil)).to eq({})
     end
