@@ -204,13 +204,6 @@ module AwsAdvancedRubyDriverWrapper
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
-      # The administrative interface, for creating master keys and configuring columns.
-      #
-      # @return [Encryption::KeyManagementUtility]
-      def key_management_utility
-        @encryption_utility.key_management_utility
-      end
-
       # The call's block is taken from the call context rather than from a block parameter, since
       # that is where the pipeline reads the block it passes on.
       def execute(method_name, pipeline_callable, *args, **_kwargs)

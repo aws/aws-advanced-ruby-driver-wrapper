@@ -17,7 +17,6 @@
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
-require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_management_utility'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_manager'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/metadata_manager'
@@ -31,7 +30,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
   let(:kms_client) { instance_double(Aws::KMS::Client) }
   let(:key_manager) { instance_double(encryption::KeyManager) }
   let(:metadata_manager) { instance_double(encryption::MetadataManager) }
-  let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
   let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true) }
   let(:connection) { double('Connection') }
   let(:config) { build_encryption_config }
@@ -41,13 +39,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
                                                  hmac_key: 'h' * 32)
   end
   subject(:utility) do
-    described_class.new(key_manager: key_manager, metadata_manager: metadata_manager,
-                        connection_provider: connection_provider, sql_runner: sql_runner, kms_client: kms_client,
-                        config: config)
+    described_class.new(connection: connection, kms_client: kms_client, config: config, driver: :postgresql)
   end
 
   before do
-    allow(connection_provider).to receive(:with_connection).and_yield(connection)
+    # KeyManagementUtility assembles these from the connection; return the doubles so the tests can
+    # drive its orchestration logic without a real database.
+    allow(encryption::SqlRunner).to receive(:new).and_return(sql_runner)
+    allow(encryption::DataKeyCache).to receive(:new).and_return(instance_double(encryption::DataKeyCache))
+    allow(encryption::KeyManager).to receive(:new).and_return(key_manager)
+    allow(encryption::MetadataManager).to receive(:new).and_return(metadata_manager)
     allow(metadata_manager).to receive(:refresh)
     allow(key_manager).to receive(:generate_data_key).and_return(generated_key)
     allow(key_manager).to receive(:store_key_metadata) { |metadata| metadata.with(id: 7) }
@@ -115,9 +116,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
     it 'records the new key in the audit trail' do
       audit_logger = instance_double(encryption::AuditLogger)
       allow(audit_logger).to receive(:log_key_creation)
-      utility = described_class.new(key_manager: key_manager, metadata_manager: metadata_manager,
-                                    connection_provider: connection_provider, sql_runner: sql_runner,
-                                    kms_client: kms_client, config: config, audit_logger: audit_logger)
+      utility = described_class.new(connection: connection, kms_client: kms_client, config: config,
+                                    driver: :postgresql, audit_logger: audit_logger)
 
       utility.create_master_key('column kms_encryption')
 
@@ -176,9 +176,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
     end
 
     it 'does not reload a cache that is turned off' do
-      utility = described_class.new(key_manager: key_manager, metadata_manager: metadata_manager,
-                                    connection_provider: connection_provider, sql_runner: sql_runner,
-                                    kms_client: kms_client, config: config.with(metadata_cache_enabled: false))
+      utility = described_class.new(connection: connection, kms_client: kms_client, driver: :postgresql,
+                                    config: config.with(metadata_cache_enabled: false))
       utility.initialize_encryption_for_column('users', 'ssn', master_key_arn)
 
       expect(metadata_manager).not_to have_received(:refresh)
@@ -402,6 +401,36 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
 
     it 'needs a master key' do
       expect { utility.validate_master_key(nil) }.to raise_error(ArgumentError, /master_key_arn is required/)
+    end
+  end
+
+  # The constructor assembles the utility from a plain connection, with no service container,
+  # choosing the driver dialect from the connection (or an explicit :driver).
+  describe '#initialize' do
+    it 'builds a utility from a connection with an explicit driver and no service container' do
+      utility = described_class.new(connection: connection, kms_client: kms_client, config: config, driver: :postgresql)
+      expect(utility).to be_a(described_class)
+    end
+
+    it 'infers the dialect from the connection class' do
+      stub_const('PG::Connection', Class.new)
+      utility = described_class.new(connection: PG::Connection.new, kms_client: kms_client, config: config)
+      expect(utility).to be_a(described_class)
+    end
+
+    it 'raises when the driver cannot be inferred from the connection' do
+      expect { described_class.new(connection: connection, kms_client: kms_client, config: config) }
+        .to raise_error(ArgumentError, /driver: :postgresql or :mysql2/)
+    end
+
+    it 'raises on an unknown explicit driver' do
+      expect { described_class.new(connection: connection, kms_client: kms_client, config: config, driver: :oracle) }
+        .to raise_error(ArgumentError, /Unknown driver/)
+    end
+
+    it 'requires a connection (never a service container)' do
+      expect { described_class.new(connection: nil, kms_client: kms_client, config: config) }
+        .to raise_error(ArgumentError, /connection is required/)
     end
   end
 end

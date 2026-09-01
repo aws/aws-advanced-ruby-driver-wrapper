@@ -40,35 +40,25 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   let(:table) { 'enc_key_mgmt' }
   let(:admin_conn) { native_connect }
 
+  let(:config) do
+    enc::EncryptionConfig.from_props(
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_KMS_REGION.name => kms_region,
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.name => metadata_schema
+    )
+  end
+
   before do
     require_kms!
     create_metadata_tables(admin_conn)
     create_app_table(admin_conn, table, encrypted_columns: ['ssn'], plain_columns: ['name'])
 
-    # Assemble the administrative KeyManagementUtility from its components, the way an application
-    # would (the Ruby equivalent of the JDBC KmsEncryptionPluginGuide's manual construction). Ruby
-    # reads the metadata tables over short-lived connections, so KeyManager/MetadataManager take an
-    # IndependentConnectionProvider plus a SqlRunner instead of a raw connection.
-    @container = encryption_service_container
-    config = enc::EncryptionConfig.from_props(@container.connection_service.wrapper_props)
-    sql_runner = enc::SqlRunner.new(@container.dialect_service.driver_dialect)
-    @connection_provider = enc::IndependentConnectionProvider.new(@container)
-    data_key_cache = enc::DataKeyCache.new(max_size: config.data_key_cache_max_size,
-                                           ttl_sec: config.data_key_cache_expiration_sec,
-                                           enabled: config.data_key_cache_enabled)
-    key_manager = enc::KeyManager.new(kms_client: kms_client, connection_provider: @connection_provider,
-                                      sql_runner: sql_runner, config: config, data_key_cache: data_key_cache)
-    metadata_manager = enc::MetadataManager.new(connection_provider: @connection_provider,
-                                                sql_runner: sql_runner, config: config)
-    @utility = enc::KeyManagementUtility.new(key_manager: key_manager, metadata_manager: metadata_manager,
-                                             connection_provider: @connection_provider, sql_runner: sql_runner,
-                                             kms_client: kms_client, config: config)
-    @schema_validator = enc::SchemaValidator.new(config.metadata_schema, sql_runner)
+    # Build the administrative utility from a plain connection, with no service container - the
+    # container-free entry point (the Ruby equivalent of the JDBC KmsEncryptionPluginGuide). Every
+    # operation runs on admin_conn, which the utility never closes.
+    @utility = enc::KeyManagementUtility.new(connection: admin_conn, kms_client: kms_client, config: config)
   end
 
   after do
-    container_conn = @container&.connection_service&.current_connection
-    container_conn && Integration::DriverHelper.close(drv, container_conn)
     teardown_encryption(admin_conn, table: table)
     admin_conn && Integration::DriverHelper.close(drv, admin_conn)
   rescue StandardError
@@ -76,7 +66,8 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   end
 
   it 'validates a well-formed metadata schema' do
-    result = @connection_provider.with_connection { |conn| @schema_validator.validate(conn) }
+    validator = enc::SchemaValidator.new(config.metadata_schema, enc::SqlRunner.new(schema_validator_dialect))
+    result = validator.validate(admin_conn)
     expect(result.valid?).to be(true), -> { "schema validation failed: #{result.issues.join(', ')}" }
   end
 
@@ -130,6 +121,43 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   it 'reports the columns a stored key is used by' do
     key_id = @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
     expect(@utility.columns_using_key(key_id)).to include("#{table}.ssn")
+  end
+
+  # Turning encryption off removes only the metadata row; the data key is deliberately left in
+  # key_storage so previously written values can still be decrypted (e.g. after re-enabling).
+  it 'removes a column configuration while keeping its key in key_storage' do
+    @utility.initialize_encryption_for_column(table, 'ssn', kms_key_id)
+    expect(metadata_count('ssn')).to eq(1)
+    keys_before = key_storage_count
+
+    expect(@utility.remove_encryption_for_column(table, 'ssn')).to be(true)
+
+    expect(metadata_count('ssn')).to eq(0)         # no longer configured for encryption
+    expect(key_storage_count).to eq(keys_before)   # the key itself is retained
+  end
+
+  def metadata_count(column)
+    scalar_count("SELECT COUNT(*) FROM #{schema_ref('encryption_metadata')} " \
+                 "WHERE table_name = '#{table}' AND column_name = '#{column}'")
+  end
+
+  def key_storage_count
+    scalar_count("SELECT COUNT(*) FROM #{schema_ref('key_storage')}")
+  end
+
+  def scalar_count(sql)
+    case drv
+    when Integration::TestDriver::PG    then admin_conn.exec(sql).getvalue(0, 0).to_i
+    when Integration::TestDriver::MYSQL then admin_conn.query(sql).first.values.first.to_i
+    end
+  end
+
+  # A driver dialect instance for building a standalone SqlRunner/SchemaValidator (no container).
+  def schema_validator_dialect
+    case drv
+    when Integration::TestDriver::PG    then AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new
+    when Integration::TestDriver::MYSQL then AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new
+    end
   end
 
   def schedule_key_deletion(arn)

@@ -113,6 +113,12 @@ RSpec.describe 'KmsEncryption type coverage', :integration, :kms_encryption,
     expect(result.b).to eq(value)
   end
 
+  # A NULL bind is not a value to encrypt: the plugin leaves it alone on write and hands back nil on
+  # read, so a nullable encrypted column behaves normally.
+  it 'round-trips a NULL as nil' do
+    expect(roundtrip('null_case', nil)).to be_nil
+  end
+
   # Inserts a typed value into the encrypted column under a unique label and reads it back decrypted.
   def roundtrip(label, value)
     conn = encryption_connect

@@ -14,12 +14,19 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative '../../driver_dialects/mysql_driver_dialect'
+require_relative '../../driver_dialects/pg_driver_dialect'
 require_relative '../../logging'
+require_relative 'connection_source'
+require_relative 'data_key_cache'
 require_relative 'encryption_algorithm'
 require_relative 'encryption_service'
 require_relative 'errors'
+require_relative 'key_manager'
 require_relative 'key_metadata'
+require_relative 'metadata_manager'
 require_relative 'sanitizer'
+require_relative 'sql_runner'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -28,11 +35,18 @@ module AwsAdvancedRubyDriverWrapper
       # column, rotates data keys, and reports which columns a key is used by.
       #
       # None of this runs during normal query execution. It is meant to be called once, from a
-      # migration or a setup script, by whoever administers the kms_encryption configuration:
+      # migration or a setup script, by whoever administers the kms_encryption configuration. Build
+      # it from a plain database connection you already have:
       #
-      #   utility = plugin.key_management_utility
+      #   kms     = Aws::KMS::Client.new(region: 'us-east-1')
+      #   config  = EncryptionConfig.from_props(encryption_kms_region: 'us-east-1',
+      #                                         encryption_metadata_schema: 'encrypt')
+      #   utility = KeyManagementUtility.new(connection: conn, kms_client: kms, config: config)
       #   arn = utility.create_master_key('application column kms_encryption')
       #   utility.initialize_encryption_for_column('users', 'ssn', arn)
+      #
+      # Every operation uses the connection you pass, and that connection is never closed here - its
+      # lifecycle stays yours.
       #
       # Rotating a data key only changes the key that new writes use. Values already written with
       # the previous key stay readable, because each stored value records the id of the key it was
@@ -41,23 +55,39 @@ module AwsAdvancedRubyDriverWrapper
       # until it is done, retiring the old key from +key_storage+ would make them unreadable.
       class KeyManagementUtility
         include Logging
+        include ConnectionSource
 
         KEY_SPEC = 'AES_256'
         ALIAS_PREFIX = 'alias/ruby-kms_encryption-'
 
-        # @param key_manager [KeyManager]
-        # @param metadata_manager [MetadataManager]
-        # @param connection_provider [IndependentConnectionProvider]
-        # @param sql_runner [SqlRunner]
+        # Builds a utility that runs every operation on the connection you supply, assembling the
+        # KeyManager, MetadataManager, and SqlRunner it needs internally. This is purely a user-facing
+        # administrative tool, so it takes a plain connection and never closes that connection; its
+        # lifecycle stays yours.
+        #
+        # @param connection [Object] a pg or mysql2 connection, used for every operation
         # @param kms_client [Aws::KMS::Client]
         # @param config [EncryptionConfig]
+        # @param driver [Symbol, nil] +:postgresql+ or +:mysql2+; inferred from +connection+ when nil
         # @param audit_logger [AuditLogger, nil]
-        def initialize(key_manager:, metadata_manager:, connection_provider:, sql_runner:, kms_client:, config:,
-                       audit_logger: nil)
-          @key_manager = key_manager
-          @metadata_manager = metadata_manager
-          @connection_provider = connection_provider
-          @sql = sql_runner
+        # @raise [ArgumentError] if a required argument is missing or the driver cannot be determined
+        def initialize(connection:, kms_client:, config:, driver: nil, audit_logger: nil)
+          raise ArgumentError, 'connection is required' if connection.nil?
+          raise ArgumentError, 'kms_client is required' if kms_client.nil?
+          raise ArgumentError, 'config is required' if config.nil?
+
+          dialect = driver.nil? ? dialect_for_connection(connection) : dialect_for_driver(driver)
+          @sql = SqlRunner.new(dialect)
+          data_key_cache = DataKeyCache.new(
+            max_size: config.data_key_cache_max_size,
+            ttl_sec: config.data_key_cache_expiration_sec,
+            enabled: config.data_key_cache_enabled
+          )
+          @key_manager = KeyManager.new(kms_client: kms_client, connection: connection, sql_runner: @sql,
+                                        config: config, data_key_cache: data_key_cache, audit_logger: audit_logger)
+          @metadata_manager = MetadataManager.new(connection: connection, sql_runner: @sql,
+                                                  config: config, audit_logger: audit_logger)
+          use_connection_source(connection: connection, service_container: nil)
           @kms_client = kms_client
           @config = config
           @audit_logger = audit_logger
@@ -211,7 +241,7 @@ module AwsAdvancedRubyDriverWrapper
 
           logger.info("Removing the kms_encryption configuration for #{table_name}.#{column_name}")
 
-          affected = @connection_provider.with_connection(operation: 'DELETE_ENCRYPTION_METADATA') do |connection|
+          affected = with_connection(operation: 'DELETE_ENCRYPTION_METADATA') do |connection|
             @sql.update(connection, delete_encryption_metadata_sql, [table_name, column_name])
           end
 
@@ -242,7 +272,7 @@ module AwsAdvancedRubyDriverWrapper
         def columns_using_key(key_id)
           raise ArgumentError, 'key_id is required' if key_id.nil?
 
-          rows = @connection_provider.with_connection(operation: 'SELECT_COLUMNS_USING_KEY') do |connection|
+          rows = with_connection(operation: 'SELECT_COLUMNS_USING_KEY') do |connection|
             @sql.query(connection, select_columns_with_key_sql, [key_id])
           end
 
@@ -264,6 +294,25 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         private
+
+        # Picks a driver dialect from a connection's class without loading the driver gems.
+        def dialect_for_connection(connection)
+          name = connection.class.name.to_s
+          return DriverDialects::PgDriverDialect.new if name.start_with?('PG::')
+          return DriverDialects::MysqlDriverDialect.new if name.start_with?('Mysql2::')
+
+          raise ArgumentError,
+                "Cannot infer the driver dialect from #{name.empty? ? connection.class : name}; " \
+                'pass driver: :postgresql or :mysql2'
+        end
+
+        def dialect_for_driver(driver)
+          case driver.to_sym
+          when :postgresql, :pg then DriverDialects::PgDriverDialect.new
+          when :mysql2, :mysql then DriverDialects::MysqlDriverDialect.new
+          else raise ArgumentError, "Unknown driver #{driver.inspect}; use :postgresql or :mysql2"
+          end
+        end
 
         # Generates a data key through KMS and writes it to +key_storage+. The plaintext key is
         # wiped again immediately: nothing here needs to encrypt with it.
@@ -303,7 +352,7 @@ module AwsAdvancedRubyDriverWrapper
 
         def store_encryption_metadata(table_name, column_name, algorithm, key_id)
           now = Time.now
-          @connection_provider.with_connection(operation: 'STORE_ENCRYPTION_METADATA') do |connection|
+          with_connection(operation: 'STORE_ENCRYPTION_METADATA') do |connection|
             @sql.update(connection, insert_encryption_metadata_sql,
                         [table_name, column_name, algorithm, key_id, now, now])
           end
@@ -313,7 +362,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def update_encryption_metadata_key(table_name, column_name, key_id)
-          affected = @connection_provider.with_connection(operation: 'UPDATE_ENCRYPTION_METADATA') do |connection|
+          affected = with_connection(operation: 'UPDATE_ENCRYPTION_METADATA') do |connection|
             @sql.update(connection, update_encryption_metadata_key_sql, [key_id, Time.now, table_name, column_name])
           end
 

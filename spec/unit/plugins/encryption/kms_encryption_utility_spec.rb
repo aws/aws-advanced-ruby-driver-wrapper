@@ -88,7 +88,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
       expect(utility.metadata_manager).to be_nil
       expect(utility.key_manager).to be_nil
       expect(utility.sql_runner).to be_nil
-      expect(utility.connection_provider).to be_nil
     end
 
     describe 'the metadata cache warning' do
@@ -132,10 +131,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
 
       expect(utility).to be_initialized
       expect(utility.sql_runner).to be_a(encryption::SqlRunner)
-      expect(utility.connection_provider).to be_a(encryption::IndependentConnectionProvider)
       expect(utility.key_manager).to be_a(encryption::KeyManager)
       expect(utility.metadata_manager).to be_a(encryption::MetadataManager)
-      expect(utility.key_management_utility).to be_a(encryption::KeyManagementUtility)
     end
 
     # The SQL the plugin runs itself has to be written for the driver the application connects with.
@@ -187,15 +184,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
       expect { utility.ensure_initialized }
         .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::MetadataError, /relation does not exist/)
       expect(utility).not_to be_initialized
-    end
-  end
-
-  describe '#key_management_utility' do
-    # The administrative interface is normally the first thing a setup script reaches for, before
-    # any statement has been intercepted.
-    it 'builds the components if they are not built yet' do
-      expect(utility.key_management_utility).to be_a(encryption::KeyManagementUtility)
-      expect(utility).to be_initialized
     end
   end
 
@@ -292,20 +280,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
 
       expect(utility.using_independent_connections?).to be(true)
       expect(utility.connection_mode_status)
-        .to eq('The kms_encryption plugin is reading its metadata over independent connections')
+        .to eq('The kms_encryption plugin is reading its metadata over its own short-lived connections')
     end
   end
 
   describe '#log_current_status' do
-    it 'reports the connection mode and the metadata connection counters' do
+    it 'reports the connection mode' do
       utility.ensure_initialized
-      allow(utility.connection_provider).to receive(:log_health_status)
       expect(utility.send(:logger)).to receive(:info).with('KmsEncryptionPlugin status report')
-      expect(utility.send(:logger)).to receive(:info).with(/reading its metadata over independent connections/)
+      expect(utility.send(:logger)).to receive(:info).with(/reading its metadata over its own short-lived connections/)
 
       utility.log_current_status
-
-      expect(utility.connection_provider).to have_received(:log_health_status)
     end
 
     it 'reports the connection mode before any connection was made' do
@@ -329,15 +314,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
       expect(utility).not_to be_initialized
       expect(metadata_manager).to have_received(:shutdown)
       expect(utility.data_key_cache).to have_received(:shutdown)
-    end
-
-    it 'reports the metadata connection counters one last time' do
-      utility.ensure_initialized
-      allow(utility.connection_provider).to receive(:log_health_status)
-
-      utility.cleanup
-
-      expect(utility.connection_provider).to have_received(:log_health_status)
     end
 
     # A real KMS client has nothing to close, but a stubbed or wrapped one might.

@@ -101,6 +101,78 @@ RSpec.describe 'KmsEncryption round-trip', :integration, :kms_encryption,
       expect(at_rest).not_to be_nil
       expect(at_rest.to_s).not_to include(ssn)
     end
+
+    # The /*@encrypt:table.column*/ annotation has to survive the ActiveRecord adapter: the comment
+    # stays in the SQL AR sends to the driver, and the plugin honors it to encrypt the bound value.
+    # This uses a raw bound statement through the connection because that is how an application would
+    # reach for an annotation - a plain create! is already parsed and encrypted without one.
+    it 'honors an /*@encrypt:table.column*/ annotation on a bound value' do
+      model # establishes the ActiveRecord connection
+      annotated_ar_insert('Annotated', ssn)
+
+      expect(model.find_by(name: 'Annotated').ssn.to_s).to eq(ssn)
+      expect(stored_value(admin_conn, table, 'ssn', 'name', 'Annotated').to_s).not_to include(ssn)
+    end
+
+    # Encryption is randomized, so an equality finder on an encrypted column never matches - the
+    # documented ActiveRecord footgun (find_by / where / validates_uniqueness_of silently find
+    # nothing). Filter on a non-encrypted column instead.
+    it 'never matches an equality finder on an encrypted column' do
+      model.create!(name: person, ssn: ssn)
+
+      expect(model.find_by(ssn: ssn)).to be_nil
+      expect(model.where(ssn: ssn).count).to eq(0)
+    end
+  end
+
+  # A real table usually encrypts more than one column. This checks that a single INSERT binding two
+  # encrypted columns maps each parameter to the right column and that both read back decrypted.
+  context 'with multiple encrypted columns on one row' do
+    let(:multi_table) { 'enc_multi' }
+
+    before do
+      provision(admin_conn, table: multi_table, encrypted_columns: %w[ssn email], plain_columns: ['name'])
+    end
+
+    after do
+      teardown_encryption(admin_conn, table: multi_table)
+    rescue StandardError
+      nil
+    end
+
+    it 'encrypts and reads back every encrypted column in one row' do
+      email = 'alice@test.com'
+      conn = encryption_connect
+      insert_multi(conn, person, ssn, email)
+
+      row = select_multi(conn, person)
+      expect(row['ssn']).to eq(ssn)
+      expect(row['email']).to eq(email)
+      expect(stored_value(admin_conn, multi_table, 'ssn', 'name', person).to_s).not_to include(ssn)
+      expect(stored_value(admin_conn, multi_table, 'email', 'name', person).to_s).not_to include(email)
+    ensure
+      conn && Integration::DriverHelper.close(drv, conn)
+    end
+
+    def insert_multi(conn, name, ssn_value, email_value)
+      case drv
+      when Integration::TestDriver::PG
+        conn.exec_params("INSERT INTO #{multi_table} (name, ssn, email) VALUES ($1, $2, $3)",
+                         [name, ssn_value, email_value])
+      when Integration::TestDriver::MYSQL
+        conn.prepare("INSERT INTO #{multi_table} (name, ssn, email) VALUES (?, ?, ?)")
+            .execute(name, ssn_value, email_value)
+      end
+    end
+
+    def select_multi(conn, name)
+      case drv
+      when Integration::TestDriver::PG
+        conn.exec_params("SELECT ssn, email FROM #{multi_table} WHERE name = $1", [name]).first
+      when Integration::TestDriver::MYSQL
+        conn.prepare("SELECT ssn, email FROM #{multi_table} WHERE name = ?").execute(name).first
+      end
+    end
   end
 
   # -- write/read helpers, per driver --
@@ -121,5 +193,19 @@ RSpec.describe 'KmsEncryption round-trip', :integration, :kms_encryption,
     when Integration::TestDriver::MYSQL
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
+  end
+
+  # Inserts through ActiveRecord's connection with the ssn value bound and marked for encryption by
+  # an annotation, using each adapter's native bind placeholder. With prepared_statements on, AR
+  # sends the annotated SQL and the bound values to the driver rather than inlining them.
+  def annotated_ar_insert(name, ssn_value)
+    name_ph, ssn_ph = drv == Integration::TestDriver::PG ? %w[$1 $2] : %w[? ?]
+    sql = "INSERT INTO #{table} (name, ssn) VALUES (#{name_ph}, /*@encrypt:#{table}.ssn*/ #{ssn_ph})"
+    ActiveRecord::Base.connection.exec_insert(sql, 'annotated insert',
+                                              [query_attribute('name', name), query_attribute('ssn', ssn_value)])
+  end
+
+  def query_attribute(name, value)
+    ActiveRecord::Relation::QueryAttribute.new(name, value, ActiveRecord::Type::String.new)
   end
 end

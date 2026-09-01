@@ -128,15 +128,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
   end
 
-  describe '#key_management_utility' do
-    it 'is the utility\'s administrative interface' do
-      key_management_utility = instance_double(encryption::KeyManagementUtility)
-      allow(encryption_utility).to receive(:key_management_utility).and_return(key_management_utility)
-
-      expect(plugin.key_management_utility).to be(key_management_utility)
-    end
-  end
-
   describe 'closing the connection' do
     it 'releases what the plugin holds before the connection goes' do
       expect(call('connection.close', returns: :closed)).to eq(:closed)

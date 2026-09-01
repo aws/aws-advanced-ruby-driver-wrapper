@@ -128,42 +128,6 @@ module Integration
       DriverHelper.wrapper_connect(drv, **native_params, **encryption_props)
     end
 
-    # A connected service container with no application plugins, standing in for the "connection" an
-    # administrator already has when building the KeyManagementUtility from its components. Ruby's
-    # KeyManager/MetadataManager read the metadata tables over their own short-lived connections, so
-    # they take an IndependentConnectionProvider (built from this container) plus a SqlRunner rather
-    # than a raw driver connection. Requiring kms_encryption_utility pulls in every encryption
-    # component the caller assembles (EncryptionConfig, KeyManager, MetadataManager, SqlRunner,
-    # IndependentConnectionProvider, DataKeyCache, SchemaValidator, KeyManagementUtility).
-    #
-    # @return [Services::ServiceContainer]
-    def encryption_service_container
-      require 'aws_advanced_ruby_driver_wrapper/utils/connection_config_parser'
-      require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
-      require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
-
-      props = native_params.merge(
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => '',
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_KMS_REGION.name => kms_region,
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.name => metadata_schema
-      )
-      config = AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfigParser.parse(config_parser_driver, **props)
-      container = AwsAdvancedRubyDriverWrapper::Services::ServiceUtility.create_standard_container(config)
-      container.host_service.refresh_host_list
-      cs = container.connection_service
-      container.plugin_manager.connect(cs.initial_host_info, cs.driver_props, true)
-      container
-    end
-
-    # @return [Symbol] the driver name ConnectionConfigParser expects
-    def config_parser_driver
-      case drv
-      when TestDriver::PG    then :postgresql
-      when TestDriver::MYSQL then :mysql2
-      else raise "Unsupported driver: #{drv}"
-      end
-    end
-
     # An ActiveRecord connection configuration with the kms_encryption plugin enabled.
     #
     # The SSL option matches what {DriverHelper.native_config} applies for the raw-driver path, so

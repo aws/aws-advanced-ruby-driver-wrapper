@@ -20,8 +20,6 @@ require_relative 'audit_logger'
 require_relative 'data_key_cache'
 require_relative 'encryption_config'
 require_relative 'errors'
-require_relative 'independent_connection_provider'
-require_relative 'key_management_utility'
 require_relative 'key_manager'
 require_relative 'metadata_manager'
 require_relative 'schema_validator'
@@ -136,20 +134,6 @@ module AwsAdvancedRubyDriverWrapper
           @lock.synchronize { @sql_runner }
         end
 
-        # @return [IndependentConnectionProvider, nil] nil until {#ensure_initialized} has run
-        def connection_provider
-          @lock.synchronize { @connection_provider }
-        end
-
-        # The administrative interface, for setting up and rotating keys.
-        #
-        # @return [KeyManagementUtility]
-        # @raise [Errors::EncryptionPluginError] if the components cannot be built
-        def key_management_utility
-          ensure_initialized
-          @lock.synchronize { @key_management_utility }
-        end
-
         # Checks that the +encryption_metadata+ and +key_storage+ tables look the way the plugin
         # expects. Nothing calls this automatically: it is meant for setup scripts and diagnostics.
         #
@@ -157,10 +141,9 @@ module AwsAdvancedRubyDriverWrapper
         # @raise [Errors::EncryptionPluginError] if the components cannot be built
         def validate_schema
           ensure_initialized
-          validator = @lock.synchronize { @schema_validator }
-          provider = @lock.synchronize { @connection_provider }
+          validator, metadata_manager = @lock.synchronize { [@schema_validator, @metadata_manager] }
 
-          provider.with_connection(operation: 'VALIDATE_SCHEMA') { |connection| validator.validate(connection) }
+          metadata_manager.with_connection(operation: 'VALIDATE_SCHEMA') { |connection| validator.validate(connection) }
         end
 
         # The KMS client, created on first use.
@@ -170,26 +153,26 @@ module AwsAdvancedRubyDriverWrapper
           @lock.synchronize { @kms_client ||= create_kms_client }
         end
 
-        # @return [Boolean] whether the plugin reads its metadata over its own connections
+        # @return [Boolean] whether the database-backed components (which read metadata and keys over
+        #   their own short-lived connections) have been built
         def using_independent_connections?
-          !connection_provider.nil?
+          initialized?
         end
 
         # @return [String] a description of how metadata is being read
         def connection_mode_status
           if using_independent_connections?
-            'The kms_encryption plugin is reading its metadata over independent connections'
+            'The kms_encryption plugin is reading its metadata over its own short-lived connections'
           else
             'The kms_encryption plugin has not opened a metadata connection yet'
           end
         end
 
-        # Logs the connection mode and the metadata connection counters, for troubleshooting.
+        # Logs the connection mode, for troubleshooting.
         # @return [void]
         def log_current_status
           logger.info("#{PLUGIN_NAME} status report")
           logger.info(connection_mode_status)
-          connection_provider&.log_health_status
           nil
         end
 
@@ -202,13 +185,12 @@ module AwsAdvancedRubyDriverWrapper
 
           logger.debug("Cleaning up #{PLUGIN_NAME}")
 
-          metadata_manager, connection_provider, data_key_cache, kms_client = @lock.synchronize do
+          metadata_manager, data_key_cache, kms_client = @lock.synchronize do
             @closed = true
             @initialized = false
-            [@metadata_manager, @connection_provider, @data_key_cache, @kms_client]
+            [@metadata_manager, @data_key_cache, @kms_client]
           end
 
-          quietly('log the metadata connection status') { connection_provider&.log_health_status }
           quietly('stop the metadata refresh') { metadata_manager&.shutdown }
           quietly('clear the data key cache') { data_key_cache&.shutdown }
           quietly('close the KMS client') { kms_client.close if kms_client.respond_to?(:close) }
@@ -222,7 +204,6 @@ module AwsAdvancedRubyDriverWrapper
         # Runs under @lock.
         def build_database_components
           @sql_runner = SqlRunner.new(@service_container.dialect_service.driver_dialect)
-          @connection_provider = IndependentConnectionProvider.new(@service_container, audit_logger: @audit_logger)
           @audit_logger.log_connection_parameter_extraction(
             strategy: 'ServiceContainer', connection_type: 'INDEPENDENT_CONNECTION'
           )
@@ -230,28 +211,19 @@ module AwsAdvancedRubyDriverWrapper
           @kms_client ||= create_kms_client
           @key_manager = KeyManager.new(
             kms_client: @kms_client,
-            connection_provider: @connection_provider,
+            service_container: @service_container,
             sql_runner: @sql_runner,
             config: @config,
             data_key_cache: @data_key_cache,
             audit_logger: @audit_logger
           )
           @metadata_manager = MetadataManager.new(
-            connection_provider: @connection_provider,
+            service_container: @service_container,
             sql_runner: @sql_runner,
             config: @config,
             audit_logger: @audit_logger
           )
           @schema_validator = SchemaValidator.new(@config.metadata_schema, @sql_runner)
-          @key_management_utility = KeyManagementUtility.new(
-            key_manager: @key_manager,
-            metadata_manager: @metadata_manager,
-            connection_provider: @connection_provider,
-            sql_runner: @sql_runner,
-            kms_client: @kms_client,
-            config: @config,
-            audit_logger: @audit_logger
-          )
 
           @metadata_manager.start
           logger.debug('The kms_encryption plugin is ready to encrypt and decrypt column values')
