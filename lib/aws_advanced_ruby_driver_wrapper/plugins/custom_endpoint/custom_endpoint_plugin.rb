@@ -18,6 +18,7 @@ require 'concurrent'
 require_relative '../../errors'
 require_relative '../../logging'
 require_relative '../../property_definition'
+require_relative '../../ruby_method'
 require_relative '../../utils/rds_utils'
 require_relative 'custom_endpoint_monitor'
 
@@ -71,8 +72,14 @@ module AwsAdvancedRubyDriverWrapper
           pipeline_callable.call
         end
 
-        def execute(_, pipeline_callable, *_, **_)
+        CLOSE_METHODS = Set[
+          RubyMethod::CONNECTION_CLOSE.name,
+          RubyMethod::CONNECTION_RESET.name
+        ].freeze
+
+        def execute(method_name, pipeline_callable, *_, **_)
           return pipeline_callable.call if @custom_endpoint_host.nil?
+          return pipeline_callable.call if CLOSE_METHODS.include?(method_name.to_s)
 
           monitor = create_monitor_if_absent(@props)
           wait_for_endpoint_info(monitor) if @should_wait_for_info
