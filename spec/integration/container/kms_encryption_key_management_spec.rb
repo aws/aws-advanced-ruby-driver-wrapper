@@ -71,9 +71,15 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     expect(result.valid?).to be(true), -> { "schema validation failed: #{result.issues.join(', ')}" }
   end
 
+  # Off by default: this is the only spec that creates a real master key, and a KMS key can only be
+  # scheduled for deletion, never removed immediately, so every run leaves a billable key pending for
+  # the 7-day minimum window. Opt in with KMS_ALLOW_KEY_CREATION=true to verify create_master_key.
   it 'creates a KMS master key when permitted' do
+    skip 'KMS_ALLOW_KEY_CREATION is not set; skipping the master-key creation test' unless key_creation_allowed?
+
     arn = begin
-      @utility.create_master_key('aws-advanced-ruby-driver-wrapper integration test key')
+      # No alias: the key is short-lived, and an alias would only outlive it as clutter.
+      @utility.create_master_key('aws-advanced-ruby-driver-wrapper integration test key', create_alias: false)
     rescue key_error => e
       skip "master key creation is not permitted in this environment: #{e.message}"
     end
@@ -160,10 +166,16 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     end
   end
 
+  def key_creation_allowed?
+    %w[1 true yes].include?(ENV.fetch('KMS_ALLOW_KEY_CREATION', '').strip.downcase)
+  end
+
   def schedule_key_deletion(arn)
     kms_client.schedule_key_deletion(key_id: arn, pending_window_in_days: 7)
-  rescue StandardError
-    nil
+  rescue StandardError => e
+    # A key that could not be scheduled for deletion lingers - and is billable - indefinitely, so
+    # make the failure visible rather than swallowing it.
+    warn "WARNING: failed to schedule KMS key #{arn} for deletion; delete it manually: #{e.message}"
   end
 
   def write_ssn(conn, name, ssn)
