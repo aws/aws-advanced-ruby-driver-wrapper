@@ -735,22 +735,20 @@ public class AuroraTestUtility {
   }
 
   private boolean ipExists(String ipAddress) {
+    final String cidr = ipAddress + "/32";
     final DescribeSecurityGroupsResponse response =
         ec2Client.describeSecurityGroups(
-            (builder) ->
-                builder
-                    .groupNames(DEFAULT_SECURITY_GROUP)
-                    .filters(
-                        software.amazon.awssdk.services.ec2.model.Filter.builder()
-                            .name("ip-permission.cidr")
-                            .values(ipAddress + "/32")
-                            .build(),
-                        software.amazon.awssdk.services.ec2.model.Filter.builder()
-                            .name("ip-permission.protocol")
-                            .values("-1")
-                            .build()));
+            (builder) -> builder.groupNames(DEFAULT_SECURITY_GROUP));
 
-    return response != null && !response.securityGroups().isEmpty();
+    if (response == null || response.securityGroups().isEmpty()) {
+      return false;
+    }
+
+    return response.securityGroups().stream()
+        .flatMap(sg -> sg.ipPermissions().stream())
+        .filter(perm -> "-1".equals(perm.ipProtocol()))
+        .flatMap(perm -> perm.ipRanges().stream())
+        .anyMatch(range -> cidr.equals(range.cidrIp()));
   }
 
   /**

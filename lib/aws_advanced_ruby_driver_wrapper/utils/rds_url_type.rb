@@ -49,11 +49,11 @@ module AwsAdvancedRubyDriverWrapper
       IP_ADDRESS =
         new(:ip_address, rds: false, rds_cluster: false, has_region: false)
       RDS_WRITER_CLUSTER =
-        new(:rds_writer_cluster, rds: true,  rds_cluster: true, has_region: true)
+        new(:rds_writer_cluster, rds: true, rds_cluster: true, has_region: true)
       RDS_READER_CLUSTER =
-        new(:rds_reader_cluster, rds: true,  rds_cluster: true, has_region: true)
+        new(:rds_reader_cluster, rds: true, rds_cluster: true, has_region: true)
       RDS_CUSTOM_CLUSTER =
-        new(:rds_custom_cluster, rds: true,  rds_cluster: true, has_region: true)
+        new(:rds_custom_cluster, rds: true, rds_cluster: true, has_region: true)
       RDS_PROXY =
         new(:rds_proxy, rds: true, rds_cluster: false, has_region: true)
       RDS_PROXY_ENDPOINT =

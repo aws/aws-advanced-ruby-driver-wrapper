@@ -130,6 +130,30 @@ module Integration
       @info.secondary_cluster_identifier
     end
 
+    def secondary_database_info
+      @info.secondary_database_info
+    end
+
+    def secondary_instances
+      secondary_database_info&.instances || []
+    end
+
+    def secondary_instance_endpoint_suffix
+      secondary_database_info&.instance_endpoint_suffix
+    end
+
+    def secondary_cluster_read_only_endpoint
+      secondary_database_info&.cluster_read_only_endpoint
+    end
+
+    def secondary_proxy_database_info
+      @info.secondary_proxy_database_info
+    end
+
+    def secondary_proxy_instances
+      secondary_proxy_database_info&.instances || []
+    end
+
     def proxy_info(instance_name)
       raise "Proxy not found: #{instance_name}" if @proxies.nil?
 
@@ -138,6 +162,12 @@ module Integration
 
     def proxy_infos
       @proxies&.values || []
+    end
+
+    # Proxy infos filtered by GDB region (:primary or :secondary). Lets ProxyHelper cut connectivity
+    # to a single region during cross-region failover tests.
+    def proxy_infos_for_region(region)
+      proxy_infos.select { |p| p.region == region }
     end
 
     def allowed_test_drivers
@@ -194,38 +224,51 @@ module Integration
 
       environment.instance_variable_set(:@proxies, {})
       proxies = environment.instance_variable_get(:@proxies)
-      control_port = environment.proxy_database_info.control_port
 
-      environment.proxy_instances.each do |instance|
+      register_region_proxies(proxies, environment.proxy_database_info, environment.database_info, :primary)
+
+      # For AURORA_GLOBAL, the secondary region is proxied too so ProxyHelper can cut connectivity to
+      # either region during cross-region failover tests.
+      return unless environment.secondary_proxy_database_info
+
+      register_region_proxies(
+        proxies, environment.secondary_proxy_database_info, environment.secondary_database_info, :secondary
+      )
+    end
+
+    # Registers Toxiproxy proxies for one region's instance endpoints plus its cluster and reader
+    # cluster endpoints, keyed by instance id / proxied endpoint host in the shared +proxies+ map.
+    private_class_method def self.register_region_proxies(proxies, proxy_database_info, database_info, region)
+      control_port = proxy_database_info.control_port
+
+      proxy_database_info.instances.each do |instance|
         Toxiproxy.host = "http://#{instance.host}:#{control_port}"
         proxy = nil
         Toxiproxy.all.each { |p| proxy ||= p }
         raise "Proxy not found for #{instance.instance_id}" unless proxy
 
-        proxies[instance.instance_id] = ProxyInfo.new(
-          proxy, instance.host, control_port
-        )
+        proxies[instance.instance_id] = ProxyInfo.new(proxy, instance.host, control_port, region)
       end
 
-      if environment.proxy_database_info.cluster_endpoint
-        Toxiproxy.host = "http://#{environment.proxy_database_info.cluster_endpoint}:#{control_port}"
-        proxy = Toxiproxy.find_by_name("#{environment.database_info.cluster_endpoint}:#{environment.database_info.cluster_endpoint_port}")
+      if proxy_database_info.cluster_endpoint
+        Toxiproxy.host = "http://#{proxy_database_info.cluster_endpoint}:#{control_port}"
+        proxy = Toxiproxy.find_by_name("#{database_info.cluster_endpoint}:#{database_info.cluster_endpoint_port}")
         if proxy
-          proxies[environment.proxy_database_info.cluster_endpoint] =
-            ProxyInfo.new(proxy, environment.proxy_database_info.cluster_endpoint, control_port)
+          proxies[proxy_database_info.cluster_endpoint] =
+            ProxyInfo.new(proxy, proxy_database_info.cluster_endpoint, control_port, region)
         end
       end
 
-      return unless environment.proxy_database_info.cluster_read_only_endpoint
+      return unless proxy_database_info.cluster_read_only_endpoint
 
-      Toxiproxy.host = "http://#{environment.proxy_database_info.cluster_read_only_endpoint}:#{control_port}"
-      proxy_name = "#{environment.database_info.cluster_read_only_endpoint}:" \
-                   "#{environment.database_info.cluster_read_only_endpoint_port}"
+      Toxiproxy.host = "http://#{proxy_database_info.cluster_read_only_endpoint}:#{control_port}"
+      proxy_name = "#{database_info.cluster_read_only_endpoint}:" \
+                   "#{database_info.cluster_read_only_endpoint_port}"
       proxy = Toxiproxy.find_by_name(proxy_name)
       return unless proxy
 
-      proxies[environment.proxy_database_info.cluster_read_only_endpoint] =
-        ProxyInfo.new(proxy, environment.proxy_database_info.cluster_read_only_endpoint, control_port)
+      proxies[proxy_database_info.cluster_read_only_endpoint] =
+        ProxyInfo.new(proxy, proxy_database_info.cluster_read_only_endpoint, control_port, region)
     end
   end
 end
