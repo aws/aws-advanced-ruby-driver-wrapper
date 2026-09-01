@@ -70,9 +70,12 @@ module AwsAdvancedRubyDriverWrapper
             connection_service.wrapper_props,
             false
           )
-          return connection unless connection.nil?
+          if connection.nil?
+            raise AwsAdvancedRubyDriverWrapper::Errors::AwsError,
+                  "The connect pipeline returned no connection for #{operation || 'a metadata query'}"
+          end
 
-          raise Errors::AwsError, "The connect pipeline returned no connection for #{operation || 'a metadata query'}"
+          connection
         end
 
         def close_runtime_connection(connection)

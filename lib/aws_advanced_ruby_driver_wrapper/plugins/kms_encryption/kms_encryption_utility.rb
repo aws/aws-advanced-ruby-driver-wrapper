@@ -153,15 +153,9 @@ module AwsAdvancedRubyDriverWrapper
           @lock.synchronize { @kms_client ||= create_kms_client }
         end
 
-        # @return [Boolean] whether the database-backed components (which read metadata and keys over
-        #   their own short-lived connections) have been built
-        def using_independent_connections?
-          initialized?
-        end
-
         # @return [String] a description of how metadata is being read
         def connection_mode_status
-          if using_independent_connections?
+          if initialized?
             'The kms_encryption plugin is reading its metadata over its own short-lived connections'
           else
             'The kms_encryption plugin has not opened a metadata connection yet'

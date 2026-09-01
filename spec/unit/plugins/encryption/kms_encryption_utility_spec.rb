@@ -271,14 +271,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
 
   describe '#connection_mode_status' do
     it 'says that no metadata connection has been made yet' do
-      expect(utility.using_independent_connections?).to be(false)
       expect(utility.connection_mode_status).to eq('The kms_encryption plugin has not opened a metadata connection yet')
     end
 
-    it 'says that the metadata is read over independent connections' do
+    it 'says that the metadata is read over its own short-lived connections' do
       utility.ensure_initialized
 
-      expect(utility.using_independent_connections?).to be(true)
       expect(utility.connection_mode_status)
         .to eq('The kms_encryption plugin is reading its metadata over its own short-lived connections')
     end

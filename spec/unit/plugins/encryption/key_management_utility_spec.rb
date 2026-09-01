@@ -432,5 +432,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
       expect { described_class.new(connection: nil, kms_client: kms_client, config: config) }
         .to raise_error(ArgumentError, /connection is required/)
     end
+
+    it 'infers the dialect from a wrapper connection' do
+      stub_const('AwsAdvancedRubyDriverWrapper::WrapperPgConnection', Class.new)
+      utility = described_class.new(connection: AwsAdvancedRubyDriverWrapper::WrapperPgConnection.new,
+                                    kms_client: kms_client, config: config)
+      expect(utility).to be_a(described_class)
+    end
   end
 end

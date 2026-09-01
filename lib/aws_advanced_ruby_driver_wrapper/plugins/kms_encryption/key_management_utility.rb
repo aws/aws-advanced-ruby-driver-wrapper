@@ -295,11 +295,13 @@ module AwsAdvancedRubyDriverWrapper
 
         private
 
-        # Picks a driver dialect from a connection's class without loading the driver gems.
+        # Picks a driver dialect from a connection's class without loading the driver gems. Both a raw
+        # driver connection (PG::Connection / Mysql2::Client) and a wrapper connection
+        # (WrapperPgConnection / Mysql2WrapperClient) are recognized.
         def dialect_for_connection(connection)
           name = connection.class.name.to_s
-          return DriverDialects::PgDriverDialect.new if name.start_with?('PG::')
-          return DriverDialects::MysqlDriverDialect.new if name.start_with?('Mysql2::')
+          return DriverDialects::PgDriverDialect.new if name.start_with?('PG::') || name.end_with?('WrapperPgConnection')
+          return DriverDialects::MysqlDriverDialect.new if name.start_with?('Mysql2::') || name.end_with?('Mysql2WrapperClient')
 
           raise ArgumentError,
                 "Cannot infer the driver dialect from #{name.empty? ? connection.class : name}; " \
