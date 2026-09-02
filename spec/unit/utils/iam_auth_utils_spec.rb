@@ -16,15 +16,15 @@
 
 require_relative '../../spec_helper'
 require 'aws-sdk-rds'
-require 'aws_ruby_database_driver_wrapper/utils/iam_auth_utils'
-require 'aws_ruby_database_driver_wrapper/utils/rds_utils'
-require 'aws_ruby_database_driver_wrapper/utils/rds_url_type'
+require 'aws_advanced_ruby_driver_wrapper/utils/iam_auth_utils'
+require 'aws_advanced_ruby_driver_wrapper/utils/rds_utils'
+require 'aws_advanced_ruby_driver_wrapper/utils/rds_url_type'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::IamAuthUtils do
   subject(:utils) { described_class }
 
-  let(:rds_utils) { AwsRubyDatabaseDriverWrapper::Utils::RdsUtils }
-  let(:rds_url_type) { AwsRubyDatabaseDriverWrapper::Utils::RdsUrlType }
+  let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+  let(:rds_url_type) { AwsAdvancedRubyDriverWrapper::Utils::RdsUrlType }
 
   describe '.parse_token_expiry' do
     it 'returns the X-Amz-Expires integer when present' do
@@ -76,6 +76,28 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
       token = 'myhost/?X-Amz-Expires=900'
       entry = utils.build_token_entry(token, 870)
       expect(entry.token).to eq token
+    end
+  end
+
+  describe 'TokenEntry redaction' do
+    let(:entry) { described_class::TokenEntry.new(token: 'super-secret-iam-token', expires_at: 123.0) }
+
+    it 'redacts the token in #inspect' do
+      expect(entry.inspect).not_to include('super-secret-iam-token')
+      expect(entry.inspect).to include(AwsAdvancedRubyDriverWrapper::REDACTED)
+    end
+
+    it 'redacts the token in #to_s' do
+      expect(entry.to_s).not_to include('super-secret-iam-token')
+      expect(entry.to_s).to include(AwsAdvancedRubyDriverWrapper::REDACTED)
+    end
+
+    it 'redacts the token when interpolated into a string' do
+      expect("entry=#{entry}").not_to include('super-secret-iam-token')
+    end
+
+    it 'still exposes the token via the accessor for internal use' do
+      expect(entry.token).to eq('super-secret-iam-token')
     end
   end
 
@@ -259,7 +281,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
   end
 
   describe '.resolve_host' do
-    let(:host_info) { instance_double('AwsRubyDatabaseDriverWrapper::Utils::HostInfo', host: 'info.host.com') }
+    let(:host_info) { instance_double('AwsAdvancedRubyDriverWrapper::Utils::HostInfo', host: 'info.host.com') }
 
     it 'returns iam_host when non-nil and non-empty' do
       expect(utils.resolve_host('override.host.com', host_info)).to eq 'override.host.com'
@@ -275,7 +297,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Utils::IamAuthUtils do
   end
 
   describe '.resolve_port' do
-    let(:host_info) { instance_double('AwsRubyDatabaseDriverWrapper::Utils::HostInfo') }
+    let(:host_info) { instance_double('AwsAdvancedRubyDriverWrapper::Utils::HostInfo') }
 
     context 'when iam_default_port is positive' do
       it 'returns iam_default_port' do

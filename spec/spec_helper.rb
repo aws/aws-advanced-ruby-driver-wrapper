@@ -22,8 +22,8 @@ SimpleCov.start do
   self.formatters = [SimpleCov::Formatter::HTMLFormatter, SimpleCov::Formatter::CoberturaFormatter]
 
   # Filter out test files and vendor code from coverage analysis
-  add_filter '/spec/'
-  add_filter '/vendor/'
+  skip '/spec/'
+  skip '/vendor/'
 
   # Only enforce coverage for files with complex business logic, eg:
   # add_group "Failover", "lib/plugins/failover"
@@ -36,17 +36,17 @@ $LOAD_PATH.unshift File.expand_path('../lib', __dir__)
 Dir[File.join(__dir__, 'support', '**', '*.rb')].each { |f| require f }
 
 require 'bundler/setup'
-require 'aws_ruby_database_driver_wrapper'
-require 'aws_ruby_database_driver_wrapper/postgresql'
-require 'aws_ruby_database_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper/postgresql'
+require 'aws_advanced_ruby_driver_wrapper/mysql'
 require 'dotenv/load'
 require 'pg'
 require 'mysql2'
 require 'active_record'
-require 'aws_ruby_database_driver_wrapper/active_record/aws_mysql2_adapter'
-require 'aws_ruby_database_driver_wrapper/active_record/aws_postgresql_adapter'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
 
-AwsRubyDatabaseDriverWrapper.logger.level = Logger::DEBUG
+AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG
 $stderr.sync = true
 $stdout.sync = true
 

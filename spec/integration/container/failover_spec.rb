@@ -23,9 +23,13 @@ require_relative 'utils/driver_helper'
 require_relative 'utils/proxy_helper'
 require_relative 'utils/connection_utils'
 require_relative 'utils/database_engine'
+require_relative 'utils/database_engine_deployment'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
-require 'aws_ruby_database_driver_wrapper'
+require_relative 'utils/topology_helper'
+require 'securerandom'
+require 'aws-sdk-secretsmanager'
+require 'aws_advanced_ruby_driver_wrapper'
 
 RSpec.describe 'Failover', :integration,
                features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED],
@@ -37,9 +41,9 @@ RSpec.describe 'Failover', :integration,
 
   let(:failover_props) do
     {
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
         "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
       connect_timeout: 10
     }
@@ -62,15 +66,21 @@ RSpec.describe 'Failover', :integration,
   # Waits until the topology cache holds an entry for every instance in the cluster, which indicates the
   # topology monitor has completed a full discovery through the cluster endpoint.
   def wait_for_full_topology(timeout_secs: 30, delay_secs: 0.5)
-    expected_count = proxy_info.instances.size
-    Integration::RetryHelper.retry_until(timeout_secs: timeout_secs, delay_secs: delay_secs) do
-      hosts = AwsRubyDatabaseDriverWrapper::Services::CoreServices.storage_service.get(
-        :topology,
-        AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value,
-        register_access: false
-      )
-      !hosts.nil? && hosts.size >= expected_count
-    end
+    Integration::TopologyHelper.wait_for_topology(
+      min_instances: proxy_info.instances.size,
+      require_instance_hosts: false,
+      timeout_secs: timeout_secs,
+      delay_secs: delay_secs
+    )
+  end
+
+  # Warms the topology cache (and finalizes the dialect) with a throwaway connection so initial_connection
+  # can substitute a concrete instance for the cluster endpoint, then asserts the topology was discovered.
+  def warm_failover_topology(config, props)
+    discovered = Integration::TopologyHelper.warm_topology_cache(
+      drv: drv, config: config, props: props
+    )
+    expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
   end
 
   describe 'writer failover' do
@@ -87,7 +97,7 @@ RSpec.describe 'Failover', :integration,
       rds_util.crash_instance(current_writer)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -108,7 +118,7 @@ RSpec.describe 'Failover', :integration,
       rds_util.crash_instance(current_writer)
 
       expect { stmt.execute }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -134,7 +144,7 @@ RSpec.describe 'Failover', :integration,
       rds_util.crash_instance(current_writer)
 
       expect { Integration::DriverHelper.execute(drv, conn, "INSERT INTO test_failover_transaction VALUES (2, 'value2')") }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::TransactionStateUnknownError
+        AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -160,7 +170,7 @@ RSpec.describe 'Failover', :integration,
       rds_util.simulate_temporary_failure(current_writer, 0, 15)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -186,7 +196,7 @@ RSpec.describe 'Failover', :integration,
       rds_util.crash_instance(current_writer)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       expect(conn.conninfo_hash[:application_name]).to eq('failover_props_test')
@@ -211,7 +221,7 @@ RSpec.describe 'Failover', :integration,
       rds_util.crash_instance(current_writer)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       expect(conn.query_options[:read_timeout]).to eq(13)
@@ -227,13 +237,13 @@ RSpec.describe 'Failover', :integration,
       conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 30 }
+        props: { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 30 }
       )
 
       Integration::ProxyHelper.disable_all_connectivity
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverFailedError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError
       )
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
@@ -261,7 +271,7 @@ RSpec.describe 'Failover', :integration,
 
       results = threads.map(&:value)
       results.each do |result|
-        expect(result[:error]).to be_a(AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError)
+        expect(result[:error]).to be_a(AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError)
       end
 
       connections.each do |conn|
@@ -284,7 +294,7 @@ RSpec.describe 'Failover', :integration,
       Integration::ProxyHelper.disable_connectivity(reader_instance.instance_id)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -302,13 +312,13 @@ RSpec.describe 'Failover', :integration,
       conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer' }
+        props: { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer' }
       )
 
       Integration::ProxyHelper.disable_connectivity(current_writer)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
@@ -322,15 +332,15 @@ RSpec.describe 'Failover', :integration,
         host: proxy_info.cluster_read_only_endpoint,
         port: proxy_info.cluster_read_only_endpoint_port,
         props: {
-          AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'strict_reader',
-          AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 600
+          AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'strict_reader',
+          AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 600
         }
       )
 
       Integration::ProxyHelper.disable_connectivity(proxy_info.cluster_read_only_endpoint)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       current_connection_id = rds_util.query_instance_id(conn)
@@ -347,16 +357,256 @@ RSpec.describe 'Failover', :integration,
       conn = failover_connect(
         host: initial_writer_instance.host,
         port: initial_writer_instance.port,
-        props: { AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer' }
+        props: { AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_MODE.name => 'reader_or_writer' }
       )
 
       rds_util.simulate_temporary_failure(current_writer, 0, 5)
 
       expect { rds_util.query_instance_id(conn) }.to raise_error(
-        AwsRubyDatabaseDriverWrapper::Errors::FailoverSuccessError
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       expect { rds_util.query_instance_id(conn) }.not_to raise_error
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+  end
+
+  describe 'failover with IAM authentication',
+           features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED, Integration::TestEnvironmentFeatures::IAM],
+           deployments: [Integration::DatabaseEngineDeployment::AURORA] do
+    let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+    let(:iam_failover_config) do
+      config = Integration::DriverHelper.native_config(
+        drv,
+        host: info.cluster_endpoint,
+        port: info.cluster_endpoint_port,
+        user: env.iam_user_name,
+        password: 'anything',
+        dbname: info.default_dbname
+      )
+      case drv
+      when Integration::TestDriver::PG    then config.merge(sslmode: 'require')
+      when Integration::TestDriver::MYSQL then config.merge(ssl_mode: :required)
+      else config
+      end
+    end
+
+    before do
+      skip 'No allowed drivers for this environment' if drv.nil?
+      begin
+        AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin.clear_cache(
+          AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service
+        )
+      rescue StandardError
+        nil
+      end
+    end
+
+    def iam_failover_props(plugins)
+      base_iam_props.merge(
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => plugins,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+        connect_timeout: 10
+      )
+    end
+
+    it 'fails over and authenticates with IAM against the new writer' do
+      enable_on_num_instances(min_instances: 2)
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **iam_failover_config, **iam_failover_props('failover,iam'))
+      expect(rds_util.query_instance_id(conn)).to eq(rds_util.cluster_writer_instance_id)
+
+      rds_util.failover_cluster_and_wait_until_writer_changed
+      new_writer_id = rds_util.cluster_writer_instance_id
+
+      # The failover plugin reconnects to the new writer using iam authentication.
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
+
+      expect(Integration::RetryHelper.verify_writer(rds_util, rds_util.query_instance_id(conn))).to be true
+      expect(rds_util.query_instance_id(conn)).to eq(new_writer_id)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'initial_connection substitutes an instance, authenticates with IAM, then authenticates with IAM after failover' do
+      enable_on_num_instances(min_instances: 2)
+
+      # Warm the topology so initial_connection can substitute the cluster endpoint for an instance.
+      warm_failover_topology(iam_failover_config, iam_failover_props('initial_connection,failover,iam'))
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **iam_failover_config, **iam_failover_props('initial_connection,failover,iam'))
+
+      # Connected against a substituted instance endpoint using an IAM token generated for that host.
+      host = conn.instance_variable_get(:@service_container).connection_service.current_host_info.host
+      expect(host).not_to eq(info.cluster_endpoint)
+      expect(rds_utils.rds_instance?(host)).to be true
+
+      rds_util.failover_cluster_and_wait_until_writer_changed
+      new_writer_id = rds_util.cluster_writer_instance_id
+
+      # Full chain: after failover, the failover plugin reconnects to the new writer and IAM generates a
+      # fresh token for it. A successful query proves all three plugins cooperated.
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
+      expect(Integration::RetryHelper.verify_writer(rds_util, rds_util.query_instance_id(conn))).to be true
+      expect(rds_util.query_instance_id(conn)).to eq(new_writer_id)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+  end
+
+  describe 'failover with Secrets Manager authentication',
+           features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED, Integration::TestEnvironmentFeatures::SECRETS_MANAGER],
+           deployments: [Integration::DatabaseEngineDeployment::AURORA] do
+    let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+    before(:all) do
+      @env = Integration::TestEnvironment.current
+      @sm_client = Aws::SecretsManager::Client.new(region: @env.aurora_region)
+      @secret_id = "aws-ruby-wrapper-it-failover-sm-#{SecureRandom.uuid}"
+      @sm_client.create_secret(
+        name: @secret_id,
+        secret_string: JSON.generate(
+          username: @env.database_info.username,
+          password: @env.database_info.password
+        )
+      )
+    end
+
+    after(:all) do
+      @sm_client&.delete_secret(secret_id: @secret_id, force_delete_without_recovery: true)
+    rescue StandardError => e
+      warn "Failed to delete test secret #{@secret_id}: #{e.message}"
+    ensure
+      @sm_client = nil
+    end
+
+    before do
+      skip 'No allowed drivers for this environment' if drv.nil?
+      begin
+        AwsAdvancedRubyDriverWrapper.clear_caches
+      rescue StandardError
+        nil
+      end
+    end
+
+    let(:sm_failover_config) do
+      Integration::DriverHelper.native_config(
+        drv,
+        host: info.cluster_endpoint,
+        port: info.cluster_endpoint_port,
+        user: 'ignored',
+        password: 'ignored',
+        dbname: info.default_dbname
+      )
+    end
+
+    def sm_failover_props(plugins)
+      {
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => plugins,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => env.aurora_region,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+        connect_timeout: 10
+      }
+    end
+
+    it 'fails over and reconnects with cached secret credentials' do
+      enable_on_num_instances(min_instances: 2)
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **sm_failover_config, **sm_failover_props('failover,secrets_manager'))
+      expect(rds_util.query_instance_id(conn)).to eq(rds_util.cluster_writer_instance_id)
+
+      rds_util.failover_cluster_and_wait_until_writer_changed
+      new_writer_id = rds_util.cluster_writer_instance_id
+
+      # The failover plugin reconnects to the new writer using the same fetched credentials.
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
+
+      expect(Integration::RetryHelper.verify_writer(rds_util, rds_util.query_instance_id(conn))).to be true
+      expect(rds_util.query_instance_id(conn)).to eq(new_writer_id)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+
+    it 'initial_connection substitutes an instance, connects with the secret, then reconnects with the secret after failover' do
+      enable_on_num_instances(min_instances: 2)
+
+      warm_failover_topology(sm_failover_config, sm_failover_props('initial_connection,failover,secrets_manager'))
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **sm_failover_config,
+**sm_failover_props('initial_connection,failover,secrets_manager'))
+
+      host = conn.instance_variable_get(:@service_container).connection_service.current_host_info.host
+      expect(host).not_to eq(info.cluster_endpoint)
+      expect(rds_utils.rds_instance?(host)).to be true
+
+      rds_util.failover_cluster_and_wait_until_writer_changed
+      new_writer_id = rds_util.cluster_writer_instance_id
+
+      # After failover, the failover plugin reconnects to the new writer using the same secret credentials.
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
+      expect(Integration::RetryHelper.verify_writer(rds_util, rds_util.query_instance_id(conn))).to be true
+      expect(rds_util.query_instance_id(conn)).to eq(new_writer_id)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+  end
+
+  describe 'failover with initial connection strategy',
+           features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED],
+           deployments: [Integration::DatabaseEngineDeployment::AURORA] do
+    let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+    let(:writer_cluster_config) do
+      Integration::DriverHelper.native_config(
+        drv,
+        host: info.cluster_endpoint,
+        port: info.cluster_endpoint_port,
+        user: info.username,
+        password: info.password,
+        dbname: info.default_dbname
+      )
+    end
+
+    let(:failover_initial_connection_props) do
+      base_wrapper_props.merge(
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,failover',
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+        connect_timeout: 10
+      )
+    end
+
+    before do
+      skip 'No allowed drivers for this environment' if drv.nil?
+    end
+
+    it 'substitutes a writer instance endpoint on connect and still fails over afterwards' do
+      enable_on_num_instances(min_instances: 2)
+
+      warm_failover_topology(writer_cluster_config, failover_initial_connection_props)
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **writer_cluster_config, **failover_initial_connection_props)
+
+      # initial_connection substituted the cluster endpoint for a concrete writer instance endpoint.
+      host = conn.instance_variable_get(:@service_container).connection_service.current_host_info.host
+      expect(host).not_to eq(info.cluster_endpoint)
+      expect(rds_utils.rds_instance?(host)).to be true
+
+      rds_util.failover_cluster_and_wait_until_writer_changed
+
+      # The substitution did not disrupt the failover plugin: the connection recovers onto the new writer.
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
+      expect(Integration::RetryHelper.verify_writer(rds_util, rds_util.query_instance_id(conn))).to be true
     ensure
       Integration::DriverHelper.close(drv, conn) if conn
     end

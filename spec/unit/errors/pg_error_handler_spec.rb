@@ -14,11 +14,11 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper/errors/pg_error_handler'
-require 'aws_ruby_database_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/errors/pg_error_handler'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
-  let(:driver_dialect) { AwsRubyDatabaseDriverWrapper::DriverDialects::PgDriverDialect.new }
+RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
   describe '#network_error_by_sql_state?' do
@@ -156,7 +156,7 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
     # These reached a server that then refused the login. Retrying against another host cannot help,
     # so they must not be classified as network errors.
     context 'when a server was reached and rejected the connection' do
-      # rubocop:disable Layout/LineLength
+      # rubocop:disable-next Layout/LineLength
       {
         'a failed password' => 'connection to server at "host", port 5432 failed: FATAL:  password authentication failed for user "someone"',
         'a missing pg_hba entry' => 'connection to server at "host", port 5432 failed: FATAL:  no pg_hba.conf entry for host "1.2.3.4", user "someone"',
@@ -171,7 +171,6 @@ RSpec.describe AwsRubyDatabaseDriverWrapper::Errors::PgErrorHandler do
           expect(handler.network_error?(error)).to be false
         end
       end
-      # rubocop:enable Layout/LineLength
     end
   end
 

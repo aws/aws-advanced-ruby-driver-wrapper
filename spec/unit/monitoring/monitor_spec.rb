@@ -15,9 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_ruby_database_driver_wrapper/monitoring/monitor'
+require 'aws_advanced_ruby_driver_wrapper/monitoring/monitor'
 
-RSpec.describe AwsRubyDatabaseDriverWrapper::Monitoring::Monitor do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::Monitor do
   let(:monitor_class) do
     Class.new(described_class) do
       attr_accessor :iterations
