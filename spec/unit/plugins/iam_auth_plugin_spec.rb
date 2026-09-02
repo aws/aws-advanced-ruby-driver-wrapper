@@ -368,52 +368,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
-  describe '#connect sets enable_cleartext_plugin for MySQL driver' do
-    let(:mysql_dialect_service) do
-      double('DialectService',
-             db_dialect: mock_db_dialect,
-             login_error?: false,
-             driver_dialect: AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager::MYSQL_DIALECT)
-    end
-    let(:mysql_service_container) do
-      double('ServiceContainer',
-             storage_service: mock_storage_service,
-             dialect_service: mysql_dialect_service)
-    end
-
-    before { allow(mock_db_dialect).to receive(:default_port).and_return(DEFAULT_MYSQL_PORT) }
-
-    it 'sets enable_cleartext_plugin: true in props before calling the pipeline' do
-      observed_cleartext = nil
-      props = base_pg_props.merge(user: 'mysqlUser')
-      pipeline = lambda do
-        observed_cleartext = props[:enable_cleartext_plugin]
-        raise StandardError, 'simulated'
-      end
-      begin
-        described_class.new(mysql_service_container).connect(mysql_host_info, props, true, pipeline)
-      rescue StandardError
-        nil
-      end
-      expect(observed_cleartext).to be true
-    end
-
-    it 'does not set enable_cleartext_plugin for PostgreSQL driver' do
-      observed_cleartext = nil
-      props = base_pg_props
-      pipeline = lambda do
-        observed_cleartext = props[:enable_cleartext_plugin]
-        raise StandardError, 'simulated'
-      end
-      begin
-        build_plugin.connect(pg_host_info, props, true, pipeline)
-      rescue StandardError
-        nil
-      end
-      expect(observed_cleartext).to be_nil
-    end
-  end
-
   describe '#connect with Global Database endpoint' do
     before do
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, GDB_CACHE_KEY).and_return(nil)

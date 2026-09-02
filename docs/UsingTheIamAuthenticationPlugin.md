@@ -16,6 +16,7 @@ The IAM Authentication Plugin enables [AWS IAM database authentication](https://
 >   host: "db-identifier.cluster-XYZ.us-east-2.rds.amazonaws.com",
 >   username: "iam_user",
 >   wrapper_plugins: "iam",
+>   enable_cleartext_plugin: true,
 >   sslca: "/path/to/global-bundle.pem",
 >   ssl_mode: "verify_identity"
 > )
@@ -67,12 +68,26 @@ AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient.new(
   host: "db-identifier.cluster-XYZ.us-east-2.rds.amazonaws.com",
   username: "iam_user",
   wrapper_plugins: "failover,iam",
+  enable_cleartext_plugin: true,
   sslca: "/path/to/global-bundle.pem",
   sslmode: "verify-full"
 )
 ```
 
 The host (or `iam_host` property if connecting to a custom domain or IP address) must be a valid Amazon RDS endpoint.
+
+> [!IMPORTANT]
+> **MySQL requires `enable_cleartext_plugin: true`.** RDS/Aurora MySQL IAM
+> authentication relies on the MySQL `mysql_clear_password` client plugin, since
+> the IAM auth token must be sent to the server in cleartext (the underlying
+> `mysql2` driver does not enable this plugin by default). The wrapper does
+> **not** set this for you, so you must pass `enable_cleartext_plugin: true` in
+> your connection properties when using the IAM plugin with MySQL. Because the
+> token is sent in cleartext, you must also use a TLS/SSL connection (see the
+> SSL warning above) so the token is encrypted in transit.
+>
+> This does not apply to PostgreSQL (`pg`), which does not use the cleartext
+> plugin mechanism.
 
 ## Configuration Parameters
 
