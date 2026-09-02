@@ -26,12 +26,19 @@ module AwsAdvancedRubyDriverWrapper
       module_function
 
       TokenEntry = Data.define(:token, :expires_at) do
-        # Redact the token so it is never exposed if an instance is logged..
+        # Redact the token so it is never exposed if an instance is logged,
+        # interpolated, or rendered in a backtrace.
         def inspect
           "#<data TokenEntry token=#{AwsAdvancedRubyDriverWrapper::REDACTED.inspect}, " \
             "expires_at=#{expires_at.inspect}>"
         end
         alias_method :to_s, :inspect
+
+        # `pp` / PrettyPrint does not call #inspect; route them through the
+        # redacted representation so `pp entry` cannot leak the token.
+        def pretty_print(pp)
+          pp.text(inspect)
+        end
       end
 
       EXPIRY_BUFFER_SEC = 60
