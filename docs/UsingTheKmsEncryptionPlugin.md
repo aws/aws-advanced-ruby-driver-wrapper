@@ -3,7 +3,11 @@
 The KMS Encryption Plugin encrypts individual table columns with data keys held in [AWS KMS](https://aws.amazon.com/kms/), without the application having to know about it. Which columns are encrypted is configured in the database rather than in application code, so it can change without redeploying the application. That configuration is managed through `Plugins::Encryption::KeyManagementUtility`, which records the column and stores its data key together; editing the `encryption_metadata` and `key_storage` tables by hand is not recommended, since a column is only usable once a matching data key exists in `key_storage`. When a statement writes to one of those columns the plugin encrypts the bind parameter on its way to the server, and when a statement reads one back it decrypts the value on its way to the application. The plaintext never reaches the server, and neither does any data key: only a KMS-encrypted copy of each data key is stored, in `key_storage`.
 
 > [!IMPORTANT]
-> The plugin only sees the statements this wrapper sends over a connection that has the plugin enabled, so on its own it cannot guarantee that an encrypted column never holds a plaintext. To guarantee that plaintext values are never written to an encrypted column, server-side encryption enforcement in the database is required — see [Enforce encryption in the database](#enforce-encryption-in-the-database). Read [Paths that are not covered](#paths-that-are-not-covered) as well before relying on the plugin.
+> On its own, the plugin cannot guarantee that an encrypted column never holds a plaintext value:
+> - the plugin only sees the statements this wrapper sends over a connection that has the plugin enabled
+> - the plugin identifies which columns to encrypt by parsing each statement's SQL, and this parsing is best-effort: for complex SQL it may fail to recognize that a statement writes an encrypted column, in which case the plugin cannot encrypt it
+>
+> To guarantee that plaintext values are never written to an encrypted column, server-side encryption enforcement in the database is required - the database-side triggers, not the SQL parser, are what guarantee an encrypted column never holds plaintext. While the plugin can technically be included in your plugin list without server side encryption enforcement, it is the only way to ensure with 100% certainty that an encrypted column never holds plaintext. See [enforce encryption in the database](#enforce-encryption-in-the-database) to set up server-side enforcement. Read [paths that are not covered](#paths-that-are-not-covered) as well before relying on the plugin.
 
 ## Enabling the Plugin
 
@@ -60,7 +64,7 @@ client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123
   conn.exec_params('INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)', ...)
   ```
 
-When the plugin cannot do its job it mostly stays out of the way and leaves the value to the [server-side enforcement](#enforce-encryption-in-the-database), which is what actually guarantees an encrypted column never holds a plaintext. A read is **lenient**: a value whose integrity check does not pass is handed to the application exactly as the database holds it, which is what the application would have got without the plugin. A write is lenient too, with one exception: it **fails closed** and raises `Errors::MetadataError` only when it can confirm a column is encrypted and sees the statement writing it with something other than a bind parameter, which cannot be encrypted and is almost always a mistake. Everything else it cannot fully read, it passes through - see [Paths that are not covered](#paths-that-are-not-covered).
+When the plugin cannot do its job it mostly stays out of the way and leaves the value to the [server-side enforcement](#enforce-encryption-in-the-database), which is what actually guarantees an encrypted column never holds a plaintext. A read is **lenient**: a value whose integrity check does not pass is handed to the application exactly as the database holds it, which is what the application would have got without the plugin. A write is lenient too, with one exception: it **fails closed** and raises `Errors::MetadataError` only when it can confirm a column is encrypted and sees the statement writing it with something other than a bind parameter, which cannot be encrypted and is almost always a mistake. Everything else it cannot fully read, it passes through - see [paths that are not covered](#paths-that-are-not-covered).
 
 ## Paths that are not covered
 
@@ -77,7 +81,7 @@ When the plugin can see a statement writes but cannot establish which columns - 
 ### Not seen at all, so a plaintext is stored silently
 
 > [!WARNING]
-> On the paths below the plugin never sees the value at all, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged. The server-side HMAC-validation trigger (see [Enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from silently storing a plaintext.
+> On the paths below the plugin never sees the value at all, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged. The server-side HMAC-validation trigger (see [enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from silently storing a plaintext.
 
 - `LOAD DATA INFILE` on MySQL, and a `COPY ... FROM` whose statement text cannot be parsed.
 - Anything the server runs on the application's behalf: `CALL`, `DO`, a function, a stored routine, a trigger.
