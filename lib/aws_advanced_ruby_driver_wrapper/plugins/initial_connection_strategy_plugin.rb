@@ -157,8 +157,19 @@ module AwsAdvancedRubyDriverWrapper
         # No instance URL available to substitute. This happens when topology hasn't been successfully queried yet.
         # Fall back to connecting via the initial endpoint.
         # Callers that want to wait for topology first opt in via INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS (handled in #connect).
-        logger.debug("Unable to resolve a substitute instance host for strategy '#{substitution_strategy}'; \
-          connecting via the original endpoint '#{original_host_info&.host}'")
+        #
+        # Log the diagnostic state that explains the fallback. The most common cause is that the fresh
+        # connection's dialect is not final yet, so the host list provider returns only the initial
+        # (role-less) cluster endpoint even when the shared topology cache is already populated. See the
+        # note on #wait_for_topology_if_configured.
+        logger.debug do
+          hosts = host_service.all_hosts
+          host_summary = hosts.map { |h| "#{h.host}(#{h.role})" }
+          "Unable to resolve a substitute instance host for strategy '#{substitution_strategy}'; " \
+            "connecting via the original endpoint '#{original_host_info&.host}'. " \
+            "dialect_final=#{dialect_service.dialect_final?}, " \
+            "candidate=#{candidate&.host.inspect}, host_count=#{hosts.size}, hosts=#{host_summary}"
+        end
         original_host_info
       end
 
@@ -170,7 +181,16 @@ module AwsAdvancedRubyDriverWrapper
         return unless @wait_for_topology_sec.positive?
         return unless only_initial_endpoint_known?
 
+        logger.debug do
+          "initial_connection: waiting up to #{@wait_for_topology_sec}s for topology " \
+            "(dialect_final=#{dialect_service.dialect_final?})"
+        end
         host_service.force_refresh_host_list?(timeout_sec: @wait_for_topology_sec)
+        logger.debug do
+          hosts = host_service.all_hosts
+          "initial_connection: topology wait finished; host_count=#{hosts.size}, " \
+            "topology_available=#{topology_available?}, dialect_final=#{dialect_service.dialect_final?}"
+        end
       end
 
       # True when the topology contains a single host that is not an instance URL, i.e. we only have

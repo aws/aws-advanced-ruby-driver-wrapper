@@ -242,17 +242,29 @@ module Integration
       port = db_info.instance_endpoint_port
       known_hosts = db_info.instances.to_set(&:host)
       deadline = Time.now + timeout_secs
+      # Note: this only verifies the DIRECT instance endpoints. It does NOT verify the proxied
+      # (Toxiproxy) endpoints that the network-outage failover tests actually connect through, so a
+      # cluster can pass this readiness gate while the proxy path is still recovering.
+      TestUtils.logger.info(
+        "make_sure_instances_up: verifying direct instance endpoints (not proxied); " \
+        "instance_ids=#{instance_ids.inspect}, known_hosts=#{known_hosts.to_a.inspect}, timeout=#{timeout_secs}s"
+      )
       instance_ids.each do |id|
         host = "#{id}.#{suffix}"
-        next unless known_hosts.include?(host)
+        unless known_hosts.include?(host)
+          TestUtils.logger.info("make_sure_instances_up: skipping #{host} (not in known hosts)")
+          next
+        end
 
         instance_info = TestInstanceInfo.new('instanceId' => id, 'host' => host, 'port' => port)
         loop do
           open_connection(instance_info).tap(&:close)
+          TestUtils.logger.info("make_sure_instances_up: #{host} is up")
           break
-        rescue StandardError
+        rescue StandardError => e
           raise "Instance #{id} did not come up within #{timeout_secs} seconds" if Time.now >= deadline
 
+          TestUtils.logger.debug("make_sure_instances_up: #{host} not up yet (#{e.message}), retrying")
           sleep(1)
         end
       end

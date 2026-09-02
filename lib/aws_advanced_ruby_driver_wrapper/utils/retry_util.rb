@@ -130,7 +130,19 @@ module AwsAdvancedRubyDriverWrapper
         close_quietly(conn)
         nil
       rescue StandardError => e
-        logger.debug { "Exception connecting to #{candidate.host}: #{e.message}" }
+        # A login/auth failure and a network failure both land here and are both retried until the
+        # deadline. Classify the error before swallowing it so that an authentication problem (e.g. a
+        # bad IAM token) is not silently indistinguishable from a genuine connectivity outage in the
+        # logs. The retry behavior is unchanged; only the diagnostic is more specific.
+        error_kind =
+          if @dialect_service.login_error?(e)
+            'login/auth error'
+          elsif @dialect_service.network_error?(e)
+            'network error'
+          else
+            'error'
+          end
+        logger.debug { "Exception connecting to #{candidate.host} (#{error_kind}): #{e.message}" }
         close_quietly(conn)
         nil
       end
