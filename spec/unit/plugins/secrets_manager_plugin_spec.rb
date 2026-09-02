@@ -456,4 +456,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       real_storage&.shutdown
     end
   end
+
+  describe 'SecretEntry redaction' do
+    let(:entry) do
+      described_class::SecretEntry.new(username: 'dbuser', password: 'super-secret-pass', expires_at: 123.0)
+    end
+
+    it 'redacts the password in #inspect while keeping the username' do
+      expect(entry.inspect).not_to include('super-secret-pass')
+      expect(entry.inspect).to include(AwsAdvancedRubyDriverWrapper::REDACTED)
+      expect(entry.inspect).to include('dbuser')
+    end
+
+    it 'redacts the password in #to_s' do
+      expect(entry.to_s).not_to include('super-secret-pass')
+      expect(entry.to_s).to include(AwsAdvancedRubyDriverWrapper::REDACTED)
+    end
+
+    it 'redacts the password when interpolated into a string' do
+      expect("entry=#{entry}").not_to include('super-secret-pass')
+    end
+
+    it 'still exposes the password via the accessor for internal use' do
+      expect(entry.password).to eq('super-secret-pass')
+    end
+  end
 end
