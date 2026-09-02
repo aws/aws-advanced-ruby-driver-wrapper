@@ -1,0 +1,55 @@
+name: Run Aurora PostgreSQL Performance Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  aurora-pg-performance-tests:
+    name: 'Run Aurora PostgreSQL performance tests'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@v7
+
+      - name: 'Set up Ruby 3.3'
+        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: 'Set up JDK 8'
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'corretto'
+          java-version: 8
+
+      - name: 'Configure AWS Credentials'
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_perf_test_pg
+          role-duration-seconds: 21600
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Run PostgreSQL performance tests'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-pg-performance --info
+        env:
+          RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
+          RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          AURORA_PG_ENGINE_VERSION: lts
+
+      - name: 'Archive performance results'
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 'pg-performance-results'
+          path: |
+            ./spec/integration/host/build/reports/tests/test/
+            ./spec/integration/container/reports/
+          if-no-files-found: ignore
+          retention-days: 5
