@@ -580,6 +580,7 @@ RSpec.describe 'Failover', :integration,
       base_wrapper_props.merge(
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,failover',
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS.name => 30_000,
         connect_timeout: 10
       )
     end

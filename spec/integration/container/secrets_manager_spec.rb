@@ -267,7 +267,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,secrets_manager',
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => region,
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS.name => 30_000
       }
     end
 

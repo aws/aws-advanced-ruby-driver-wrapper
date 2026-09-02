@@ -311,7 +311,8 @@ RSpec.describe 'AwsIamAuthentication', :integration,
 
     let(:iam_initial_connection_props) do
       base_iam_props.merge(
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,iam'
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,iam',
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS.name => 30_000
       )
     end
 
