@@ -23,14 +23,13 @@ Gem::Specification.new do |spec|
 
   spec.summary = 'AWS Advanced Ruby Driver Wrapper for MySQL and PostgreSQL'
   spec.description = 'A Ruby DB driver wrapper that provides enhanced features for AWS RDS MySQL/PostgreSQL databases'
-  # TODO: uncomment URIs
-  # spec.homepage = 'github.com/aws/aws-advanced-ruby-driver-wrapper'
+  spec.homepage = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper'
   spec.license = 'Apache-2.0'
   spec.required_ruby_version = '>= 3.3.0'
 
-  # spec.metadata['homepage_uri'] = spec.homepage
-  # spec.metadata['source_code_uri'] = 'github.com/aws/aws-advanced-ruby-driver-wrapper'
-  # spec.metadata['changelog_uri'] = 'github.com/aws/aws-advanced-ruby-driver-wrapper/blob/main/CHANGELOG.md'
+  spec.metadata['homepage_uri'] = spec.homepage
+  spec.metadata['source_code_uri'] = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper'
+  spec.metadata['changelog_uri'] = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper/blob/main/CHANGELOG.md'
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   # Specify which files should be added to the gem when it is released.
