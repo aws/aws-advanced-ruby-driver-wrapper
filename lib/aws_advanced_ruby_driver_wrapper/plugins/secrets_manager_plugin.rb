@@ -40,6 +40,13 @@ module AwsAdvancedRubyDriverWrapper
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
           expires_at && now >= expires_at
         end
+
+        # Redact the password so the secret is never exposed if an instance is logged.
+        def inspect
+          "#<data SecretEntry username=#{username.inspect}, " \
+            "password=#{AwsAdvancedRubyDriverWrapper::REDACTED.inspect}, expires_at=#{expires_at.inspect}>"
+        end
+        alias_method :to_s, :inspect
       end
 
       @pending_refreshes = Concurrent::Map.new
