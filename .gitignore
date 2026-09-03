@@ -6,6 +6,7 @@
 /spec/reports/
 /spec/examples.txt
 /spec/integration/host/build
+gemfiles/*.gemfile.lock
 /tmp/
 **/logs
 **/bin
