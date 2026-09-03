@@ -79,9 +79,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
     @context.args
   end
 
-  # That a value was replaced by something that decrypts back to it. Asked as two expectations
-  # because decrypting is lenient: handed a value that is not an encrypted payload at all it answers
-  # with that value, so decrypting alone cannot tell an encrypted value from an untouched one.
+  # That a value was replaced by something that decrypts back to it: it is not the plaintext, and
+  # decrypting it returns the plaintext.
   def expect_encrypted(bound_value, plaintext_value, message = nil)
     expect(bound_value).not_to eq(plaintext_value), message
     expect(plaintext(bound_value)).to eq(plaintext_value), message
@@ -318,10 +317,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(call('result.[]', args: [0], sql: select, returns: row)).to be(row)
     end
 
-    # A column that was written before kms_encryption was turned on still has to read back.
-    it 'leaves a value that is not an encrypted payload untouched' do
+    # The read fails closed: a value in an encrypted column that is not a valid payload (a value
+    # written before kms_encryption was turned on) is refused rather than handed back. Matches JDBC.
+    it 'raises on a value that is not an encrypted payload' do
       row = { 'name' => 'Jo', 'ssn' => '123-45-6789' }
-      expect(call('result.to_a', sql: select, returns: [row])).to eq([row])
+      expect { call('result.to_a', sql: select, returns: [row]) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError)
     end
 
     # One cipher serves the whole call, so a statement returning many rows costs a single Decrypt.

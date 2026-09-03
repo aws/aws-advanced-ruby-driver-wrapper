@@ -140,23 +140,6 @@ module AwsAdvancedRubyDriverWrapper
             end
           end
 
-          # Checks the HMAC of a payload without decrypting it, so a caller can tell an encrypted
-          # value apart from one written before kms_encryption was turned on without needing the data
-          # key. A value that is too short, unsigned, or signed with a different key reads as invalid.
-          #
-          # @param encrypted [String, nil]
-          # @param hmac_key [String, nil]
-          # @return [Boolean]
-          def encrypted_data_valid?(encrypted, hmac_key)
-            return false if encrypted.nil? || hmac_key.nil?
-            return false if hmac_key.empty?
-
-            data = encrypted.b
-            return false if data.bytesize < MIN_ENCRYPTED_LENGTH
-
-            hmac_matches?(data.byteslice(0, HMAC_TAG_LENGTH), data.byteslice(HMAC_TAG_LENGTH..), hmac_key)
-          end
-
           # Serializes a value to the bytes that get encrypted.
           #
           # @param value [Object]

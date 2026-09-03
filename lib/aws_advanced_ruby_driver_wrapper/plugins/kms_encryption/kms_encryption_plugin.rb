@@ -426,8 +426,6 @@ module AwsAdvancedRubyDriverWrapper
           next unless row.key?(column_name)
 
           raw = row[column_name]
-          next unless cipher.encrypted_payload?(raw)
-
           value = decrypt_value(raw, config, cipher)
           next if value.equal?(raw)
 
@@ -443,8 +441,6 @@ module AwsAdvancedRubyDriverWrapper
         decrypted = nil
         positions.each do |index, config|
           raw = row[index]
-          next unless cipher.encrypted_payload?(raw)
-
           value = decrypt_value(raw, config, cipher)
           next if value.equal?(raw)
 
@@ -465,8 +461,6 @@ module AwsAdvancedRubyDriverWrapper
           next unless keys.include?(column_name)
 
           raw = row[column_name]
-          next unless cipher.encrypted_payload?(raw)
-
           value = decrypt_value(raw, config, cipher)
           next if value.equal?(raw)
 

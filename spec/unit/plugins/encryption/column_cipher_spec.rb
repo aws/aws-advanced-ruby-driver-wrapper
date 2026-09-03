@@ -78,27 +78,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
       expect(cipher.decrypt(cipher.encrypt(42, config), config)).to eq('42')
     end
 
-    # A column that was written before kms_encryption was turned on still has to read back.
-    it 'leaves a value that is not an encrypted payload untouched' do
-      expect(cipher.decrypt('123-45-6789', config)).to eq('123-45-6789')
+    # The read fails closed: every value of a configured column is expected to be an encrypted
+    # payload, so a value too short to be one (a value written before kms_encryption was turned on)
+    # is refused rather than returned. Matches the reference JDBC wrapper.
+    it 'raises on a value too short to be an encrypted payload' do
+      expect { cipher.decrypt('123-45-6789', config) }.to raise_error(encryption_error)
     end
 
-    it 'leaves a value that is not a string untouched' do
+    # A null value is passed through so a nullable column still reads null.
+    it 'leaves a null value untouched' do
       expect(cipher.decrypt(42, config)).to eq(42)
       expect(cipher.decrypt(nil, config)).to be_nil
     end
 
-    # A value that fails its integrity check cannot be told apart from a value written before
-    # kms_encryption was turned on, so it comes back as the bytes that are actually stored rather
-    # than as a plaintext the wrapper cannot vouch for. The required server-side enforcement, not
-    # the read path, is what guarantees an encrypted column never holds an unverified value.
-    it 'never decrypts a payload that fails its integrity check' do
+    # A payload whose ciphertext or HMAC has been altered no longer verifies, so it is refused
+    # rather than handed back: the wrapper never returns bytes it cannot vouch for.
+    it 'raises when a payload fails its integrity check' do
       encrypted = cipher.encrypt('123-45-6789', config)
       encrypted.setbyte(50, encrypted.getbyte(50) ^ 0xff)
 
-      decrypted = cipher.decrypt(encrypted, config)
-      expect(decrypted).to be(encrypted)
-      expect(decrypted).not_to include('123-45-6789')
+      expect { cipher.decrypt(encrypted, config) }.to raise_error(encryption_error, /tampered/)
     end
 
     # The write path refuses a column whose stored key has no HMAC key; the read path must fail the
@@ -144,34 +143,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
       expect(key_manager).to have_received(:key_metadata_by_id).with(1)
     end
 
-    # A value that is not really an encrypted payload (legacy data, tampered bytes) can still be long
-    # enough to carry an embedded key id, which resolves to nothing or errors. A lenient read must
-    # return it untouched rather than surfacing the lookup failure.
-    it 'returns the value untouched when the key its payload names cannot be looked up' do
+    # A payload whose embedded key id cannot be looked up falls back to the current key, which it
+    # does not verify against, so it is refused. The lookup error is swallowed so the failure
+    # surfaces as a clean integrity error rather than a key-management one.
+    it 'raises when the key its payload names cannot be looked up' do
       encrypted = cipher.encrypt('123-45-6789', config) # written under key id 1
 
       rotated_config = config.with(key_metadata: key_metadata.with(id: 2, hmac_key: 'H' * 32))
       allow(key_manager).to receive(:key_metadata_by_id).with(1)
                                                         .and_raise(AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError.key_retrieval_failed('boom'))
 
-      result = nil
-      expect { result = cipher.decrypt(encrypted, rotated_config) }.not_to raise_error
-      expect(result).to be(encrypted)
-    end
-  end
-
-  describe '#encrypted_payload?' do
-    it 'is true for something long enough to be a payload' do
-      expect(cipher.encrypted_payload?(cipher.encrypt('123-45-6789', config))).to be(true)
-    end
-
-    it 'is false for a short value' do
-      expect(cipher.encrypted_payload?('123-45-6789')).to be(false)
-    end
-
-    it 'is false for a value that is not a string' do
-      expect(cipher.encrypted_payload?(42)).to be(false)
-      expect(cipher.encrypted_payload?(nil)).to be(false)
+      expect { cipher.decrypt(encrypted, rotated_config) }.to raise_error(encryption_error, /tampered/)
     end
   end
 

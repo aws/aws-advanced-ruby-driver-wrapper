@@ -241,36 +241,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     end
   end
 
-  describe '.encrypted_data_valid?' do
-    it 'is true for an untouched payload' do
-      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
-      expect(described_class.encrypted_data_valid?(encrypted, hmac_key)).to be(true)
-    end
-
-    it 'is false once the payload has been edited' do
-      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
-      encrypted.setbyte(60, encrypted.getbyte(60) ^ 0xff)
-      expect(described_class.encrypted_data_valid?(encrypted, hmac_key)).to be(false)
-    end
-
-    it 'is false for a different HMAC key' do
-      encrypted = encrypt_value('123-45-6789', data_key, hmac_key)
-      expect(described_class.encrypted_data_valid?(encrypted, OpenSSL::Random.random_bytes(32))).to be(false)
-    end
-
-    # Plaintext already in the column is short and unsigned, which is how the plugin tells
-    # encrypted values apart from values written before kms_encryption was turned on.
-    it 'is false for a value that is not an encrypted payload' do
-      expect(described_class.encrypted_data_valid?('123-45-6789', hmac_key)).to be(false)
-    end
-
-    it 'is false without a payload or a key' do
-      expect(described_class.encrypted_data_valid?(nil, hmac_key)).to be(false)
-      expect(described_class.encrypted_data_valid?('x' * 61, nil)).to be(false)
-      expect(described_class.encrypted_data_valid?('x' * 61, '')).to be(false)
-    end
-  end
-
   describe '.key_id_from_payload' do
     it 'reads back the key id a value was encrypted with' do
       expect(described_class.key_id_from_payload(encrypt_value('123-45-6789', data_key, hmac_key, kid: 4242)))

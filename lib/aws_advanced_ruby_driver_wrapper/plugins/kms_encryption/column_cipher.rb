@@ -57,20 +57,18 @@ module AwsAdvancedRubyDriverWrapper
 
         # Decrypts one value read from the column the configuration describes.
         #
-        # The read is lenient by design: a value that does not carry a valid integrity tag is
-        # returned untouched, so a column holding values written before kms_encryption was turned on
-        # still reads back as it was written. Distinguishing a value that was never encrypted from
-        # one that was but has been tampered with is not possible from the bytes alone, so that
-        # guarantee is left to the server-side encryption enforcement rather than attempted here. The
-        # one hard failure is a stored key with no HMAC key: the column can then verify nothing,
-        # which the write path already refuses, so the read path refuses it too rather than falling
-        # open and turning every read into a silent passthrough.
+        # The read fails closed: every value of a column configured for kms_encryption is expected to
+        # be an encrypted payload, so a value that cannot be verified and decrypted - too short to be
+        # a payload, an integrity tag that does not match, or a stored key with no HMAC key - is
+        # raised on rather than returned, so the wrapper never hands the application a value it cannot
+        # vouch for. This matches the reference JDBC wrapper. A null value is passed through so a
+        # nullable column still reads null.
         #
         # @param raw [Object, nil] the raw column value
         # @param config [ColumnEncryptionConfig] the column's kms_encryption configuration
-        # @return [Object, nil] the decrypted value, or +raw+ when it does not carry a valid tag
-        # @raise [Errors::EncryptionError] if the column has no key material, its stored key has no
-        #   HMAC key, or a value that does verify cannot be decrypted
+        # @return [Object, nil] the decrypted value, or +raw+ when it is null
+        # @raise [Errors::EncryptionError] if the value cannot be verified and decrypted, or the
+        #   column has no usable key material
         def decrypt(raw, config)
           return raw unless raw.is_a?(String)
 
@@ -81,18 +79,11 @@ module AwsAdvancedRubyDriverWrapper
           bytes = @sql.read_binary(raw)
           # Resolve the key the value was written with from the id in its payload, so a value written
           # before a key rotation still decrypts. A value whose key cannot be resolved falls back to
-          # the current key, against which it then fails its integrity check and is returned untouched.
+          # the current key, against which it then fails its integrity check and is refused.
           metadata = key_metadata_for_value(bytes, config)
           hmac_key = hmac_key_for(metadata, config)
-          return raw unless EncryptionService.encrypted_data_valid?(bytes, hmac_key)
 
           EncryptionService.decrypt(bytes, data_key_for(metadata), hmac_key, config.algorithm, target_type: String)
-        end
-
-        # @param raw [Object, nil] a raw column value
-        # @return [Boolean] whether the value even looks like an encrypted payload
-        def encrypted_payload?(raw)
-          raw.is_a?(String) && @sql.read_binary(raw).bytesize >= EncryptionService::MIN_ENCRYPTED_LENGTH
         end
 
         # Zeroes every plaintext data key this cipher decrypted.
