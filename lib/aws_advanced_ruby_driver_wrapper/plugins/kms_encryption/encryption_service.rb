@@ -140,8 +140,9 @@ module AwsAdvancedRubyDriverWrapper
             end
           end
 
-          # Checks the HMAC of a payload without decrypting it. Useful for validating stored
-          # data when the data key is not available.
+          # Checks the HMAC of a payload without decrypting it, so a caller can tell an encrypted
+          # value apart from one written before kms_encryption was turned on without needing the data
+          # key. A value that is too short, unsigned, or signed with a different key reads as invalid.
           #
           # @param encrypted [String, nil]
           # @param hmac_key [String, nil]

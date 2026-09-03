@@ -57,14 +57,20 @@ module AwsAdvancedRubyDriverWrapper
 
         # Decrypts one value read from the column the configuration describes.
         #
-        # A value that does not carry a valid integrity tag is returned untouched, so that a column
-        # holding values written before kms_encryption was turned on still reads back as it was
-        # written.
+        # The read is lenient by design: a value that does not carry a valid integrity tag is
+        # returned untouched, so a column holding values written before kms_encryption was turned on
+        # still reads back as it was written. Distinguishing a value that was never encrypted from
+        # one that was but has been tampered with is not possible from the bytes alone, so that
+        # guarantee is left to the server-side encryption enforcement rather than attempted here. The
+        # one hard failure is a stored key with no HMAC key: the column can then verify nothing,
+        # which the write path already refuses, so the read path refuses it too rather than falling
+        # open and turning every read into a silent passthrough.
         #
         # @param raw [Object, nil] the raw column value
         # @param config [ColumnEncryptionConfig] the column's kms_encryption configuration
-        # @return [Object, nil] the decrypted value, or +raw+ when it is not an encrypted payload
-        # @raise [Errors::EncryptionError] if the value is encrypted but cannot be decrypted
+        # @return [Object, nil] the decrypted value, or +raw+ when it does not carry a valid tag
+        # @raise [Errors::EncryptionError] if the column has no key material, its stored key has no
+        #   HMAC key, or a value that does verify cannot be decrypted
         def decrypt(raw, config)
           return raw unless raw.is_a?(String)
 
@@ -74,12 +80,10 @@ module AwsAdvancedRubyDriverWrapper
 
           bytes = @sql.read_binary(raw)
           # Resolve the key the value was written with from the id in its payload, so a value written
-          # before a key rotation still decrypts. A value with no resolvable key (legacy data, or a
-          # key no longer in key_storage) falls back to the current key, fails the integrity check
-          # below, and is returned untouched.
+          # before a key rotation still decrypts. A value whose key cannot be resolved falls back to
+          # the current key, against which it then fails its integrity check and is returned untouched.
           metadata = key_metadata_for_value(bytes, config)
-          hmac_key = metadata&.hmac_key
-          return raw if hmac_key.nil? || hmac_key.empty?
+          hmac_key = hmac_key_for(metadata, config)
           return raw unless EncryptionService.encrypted_data_valid?(bytes, hmac_key)
 
           EncryptionService.decrypt(bytes, data_key_for(metadata), hmac_key, config.algorithm, target_type: String)

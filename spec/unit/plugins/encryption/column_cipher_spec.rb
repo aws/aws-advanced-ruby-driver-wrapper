@@ -90,7 +90,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
 
     # A value that fails its integrity check cannot be told apart from a value written before
     # kms_encryption was turned on, so it comes back as the bytes that are actually stored rather
-    # than as a plaintext the wrapper cannot vouch for.
+    # than as a plaintext the wrapper cannot vouch for. The required server-side enforcement, not
+    # the read path, is what guarantees an encrypted column never holds an unverified value.
     it 'never decrypts a payload that fails its integrity check' do
       encrypted = cipher.encrypt('123-45-6789', config)
       encrypted.setbyte(50, encrypted.getbyte(50) ^ 0xff)
@@ -98,6 +99,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
       decrypted = cipher.decrypt(encrypted, config)
       expect(decrypted).to be(encrypted)
       expect(decrypted).not_to include('123-45-6789')
+    end
+
+    # The write path refuses a column whose stored key has no HMAC key; the read path must fail the
+    # same way rather than fall open, or emptying a stored HMAC key would silently turn every read
+    # into passthrough.
+    it 'raises when the stored key has no HMAC key rather than returning the value untouched' do
+      encrypted = cipher.encrypt('123-45-6789', config)
+      no_hmac = config.with(key_metadata: key_metadata.with(hmac_key: ''))
+
+      expect { cipher.decrypt(encrypted, no_hmac) }
+        .to raise_error(encryption_error, /no HMAC key/)
     end
 
     it 'refuses a payload that is signed but was encrypted with a different data key' do
