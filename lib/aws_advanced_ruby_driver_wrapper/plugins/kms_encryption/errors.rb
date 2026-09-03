@@ -80,6 +80,11 @@ module AwsAdvancedRubyDriverWrapper
       INVALID_ALGORITHM = 'ENC03'
       INVALID_KEY = 'ENC04'
       TYPE_CONVERSION_FAILED = 'ENC05'
+      # A value could not be confirmed to be a valid encrypted payload of this column: it is too
+      # short to be one, or its HMAC does not verify. Distinct from DECRYPTION_FAILED, which means a
+      # confirmed payload that would not decrypt (a wrong data key), so that a lenient read can
+      # return an unverifiable value untouched while still failing closed on a real decryption fault.
+      INTEGRITY_CHECK_FAILED = 'ENC06'
 
       def default_code
         ENCRYPTION_FAILED
@@ -92,6 +97,10 @@ module AwsAdvancedRubyDriverWrapper
 
         def decryption_failed(message, context = {})
           new(message, code: DECRYPTION_FAILED, context: context)
+        end
+
+        def integrity_check_failed(message, context = {})
+          new(message, code: INTEGRITY_CHECK_FAILED, context: context)
         end
 
         def invalid_algorithm(message, context = {})

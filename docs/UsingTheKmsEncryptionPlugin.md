@@ -26,21 +26,22 @@ The plugin expects two tables in the schema named by `encryption_metadata_schema
 
 ## Parameters
 
-| Parameter | Type | Required | Description | Example | Default |
-|---|---|:---:|---|---|---|
-| `encryption_metadata_schema` | String | No | Schema holding the `encryption_metadata` and `key_storage` tables. | `'app_encrypt'` | `'encrypt'` |
-| `encryption_kms_region` | String | Yes | AWS region for KMS calls. Falls back to the `AWS_REGION` or `AWS_DEFAULT_REGION` environment variable; the plugin raises if none of these is set. | `'us-east-2'` | None |
-| `encryption_kms_endpoint` | String | No | Endpoint URL override for KMS. | `'http://localhost:4566'` | `nil` |
+| Parameter | Type | Required | Description | Example                               | Default |
+|---|---|:---:|---|---------------------------------------|---|
+| `encryption_metadata_schema` | String | No | Schema holding the `encryption_metadata` and `key_storage` tables. | `'app_encrypt'`                       | `'encrypt'` |
+| `encryption_kms_region` | String | Yes | AWS region for KMS calls. Falls back to the `AWS_REGION` or `AWS_DEFAULT_REGION` environment variable; the plugin raises if none of these is set. | `'us-east-2'`                         | None |
+| `encryption_kms_endpoint` | String | No | Endpoint URL override for KMS. | `'http://localhost:4566'`             | `nil` |
 | `aws_credentials_provider` | `Aws::CredentialProvider` | No | A custom AWS credentials provider instance for authenticating with KMS. | `Aws::AssumeRoleCredentials.new(...)` | AWS SDK default chain |
-| `encryption_metadata_cache_enabled` | Boolean | No | Cache the encryption metadata in memory. Leave it enabled in production: when disabled, the plugin opens a short-lived metadata connection for **every** statement that touches an encrypted column. If you need fresher metadata, lower `encryption_metadata_cache_refresh_interval_sec` rather than disabling the cache. | `false` | `true` |
-| `encryption_metadata_cache_expiration_sec` | Integer | No | How long cached encryption metadata stays valid, in seconds. | `600` | `3600` |
-| `encryption_metadata_cache_refresh_interval_sec` | Integer | No | How often the encryption metadata is refreshed in the background, in seconds. Set to `0` to disable background refresh. | `60` | `300` |
-| `encryption_data_key_cache_enabled` | Boolean | No | Cache decrypted data keys in memory. Leave it enabled in production: when disabled, the plugin makes a KMS `Decrypt` call for **every** statement that touches an encrypted column, which adds latency and cost and can hit KMS request-rate limits. Disabling it does shorten how long a plaintext data key stays in memory, so treat it as a deliberate throughput-versus-key-exposure tradeoff rather than an off-by-default setting. | `false` | `true` |
-| `encryption_data_key_cache_max_size` | Integer | No | Maximum number of decrypted data keys held in memory. | `100` | `1000` |
-| `encryption_data_key_cache_expiration_sec` | Integer | No | How long a decrypted data key stays cached, in seconds. | `600` | `300` |
-| `encryption_key_management_max_retries` | Integer | No | Maximum number of retries for throttled or failed KMS calls. | `5` | `3` |
-| `encryption_key_management_retry_backoff_base_ms` | Integer | No | Base delay in milliseconds for the exponential backoff between KMS retries. | `250` | `100` |
-| `encryption_audit_logging_enabled` | Boolean | No | Log an audit record for every key management, encryption, and decryption operation. | `true` | `false` |
+| `encryption_metadata_cache_enabled` | Boolean | No | Cache the encryption metadata in memory. Leave it enabled in production: when disabled, the plugin opens a short-lived metadata connection for **every** statement that touches an encrypted column. If you need fresher metadata, lower `encryption_metadata_cache_refresh_interval_sec` rather than disabling the cache. | `true`                                | `true` |
+| `encryption_metadata_cache_expiration_sec` | Integer | No | How long cached encryption metadata stays valid, in seconds. | `600`                                 | `3600` |
+| `encryption_metadata_cache_refresh_interval_sec` | Integer | No | How often the encryption metadata is refreshed in the background, in seconds. Set to `0` to disable background refresh. | `60`                                  | `300` |
+| `encryption_data_key_cache_enabled` | Boolean | No | Cache decrypted data keys in memory. Leave it enabled in production: when disabled, the plugin makes a KMS `Decrypt` call for **every** statement that touches an encrypted column, which adds latency and cost and can hit KMS request-rate limits. Disabling it does shorten how long a plaintext data key stays in memory, so treat it as a deliberate throughput-versus-key-exposure tradeoff rather than an off-by-default setting. | `true`                                | `true` |
+| `encryption_data_key_cache_max_size` | Integer | No | Maximum number of decrypted data keys held in memory. | `100`                                 | `1000` |
+| `encryption_data_key_cache_expiration_sec` | Integer | No | How long a decrypted data key stays cached, in seconds. | `600`                                 | `300` |
+| `encryption_key_management_max_retries` | Integer | No | Maximum number of retries for throttled or failed KMS calls. | `5`                                   | `3` |
+| `encryption_key_management_retry_backoff_base_ms` | Integer | No | Base delay in milliseconds for the exponential backoff between KMS retries. | `250`                                 | `100` |
+| `encryption_audit_logging_enabled` | Boolean | No | Log an audit record for every key management, encryption, and decryption operation. | `true`                                | `false` |
+| `encryption_return_unverified_data` | Boolean | No | **Do not enable in production.** On read, return a value as it is stored when it cannot be confirmed to be this column's encrypted data (too short to be a payload, or a failed HMAC) instead of raising. Intended only for reading data written before the column was encrypted. A value that verifies but cannot be decrypted (a wrong data key) still raises. See [Reading data written before encryption](#reading-data-written-before-encryption). | `false`                               | `false` |
 
 ## Paths that are covered
 
@@ -55,6 +56,22 @@ conn.exec_params('SELECT ssn FROM users WHERE name = $1', ['Jo']).each { |row| r
 client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123-45-6789')
 ```
 
+> [!IMPORTANT]
+> **On MySQL with ActiveRecord, set `prepared_statements: true` on the connection.** The `aws_mysql2` adapter (like the underlying `mysql2` adapter) defaults prepared statements **off**, and with them off ActiveRecord writes a value into the SQL text as a literal rather than binding it. The plugin cannot encrypt a literal, so a write to an encrypted column is refused (`Errors::MetadataError`, see [below](#refused-so-the-plaintext-is-not-stored)). Enable them in `database.yml` so values are bound and can be encrypted:
+> ```yaml
+> production:
+>   adapter: aws_mysql2
+>   prepared_statements: true
+>   # ...
+> ```
+> The `aws_postgresql` adapter already defaults prepared statements on, so PostgreSQL needs no change.
+>
+> Prepared statements are off by default on the mysql2 adapter for a reason, so weigh the trade-off before enabling them fleet-wide:
+> - **Connection poolers/proxies.** Server-side prepared statements are bound to a specific backend connection. A pooler that multiplexes many clients onto fewer backends — Amazon RDS Proxy, ProxySQL, PgBouncer in transaction mode — may be unable to reuse them, which forces session pinning (defeating much of the pooling benefit) or surfaces `Unknown prepared statement handler` errors.
+> - **Server statement limits.** Each prepared statement consumes a handle against MySQL's `max_prepared_stmt_count`; many long-lived pooled connections each preparing many distinct statements can exhaust it and start failing with `Can't create more than max_prepared_stmt_count statements`.
+>
+> If you cannot enable prepared statements, the plugin still cannot encrypt an inlined literal — scope the encrypted columns to writes you can issue as bound parameters (a raw prepared/`exec_params` statement, or an `/*@encrypt:table.column*/` annotation on a bound value), and rely on the required [server-side trigger](#enforce-encryption-in-the-database) to reject any plaintext that slips through.
+
 - Bind parameters of an `INSERT`, `UPDATE`, or `REPLACE` whose columns the plugin can read from the statement, including a multi-row `VALUES` list and the assignments of an upsert (`ON CONFLICT ... DO UPDATE` on PostgreSQL, `ON DUPLICATE KEY UPDATE` on MySQL). On PostgreSQL this also covers a `MERGE`'s `WHEN MATCHED ... UPDATE` / `WHEN NOT MATCHED ... INSERT` clauses and a data-modifying common table expression, for example `WITH w AS (INSERT INTO users (ssn) VALUES ($1) RETURNING id) SELECT * FROM w`.
 - Bind parameters compared against an encrypted column in a `WHERE` clause. Note that encryption is randomized, with a fresh IV per value, so the ciphertext differs every time and an equality search against an encrypted column will not match anything — it silently returns no rows rather than matching, and nothing leaks through deterministic ciphertext. In an ActiveRecord app the same applies to finders and validations that compare an encrypted column: `where(ssn: x)`, `find_by(ssn: x)`, and `validates_uniqueness_of :ssn` never match an existing row, so a uniqueness validation silently passes even when a duplicate exists. Filter, look up, and enforce uniqueness on a column that is not encrypted instead.
 - Statements run by name after being prepared, whether prepared by the driver's own `prepare` or by a `PREPARE` sent as a statement. A `PREPARE` is also checked as it is sent, so a plaintext written into the statement it carries is caught at that point.
@@ -64,7 +81,16 @@ client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123
   conn.exec_params('INSERT INTO users (name, ssn) VALUES ($1, /*@encrypt:users.ssn*/ $2)', ...)
   ```
 
-When the plugin cannot do its job it mostly stays out of the way and leaves the value to the [server-side enforcement](#enforce-encryption-in-the-database), which is what actually guarantees an encrypted column never holds a plaintext. A read is **lenient**: a value whose integrity check does not pass is handed to the application exactly as the database holds it, which is what the application would have got without the plugin. A write is lenient too, with one exception: it **fails closed** and raises `Errors::MetadataError` only when it can confirm a column is encrypted and sees the statement writing it with something other than a bind parameter, which cannot be encrypted and is almost always a mistake. Everything else it cannot fully read, it passes through - see [paths that are not covered](#paths-that-are-not-covered).
+The plugin treats reads and writes differently. A **read fails closed**: a value read from an encrypted column that does not verify - it is not a valid encrypted payload, or its integrity tag does not match - is refused with an `Errors::EncryptionError` rather than handed back, so the application never receives a value the wrapper cannot vouch for. A consequence worth noting: a value that reached an encrypted column outside the plugin, including data that predates the column being encrypted, will raise when read back through the plugin, so encrypt existing data before it is read through an encrypted column (or, only for a controlled migration, see [Reading data written before encryption](#reading-data-written-before-encryption)). A **write** is the opposite - when the plugin cannot do its job it mostly stays out of the way and leaves the value to the [server-side enforcement](#enforce-encryption-in-the-database), which is what actually guarantees an encrypted column never holds a plaintext, with one exception: it **fails closed** and raises `Errors::MetadataError` when it can confirm a column is encrypted and sees the statement writing it with something other than a bind parameter, which cannot be encrypted and is almost always a mistake. Everything else on a write it cannot fully read, it passes through - see [Paths that are not covered](#paths-that-are-not-covered).
+
+### Reading data written before encryption
+
+When you enable encryption on a column that already holds plaintext, those existing rows are not encrypted payloads, so reading them back through the plugin fails closed and raises. The supported way to handle this is to **encrypt the existing data** (read each value and write it back through the plugin so it is stored encrypted) before the application reads the column normally.
+
+For a controlled migration where that is not yet possible, `encryption_return_unverified_data` (default `false`) makes the read **lenient**: a value that cannot be confirmed to be this column's encrypted data - too short to be a payload, or a failed HMAC - is returned exactly as the database holds it instead of raising, so legacy plaintext reads back untouched while genuinely encrypted values still decrypt.
+
+> [!WARNING]
+> **Do not enable `encryption_return_unverified_data` in production.** It lets unverified data reach the application and removes the read path's tamper detection: a value that fails its integrity check can no longer be told apart from a value that was never encrypted, so a tampered or corrupted value is returned silently. Use it only for a bounded migration of pre-existing data, then turn it off. Even when it is enabled, a value that verifies but cannot be decrypted (a wrong or mismatched data key) still raises, because that indicates a real key fault rather than legacy plaintext.
 
 ## Paths that are not covered
 
@@ -81,7 +107,7 @@ When the plugin can see a statement writes but cannot establish which columns - 
 ### Not seen at all, so a plaintext is stored silently
 
 > [!WARNING]
-> On the paths below the plugin never sees the value at all, so a plaintext goes to the server, is stored as-is, and reads back as-is forever after, since the read path only decrypts a value whose integrity tag verifies. Nothing raises and nothing is logged. The server-side HMAC-validation trigger (see [enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from silently storing a plaintext.
+> On the paths below the plugin never sees the write at all, so a plaintext goes to the server and is stored, with nothing raised and nothing logged at write time. The server-side HMAC-validation trigger (see [Enforce encryption in the database](#enforce-encryption-in-the-database)) is what stops these paths from storing a plaintext. Without the trigger the plaintext is stored; a later read of it through the plugin fails closed and raises, but a read that does not go through the plugin still returns it in the clear.
 
 - `LOAD DATA INFILE` on MySQL, and a `COPY ... FROM` whose statement text cannot be parsed.
 - Anything the server runs on the application's behalf: `CALL`, `DO`, a function, a stored routine, a trigger.
@@ -92,7 +118,7 @@ When the plugin can see a statement writes but cannot establish which columns - 
 ## Enforce encryption in the database
 
 > [!WARNING]
-> **A database-side HMAC-validation trigger is required on every encrypted column to prevent plaintext writes — install the one below for each.** Without it, the checks in this plugin are the only thing standing between a plaintext and an encrypted column, and they cover only the statements this wrapper sends over a connection with the plugin enabled. A plaintext that gets past them is stored silently, reads back silently, and is indistinguishable from a legitimately unencrypted legacy value: there is no error, no log line, and no way to tell afterwards how long the value sat in the clear. Whether the column holds only ciphertext is a property of the database, and only the database can enforce it.
+> **A database-side HMAC-validation trigger is required on every encrypted column to prevent plaintext writes — install the one below for each.** Without it, the checks in this plugin are the only thing standing between a plaintext and an encrypted column, and they cover only the statements this wrapper sends over a connection with the plugin enabled. A plaintext that gets past them is stored: a later read through the plugin fails closed and raises rather than returning it, but a read that bypasses the plugin still returns it in the clear, and the trigger is the only thing that keeps it out of the column in the first place. Whether the column holds only ciphertext is a property of the database, and only the database can enforce it.
 
 The trigger needs no help from the application, because the HMAC key that signs each value is stored unencrypted in `key_storage`: the server can verify that a value carries a valid integrity tag without ever holding the data key, and so without being able to decrypt anything.
 
@@ -131,8 +157,8 @@ BEGIN
     PERFORM set_config(cache_key, encode(hmac_key, 'hex'), true);
   END;
 
-  -- Payload: [ HMAC-SHA256 tag : 32 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
-  IF length(col_value) < 61
+  -- Payload: [ HMAC-SHA256 tag : 32 ][ key id : 4 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
+  IF length(col_value) < 65
      OR substring(col_value from 1 for 32) <> hmac(substring(col_value from 33), hmac_key, 'sha256') THEN
     RAISE EXCEPTION 'Column %.% does not carry a valid HMAC tag (plaintext or tampered value)', TG_TABLE_NAME, col_name;
   END IF;

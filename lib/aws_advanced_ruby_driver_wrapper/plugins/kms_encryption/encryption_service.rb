@@ -31,19 +31,23 @@ module AwsAdvancedRubyDriverWrapper
       #
       # The payload written to the database is:
       #
-      #   [ HMAC-SHA256 tag : 32 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
+      #   [ HMAC-SHA256 tag : 32 ][ key id : 4 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
       #
       # The HMAC covers everything after itself, which lets the database verify that a payload
       # has not been tampered with (see the +verify_encrypted_data_hmac+ SQL function) without
-      # ever holding the data key. The type marker records how the plaintext was serialized so
-      # that the original Ruby type can be recovered on read.
+      # ever holding the data key. The key id records which +key_storage+ row the value was
+      # encrypted with, so a value stays decryptable after its column's data key has been rotated
+      # (the read path resolves that exact key rather than assuming the column's current one); it
+      # is inside the HMAC-covered region, so tampering with it is detected. The type marker records
+      # how the plaintext was serialized so that the original Ruby type can be recovered on read.
       module EncryptionService
         HMAC_DIGEST = 'SHA256'
         HMAC_TAG_LENGTH = 32
+        KEY_ID_LENGTH = 4
         TYPE_MARKER_LENGTH = 1
         GCM_IV_LENGTH = 12
         GCM_TAG_LENGTH = 16
-        MIN_ENCRYPTED_LENGTH = HMAC_TAG_LENGTH + TYPE_MARKER_LENGTH + GCM_IV_LENGTH + GCM_TAG_LENGTH
+        MIN_ENCRYPTED_LENGTH = HMAC_TAG_LENGTH + KEY_ID_LENGTH + TYPE_MARKER_LENGTH + GCM_IV_LENGTH + GCM_TAG_LENGTH
 
         MILLIS_PER_SECOND = 1000.0
 
@@ -54,23 +58,42 @@ module AwsAdvancedRubyDriverWrapper
           # @param data_key [String] the plaintext data key, binary
           # @param hmac_key [String] the HMAC-SHA256 key, binary
           # @param algorithm [String] an {EncryptionAlgorithm} name
+          # @param key_id [Integer] the +key_storage+ id of the data key, recorded in the payload so
+          #   the value stays decryptable after the column's key is rotated
           # @return [String, nil] the binary payload to store, or nil when value is nil
           # @raise [Errors::EncryptionError] if the key or algorithm is unusable, or the cipher fails
-          def encrypt(value, data_key, hmac_key, algorithm = EncryptionAlgorithm::DEFAULT)
+          def encrypt(value, data_key, hmac_key, algorithm = EncryptionAlgorithm::DEFAULT, key_id:)
             return nil if value.nil?
 
             validate_key!(data_key, algorithm)
             validate_hmac_key!(hmac_key)
+            validate_key_id!(key_id)
 
             marker = TypeMarker.from_object(value)
             plaintext = serialize_value(value, marker)
 
             begin
-              payload = seal(plaintext, marker, data_key, algorithm)
-              "#{OpenSSL::HMAC.digest(HMAC_DIGEST, hmac_key, payload)}#{payload}".b
+              # body = [ key id : 4 ][ type marker : 1 ][ IV : 12 ][ ciphertext ][ GCM tag : 16 ]
+              body = "#{[key_id].pack('N')}#{seal(plaintext, marker, data_key, algorithm)}".b
+              "#{OpenSSL::HMAC.digest(HMAC_DIGEST, hmac_key, body)}#{body}".b
             ensure
               wipe(plaintext)
             end
+          end
+
+          # Reads the key id recorded in a payload, without verifying or decrypting it. Used to pick
+          # the key a stored value was written with before its HMAC is checked; a payload with no key
+          # id (too short, or written before this format existed) yields nil.
+          #
+          # @param encrypted [String, nil] the binary payload read from the database
+          # @return [Integer, nil]
+          def key_id_from_payload(encrypted)
+            return nil if encrypted.nil?
+
+            data = encrypted.b
+            return nil if data.bytesize < HMAC_TAG_LENGTH + KEY_ID_LENGTH
+
+            data.byteslice(HMAC_TAG_LENGTH, KEY_ID_LENGTH).unpack1('N')
           end
 
           # Decrypts a payload produced by {encrypt}.
@@ -89,7 +112,7 @@ module AwsAdvancedRubyDriverWrapper
 
             data = encrypted.b
             if data.bytesize < MIN_ENCRYPTED_LENGTH
-              raise Errors::EncryptionError.decryption_failed(
+              raise Errors::EncryptionError.integrity_check_failed(
                 "Encrypted data is too short: #{data.bytesize} bytes, expected at least #{MIN_ENCRYPTED_LENGTH}"
               ).with_algorithm(algorithm)
             end
@@ -97,13 +120,16 @@ module AwsAdvancedRubyDriverWrapper
             validate_key!(data_key, algorithm)
             validate_hmac_key!(hmac_key)
 
-            payload = data.byteslice(HMAC_TAG_LENGTH..)
-            unless hmac_matches?(data.byteslice(0, HMAC_TAG_LENGTH), payload, hmac_key)
+            # The HMAC covers the key id and everything after it; strip the key id once verified to
+            # recover the sealed payload the marker, IV, ciphertext and tag live in.
+            body = data.byteslice(HMAC_TAG_LENGTH..)
+            unless hmac_matches?(data.byteslice(0, HMAC_TAG_LENGTH), body, hmac_key)
               raise Errors::EncryptionError
-                .decryption_failed('Integrity check failed: the encrypted value has been tampered with')
+                .integrity_check_failed('Integrity check failed: the encrypted value has been tampered with')
                 .with_algorithm(algorithm)
             end
 
+            payload = body.byteslice(KEY_ID_LENGTH..)
             marker = read_marker(payload)
             plaintext = unseal(payload, data_key, algorithm, marker)
 
@@ -112,22 +138,6 @@ module AwsAdvancedRubyDriverWrapper
             ensure
               wipe(plaintext)
             end
-          end
-
-          # Checks the HMAC of a payload without decrypting it. Useful for validating stored
-          # data when the data key is not available.
-          #
-          # @param encrypted [String, nil]
-          # @param hmac_key [String, nil]
-          # @return [Boolean]
-          def encrypted_data_valid?(encrypted, hmac_key)
-            return false if encrypted.nil? || hmac_key.nil?
-            return false if hmac_key.empty?
-
-            data = encrypted.b
-            return false if data.bytesize < MIN_ENCRYPTED_LENGTH
-
-            hmac_matches?(data.byteslice(0, HMAC_TAG_LENGTH), data.byteslice(HMAC_TAG_LENGTH..), hmac_key)
           end
 
           # Serializes a value to the bytes that get encrypted.
@@ -310,6 +320,16 @@ module AwsAdvancedRubyDriverWrapper
             return if hmac_key.is_a?(String) && !hmac_key.empty?
 
             raise Errors::EncryptionError.invalid_key('An HMAC key is required to protect encrypted values')
+          end
+
+          # The key id is packed as an unsigned 32-bit integer, so it must be a non-negative Integer
+          # that fits in four bytes.
+          def validate_key_id!(key_id)
+            return if key_id.is_a?(Integer) && key_id >= 0 && key_id <= 0xFFFF_FFFF
+
+            raise Errors::EncryptionError.encryption_failed(
+              "A valid key id is required to tag an encrypted value, got #{key_id.inspect}"
+            )
           end
 
           def expect_length(bytes, length, marker)

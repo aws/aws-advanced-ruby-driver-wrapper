@@ -52,6 +52,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(config.data_key_cache_enabled).to be(true)
       expect(config.data_key_cache_max_size).to eq(1000)
       expect(config.data_key_cache_expiration_sec).to eq(300)
+      expect(config.return_unverified_data).to be(false)
     end
 
     it 'reads every setting from the properties' do
@@ -68,7 +69,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
           encryption_audit_logging_enabled: true,
           encryption_data_key_cache_enabled: false,
           encryption_data_key_cache_max_size: 10,
-          encryption_data_key_cache_expiration_sec: 120
+          encryption_data_key_cache_expiration_sec: 120,
+          encryption_return_unverified_data: true
         )
       )
 
@@ -84,6 +86,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(config.data_key_cache_enabled).to be(false)
       expect(config.data_key_cache_max_size).to eq(10)
       expect(config.data_key_cache_expiration_sec).to eq(120)
+      expect(config.return_unverified_data).to be(true)
     end
 
     it 'falls back to AWS_REGION' do

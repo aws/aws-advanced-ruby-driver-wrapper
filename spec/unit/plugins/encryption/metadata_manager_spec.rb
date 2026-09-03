@@ -16,7 +16,6 @@
 
 require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
-require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/metadata_manager'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
@@ -24,17 +23,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
   let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
   let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
   let(:connection) { double('Connection') }
-  let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
   let(:sql_runner) { instance_double(encryption::SqlRunner) }
   # Background refresh off by default, so that an example only sees the queries it makes itself.
   let(:config) { build_encryption_config(metadata_cache_refresh_interval_sec: 0) }
   let(:rows) { [row('users', 'ssn'), row('users', 'email'), row('orders', 'card_number')] }
   subject(:manager) do
-    described_class.new(connection_provider: connection_provider, sql_runner: sql_runner, config: config)
+    described_class.new(connection: connection, sql_runner: sql_runner, config: config)
   end
 
   before do
-    allow(connection_provider).to receive(:with_connection).and_yield(connection)
     allow(sql_runner).to receive(:query).and_return(rows)
     allow(sql_runner).to receive(:read_binary) { |value| value }
   end
@@ -60,7 +57,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
     end
 
     it 'does not load anything when the metadata is not cached' do
-      manager = described_class.new(connection_provider: connection_provider, sql_runner: sql_runner,
+      manager = described_class.new(connection: connection, sql_runner: sql_runner,
                                     config: config.with(metadata_cache_enabled: false))
       manager.start
 
@@ -71,7 +68,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
     # A column can be added to or removed from the kms_encryption configuration while the application
     # runs, so the cache is reloaded periodically.
     it 'refreshes the cache in the background when an interval is configured' do
-      manager = described_class.new(connection_provider: connection_provider, sql_runner: sql_runner,
+      manager = described_class.new(connection: connection, sql_runner: sql_runner,
                                     config: config.with(metadata_cache_refresh_interval_sec: 1))
       manager.start
       refresh_thread = Thread.list.find { |thread| thread.name == 'kms_encryption-metadata-refresh' }
@@ -116,7 +113,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
     it 'records the refresh in the audit trail' do
       audit_logger = instance_double(encryption::AuditLogger)
       allow(audit_logger).to receive(:log_metadata_operation)
-      manager = described_class.new(connection_provider: connection_provider, sql_runner: sql_runner, config: config,
+      manager = described_class.new(connection: connection, sql_runner: sql_runner, config: config,
                                     audit_logger: audit_logger)
       manager.refresh
 
@@ -127,7 +124,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
       audit_logger = instance_double(encryption::AuditLogger)
       allow(audit_logger).to receive(:log_metadata_operation)
       allow(sql_runner).to receive(:query).and_raise(StandardError, 'relation does not exist')
-      manager = described_class.new(connection_provider: connection_provider, sql_runner: sql_runner, config: config,
+      manager = described_class.new(connection: connection, sql_runner: sql_runner, config: config,
                                     audit_logger: audit_logger)
 
       expect { manager.refresh }.to raise_error(metadata_error)
@@ -272,7 +269,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
 
   describe 'looking up a column without a usable cache' do
     subject(:manager) do
-      described_class.new(connection_provider: connection_provider, sql_runner: sql_runner,
+      described_class.new(connection: connection, sql_runner: sql_runner,
                           config: config.with(metadata_cache_enabled: false))
     end
 
@@ -326,7 +323,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
 
   describe 'a cache that has expired' do
     subject(:manager) do
-      described_class.new(connection_provider: connection_provider, sql_runner: sql_runner,
+      described_class.new(connection: connection, sql_runner: sql_runner,
                           config: config.with(metadata_cache_expiration_sec: 1))
     end
 

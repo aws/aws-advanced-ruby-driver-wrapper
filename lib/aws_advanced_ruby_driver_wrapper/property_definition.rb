@@ -322,6 +322,14 @@ module AwsAdvancedRubyDriverWrapper
       'Log an audit record for every key management, kms_encryption, and decryption operation',
       default_value: false, type: :boolean
     )
+    ENCRYPTION_RETURN_UNVERIFIED_DATA = WrapperProperty.new(
+      :encryption_return_unverified_data,
+      'On read, return a value as it is stored when it cannot be confirmed to be valid encrypted data ' \
+      '(too short to be a payload, or a failed HMAC) instead of raising. Intended only for reading data ' \
+      'written before kms_encryption was enabled. MUST NOT be enabled in production: it lets unverified ' \
+      'data reach the application. A value that verifies but cannot be decrypted still raises.',
+      default_value: false, type: :boolean
+    )
     ENCRYPTION_DATA_KEY_CACHE_ENABLED = WrapperProperty.new(
       :encryption_data_key_cache_enabled,
       'Cache decrypted data keys in memory to avoid a KMS Decrypt call per statement',
