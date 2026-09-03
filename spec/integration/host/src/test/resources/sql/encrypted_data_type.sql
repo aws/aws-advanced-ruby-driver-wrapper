@@ -1,8 +1,8 @@
 -- PostgreSQL domain for HMAC-verified encrypted data
--- Format: [HMAC:32bytes][type:1byte][IV:12bytes][ciphertext]
+-- Format: [HMAC:32][type:1][IV:12][ciphertext][GCM tag:16]  (minimum length 61)
 DROP DOMAIN IF EXISTS encrypted_data CASCADE;
 CREATE DOMAIN encrypted_data AS bytea
-CHECK (length(VALUE) >= 45);
+CHECK (length(VALUE) >= 61);
 
 -- Helper function to verify HMAC using HMAC key (two-key format)
 CREATE OR REPLACE FUNCTION verify_encrypted_data_hmac(
@@ -16,7 +16,7 @@ DECLARE
     encrypted_payload bytea;
     calculated_hmac bytea;
 BEGIN
-    -- Format: [HMAC:32][type:1][IV:12][ciphertext]
+    -- Format: [HMAC:32][type:1][IV:12][ciphertext][GCM tag:16]
     stored_hmac := substring(data_bytes from 1 for 32);
     encrypted_payload := substring(data_bytes from 33);
     calculated_hmac := hmac(encrypted_payload, hmac_key, 'sha256');
@@ -27,7 +27,7 @@ $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION has_valid_hmac_structure(data encrypted_data)
 RETURNS boolean AS $$
 BEGIN
-    RETURN length(data::bytea) >= 45;
+    RETURN length(data::bytea) >= 61;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 
@@ -71,10 +71,10 @@ BEGIN
             PERFORM set_config(cache_key, encode(hmac_key, 'hex'), false);
         END;
 
-        -- Verify HMAC (format: [HMAC:32][type:1][IV:12][ciphertext])
+        -- Verify HMAC (format: [HMAC:32][type:1][IV:12][ciphertext][GCM tag:16])
         data_bytes := col_value::bytea;
 
-        IF length(data_bytes) < 45 THEN
+        IF length(data_bytes) < 61 THEN
             RAISE EXCEPTION 'Invalid encrypted data length for column %', col_name;
         END IF;
 

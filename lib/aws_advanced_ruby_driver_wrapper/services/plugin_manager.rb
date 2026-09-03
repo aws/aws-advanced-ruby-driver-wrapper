@@ -23,6 +23,7 @@ require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
+require_relative '../plugins/kms_encryption/kms_encryption_plugin'
 require_relative '../plugins/secrets_manager_plugin'
 require_relative '../plugins/blue_green/blue_green_plugin'
 require_relative '../plugins/custom_endpoint/custom_endpoint_plugin'
@@ -43,6 +44,7 @@ module AwsAdvancedRubyDriverWrapper
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
+        'kms_encryption' => Plugins::KmsEncryptionPlugin,
         'secrets_manager' => Plugins::SecretsManagerPlugin
       }
 
@@ -56,7 +58,8 @@ module AwsAdvancedRubyDriverWrapper
         Plugins::FailoverPlugin => 400,
         Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
-        Plugins::SecretsManagerPlugin => 1900
+        Plugins::SecretsManagerPlugin => 1900,
+        Plugins::KmsEncryptionPlugin => 2050
       }
 
       class << self

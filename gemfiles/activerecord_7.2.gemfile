@@ -29,6 +29,7 @@ group :development do
 end
 
 group :test do
+  gem 'aws-sdk-kms'
   gem 'aws-sdk-rds'
   gem 'aws-sdk-secretsmanager'
   gem 'dotenv'
