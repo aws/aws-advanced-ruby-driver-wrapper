@@ -1,33 +1,25 @@
-name: Global Database Integration Tests
+name: Run Aurora PostgreSQL Performance Tests
 
 on:
   workflow_dispatch:
-  schedule:
-    # Every Monday at 9:00 AM UTC
-    - cron: '0 9 * * 1'
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  gdb-integration-tests:
-    name: GDB Integration Tests (${{ matrix.environment }})
+  aurora-pg-performance-tests:
+    name: 'Run Aurora PostgreSQL performance tests'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        environment: [ 'gdb-mysql', 'gdb-pg' ]
 
     steps:
       - name: 'Clone repository'
         uses: actions/checkout@v7
 
-      - name: 'Set up Ruby 4.0'
+      - name: 'Set up Ruby 3.3'
         uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
         with:
-          ruby-version: '4.0'
+          ruby-version: '3.3'
           bundler-cache: true
 
       - name: 'Set up JDK 8'
@@ -40,24 +32,24 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
-          role-session-name: ruby_gdb_integration_tests
+          role-session-name: ruby_perf_test_pg
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Run GDB Integration Tests'
-        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }} --info
+      - name: 'Run PostgreSQL performance tests'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-pg-performance --info
         env:
           RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          GDB_SECONDARY_REGION: ${{ secrets.GDB_SECONDARY_REGION }}
-          AURORA_MYSQL_DB_ENGINE_VERSION: lts
           AURORA_PG_ENGINE_VERSION: lts
 
-      - name: 'Archive GDB results'
+      - name: 'Archive performance results'
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: rspec-gdb-integration-report-${{ matrix.environment }}
-          path: ./spec/integration/host/build/reports/tests/test/
+          name: 'pg-performance-results'
+          path: |
+            ./spec/integration/host/build/reports/tests/test/
+            ./spec/integration/container/reports/
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 5

@@ -271,14 +271,22 @@ public class ContainerHelper {
       new File(dir).mkdirs();
     }
 
+    // Pin Bundler to the exact version recorded in the project's Gemfile.lock
+    // ("BUNDLED WITH"). Installing it at image-build time avoids the runtime
+    // "lockfile was generated with X ... Installing Bundler X and restarting"
+    // reconciliation step during `bundle install`.
+    final String bundlerVersion = readBundledWithVersion(toDockerPath("../../../Gemfile.lock"));
+
     return new FixedExposedPortContainer<>(
       new ImageFromDockerfile(dockerImageName, true)
         .withDockerfileFromBuilder(
           builder -> appendExtraCommandsToBuilder.apply(
-            builder
-              .from(testContainerImageName)
-              .run("mkdir", "app")
-              .workDir("/app")
+            withBundlerSetup(
+              builder
+                .from(testContainerImageName)
+                .run("mkdir", "app")
+                .workDir("/app"),
+              bundlerVersion)
               .entryPoint("/bin/sh -c \"while true; do sleep 30; done;\"")
               .expose(5005)
           ).build()))
@@ -289,6 +297,57 @@ public class ContainerHelper {
       .withFileSystemBind(toDockerPath("../../../spec"), "/app/spec", BindMode.READ_WRITE)
       .withFileSystemBind(toDockerPath("../../../aws-advanced-ruby-driver-wrapper.gemspec"), "/app/aws-advanced-ruby-driver-wrapper.gemspec", BindMode.READ_ONLY)
       .withPrivilegedMode(true);
+  }
+
+  /**
+   * Reads the Bundler version recorded under the "BUNDLED WITH" section of a
+   * Gemfile.lock. Returns {@code null} if the file or the section is absent, in
+   * which case no explicit Bundler version is pinned into the image.
+   */
+  private static String readBundledWithVersion(String gemfileLockPath) {
+    File lock = new File(gemfileLockPath);
+    if (!lock.isFile()) {
+      return null;
+    }
+    try {
+      java.util.List<String> lines =
+          java.nio.file.Files.readAllLines(lock.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+      for (int i = 0; i < lines.size(); i++) {
+        if ("BUNDLED WITH".equals(lines.get(i).trim())) {
+          for (int j = i + 1; j < lines.size(); j++) {
+            String candidate = lines.get(j).trim();
+            if (!candidate.isEmpty()) {
+              return candidate.matches("\\d+\\.\\d+(\\.\\d+)?([.\\-].+)?") ? candidate : null;
+            }
+          }
+        }
+      }
+    } catch (IOException e) {
+      // Best-effort only; fall through to no explicit pin.
+    }
+    return null;
+  }
+
+  /**
+   * Appends image-build steps that make the test container's dependency setup
+   * deterministic and quiet by installing the exact Bundler version recorded in
+   * the lockfile ("BUNDLED WITH") so `bundle install` does not reconcile and
+   * restart at runtime, and by configuring Bundler for non-interactive,
+   * retrying installs.
+   */
+  private static DockerfileBuilder withBundlerSetup(DockerfileBuilder builder, String bundlerVersion) {
+    if (!StringUtils.isNullOrEmpty(bundlerVersion)) {
+      builder = builder.run("gem", "install", "bundler", "-v", bundlerVersion);
+    }
+
+    // Deterministic, non-interactive Bundler behavior for the runtime install.
+    // BUNDLE_FROZEN makes Gemfile.lock authoritative: the install fails fast
+    // if the lock is out of sync, so local Docker and GitHub Actions runs match.
+    builder = builder.env("BUNDLE_FROZEN", "true");
+    builder = builder.env("BUNDLE_JOBS", "4");
+    builder = builder.env("BUNDLE_RETRY", "3");
+
+    return builder;
   }
 
   /**

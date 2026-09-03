@@ -41,7 +41,9 @@ module Integration
                 :primary_region,
                 :secondary_region,
                 :secondary_cluster_endpoint,
-                :secondary_cluster_identifier
+                :secondary_cluster_identifier,
+                :secondary_database_info,
+                :secondary_proxy_database_info
 
     def initialize(test_info)
       return if test_info.nil?
@@ -67,6 +69,10 @@ module Integration
       @secondary_region = test_info['secondaryRegion']
       @secondary_cluster_endpoint = test_info['secondaryClusterEndpoint']
       @secondary_cluster_identifier = test_info['secondaryClusterIdentifier']
+      @secondary_database_info = TestDatabaseInfo.new(test_info['secondaryDatabaseInfo']) if test_info['secondaryDatabaseInfo']
+      return unless test_info['secondaryProxyDatabaseInfo']
+
+      @secondary_proxy_database_info = TestProxyDatabaseInfo.new(test_info['secondaryProxyDatabaseInfo'])
     end
   end
 end

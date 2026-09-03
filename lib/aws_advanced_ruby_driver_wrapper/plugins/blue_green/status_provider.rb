@@ -232,8 +232,8 @@ module AwsAdvancedRubyDriverWrapper
         MONITOR_SETTINGS = {
           Phase::NOT_CREATED => { interval: IntervalRate::BASELINE, collect_ips: false, collect_topo: false, use_ip: false }.freeze,
           Phase::CREATED => { interval: IntervalRate::INCREASED, collect_ips: true, collect_topo: true, use_ip: false }.freeze,
-          Phase::PREPARATION => { interval: IntervalRate::HIGH,      collect_ips: false, collect_topo: false, use_ip: true  }.freeze,
-          Phase::IN_PROGRESS => { interval: IntervalRate::HIGH,      collect_ips: false, collect_topo: false, use_ip: true  }.freeze,
+          Phase::PREPARATION => { interval: IntervalRate::HIGH, collect_ips: false, collect_topo: false, use_ip: true }.freeze,
+          Phase::IN_PROGRESS => { interval: IntervalRate::HIGH, collect_ips: false, collect_topo: false, use_ip: true }.freeze,
           Phase::POST => { interval: IntervalRate::HIGH, collect_ips: false, collect_topo: false, use_ip: true }.freeze,
           Phase::COMPLETED => { interval: IntervalRate::BASELINE, collect_ips: false, collect_topo: false, use_ip: false }.freeze
         }.freeze

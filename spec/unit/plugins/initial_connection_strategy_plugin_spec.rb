@@ -451,6 +451,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
       end.to raise_error(errors::AwsError, /invalid for reader/)
     end
 
+    it 'raises when writer verification is set for custom cluster' do
+      plugin = build_plugin(initial_connection_verify_role: 'writer')
+
+      expect do
+        plugin.connect(make_host_info(custom_cluster_host), {}, true, pipeline_callable)
+      end.to raise_error(errors::AwsError, /invalid for reader or custom cluster/)
+    end
+
     it 'raises at init for invalid verify role value' do
       expect do
         build_plugin(initial_connection_verify_role: 'invalid')

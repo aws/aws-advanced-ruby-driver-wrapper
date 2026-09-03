@@ -156,7 +156,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
     # These reached a server that then refused the login. Retrying against another host cannot help,
     # so they must not be classified as network errors.
     context 'when a server was reached and rejected the connection' do
-      # rubocop:disable Layout/LineLength
+      # rubocop:disable-next Layout/LineLength
       {
         'a failed password' => 'connection to server at "host", port 5432 failed: FATAL:  password authentication failed for user "someone"',
         'a missing pg_hba entry' => 'connection to server at "host", port 5432 failed: FATAL:  no pg_hba.conf entry for host "1.2.3.4", user "someone"',
@@ -171,7 +171,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
           expect(handler.network_error?(error)).to be false
         end
       end
-      # rubocop:enable Layout/LineLength
     end
   end
 

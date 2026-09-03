@@ -101,10 +101,6 @@ module AwsAdvancedRubyDriverWrapper
           is_cached_token = false
         end
 
-        if @service_container.dialect_service.driver_dialect == DriverDialects::DriverDialectManager::MYSQL_DIALECT
-          driver_props[:enable_cleartext_plugin] = true
-        end
-
         begin
           pipeline_callable.call
         rescue StandardError => e

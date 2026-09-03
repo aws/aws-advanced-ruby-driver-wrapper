@@ -26,14 +26,14 @@ gem 'pg_query', '>= 5.1'
 group :development do
   gem 'bundler'
   gem 'rdoc'
-  gem 'rubocop', '~> 1.86'
-  gem 'rubocop-performance', '~> 1.26'
+  gem 'rubocop', '~> 1.90'
+  gem 'rubocop-performance', '~> 1.27'
   gem 'yard', '>= 0.9.44'
 end
 
 group :test do
   gem 'aws-sdk-kms'
-  gem 'aws-sdk-rds', '~> 1.315.0'
+  gem 'aws-sdk-rds', '~> 1.321.0'
   gem 'aws-sdk-secretsmanager'
   gem 'debug'
   gem 'dotenv'

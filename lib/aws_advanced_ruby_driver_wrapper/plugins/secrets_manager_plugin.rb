@@ -32,9 +32,27 @@ module AwsAdvancedRubyDriverWrapper
       SECRETS_ARN_PATTERN = %r{\Aarn:aws(?:-[a-z]+)*:secretsmanager:(?<region>[^:\n]+):[^:\n]*:(?:[^:/\n]*[:/])?}
       MAX_RETRY_DELAY_SEC = 8
 
+      # Entries remain in the shared cache longer than their expiration so expired-but-present
+      # entries can be served immediately while a background refresh runs (SWR).
+      CACHE_DISPOSAL_EXTRA_TIME_SEC = 30 * 60
+
       SecretEntry = Data.define(:username, :password, :expires_at) do
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
           expires_at && now >= expires_at
+        end
+
+        # Redact the password so the secret is never exposed if an instance is
+        # logged, interpolated, or rendered in a backtrace.
+        def inspect
+          "#<data SecretEntry username=#{username.inspect}, " \
+            "password=#{AwsAdvancedRubyDriverWrapper::REDACTED.inspect}, expires_at=#{expires_at.inspect}>"
+        end
+        alias_method :to_s, :inspect
+
+        # `pp` / PrettyPrint does not call #inspect; route them through the
+        # redacted representation so `pp entry` cannot leak the password.
+        def pretty_print(pp)
+          pp.text(inspect)
         end
       end
 
@@ -72,7 +90,10 @@ module AwsAdvancedRubyDriverWrapper
         @rotation_retry_timeout_sec = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_MS.get_int(props) / 1000.0
         @rotation_retry_base_delay_sec = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_MS.get_int(props) / 1000.0
 
-        service_container.storage_service.register(SECRETS_MANAGER_CACHE_NAME, ttl: @expiration_sec)
+        service_container.storage_service.register(
+          SECRETS_MANAGER_CACHE_NAME,
+          ttl: @expiration_sec + CACHE_DISPOSAL_EXTRA_TIME_SEC
+        )
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
@@ -87,6 +108,16 @@ module AwsAdvancedRubyDriverWrapper
       private
 
       def secrets_connect(driver_props, pipeline_callable)
+        if @rotation_retry_timeout_sec.positive?
+          connect_with_rotation_budget(driver_props, pipeline_callable)
+        else
+          connect_with_single_retry(driver_props, pipeline_callable)
+        end
+      end
+
+      # Default behavior (budget disabled): at most one forced re-fetch, and only when
+      # the *cached* secret failed to log in.
+      def connect_with_single_retry(driver_props, pipeline_callable)
         secret_is_fresh = fetch_secret_and_report_if_fresh?(force: false)
         apply_secret(driver_props)
 
@@ -96,45 +127,55 @@ module AwsAdvancedRubyDriverWrapper
           raise unless !secret_is_fresh && @service_container.dialect_service.login_error?(e)
         end
 
-        # First forced refetch + retry
         fetch_secret_and_report_if_fresh?(force: true)
         apply_secret(driver_props)
-
-        begin
-          pipeline_callable.call
-        rescue StandardError => e
-          raise unless @rotation_retry_timeout_sec.positive? && @service_container.dialect_service.login_error?(e)
-
-          rotation_retry(driver_props, pipeline_callable, e)
-        end
+        pipeline_callable.call
       end
 
-      # Retry loop for rotation window: poll GetSecretValue with exponential backoff
-      # until AWSCURRENT is promoted or timeout expires.
-      def rotation_retry(driver_props, pipeline_callable, last_error)
-        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @rotation_retry_timeout_sec
+      # Budgeted behavior: force a re-fetch + reconnect with capped exponential backoff
+      # until login succeeds or the time budget is exhausted. Bridges the rotation window
+      # including the cold-cache first connection, and tolerates transient fetch failures.
+      def connect_with_rotation_budget(driver_props, pipeline_callable)
+        deadline  = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @rotation_retry_timeout_sec
         delay_sec = @rotation_retry_base_delay_sec
-
-        logger.info("SecretsManagerPlugin: entering rotation retry loop (timeout=#{@rotation_retry_timeout_sec}s)")
+        last_login_error = nil
+        attempt = 0
 
         loop do
-          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
-          raise last_error if remaining <= 0
-
-          sleep_sec = [delay_sec, remaining].min
-          sleep(sleep_sec)
-
-          fetch_secret_and_report_if_fresh?(force: true)
-          apply_secret(driver_props)
+          attempt += 1
 
           begin
-            return pipeline_callable.call
+            # Attempt 1 may use the cache; every later attempt forces a re-fetch to pick up
+            # a version promoted in the meantime.
+            fetch_secret_and_report_if_fresh?(force: attempt > 1)
           rescue StandardError => e
-            raise unless @service_container.dialect_service.login_error?(e)
+            raise e if last_login_error.nil?
 
-            last_error = e
-            delay_sec = [delay_sec * 2, MAX_RETRY_DELAY_SEC].min
+            # Otherwise a transient Secrets Manager failure must not consume the budget;
+            # keep the login error as the reported cause and try again.
+            logger.debug("SecretsManagerPlugin: re-fetch failed mid-retry (#{e.class}: #{e.message}); keeping login error")
+          else
+            apply_secret(driver_props)
+            begin
+              connection = pipeline_callable.call
+              logger.info("SecretsManagerPlugin: connection succeeded on attempt #{attempt}") if attempt > 1
+              return connection
+            rescue StandardError => e
+              # Not a credentials problem -> re-fetching would not help.
+              raise unless @service_container.dialect_service.login_error?(e)
+
+              last_login_error = e
+            end
           end
+
+          remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          if remaining <= 0
+            logger.info("SecretsManagerPlugin: rotation retry budget exhausted after #{attempt} attempt(s)")
+            raise last_login_error
+          end
+
+          sleep([delay_sec, remaining].min)
+          delay_sec = [delay_sec * 2, MAX_RETRY_DELAY_SEC].min
         end
       end
 
