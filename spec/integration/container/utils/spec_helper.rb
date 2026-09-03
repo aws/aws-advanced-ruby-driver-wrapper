@@ -30,7 +30,7 @@ RSpec.shared_context 'integration setup' do
     }
     if env.global_cluster_endpoint
       props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name] =
-        "[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{writer.port}"
+        Integration::RdsTestUtility.global_instance_host_patterns
     end
     props
   end

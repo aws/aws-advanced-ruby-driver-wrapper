@@ -51,14 +51,27 @@ module Integration
     end
 
     def initialize(region, endpoint: nil)
+      @region = region
+      @endpoint = endpoint
       options = { region: region }
       options[:endpoint] = endpoint if endpoint
       @client = Aws::RDS::Client.new(**options)
     end
 
+    attr_reader :region
+
     def self.utility
       env = TestEnvironment.current
       new(env.aurora_region, endpoint: env.rds_endpoint)
+    end
+
+    # A utility bound to the GDB secondary region. Global cluster APIs run against the primary region,
+    # but describing/classifying secondary-region instances requires a secondary-region client.
+    def self.secondary_utility
+      env = TestEnvironment.current
+      raise 'No secondary region configured for this environment' if env.secondary_region.nil?
+
+      new(env.secondary_region, endpoint: env.rds_endpoint)
     end
 
     def db_instance(instance_id)
@@ -153,12 +166,23 @@ module Integration
       writer.db_instance_identifier
     end
 
+    # Live reader instance ids for a cluster (every member that is not the writer), from RDS describe.
+    # Use this instead of a statically-ordered instance list: roles drift after any failover, so the
+    # instance that was a reader at env-build time may now be the writer and vice versa.
+    def cluster_reader_instance_ids(cluster_id = nil)
+      cluster_id ||= TestEnvironment.current.cluster_name
+      cluster = db_cluster(cluster_id)
+      raise "ClusterNotFound: #{cluster_id}" if cluster.nil?
+
+      cluster.db_cluster_members.reject(&:is_cluster_writer).map(&:db_instance_identifier)
+    end
+
     def query_instance_id(conn, deployment: nil, engine: nil)
       deployment ||= TestEnvironment.current.deployment
       engine ||= TestEnvironment.current.engine
 
       case deployment
-      when DatabaseEngineDeployment::AURORA
+      when DatabaseEngineDeployment::AURORA, DatabaseEngineDeployment::AURORA_GLOBAL
         query_aurora_instance_id(conn, engine)
       when DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
         query_multi_az_instance_id(conn, engine)
@@ -408,7 +432,183 @@ module Integration
       self.class.sleep_sql(TestEnvironment.current.engine).call(seconds)
     end
 
+    # ---------------------------------------------------------------------------------------------
+    # Global Database (GDB) cross-region tooling
+    #
+    # These helpers drive and observe a real cross-region transition of an Aurora Global Database.
+    # ---------------------------------------------------------------------------------------------
+
+    GLOBAL_TRANSITION_TIMEOUT_SECS = 900
+    GLOBAL_TRANSITION_POLL_SECS = 15
+
+    # Planned switchover of the global cluster to +target_cluster_id+. Waits until the target
+    # cluster is the global writer.
+    def switchover_global_cluster(target_cluster_id, timeout_secs: GLOBAL_TRANSITION_TIMEOUT_SECS)
+      global_cluster_id = TestEnvironment.current.global_cluster_identifier
+      raise 'No global cluster identifier configured' if global_cluster_id.nil?
+
+      target_arn = cluster_arn(target_cluster_id)
+      TestUtils.logger.info("GDB switchover: #{global_cluster_id} -> #{target_cluster_id}")
+      @client.switchover_global_cluster(
+        global_cluster_identifier: global_cluster_id,
+        target_db_cluster_identifier: target_arn
+      )
+      wait_until_primary_cluster(target_cluster_id, timeout_secs: timeout_secs)
+    end
+
+    # Polls the global cluster members until the expected region is home to the global writer.
+    # +region_or_cluster_id+ may be a region id (e.g. 'us-west-2') or a cluster identifier.
+    def wait_until_primary_region(region_or_cluster_id, timeout: GLOBAL_TRANSITION_TIMEOUT_SECS)
+      cluster_id = cluster_id_for_region(region_or_cluster_id) || region_or_cluster_id
+      wait_until_primary_cluster(cluster_id, timeout_secs: timeout)
+    end
+
+    # Waits until +cluster_id+ is the writer (primary) member of the global cluster.
+    def wait_until_primary_cluster(cluster_id, timeout_secs: GLOBAL_TRANSITION_TIMEOUT_SECS)
+      target_arn = cluster_arn(cluster_id)
+      deadline = Time.now + timeout_secs
+      loop do
+        writer_arn = global_writer_cluster_arn
+        return if writer_arn && arns_match?(writer_arn, target_arn)
+
+        raise "Timeout waiting for #{cluster_id} to become the global primary" if Time.now > deadline
+
+        sleep(GLOBAL_TRANSITION_POLL_SECS)
+      end
+    end
+
+    # Classifies a landed instance id as region A (:primary) or region B (:secondary) by cluster
+    # membership. Tolerant of rebuilt-region id changes because it queries live cluster membership
+    # rather than a remembered id list. Returns :primary, :secondary, or nil if not found.
+    def region_of_instance(instance_id)
+      env = TestEnvironment.current
+      return :primary if cluster_contains_instance?(self, env.cluster_name, instance_id)
+
+      secondary_cluster_id = env.secondary_cluster_identifier
+      if secondary_cluster_id
+        secondary = self.class.secondary_utility
+        return :secondary if cluster_contains_instance?(secondary, secondary_cluster_id, instance_id)
+      end
+
+      nil
+    end
+
+    # Writer/reader classification of an instance against the given cluster (defaults to the primary
+    # cluster). Uses the correct-region client based on the cluster identifier. Returns :writer or
+    # :reader.
+    def instance_role(instance_id, cluster_id: nil)
+      env = TestEnvironment.current
+      cluster_id ||= env.cluster_name
+      util = cluster_id == env.secondary_cluster_identifier ? self.class.secondary_utility : self
+      util.db_instance_writer?(instance_id, cluster_id: cluster_id) ? :writer : :reader
+    end
+
+    # Builds the wrapper connection props for one multiplexed GDB connection. Each connection gets a
+    # distinct +cluster_id+ so connections don't share a topology cache, plus its own home-region and
+    # mode configuration. +extra_props+ is merged last so callers can override anything.
+    #
+    # @param cluster_id [String] unique cluster id for this connection's topology cache
+    # @param home_region [String] the failover home region
+    # @param in_home_mode [String, nil] value for in_home_failover_mode
+    # @param out_of_home_mode [String, nil] value for out_of_home_failover_mode
+    # @param accessible_regions [Array<String>, String, nil] accessible regions restriction
+    # @param instance_host_patterns [String, nil] override for global_cluster_instance_host_patterns
+    # @param extra_props [Hash] additional/override props
+    def self.gdb_wrapper_props(cluster_id:, home_region:, in_home_mode: nil, out_of_home_mode: nil,
+                               accessible_regions: nil, instance_host_patterns: nil, extra_props: {})
+      pd = AwsAdvancedRubyDriverWrapper::PropertyDefinition
+      props = {
+        pd::PLUGINS.name => 'gdb_failover',
+        pd::CLUSTER_ID.name => cluster_id,
+        pd::FAILOVER_HOME_REGION.name => home_region
+      }
+      props[pd::IN_HOME_FAILOVER_MODE.name] = in_home_mode if in_home_mode
+      props[pd::OUT_OF_HOME_FAILOVER_MODE.name] = out_of_home_mode if out_of_home_mode
+      if accessible_regions
+        regions = accessible_regions.is_a?(Array) ? accessible_regions.join(',') : accessible_regions
+        props[pd::ACCESSIBLE_REGIONS.name] = regions
+      end
+      props[pd::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name] = instance_host_patterns if instance_host_patterns
+      props.merge(extra_props)
+    end
+
+    # Builds the two-region global_cluster_instance_host_patterns string from the current environment.
+    # Format: "[primaryRegion]?.primarySuffix:port,[secondaryRegion]?.secondarySuffix:port".
+    def self.global_instance_host_patterns
+      env = TestEnvironment.current
+      info = env.database_info
+      primary_port = info.instances.first&.port
+      patterns = ["[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{primary_port}"]
+      if env.secondary_region && env.secondary_instance_endpoint_suffix
+        secondary_port = env.secondary_instances.first&.port || primary_port
+        patterns << "[#{env.secondary_region}]?.#{env.secondary_instance_endpoint_suffix}:#{secondary_port}"
+      end
+      patterns.join(',')
+    end
+
+    # Same as +global_instance_host_patterns+ but built from the *proxied* endpoints (Toxiproxy).
+    def self.global_proxy_instance_host_patterns
+      env = TestEnvironment.current
+      info = env.proxy_database_info
+      primary_port = info.instances.first&.port
+      patterns = ["[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{primary_port}"]
+      secondary = env.secondary_proxy_database_info
+      if env.secondary_region && secondary
+        secondary_port = secondary.instances.first&.port || primary_port
+        patterns << "[#{env.secondary_region}]?.#{secondary.instance_endpoint_suffix}:#{secondary_port}"
+      end
+      patterns.join(',')
+    end
+
     private
+
+    # Returns the ARN of the global cluster's current writer member, or nil.
+    def global_writer_cluster_arn
+      global_cluster_id = TestEnvironment.current.global_cluster_identifier
+      gc = @client.describe_global_clusters(global_cluster_identifier: global_cluster_id)
+                  .global_clusters.first
+      return nil if gc.nil?
+
+      writer = gc.global_cluster_members.find(&:is_writer)
+      writer&.db_cluster_arn
+    rescue Aws::RDS::Errors::GlobalClusterNotFoundFault
+      nil
+    end
+
+    # Resolves a cluster identifier to its ARN, using the correct-region client.
+    def cluster_arn(cluster_id)
+      env = TestEnvironment.current
+      util = cluster_id == env.secondary_cluster_identifier ? self.class.secondary_utility : self
+      cluster = util.db_cluster(cluster_id)
+      raise "ClusterNotFound: #{cluster_id}" if cluster.nil?
+
+      cluster.db_cluster_arn
+    end
+
+    # Maps a region id to the matching cluster identifier (primary or secondary) for the current
+    # environment, or nil if the argument doesn't look like a region.
+    def cluster_id_for_region(region_or_cluster_id)
+      env = TestEnvironment.current
+      case region_or_cluster_id
+      when env.primary_region then env.cluster_name
+      when env.secondary_region then env.secondary_cluster_identifier
+      end
+    end
+
+    def cluster_contains_instance?(util, cluster_id, instance_id)
+      cluster = util.db_cluster(cluster_id)
+      return false if cluster.nil?
+
+      cluster.db_cluster_members.any? { |m| m.db_instance_identifier == instance_id }
+    end
+
+    # Compares two cluster ARNs by their trailing cluster identifier, tolerating account/region
+    # formatting differences.
+    def arns_match?(arn_a, arn_b)
+      return false if arn_a.nil? || arn_b.nil?
+
+      arn_a == arn_b || arn_a.split(':').last == arn_b.split(':').last
+    end
 
     def get_rds_instance_bg_endpoints(bg_deployment)
       blue_instance = db_instance_by_arn(bg_deployment.source)

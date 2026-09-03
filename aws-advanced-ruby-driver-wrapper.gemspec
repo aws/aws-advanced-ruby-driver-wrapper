@@ -23,19 +23,38 @@ Gem::Specification.new do |spec|
 
   spec.summary = 'AWS Advanced Ruby Driver Wrapper for MySQL and PostgreSQL'
   spec.description = 'A Ruby DB driver wrapper that provides enhanced features for AWS RDS MySQL/PostgreSQL databases'
-  # TODO: uncomment URIs
-  # spec.homepage = 'github.com/aws/aws-advanced-ruby-driver-wrapper'
+  spec.homepage = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper'
   spec.license = 'Apache-2.0'
   spec.required_ruby_version = '>= 3.3.0'
 
-  # spec.metadata['homepage_uri'] = spec.homepage
-  # spec.metadata['source_code_uri'] = 'github.com/aws/aws-advanced-ruby-driver-wrapper'
-  # spec.metadata['changelog_uri'] = 'github.com/aws/aws-advanced-ruby-driver-wrapper/blob/main/CHANGELOG.md'
+  spec.metadata['homepage_uri'] = spec.homepage
+  spec.metadata['source_code_uri'] = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper'
+  spec.metadata['changelog_uri'] = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper/blob/main/CHANGELOG.md'
   spec.metadata['rubygems_mfa_required'] = 'true'
 
   # Specify which files should be added to the gem when it is released.
+  # Prefer `git ls-files` for an accurate, tracked-file list, but fall back to a
+  # pure-Ruby directory glob when git is unavailable (e.g. inside a build/test
+  # container where the .git directory is not present). This keeps `bundle install`
+  # from emitting "fatal: not a git repository" and works identically offline.
   spec.files = Dir.chdir(__dir__) do
-    `git ls-files -z`.split("\x0").reject do |f|
+    in_git_repo =
+      File.directory?(File.join(__dir__, '.git')) &&
+      begin
+        system('git', 'rev-parse', '--is-inside-work-tree',
+               out: File::NULL, err: File::NULL)
+      rescue StandardError
+        false
+      end
+
+    tracked =
+      if in_git_repo
+        `git ls-files -z`.split("\x0")
+      else
+        Dir.glob('**/*', File::FNM_DOTMATCH).reject { |f| File.directory?(f) }
+      end
+
+    tracked.reject do |f|
       (File.expand_path(f) == __FILE__) ||
         f.start_with?(*%w[bin/ test/ spec/ features/ .git .circleci appveyor])
     end

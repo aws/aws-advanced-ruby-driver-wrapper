@@ -79,6 +79,28 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::IamAuthUtils do
     end
   end
 
+  describe 'TokenEntry redaction' do
+    let(:entry) { described_class::TokenEntry.new(token: 'super-secret-iam-token', expires_at: 123.0) }
+
+    it 'redacts the token in #inspect' do
+      expect(entry.inspect).not_to include('super-secret-iam-token')
+      expect(entry.inspect).to include(AwsAdvancedRubyDriverWrapper::REDACTED)
+    end
+
+    it 'redacts the token in #to_s' do
+      expect(entry.to_s).not_to include('super-secret-iam-token')
+      expect(entry.to_s).to include(AwsAdvancedRubyDriverWrapper::REDACTED)
+    end
+
+    it 'redacts the token when interpolated into a string' do
+      expect("entry=#{entry}").not_to include('super-secret-iam-token')
+    end
+
+    it 'still exposes the token via the accessor for internal use' do
+      expect(entry.token).to eq('super-secret-iam-token')
+    end
+  end
+
   describe '.valid_entry?' do
     it 'returns true for a valid TokenEntry within TTL' do
       entry = described_class::TokenEntry.new(

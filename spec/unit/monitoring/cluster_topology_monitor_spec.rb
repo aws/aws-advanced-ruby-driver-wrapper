@@ -386,7 +386,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
 
       # All monitored readers report the same topology
       reader_topos = extra_hosts.first(16).reject { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }
-                                          .to_h { |h| [h.id, extra_hosts] }
+                                .to_h { |h| [h.id, extra_hosts] }
       monitor.instance_variable_set(:@instance_monitor_topologies, reader_topos)
 
       # First call starts the timer
