@@ -145,6 +145,64 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
   end
 
+  describe '#translate_placeholders' do
+    it 'leaves the placeholders alone' do
+      expect(dialect.translate_placeholders('INSERT INTO t (a, b) VALUES (?, ?)'))
+        .to eq('INSERT INTO t (a, b) VALUES (?, ?)')
+    end
+  end
+
+  describe '#binary_param' do
+    it 'passes the raw bytes with binary encoding' do
+      param = dialect.binary_param("\x00\xff".b)
+      expect(param).to eq("\x00\xff".b)
+      expect(param.encoding).to eq(Encoding::BINARY)
+    end
+  end
+
+  describe '#read_binary' do
+    it 'forces the value to binary encoding' do
+      value = "\x00\x01".dup.force_encoding(Encoding::UTF_8)
+      expect(dialect.read_binary(value).encoding).to eq(Encoding::BINARY)
+    end
+  end
+
+  describe '#affected_rows' do
+    it 'reads the affected row count from the connection' do
+      allow(connection).to receive(:affected_rows).and_return(3)
+      expect(dialect.affected_rows(connection, nil)).to eq(3)
+    end
+  end
+
+  describe '#insert_returning_id' do
+    it 'runs the insert and returns the connection last id' do
+      allow(dialect).to receive(:execute_with_params)
+      allow(connection).to receive(:last_id).and_return(7)
+      expect(dialect.insert_returning_id(connection, 'INSERT INTO t (a) VALUES (?)', ['x'], 'id')).to eq(7)
+    end
+
+    it 'is nil when no id was generated' do
+      allow(dialect).to receive(:execute_with_params)
+      allow(connection).to receive(:last_id).and_return(0)
+      expect(dialect.insert_returning_id(connection, 'INSERT INTO t (a) VALUES (?)', ['x'], 'id')).to be_nil
+    end
+  end
+
+  describe '#upsert_clause' do
+    it 'builds an ON DUPLICATE KEY UPDATE clause reading from VALUES()' do
+      expect(dialect.upsert_clause(%w[table_name column_name], %w[algorithm key_id]))
+        .to eq('ON DUPLICATE KEY UPDATE algorithm = VALUES(algorithm), key_id = VALUES(key_id)')
+    end
+  end
+
+  describe '#foreign_key_query' do
+    it 'reads foreign keys from information_schema with schema and table placeholders' do
+      sql = dialect.foreign_key_query
+      expect(sql).to include('referenced_table_name IS NOT NULL')
+      expect(sql).to include('table_schema = ? AND table_name = ?')
+    end
+  end
+
   describe '#network_bound_methods' do
     it 'returns a frozen Set' do
       expect(dialect.network_bound_methods).to be_a(Set)

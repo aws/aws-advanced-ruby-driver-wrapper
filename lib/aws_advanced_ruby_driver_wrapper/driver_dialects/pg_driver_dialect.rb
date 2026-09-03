@@ -21,8 +21,6 @@ module AwsAdvancedRubyDriverWrapper
     class PgDriverDialect
       include DriverDialect
 
-      PING_SQL = 'SELECT 1'
-
       # Every pg call that talks to the server. A call that is not listed here is handed straight
       # to the driver, bypassing the plugin pipeline.
       #
@@ -99,11 +97,50 @@ module AwsAdvancedRubyDriverWrapper
         connection.exec_params(sql, params)
       end
 
-      def ping(connection)
-        connection.exec(PING_SQL)
-        true
-      rescue ::PG::Error
-        false
+      # pg uses numbered +$1+, +$2+ ... placeholders.
+      def translate_placeholders(sql)
+        index = 0
+        sql.gsub('?') do
+          index += 1
+          "$#{index}"
+        end
+      end
+
+      # pg binds a bytea parameter as a value tagged with binary format 1.
+      def binary_param(bytes)
+        { value: bytes, format: 1 }
+      end
+
+      # pg hands back a bytea column in its hex (or older octal) text format.
+      def read_binary(value)
+        ::PG::Connection.unescape_bytea(value)
+      end
+
+      # pg reports the affected row count on the result.
+      def affected_rows(_connection, result)
+        result.respond_to?(:cmd_tuples) ? result.cmd_tuples.to_i : 0
+      end
+
+      # pg returns the generated id with a RETURNING clause.
+      def insert_returning_id(connection, sql, params, id_column)
+        row = execute_with_params(connection, "#{sql} RETURNING #{id_column}", params)&.first
+        row && row[id_column].to_i
+      end
+
+      # pg upserts with ON CONFLICT ... DO UPDATE, reading the incoming row from EXCLUDED.
+      def upsert_clause(conflict_columns, update_columns)
+        assignments = update_columns.map { |column| "#{column} = EXCLUDED.#{column}" }.join(', ')
+        "ON CONFLICT (#{conflict_columns.join(', ')}) DO UPDATE SET #{assignments}"
+      end
+
+      def foreign_key_query
+        'SELECT kcu.column_name AS from_column, ccu.table_name AS to_table, ccu.column_name AS to_column ' \
+          'FROM information_schema.table_constraints tc ' \
+          'JOIN information_schema.key_column_usage kcu ' \
+          'ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema ' \
+          'JOIN information_schema.constraint_column_usage ccu ' \
+          'ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema ' \
+          "WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = $1 AND tc.table_name = $2"
       end
 
       def closed?(connection)

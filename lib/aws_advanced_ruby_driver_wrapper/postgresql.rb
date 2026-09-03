@@ -37,19 +37,28 @@ module AwsAdvancedRubyDriverWrapper
       @service_container = Services::ServiceUtility.create_standard_container(config)
       @service_container.host_service.refresh_host_list
       @prepared_on = {}
+      @prepared_sql = {}
       @async_conn = nil
+      @async_sql = nil
       @copy_conn = nil
+      @copy_sql = nil
       @lo_conn = nil
       conn_service = @service_container.connection_service
       @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
     end
 
     # Every canonical pg operation that talks to the server, and everything this class has to know about one: the
-    # name the plugins see it under, the connection it is bound to, and the steps that should be performed after.
+    # name the plugins see it under, the connection it is bound to, where the SQL it carries is among its
+    # arguments, and the steps that should be performed after.
+    #
+    # An operation with no +sql_at+ takes the SQL of whatever it is bound to: the statement a prepared
+    # operation names, the statement a pending exchange was started with, or the statement a COPY was
+    # opened with. That is the whole reason each of them is remembered, since none is among the arguments
+    # of the call that reads it back.
     OPERATIONS = {
-      exec: { method: RubyMethod::CONNECTION_EXEC },
-      async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC },
-      exec_params: { method: RubyMethod::CONNECTION_EXEC_PARAMS },
+      exec: { method: RubyMethod::CONNECTION_EXEC, sql_at: 0, after: :remember_sql_prepared },
+      async_exec: { method: RubyMethod::CONNECTION_ASYNC_EXEC, sql_at: 0, after: :remember_sql_prepared },
+      exec_params: { method: RubyMethod::CONNECTION_EXEC_PARAMS, sql_at: 0, after: :remember_sql_prepared },
       transaction: { method: RubyMethod::CONNECTION_TRANSACTION },
       close: { method: RubyMethod::CONNECTION_CLOSE },
       reset: { method: RubyMethod::CONNECTION_RESET },
@@ -57,8 +66,8 @@ module AwsAdvancedRubyDriverWrapper
       reset_poll: { method: RubyMethod::CONNECTION_RESET_POLL },
 
       # A prepared statement only exists on the connection it was prepared on.
-      prepare: { method: RubyMethod::CONNECTION_PREPARE, after: :remember_prepared },
-      send_prepare: { method: RubyMethod::CONNECTION_SEND_PREPARE, after: %i[remember_prepared remember_async] },
+      prepare: { method: RubyMethod::CONNECTION_PREPARE, sql_at: 1, after: :remember_prepared },
+      send_prepare: { method: RubyMethod::CONNECTION_SEND_PREPARE, sql_at: 1, after: %i[remember_prepared remember_async] },
       exec_prepared: { method: RubyMethod::CONNECTION_EXEC_PREPARED, bound_to: :prepared },
       describe_prepared: { method: RubyMethod::CONNECTION_DESCRIBE_PREPARED, bound_to: :prepared },
       send_query_prepared: { method: RubyMethod::CONNECTION_SEND_QUERY_PREPARED, bound_to: :prepared, after: :remember_async },
@@ -67,8 +76,9 @@ module AwsAdvancedRubyDriverWrapper
 
       # A pending exchange, and the portal it may have left, can only be continued on the connection it
       # was started on.
-      send_query: { method: RubyMethod::CONNECTION_SEND_QUERY, after: :remember_async },
-      send_query_params: { method: RubyMethod::CONNECTION_SEND_QUERY_PARAMS, after: :remember_async },
+      send_query: { method: RubyMethod::CONNECTION_SEND_QUERY, sql_at: 0, after: %i[remember_async remember_sql_prepared] },
+      send_query_params: { method: RubyMethod::CONNECTION_SEND_QUERY_PARAMS, sql_at: 0,
+                           after: %i[remember_async remember_sql_prepared] },
       get_result: { method: RubyMethod::CONNECTION_GET_RESULT, bound_to: :async, after: :forget_async_when_drained },
       get_last_result: { method: RubyMethod::CONNECTION_GET_LAST_RESULT, bound_to: :async, after: :forget_async },
       describe_portal: { method: RubyMethod::CONNECTION_DESCRIBE_PORTAL, bound_to: :async },
@@ -81,7 +91,7 @@ module AwsAdvancedRubyDriverWrapper
       block: { method: RubyMethod::CONNECTION_BLOCK, bound_to: :async },
 
       # A COPY can only be fed or read on the connection it was started on.
-      copy_data: { method: RubyMethod::CONNECTION_COPY_DATA },
+      copy_data: { method: RubyMethod::CONNECTION_COPY_DATA, sql_at: 0 },
       put_copy_data: { method: RubyMethod::CONNECTION_PUT_COPY_DATA, bound_to: :copy },
       get_copy_data: { method: RubyMethod::CONNECTION_GET_COPY_DATA, bound_to: :copy },
       put_copy_end: { method: RubyMethod::CONNECTION_PUT_COPY_END, bound_to: :copy, after: :forget_copy },
@@ -113,8 +123,8 @@ module AwsAdvancedRubyDriverWrapper
 
     # pg gives most operations more than one spelling, and an application is free to use any of them. Each
     # spelling here is mapped to the operation it performs, so that spellings enter the pipeline under one
-    # canonical name and get the same +bound_to+ and +after+ handling its {OPERATIONS} entry asks for.
-    # Only the pipeline name is shared: the driver is still called under the original spelling.
+    # canonical name and get the same +bound_to+, +sql_at+ and +after+ handling its {OPERATIONS} entry asks
+    # for. Only the pipeline name is shared: the driver is still called under the original spelling.
     #
     # For example, the +sync_+ and +async_+ forms of an operation are two different calls, the first
     # blocking in libpq and the second sending and then waiting on the socket from Ruby, where the
@@ -151,6 +161,25 @@ module AwsAdvancedRubyDriverWrapper
       loclose: :lo_close, lolseek: :lo_lseek, lo_seek: :lo_lseek, loseek: :lo_lseek,
       lotell: :lo_tell, lotruncate: :lo_truncate
     }.freeze
+
+    # A statement can also be prepared by sending a +PREPARE+ rather than by calling pg's own
+    # +prepare+, and the +exec_prepared+ that runs it looks no different either way. The two are read
+    # here so that a statement prepared the first way is remembered like one prepared the second, and
+    # a plugin that has to inspect the statement a call runs still has it to look at.
+    #
+    # The name is an identifier, so an unquoted one is folded to lower case. The parameter types in
+    # front of +AS+ are optional. What follows +AS+ is the statement, to the end of the string, which
+    # a +PREPARE+ shares with nothing else unless the caller sent more than one statement at once.
+    #
+    # Read with a pattern rather than a parse because this sits on the path of every statement the
+    # connection sends, and the two pieces wanted here are a name and everything after +AS+.
+    # +Utils::Parser::PgStatementAnalyzer+ reads the same construct properly, from the parse tree, for
+    # the plugin that has to know what the carried statement writes.
+    STATEMENT_NAME = /"(?:[^"]|"")+"|\w+/
+    SQL_PREPARE    = /\A\s*PREPARE\s+(#{STATEMENT_NAME})\s*(?:\([^)]*\)\s*)?AS\s+(.+)\z/im
+    # +DEALLOCATE [PREPARE] { name | ALL }+ un-prepares what a +PREPARE+ prepared, which is what
+    # +close_prepared+ does to a statement prepared through the driver.
+    SQL_DEALLOCATE = /\A\s*DEALLOCATE\s+(?:PREPARE\s+)?(#{STATEMENT_NAME})\s*;?\s*\z/im
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
 
@@ -230,12 +259,16 @@ module AwsAdvancedRubyDriverWrapper
 
     # -- COPY --
 
-    # The connection is held for as long as the block runs and let go afterward even if the block raises.
+    # The connection and the statement are held for as long as the block runs and let go afterward even
+    # if the block raises. The rows the block feeds or reads belong to that statement, and it is the only
+    # place they are named, so it is what the calls inside the block publish.
     def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
+      @copy_sql = sql
       execute_operation(:copy_data, [sql, coder], &)
     ensure
       @copy_conn = nil
+      @copy_sql = nil
     end
 
     def put_copy_data(buffer, encoder = nil)
@@ -270,8 +303,10 @@ module AwsAdvancedRubyDriverWrapper
 
     private
 
-    # Runs one canonical operation through the pipeline, passing the operation's `bound_to` connection
-    # and performing any `after` steps as necessary.
+    # Runs one canonical operation through the pipeline, passing the operation's `bound_to` connection and
+    # the SQL it carries, and performing any `after` steps as necessary. The SQL is read before the call is
+    # made, since an `after` step may be what forgets it, and it is handed to the result as well, so that a
+    # plugin which has to inspect the statement still sees it when the rows are read.
     def execute_operation(operation, args = [], kwargs = {}, spelling: operation, &)
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
       conn = current_conn
@@ -279,22 +314,23 @@ module AwsAdvancedRubyDriverWrapper
       raise NoMethodError, 'Connection not initialized' if conn.nil?
 
       # Only forward keyword arguments when there are any.
+      sql = sql_for(spec, args)
       result =
         if kwargs.empty?
           pm.execute(
             spec[:method], conn,
             ->(*a, &b) { current_conn.public_send(spelling, *a, &b) },
-            *args, bounded_conn: bounded_conn_for(spec[:bound_to], args), &
+            *args, bounded_conn: bounded_conn_for(spec[:bound_to], args), sql: sql, &
           )
         else
           pm.execute(
             spec[:method], conn,
             ->(*a, **opts, &b) { current_conn.public_send(spelling, *a, **opts, &b) },
-            *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), &
+            *args, **kwargs, bounded_conn: bounded_conn_for(spec[:bound_to], args), sql: sql, &
           )
         end
-      Array(spec[:after]).each { |hook| send(hook, args, result) }
-      wrap_pg_result(result)
+      Array(spec[:after]).each { |hook| send(hook, args, result, sql) }
+      wrap_pg_result(result, sql)
     end
 
     # The operation a call performs, whatever spelling it arrived under, or nil for a call that does not
@@ -325,39 +361,91 @@ module AwsAdvancedRubyDriverWrapper
       end
     end
 
+    # @return [String, nil] the SQL the operation carries, taken from its arguments when it names a
+    #   statement of its own and from whatever it is bound to when it does not
+    def sql_for(spec, args)
+      return args[spec[:sql_at]] if spec[:sql_at]
+
+      case spec[:bound_to]
+      when :prepared then @prepared_sql[args.first]
+      when :async then @async_sql
+      when :copy then @copy_sql
+      end
+    end
+
     # -- What an operation leaves behind, named by the +after+ entries of {OPERATIONS} --
 
-    def remember_prepared(args, _result)
+    def remember_prepared(args, _result, sql)
       @prepared_on[args.first] = current_conn
+      @prepared_sql[args.first] = sql
     end
 
-    def forget_prepared(args, _result)
+    def forget_prepared(args, _result, _sql)
       @prepared_on.delete(args.first)
+      @prepared_sql.delete(args.first)
     end
 
-    def remember_async(_args, _result)
+    # A +PREPARE+ or +DEALLOCATE+ that was sent as a statement, treated as the +prepare+ or the
+    # +close_prepared+ it amounts to. Anything else that was sent is left alone.
+    def remember_sql_prepared(_args, _result, sql)
+      return unless sql.is_a?(String)
+
+      if (prepared = SQL_PREPARE.match(sql))
+        remember_prepared([statement_name_of(prepared[1])], nil, prepared[2].strip)
+      elsif (deallocated = SQL_DEALLOCATE.match(sql))
+        forget_sql_prepared(deallocated[1])
+      end
+    end
+
+    # +DEALLOCATE ALL+ un-prepares every statement of the session, which +ALL+ in quotes does not: that
+    # names one statement actually called +ALL+.
+    def forget_sql_prepared(name_token)
+      if !name_token.start_with?('"') && name_token.casecmp('ALL').zero?
+        @prepared_on.clear
+        @prepared_sql.clear
+      else
+        forget_prepared([statement_name_of(name_token)], nil, nil)
+      end
+    end
+
+    # The name a statement prepared by a +PREPARE+ ends up with. Being an identifier, it is folded to
+    # lower case unless it was quoted, and that folded name is the one the +exec_prepared+ which runs
+    # it has to give as well, so it is the one to remember it under.
+    def statement_name_of(name_token)
+      return name_token.downcase unless name_token.start_with?('"')
+
+      name_token[1..-2].gsub('""', '"')
+    end
+
+    def remember_async(_args, _result, sql)
       @async_conn = current_conn
+      @async_sql = sql
     end
 
-    def forget_async(_args, _result)
+    def forget_async(_args, _result, _sql)
       @async_conn = nil
+      @async_sql = nil
     end
 
     # get_result answers nil once the last result of a pending exchange has been read, and there is
     # nothing left to be bound to.
-    def forget_async_when_drained(_args, result)
-      @async_conn = nil if result.nil?
+    def forget_async_when_drained(_args, result, _sql)
+      return unless result.nil?
+
+      @async_conn = nil
+      @async_sql = nil
     end
 
-    def forget_copy(_args, _result)
+    def forget_copy(_args, _result, _sql)
       @copy_conn = nil
+      @copy_sql = nil
     end
 
-    def remember_large_object(_args, _result)
+    def remember_large_object(_args, _result, _sql)
       @lo_conn = current_conn
     end
 
-    def forget_large_object(_args, _result)
+    def forget_large_object(_args, _result, _sql)
       @lo_conn = nil
     end
 
@@ -377,52 +465,90 @@ module AwsAdvancedRubyDriverWrapper
       @network_bound_methods ||= driver_dialect.network_bound_methods
     end
 
-    def wrap_pg_result(result)
+    def wrap_pg_result(result, sql = nil)
       return result unless result.is_a?(PG::Result)
 
-      WrapperPgResult.new(result, @service_container, current_conn)
+      WrapperPgResult.new(result, @service_container, current_conn, sql)
     end
   end
 
   class WrapperPgResult
     include Enumerable
 
-    def initialize(result, service_container, connection)
+    # @param sql [String, nil] the SQL that produced the result, kept so that plugins which
+    #   inspect statements still see it when the rows are read
+    def initialize(result, service_container, connection, sql = nil)
       @result = result
       @service_container = service_container
       @connection = connection
+      @sql = sql
     end
 
     def each(&)
-      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) }, bounded_conn: @connection, &)
+      pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
     end
 
     def each_row(&)
-      pm.execute(RubyMethod::RESULT_EACH_ROW, current_conn, ->(&blk) { @result.each_row(&blk) }, bounded_conn: @connection, &)
+      pm.execute(RubyMethod::RESULT_EACH_ROW, current_conn, ->(&blk) { @result.each_row(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
     end
 
     def to_a
-      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a }, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def [](index)
-      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def values
-      pm.execute(RubyMethod::RESULT_VALUES, current_conn, -> { @result.values }, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_VALUES, current_conn, -> { @result.values },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def column_values(index)
-      pm.execute(RubyMethod::RESULT_COLUMN_VALUES, current_conn, ->(*a) { @result.column_values(*a) }, index, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_COLUMN_VALUES, current_conn, ->(*a) { @result.column_values(*a) }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
     end
 
     def field_values(field_name)
-      pm.execute(RubyMethod::RESULT_FIELD_VALUES, current_conn, ->(*a) { @result.field_values(*a) }, field_name, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_FIELD_VALUES, current_conn, ->(*a) { @result.field_values(*a) }, field_name,
+                 bounded_conn: @connection, sql: @sql)
     end
 
     def tuple(index)
-      pm.execute(RubyMethod::RESULT_TUPLE, current_conn, ->(*a) { @result.tuple(*a) }, index, bounded_conn: @connection)
+      pm.execute(RubyMethod::RESULT_TUPLE, current_conn, ->(*a) { @result.tuple(*a) }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+    end
+
+    def tuple_values(index)
+      pm.execute(RubyMethod::RESULT_TUPLE_VALUES, current_conn, ->(*a) { @result.tuple_values(*a) }, index,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+    end
+
+    def getvalue(row, column)
+      pm.execute(RubyMethod::RESULT_GETVALUE, current_conn, ->(*a) { @result.getvalue(*a) }, row, column,
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+    end
+
+    # The single-row-mode iterators, which read rows off the wire one at a time rather than from a
+    # buffered result; they hand out the same row shapes as +each+, +each_row+ and +tuple+.
+    def stream_each(&)
+      pm.execute(RubyMethod::RESULT_STREAM_EACH, current_conn, ->(&blk) { @result.stream_each(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
+    end
+
+    def stream_each_row(&)
+      pm.execute(RubyMethod::RESULT_STREAM_EACH_ROW, current_conn, ->(&blk) { @result.stream_each_row(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
+    end
+
+    def stream_each_tuple(&)
+      pm.execute(RubyMethod::RESULT_STREAM_EACH_TUPLE, current_conn, ->(&blk) { @result.stream_each_tuple(&blk) },
+                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &)
     end
 
     # Delegate non-network methods directly
