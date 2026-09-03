@@ -1576,7 +1576,8 @@ public class TestEnvironment implements AutoCloseable {
         .withEnv("TEST_ENV_INFO_JSON", getEnvironmentInfoAsString(env))
         .withEnv("TEST_ENV_DESCRIPTION", env.info.getRequest().getDisplayName())
         .withEnv("TEST_BG_ONLY", String.valueOf(config.testBlueGreenOnly))
-        .withEnv("EXCLUDE_BG", String.valueOf(config.noBlueGreen));
+        .withEnv("EXCLUDE_BG", String.valueOf(config.noBlueGreen))
+        .withEnv("RUN_ENCRYPTION_ONLY", String.valueOf(config.testEncryptionOnly));
 
     if (env.info
         .getRequest()
