@@ -216,7 +216,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         # @param first_index [Integer] the number the statement's first bind parameter has
-        def extract_insert(sql, first_index = 1)
+        def extract_insert(sql, first_index)
           table = extract_first_capture(INSERT_INTO, sql)
           bound, unbound, complete = extract_insert_columns(sql, table, first_index)
           QueryAnalysis.new(
@@ -232,7 +232,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         # @param first_index [Integer] the number the statement's first bind parameter has
-        def extract_update(sql, first_index = 1)
+        def extract_update(sql, first_index)
           references = UPDATE_REFERENCES.match(sql)&.[](1)
           return extract_multi_table_update(sql, references, first_index) if references && multiple_references?(references)
 
@@ -355,7 +355,7 @@ module AwsAdvancedRubyDriverWrapper
         # @param first_index [Integer] the number the statement's first bind parameter has
         # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] the columns filled by a bind
         #   parameter, those filled by something else, and whether every written column was found
-        def extract_insert_columns(sql, table_name, first_index = 1)
+        def extract_insert_columns(sql, table_name, first_index)
           declared = INSERT_COLUMNS.match(sql)
           return extract_set_columns(sql, table_name, first_index) unless declared
 
@@ -390,7 +390,7 @@ module AwsAdvancedRubyDriverWrapper
 
         # @param first_index [Integer] the number the statement's first bind parameter has
         # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] as extract_insert_columns
-        def extract_set_columns(sql, table_name, first_index = 1)
+        def extract_set_columns(sql, table_name, first_index)
           match = SET_CLAUSE.match(mask_quoted_literals(sql))
           return [[], [], false] unless match
 
