@@ -98,7 +98,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
         expect { manager.decrypt_data_key(empty, 'arn:aws:kms:us-east-1:123456789012:key/abcd') }
           .to raise_error(key_error, /The stored key metadata has no encrypted data key/) do |error|
             expect(error.code).to eq(key_error::INVALID_KEY_METADATA)
-            expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/abcd')
+            expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/***')
           end
       end
 

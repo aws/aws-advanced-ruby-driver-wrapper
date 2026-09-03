@@ -88,7 +88,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyMetadata do
     end
 
     it 'masks the account and region of the master key ARN' do
-      expect(metadata.to_s).to include('arn:aws:kms:***:***:key/1234abcd-56ef')
+      expect(metadata.to_s).to include('arn:aws:kms:***:***:key/1234***56ef')
       expect(metadata.to_s).not_to include('123456789012')
     end
 
