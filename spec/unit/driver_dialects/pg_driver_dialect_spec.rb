@@ -188,10 +188,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
   end
 
   describe '#foreign_key_query' do
-    it 'reads foreign keys from information_schema with schema and table placeholders' do
+    it 'reads foreign keys from information_schema with pg-numbered schema and table placeholders' do
       sql = dialect.foreign_key_query
       expect(sql).to include('FOREIGN KEY')
-      expect(sql).to include('tc.table_schema = ? AND tc.table_name = ?')
+      expect(sql).to include('tc.table_schema = $1 AND tc.table_name = $2')
     end
   end
 
