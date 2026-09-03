@@ -168,7 +168,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     it 'rejects a payload that is too short to hold the framing' do
       expect { described_class.decrypt('x' * 60, data_key, hmac_key) }
         .to raise_error(encryption_error, /too short: 60 bytes, expected at least 65/) do |error|
-          expect(error.code).to eq(encryption_error::DECRYPTION_FAILED)
+          expect(error.code).to eq(encryption_error::INTEGRITY_CHECK_FAILED)
         end
     end
 

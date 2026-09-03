@@ -39,10 +39,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
   let(:ssn_config) { column_config('users', 'ssn') }
   let(:configs) { { 'users.ssn' => ssn_config, 'users.email' => column_config('users', 'email') } }
   let(:metadata_manager) { instance_double(encryption::MetadataManager) }
+  let(:return_unverified_data) { false }
+  let(:encryption_config) { instance_double(encryption::EncryptionConfig, return_unverified_data: return_unverified_data) }
   let(:encryption_utility) do
     instance_double(encryption::KmsEncryptionUtility, ensure_initialized: nil, cleanup: nil,
                                                       metadata_manager: metadata_manager, key_manager: key_manager,
-                                                      sql_runner: sql_runner, audit_logger: audit_logger)
+                                                      sql_runner: sql_runner, audit_logger: audit_logger,
+                                                      config: encryption_config)
   end
   let(:plugin_manager) { instance_double(services::PluginManager) }
   let(:service_container) do
@@ -323,6 +326,38 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       row = { 'name' => 'Jo', 'ssn' => '123-45-6789' }
       expect { call('result.to_a', sql: select, returns: [row]) }
         .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError)
+    end
+
+    # The opt-in lenient read (encryption_return_unverified_data). Off by default and not for
+    # production; it returns a value that cannot be confirmed to be encrypted data rather than raising.
+    context 'when return_unverified_data is enabled' do
+      let(:return_unverified_data) { true }
+
+      before { allow(audit_logger).to receive(:log_decryption) }
+
+      # A value that cannot be confirmed to be this column's encrypted data (here, a short value
+      # written before kms_encryption was enabled) is returned as it is stored rather than raised on.
+      it 'returns a value that cannot be verified as it is stored' do
+        row = { 'name' => 'Jo', 'ssn' => '123-45-6789' }
+        expect(call('result.to_a', sql: select, returns: [row])).to eq([row])
+      end
+
+      it 'records the unverified passthrough in the audit trail' do
+        row = { 'name' => 'Jo', 'ssn' => '123-45-6789' }
+        call('result.to_a', sql: select, returns: [row])
+        expect(audit_logger).to have_received(:log_decryption)
+          .with(hash_including(table_name: 'users', column_name: 'ssn', success: false))
+      end
+
+      # A value that verifies but will not decrypt (a wrong data key) is a real key fault, not
+      # legacy data, so it still raises even in lenient mode.
+      it 'still raises when a verified payload cannot be decrypted' do
+        row = { 'ssn' => bytea(ciphertext('123-45-6789')) }
+        allow(key_manager).to receive(:decrypt_data_key) { +('b' * 32) }
+
+        expect { call('result.to_a', sql: select, returns: [row]) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError, /authentication tag does not match this data key/)
+      end
     end
 
     # One cipher serves the whole call, so a statement returning many rows costs a single Decrypt.

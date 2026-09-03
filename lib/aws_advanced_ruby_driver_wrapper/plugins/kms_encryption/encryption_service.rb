@@ -112,7 +112,7 @@ module AwsAdvancedRubyDriverWrapper
 
             data = encrypted.b
             if data.bytesize < MIN_ENCRYPTED_LENGTH
-              raise Errors::EncryptionError.decryption_failed(
+              raise Errors::EncryptionError.integrity_check_failed(
                 "Encrypted data is too short: #{data.bytesize} bytes, expected at least #{MIN_ENCRYPTED_LENGTH}"
               ).with_algorithm(algorithm)
             end
@@ -125,7 +125,7 @@ module AwsAdvancedRubyDriverWrapper
             body = data.byteslice(HMAC_TAG_LENGTH..)
             unless hmac_matches?(data.byteslice(0, HMAC_TAG_LENGTH), body, hmac_key)
               raise Errors::EncryptionError
-                .decryption_failed('Integrity check failed: the encrypted value has been tampered with')
+                .integrity_check_failed('Integrity check failed: the encrypted value has been tampered with')
                 .with_algorithm(algorithm)
             end
 

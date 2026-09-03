@@ -503,11 +503,27 @@ module AwsAdvancedRubyDriverWrapper
       def decrypt_value(raw, config, cipher)
         cipher.decrypt(raw, config)
       rescue StandardError => e
+        # In lenient mode a value that cannot be confirmed to be this column's encrypted data - too
+        # short to be a payload, or a failed HMAC - is returned as it is stored, so a column holding
+        # values written before kms_encryption was enabled still reads back. A value that verifies
+        # but will not decrypt (a GCM/data-key failure) is never returned unverified: it signals a
+        # real key problem, so only an integrity-check failure is eligible. Returning +raw+ is how
+        # the row readers see "not decrypted, leave as-is".
+        lenient = return_unverified_data? && e.is_a?(Errors::EncryptionError) &&
+                  e.code == Errors::EncryptionError::INTEGRITY_CHECK_FAILED
         audit_logger.log_decryption(
           table_name: config.table_name, column_name: config.column_name, key_id: config.key_id,
-          success: false, error_message: e.message
+          success: false, error_message: lenient ? "returned unverified: #{e.message}" : e.message
         )
+        return raw if lenient
+
         raise
+      end
+
+      # @return [Boolean] whether a value that cannot be verified on read is returned as it is stored
+      #   rather than raised on. Off by default; not for production - see the property's documentation.
+      def return_unverified_data?
+        @encryption_utility.config.return_unverified_data
       end
 
       # -- Statement analysis --
