@@ -44,7 +44,8 @@ module AwsAdvancedRubyDriverWrapper
 
         module_function
 
-        # Masks the account and region of a KMS key ARN, keeping only the trailing key id.
+        # Masks the account and region of a KMS key ARN, and masks the middle of the trailing key id
+        # the same way {.key_id} does, so a key id is redacted consistently wherever it appears.
         # @param value [String, nil]
         # @return [String, nil]
         def arn(value)
@@ -54,7 +55,7 @@ module AwsAdvancedRubyDriverWrapper
           last_slash = str.rindex('/')
           return 'arn:aws:kms:***:***:key/***' if last_slash.nil? || last_slash.zero? || last_slash == str.length - 1
 
-          "arn:aws:kms:***:***:key/#{str[(last_slash + 1)..]}"
+          "arn:aws:kms:***:***:key/#{key_id(str[(last_slash + 1)..])}"
         end
 
         # Keeps the first and last four characters of a key id, masking the middle.

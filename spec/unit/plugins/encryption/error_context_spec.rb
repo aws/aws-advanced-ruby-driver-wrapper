@@ -131,7 +131,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ErrorContext d
 
     it 'masks the account and region of the master key ARN' do
       expect(context.master_key_arn('arn:aws:kms:us-east-1:123456789012:key/1234abcd').context[:master_key_arn])
-        .to eq('arn:aws:kms:***:***:key/1234abcd')
+        .to eq('arn:aws:kms:***:***:key/***')
     end
 
     it 'masks the literals of the SQL' do

@@ -21,9 +21,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::Sanitizer do
   subject(:sanitizer) { described_class }
 
   describe '.arn' do
-    it 'keeps only the key id' do
+    it 'masks the account, region, and the middle of the key id' do
       expect(sanitizer.arn('arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab'))
-        .to eq('arn:aws:kms:***:***:key/1234abcd-12ab-34cd-56ef-1234567890ab')
+        .to eq('arn:aws:kms:***:***:key/1234***90ab')
+    end
+
+    it 'fully masks a key id too short to keep any characters' do
+      expect(sanitizer.arn('arn:aws:kms:us-east-1:123456789012:key/1234abcd'))
+        .to eq('arn:aws:kms:***:***:key/***')
     end
 
     it 'masks everything when there is no key id to keep' do
