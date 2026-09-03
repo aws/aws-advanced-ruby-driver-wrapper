@@ -18,26 +18,38 @@ module AwsAdvancedRubyDriverWrapper
   module Utils
     module Parser
       module EncryptionAnnotationParser
-        ANNOTATION_PATTERN = %r{/\*@encrypt:([\w.]+)\*/\s*\?}
+        # Both placeholder styles are accepted, so that the same annotation works for mysql2's
+        # positional +?+ and pg's numbered +$1+.
+        ANNOTATION_PATTERN = %r{/\*@encrypt:([\w.]+)\*/\s*(?:\?|\$(\d+))}
         STRIP_PATTERN = %r{/\*@encrypt:[\w.]+\*/\s*}
+        # The quote characters a literal can be wrapped in. A backtick quotes an identifier rather than
+        # a value, but is included so a +?+ inside a backtick-quoted name is not miscounted either.
+        QUOTES = ["'", '"', '`'].freeze
 
         module_function
 
-        # Returns a 1-based map of parameter index => "table.column" for each /*@encrypt:table.column*/ ? placeholder.
+        # Returns a 1-based map of parameter index => "table.column" for each
+        # /*@encrypt:table.column*/ ? or /*@encrypt:table.column*/ $n placeholder.
         # @param sql [String]
         # @return [Hash{Integer => String}]
         def parse_annotations(sql)
           return {} unless sql.is_a?(String) && !sql.empty?
 
-          question_marks = sql.each_char.with_index.filter_map { |char, char_index| char_index if char == '?' }
+          question_marks = unquoted_question_mark_positions(sql)
 
           sql.to_enum(:scan, ANNOTATION_PATTERN)
              .each_with_object({}) do |_, result|
                match = Regexp.last_match
                next unless match
 
-               param_index = question_marks.index(match.end(0) - 1)
-               result[param_index + 1] = match[1] if param_index
+               # A numbered placeholder states its own position; a question mark is located by
+               # counting the question marks that precede it.
+               if match[2]
+                 result[match[2].to_i] = match[1]
+               else
+                 param_index = question_marks.index(match.end(0) - 1)
+                 result[param_index + 1] = match[1] if param_index
+               end
              end
         end
 
@@ -51,6 +63,35 @@ module AwsAdvancedRubyDriverWrapper
           return false unless sql.is_a?(String) && !sql.empty?
 
           ANNOTATION_PATTERN.match?(sql)
+        end
+
+        # The character positions of every +?+ that is a bind placeholder, skipping any inside a quoted
+        # literal so a literal question mark does not shift the count of the placeholder an annotation
+        # points at. A doubled quote reads as one closing and one opening quote, and a backslash escapes
+        # the next character except inside a backtick, which matches how the drivers read a literal.
+        def unquoted_question_mark_positions(sql)
+          positions = []
+          quote = nil
+          index = 0
+
+          while index < sql.length
+            char = sql[index]
+            if quote
+              if char == '\\' && quote != '`'
+                index += 2
+                next
+              end
+
+              quote = nil if char == quote
+            elsif QUOTES.include?(char)
+              quote = char
+            elsif char == '?'
+              positions << index
+            end
+            index += 1
+          end
+
+          positions
         end
       end
     end
