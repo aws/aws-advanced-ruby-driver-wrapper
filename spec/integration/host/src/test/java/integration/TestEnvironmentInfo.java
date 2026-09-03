@@ -54,6 +54,12 @@ public class TestEnvironmentInfo {
   private String secondaryClusterEndpoint;
   private String secondaryClusterIdentifier;
 
+  // Secondary-region database + proxy info (mirror of databaseInfo / proxyDatabaseInfo, for the
+  // secondary GDB region). Populated for AURORA_GLOBAL deployments so the test container can reach
+  // and proxy region-B instances.
+  private TestDatabaseInfo secondaryDatabaseInfo;
+  private TestProxyDatabaseInfo secondaryProxyDatabaseInfo;
+
   public TestDatabaseInfo getDatabaseInfo() {
     return this.databaseInfo;
   }
@@ -260,5 +266,21 @@ public class TestEnvironmentInfo {
 
   public void setSecondaryClusterIdentifier(String secondaryClusterIdentifier) {
     this.secondaryClusterIdentifier = secondaryClusterIdentifier;
+  }
+
+  public TestDatabaseInfo getSecondaryDatabaseInfo() {
+    return this.secondaryDatabaseInfo;
+  }
+
+  public void setSecondaryDatabaseInfo(TestDatabaseInfo secondaryDatabaseInfo) {
+    this.secondaryDatabaseInfo = secondaryDatabaseInfo;
+  }
+
+  public TestProxyDatabaseInfo getSecondaryProxyDatabaseInfo() {
+    return this.secondaryProxyDatabaseInfo;
+  }
+
+  public void setSecondaryProxyDatabaseInfo(TestProxyDatabaseInfo secondaryProxyDatabaseInfo) {
+    this.secondaryProxyDatabaseInfo = secondaryProxyDatabaseInfo;
   }
 }

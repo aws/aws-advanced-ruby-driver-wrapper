@@ -15,5 +15,13 @@
 #  limitations under the License.
 
 module Integration
-  ProxyInfo = Struct.new(:proxy, :control_host, :control_port, :region)
+  PerfStat = Struct.new(:socket_timeout_sec, :network_outage_delay_ms, :min_ms, :max_ms, :avg_ms) do
+    def self.csv_header
+      'SocketTimeoutSec,NetworkOutageDelayMs,MinMs,MaxMs,AvgMs'
+    end
+
+    def to_csv_row
+      "#{socket_timeout_sec},#{network_outage_delay_ms},#{min_ms},#{max_ms},#{avg_ms}"
+    end
+  end
 end

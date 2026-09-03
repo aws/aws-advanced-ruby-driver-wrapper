@@ -22,6 +22,9 @@ require_relative 'utils/test_environment_features'
 require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/connection_utils'
+require_relative 'utils/database_engine_deployment'
+require_relative 'utils/rds_test_utility'
+require_relative 'utils/topology_helper'
 require 'aws_advanced_ruby_driver_wrapper'
 
 RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
@@ -244,6 +247,57 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     Integration::DriverHelper.close(drv, conn) if conn
   end
 
+  describe 'with initial connection strategy',
+           deployments: [Integration::DatabaseEngineDeployment::AURORA] do
+    let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+    let(:writer_cluster_config) do
+      Integration::DriverHelper.native_config(
+        drv,
+        host: info.cluster_endpoint,
+        port: info.cluster_endpoint_port,
+        user: 'ignored',
+        password: 'ignored',
+        dbname: info.default_dbname
+      )
+    end
+
+    let(:sm_initial_connection_props) do
+      {
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,secrets_manager',
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => region,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+      }
+    end
+
+    def connected_host(conn)
+      conn.instance_variable_get(:@service_container).connection_service.current_host_info.host
+    end
+
+    it 'substitutes an instance endpoint and authenticates against it with the fetched secret' do
+      enable_on_num_instances(min_instances: 2)
+
+      discovered = Integration::TopologyHelper.warm_topology_cache(
+        drv: drv, config: writer_cluster_config, props: sm_initial_connection_props
+      )
+      expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
+
+      conn = Integration::DriverHelper.wrapper_connect(drv, **writer_cluster_config, **sm_initial_connection_props)
+
+      # initial_connection substituted the cluster endpoint for a concrete instance, and the secret's
+      # credentials authenticated against that substituted host.
+      host = connected_host(conn)
+      expect(host).not_to eq(info.cluster_endpoint)
+      expect(rds_utils.rds_instance?(host)).to be true
+
+      result = Integration::DriverHelper.execute(drv, conn, 'SELECT 1 AS val')
+      expect(result.first['val'].to_i).to eq(1)
+    ensure
+      Integration::DriverHelper.close(drv, conn) if conn
+    end
+  end
+
   private
 
   def create_sm_wrapper_connection(secret_id:, region: env.aurora_region, password: nil, extra_props: {})
@@ -258,8 +312,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
 
     sm_props = {
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id,
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id
     }
     sm_props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name] = region if region
 

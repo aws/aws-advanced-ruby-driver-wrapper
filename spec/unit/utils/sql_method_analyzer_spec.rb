@@ -49,7 +49,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ['SHOW with autocommit off',      EXEC,  ['SHOW tables'],                    false, false],
 
     # Edge cases
-    ['nil args',                       EXEC,  nil,                                true,  false],
+    ['nil args',                       EXEC, nil,                                true,  false],
     ['empty string',                   EXEC,  [''],                               true,  false],
     ['non-string arg',                 EXEC,  [123],                              true,  false],
     ['multi-statement (first wins)',   EXEC,  ['BEGIN; INSERT INTO t VALUES(1)'], true,  true],

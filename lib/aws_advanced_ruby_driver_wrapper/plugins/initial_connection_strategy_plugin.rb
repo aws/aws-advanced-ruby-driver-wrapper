@@ -425,10 +425,12 @@ module AwsAdvancedRubyDriverWrapper
                 "#{PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.name}: 'reader' is invalid for writer or global cluster endpoints"
         end
 
-        return unless role == Host::HostRole::WRITER && url_type == Utils::RdsUrlType::RDS_READER_CLUSTER
+        # A custom endpoint can only be of type 'reader' or 'any', so writer verification is not allowed.
+        return unless role == Host::HostRole::WRITER &&
+                      [Utils::RdsUrlType::RDS_READER_CLUSTER, Utils::RdsUrlType::RDS_CUSTOM_CLUSTER].include?(url_type)
 
         raise Errors::AwsError,
-              "#{PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.name}: 'writer' is invalid for reader cluster endpoints"
+              "#{PropertyDefinition::INITIAL_CONNECTION_VERIFY_ROLE.name}: 'writer' is invalid for reader or custom cluster endpoints"
       end
 
       def readers_in_topology?(hosts)
