@@ -61,16 +61,20 @@ module AwsAdvancedRubyDriverWrapper
         # be an encrypted payload, so a value that cannot be verified and decrypted - too short to be
         # a payload, an integrity tag that does not match, or a stored key with no HMAC key - is
         # raised on rather than returned, so the wrapper never hands the application a value it cannot
-        # vouch for. This matches the reference JDBC wrapper. A null value is passed through so a
-        # nullable column still reads null.
+        # vouch for. A null column value reads back as nil.
         #
         # @param raw [Object, nil] the raw column value
         # @param config [ColumnEncryptionConfig] the column's kms_encryption configuration
-        # @return [Object, nil] the decrypted value, or +raw+ when it is null
-        # @raise [Errors::EncryptionError] if the value cannot be verified and decrypted, or the
-        #   column has no usable key material
+        # @return [Object, nil] the decrypted value, or nil when the column value is null
+        # @raise [Errors::EncryptionError] if the value cannot be verified and decrypted, is not the
+        #   stored bytes of an encrypted column, or the column has no usable key material
         def decrypt(raw, config)
-          return raw unless raw.is_a?(String)
+          return nil if raw.nil?
+
+          # A value read from an encrypted (binary) column is a String; nil, handled above, is the
+          # only other shape a NULL produces. Any other type is not the stored bytes of an encrypted
+          # column, so it is refused rather than returned unverified.
+          raise Errors::EncryptionError.decryption_failed("Cannot decrypt a #{raw.class} value") unless raw.is_a?(String)
 
           # A column configured for kms_encryption must have key material; its absence is a
           # misconfiguration worth failing on, as on the encrypt side.
@@ -100,8 +104,8 @@ module AwsAdvancedRubyDriverWrapper
         # value keeps decrypting after its column's key has been rotated: the current key is used
         # when the ids match (the common case, and the only one that needs no extra lookup), and any
         # other id is fetched from +key_storage+ and cached. A value with no embedded id (legacy
-        # data) or one whose key is gone falls back to the current key, which then fails the
-        # integrity check and is returned untouched by {#decrypt}.
+        # data) or one whose key is gone falls back to the current key, against which it then fails
+        # its integrity check and is refused by {#decrypt}.
         #
         # @return [KeyMetadata, nil]
         def key_metadata_for_value(bytes, config)
@@ -112,11 +116,11 @@ module AwsAdvancedRubyDriverWrapper
           @key_metadata_by_id[key_id] ||= resolve_key_metadata(key_id) || current
         end
 
-        # Looks a key up by the id embedded in a value. The read is lenient, so this is opportunistic:
-        # a value that is not really an encrypted payload (legacy data, tampered bytes) can carry an
-        # arbitrary id, and a value written before this format carries none, so a lookup that finds
-        # nothing or fails must not surface as an error - the caller falls back to the current key and
-        # the value fails its integrity check and is returned untouched.
+        # Looks a key up by the id embedded in a value. The lookup is opportunistic: a value that is
+        # not really an encrypted payload (legacy data, tampered bytes) can carry an arbitrary id, and
+        # a value written before this format carries none, so a lookup that finds nothing or fails must
+        # not surface as an error - the caller falls back to the current key, against which the value
+        # then fails its integrity check and is refused by {#decrypt}.
         def resolve_key_metadata(key_id)
           @key_manager.key_metadata_by_id(key_id)
         rescue Errors::EncryptionPluginError

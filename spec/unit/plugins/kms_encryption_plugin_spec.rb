@@ -321,7 +321,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
 
     # The read fails closed: a value in an encrypted column that is not a valid payload (a value
-    # written before kms_encryption was turned on) is refused rather than handed back. Matches JDBC.
+    # written before kms_encryption was turned on) is refused rather than handed back.
     it 'raises on a value that is not an encrypted payload' do
       row = { 'name' => 'Jo', 'ssn' => '123-45-6789' }
       expect { call('result.to_a', sql: select, returns: [row]) }
@@ -443,7 +443,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
 
     # getvalue reads a single cell by row and column position, matched to a column through the field
-    # list - the pg analogue of a plain column read, which JDBC decrypts.
+    # list - the pg analogue of a plain column read.
     it 'decrypts a single cell read by position when its column is encrypted' do
       value = bytea(ciphertext('123-45-6789'))
       expect(call('result.getvalue', args: [0, 1], sql: select, field_names: %w[name ssn], returns: value))
