@@ -21,7 +21,10 @@ require_relative 'utils/test_driver'
 require_relative 'utils/driver_helper'
 require_relative 'utils/kms_encryption_helper'
 require 'aws_advanced_ruby_driver_wrapper'
-require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_utility'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_management_utility'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/schema_validator'
+require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
 # KeyManagementUtility against real KMS: creating a master key, turning encryption on for a column,
 # validating the metadata schema, and rotating a data key. This drives the administrative side over

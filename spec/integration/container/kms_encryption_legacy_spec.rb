@@ -23,11 +23,11 @@ require_relative 'utils/driver_helper'
 require_relative 'utils/kms_encryption_helper'
 require 'aws_advanced_ruby_driver_wrapper'
 
-# Legacy and mixed data. The read path is lenient: a value that does not carry a valid integrity tag
-# is handed back exactly as the database holds it, so a column that already held data before it was
-# configured for encryption keeps reading back as it was written, and a tampered or wrong-key value
-# is passed through rather than raising. Both are proven by comparing a plugin read to a plain read
-# of the same stored bytes.
+# Legacy and mixed data. By default the read path fails closed: a value that does not carry a valid
+# integrity tag - legacy data written before the column was encrypted, or a tampered value - is
+# refused with an EncryptionError rather than handed back. The opt-in encryption_return_unverified_data
+# property restores the lenient behavior, returning such a value exactly as the database holds it,
+# which is proven by comparing a plugin read to a plain read of the same stored bytes.
 RSpec.describe 'KmsEncryption legacy and mixed data', :integration, :kms_encryption,
                enable_on_engines: [Integration::DatabaseEngine::MYSQL, Integration::DatabaseEngine::PG],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
@@ -36,6 +36,7 @@ RSpec.describe 'KmsEncryption legacy and mixed data', :integration, :kms_encrypt
   let(:table) { 'enc_legacy' }
   let(:admin_conn) { native_connect }
   let(:conn) { encryption_connect }
+  let(:encryption_error) { AwsAdvancedRubyDriverWrapper::Errors::EncryptionError }
 
   before do
     require_kms!
@@ -50,20 +51,41 @@ RSpec.describe 'KmsEncryption legacy and mixed data', :integration, :kms_encrypt
     nil
   end
 
-  it 'reads a pre-encryption plaintext value back untouched' do
-    # A short value that is not a valid encrypted payload, written before/around the plugin.
+  # A short value that is not a valid encrypted payload, written before/around the plugin.
+  it 'raises when reading a pre-encryption plaintext value' do
     insert_raw(admin_conn, 'Legacy', 'plain-legacy-value')
 
-    expect(read_ssn(conn, 'Legacy')).to eq(stored_value(admin_conn, table, 'ssn', 'name', 'Legacy'))
+    expect { read_ssn(conn, 'Legacy') }.to raise_error(encryption_error)
   end
 
-  it 'passes a tampered or wrong-key value through without raising' do
-    # 80 random bytes: long enough to look like a payload by length, but its HMAC will not verify.
+  # 80 random bytes: long enough to look like a payload by length, but its HMAC will not verify.
+  it 'raises when reading a value whose integrity cannot be verified' do
     insert_raw(admin_conn, 'Tampered', SecureRandom.bytes(80))
 
-    read = nil
-    expect { read = read_ssn(conn, 'Tampered') }.not_to raise_error
-    expect(read).to eq(stored_value(admin_conn, table, 'ssn', 'name', 'Tampered'))
+    expect { read_ssn(conn, 'Tampered') }.to raise_error(encryption_error)
+  end
+
+  # The opt-in lenient read. Not for production; here it lets pre-existing data read back.
+  context 'with encryption_return_unverified_data enabled' do
+    let(:conn) do
+      encryption_connect(
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_RETURN_UNVERIFIED_DATA.name => true
+      )
+    end
+
+    it 'reads a pre-encryption plaintext value back untouched' do
+      insert_raw(admin_conn, 'Legacy', 'plain-legacy-value')
+
+      expect(read_ssn(conn, 'Legacy')).to eq(stored_value(admin_conn, table, 'ssn', 'name', 'Legacy'))
+    end
+
+    it 'passes a value whose integrity cannot be verified through untouched' do
+      insert_raw(admin_conn, 'Tampered', SecureRandom.bytes(80))
+
+      read = nil
+      expect { read = read_ssn(conn, 'Tampered') }.not_to raise_error
+      expect(read).to eq(stored_value(admin_conn, table, 'ssn', 'name', 'Tampered'))
+    end
   end
 
   # Writes a raw value straight into the encrypted (binary) column over a plain connection, the way
