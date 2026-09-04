@@ -270,7 +270,7 @@ module AwsAdvancedRubyDriverWrapper
       def failover_writer
         failover_start = Time.now
         failover_deadline = failover_start + @failover_timeout
-        success = false
+        result = nil
 
         logger.info { 'Starting writer failover' }
 
@@ -281,22 +281,19 @@ module AwsAdvancedRubyDriverWrapper
 
           was_in_transaction = @service_container.session_state_service.in_transaction?
           result = @retry_util.connect_to_writer(self, @service_container.plugin_manager, deadline: failover_deadline)
-          if result&.connection && result.host_info
-            success = true
-            connection_service.update_current_connection(result.connection, result.host_info)
-            raise_failover_success_error(was_in_transaction)
-          end
+          raise Errors::FailoverFailedError, 'Unable to connect to a writer instance' unless result&.connection && result.host_info
+
+          connection_service.update_current_connection(result.connection, result.host_info)
         rescue Timeout::Error
+          close_quietly(result&.connection)
           raise Errors::FailoverFailedError,
                 "Writer failover timed out after #{@failover_timeout}s. Unable to connect to a new writer instance."
         ensure
           duration_ms = ((Time.now - failover_start) * 1000).round
           logger.debug { "Writer failover duration: #{duration_ms}ms" }
-          unless success
-            close_quietly(result&.connection)
-            raise Errors::FailoverFailedError, 'Unable to connect to a writer instance'
-          end
         end
+
+        raise_failover_success_error(was_in_transaction)
       end
 
       def raise_failover_success_error(was_in_transaction)

@@ -84,14 +84,17 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     conn.instance_variable_get(:@service_container).connection_service.current_host_info.host
   end
 
-  # Populates the shared topology cache with a throwaway connection. Substitution requires a known
-  # topology, and on a cold cache the plugin declines to substitute because the topology monitor will
-  # not start until the dialect is final, which only happens once DefaultPlugin#connect has confirmed
-  # it against a live connection. Connecting once first both finalizes the dialect for the endpoint
-  # and leaves the topology cached for the connection under test.
-  def warm_topology_cache(config)
-    conn = Integration::DriverHelper.wrapper_connect(drv, **config, **initial_connection_props)
-    Integration::DriverHelper.close(drv, conn)
+  # Populates the shared topology cache with a throwaway connection and blocks until the instance hosts
+  # have landed, so a following connection substitutes against a known topology instead of racing the
+  # background monitor. Substitution requires a known topology; on a cold cache the plugin declines to
+  # substitute because the topology monitor will not start until the dialect is final, which only happens
+  # once DefaultPlugin#connect has confirmed it against a live connection. Connecting once first both
+  # finalizes the dialect for the endpoint and warms the topology for the connection under test.
+  def warm_topology_cache(config, min_instances: 1)
+    discovered = Integration::TopologyHelper.warm_topology_cache(
+      drv: drv, config: config, props: initial_connection_props, min_instances: min_instances
+    )
+    expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
   end
 
   before do
@@ -222,7 +225,9 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       # Assigned before anything that can raise so that the ensure block always has a list to close.
       connections = []
 
-      warm_topology_cache(reader_cluster_config)
+      # Wait for every instance to land in the topology so the round-robin selector can actually spread
+      # over all readers rather than racing a partially discovered topology.
+      warm_topology_cache(reader_cluster_config, min_instances: env.instances.size)
 
       # Every instance other than the writer is a reader, so one connection per reader should visit each of
       # them exactly once. Which reader the rotation starts on depends on how the topology sorts, so only the
@@ -293,22 +298,16 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     end
 
     # Warms the topology through the proxies while they are still up, so that the plugin has instance
-    # hosts to substitute once connectivity is cut.
+    # hosts to substitute once connectivity is cut. retry_props sets CLUSTER_ID to proxied_cluster_id, so
+    # the helper watches that cache entry. The proxied hosts are not RDS instance URLs (they carry the
+    # proxy suffix), so gate on the suffix rather than requiring RDS instance hosts.
     def warm_proxied_topology
-      warmup = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
-      Integration::DriverHelper.close(drv, warmup)
-
-      # The monitor fetches topology in the background, so wait for the proxied instance hosts to land in
-      # the cache instead of racing them. Without them the plugin has nothing to substitute and would
-      # connect through the given endpoint for the wrong reason.
-      cached = Integration::RetryHelper.retry_until(timeout_secs: 30, delay_secs: 0.5) do
-        hosts = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(
-          :topology, proxied_cluster_id, register_access: false
-        )
-        !hosts.nil? && hosts.size >= proxy_info.instances.size &&
-          hosts.all? { |host| host.host.end_with?(proxy_info.instance_endpoint_suffix) }
-      end
-      expect(cached).to be(true), 'The proxied topology was not discovered before connectivity was cut'
+      discovered = Integration::TopologyHelper.warm_topology_cache(
+        drv: drv, config: proxied_reader_cluster_config, props: retry_props,
+        min_instances: proxy_info.instances.size, require_instance_hosts: false,
+        instance_suffix: proxy_info.instance_endpoint_suffix
+      )
+      expect(discovered).to be(true), 'The proxied topology was not discovered before connectivity was cut'
     end
 
     it 'falls back to the cluster endpoint when every substitution candidate is unreachable' do
