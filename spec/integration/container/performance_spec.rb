@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_ruby_database_driver_wrapper'
+require 'aws_advanced_ruby_driver_wrapper'
 require 'concurrent'
 require 'fileutils'
 require_relative 'integration_helper'
