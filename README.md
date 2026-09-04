@@ -37,6 +37,7 @@ The plugin-based design ensures applications only load the functionality they ne
 | Custom Endpoint                | Adds awareness of Aurora custom endpoints to topology and host selection.                                                                                                  |
 | Blue/Green Deployment          | Adds awareness of Amazon RDS/Aurora Blue/Green deployments to minimize downtime during switchover.                                                                         |
 | Initial Connection Strategy    | Controls how the initial connection to a cluster is established and verified.                                                                                              |
+| KMS Encryption                 | Transparently encrypts and decrypts individual table columns using data keys held in AWS KMS. See [Using the KMS Encryption Plugin](./docs/UsingTheKmsEncryptionPlugin.md). |
 
 ### Preserve Existing Workflows
 

@@ -40,6 +40,20 @@ module AwsAdvancedRubyDriverWrapper
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
           expires_at && now >= expires_at
         end
+
+        # Redact the password so the secret is never exposed if an instance is
+        # logged, interpolated, or rendered in a backtrace.
+        def inspect
+          "#<data SecretEntry username=#{username.inspect}, " \
+            "password=#{AwsAdvancedRubyDriverWrapper::REDACTED.inspect}, expires_at=#{expires_at.inspect}>"
+        end
+        alias_method :to_s, :inspect
+
+        # `pp` / PrettyPrint does not call #inspect; route them through the
+        # redacted representation so `pp entry` cannot leak the password.
+        def pretty_print(pp)
+          pp.text(inspect)
+        end
       end
 
       @pending_refreshes = Concurrent::Map.new

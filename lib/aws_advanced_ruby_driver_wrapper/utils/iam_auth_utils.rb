@@ -18,13 +18,28 @@ require 'uri'
 require_relative 'rds_utils'
 require_relative 'rds_url_type'
 require_relative '../property_definition'
+require_relative '../logging'
 
 module AwsAdvancedRubyDriverWrapper
   module Utils
     module IamAuthUtils
       module_function
 
-      TokenEntry = Data.define(:token, :expires_at)
+      TokenEntry = Data.define(:token, :expires_at) do
+        # Redact the token so it is never exposed if an instance is logged,
+        # interpolated, or rendered in a backtrace.
+        def inspect
+          "#<data TokenEntry token=#{AwsAdvancedRubyDriverWrapper::REDACTED.inspect}, " \
+            "expires_at=#{expires_at.inspect}>"
+        end
+        alias_method :to_s, :inspect
+
+        # `pp` / PrettyPrint does not call #inspect; route them through the
+        # redacted representation so `pp entry` cannot leak the token.
+        def pretty_print(pp)
+          pp.text(inspect)
+        end
+      end
 
       EXPIRY_BUFFER_SEC = 60
 

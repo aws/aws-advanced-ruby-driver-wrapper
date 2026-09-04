@@ -59,6 +59,10 @@ module Integration
         enable_proxy_instance(TestEnvironment.current.proxy_info(instance_name))
       end
 
+      def restore_connectivity(instance_name)
+        enable_proxy_connectivity(TestEnvironment.current.proxy_info(instance_name))
+      end
+
       private
 
       def disable_proxy_instance(proxy_info)

@@ -35,7 +35,7 @@ Metrics/ModuleLength:
   Enabled: false
 
 Metrics/ParameterLists:
-  Max: 10
+  Enabled: false
 
 Metrics/PerceivedComplexity:
   Enabled: false

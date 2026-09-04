@@ -69,6 +69,38 @@ module TestPlugins
     end
   end
 
+  # Subscribes to all methods. Stands in for the last plugin of the pipeline, which is the only one
+  # whose pipeline callable is the target driver method: it hands the arguments and the block it was
+  # given straight to it, the way the default plugin does.
+  class TestPluginCallsTarget < TestPlugin
+    def execute(_target_method_name, target_callable, ...)
+      target_callable.call(...)
+    end
+  end
+
+  # Subscribes to all methods. Reads the call context the manager published, and can replace the
+  # arguments or the block that the plugins after it, and the target method, are called with.
+  class TestPluginReadsContext < TestPlugin
+    attr_accessor :manager
+    attr_reader :seen_sql, :seen_args
+
+    def initialize(calls, new_args: nil, new_block: nil)
+      super(calls)
+      @new_args = new_args
+      @new_block = new_block
+    end
+
+    def execute(_target_method_name, pipeline_callable, *args, **_options)
+      context = @manager.current_call_context
+      @seen_sql = context&.sql
+      @seen_args = args
+      context.args = @new_args unless @new_args.nil?
+      context.block = @new_block unless @new_block.nil?
+
+      pipeline_callable.call
+    end
+  end
+
   # Subscribes to all methods. Raises an error either before or after calling next.
   class TestPluginRaisesError < TestPlugin
     def initialize(calls, throw_before_call = true)
@@ -182,6 +214,132 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
                               'TestPluginOne:after execute'
                             ])
       end
+    end
+  end
+
+  describe '#current_call_context' do
+    # Builds a manager whose pipeline ends in a plugin that calls the target with what it was given,
+    # so that what a plugin changed about the call can be seen at the target.
+    def build_manager_with_context_plugin(context_plugin)
+      manager = build_manager_with_plugins([context_plugin, TestPlugins::TestPluginCallsTarget.new([])])
+      context_plugin.manager = manager
+      manager
+    end
+
+    it 'is nil outside of a call' do
+      manager = build_manager_with_plugins([TestPlugins::TestPluginOne.new([])])
+
+      expect(manager.current_call_context).to be_nil
+      expect(manager.current_sql).to be_nil
+    end
+
+    # A result method has no SQL among its arguments, and a prepared statement only carries the name
+    # it was prepared under, so the caller states the SQL separately.
+    it 'publishes the SQL the call originated from' do
+      context_plugin = TestPlugins::TestPluginReadsContext.new([])
+      manager = build_manager_with_context_plugin(context_plugin)
+
+      manager.execute('test_call_a', nil, ->(*) {}, 0, sql: 'SELECT ssn FROM users')
+
+      expect(context_plugin.seen_sql).to eq('SELECT ssn FROM users')
+    end
+
+    it 'has no SQL when the caller did not say what it was' do
+      context_plugin = TestPlugins::TestPluginReadsContext.new([])
+      manager = build_manager_with_context_plugin(context_plugin)
+
+      manager.execute('test_call_a', nil, -> {})
+
+      expect(context_plugin.seen_sql).to be_nil
+    end
+
+    it 'does not pass the SQL to the target method as an argument' do
+      received = nil
+      manager = build_manager_with_plugins([TestPlugins::TestPluginCallsTarget.new([])])
+
+      manager.execute('test_call_a', nil, lambda { |*args, **kwargs|
+        received = [args, kwargs]
+      }, 'SELECT $1', ['Jo'], sql: 'SELECT $1')
+
+      expect(received).to eq([['SELECT $1', ['Jo']], {}])
+    end
+
+    # This is how the kms_encryption plugin substitutes an encrypted bind parameter without touching the
+    # array the application passed.
+    it 'lets a plugin replace the arguments the target method is called with' do
+      context_plugin = TestPlugins::TestPluginReadsContext.new([], new_args: ['SELECT $1', ['encrypted']])
+      manager = build_manager_with_context_plugin(context_plugin)
+      received = nil
+
+      manager.execute('test_call_a', nil, ->(*args) { received = args }, 'SELECT $1', ['Jo'])
+
+      expect(context_plugin.seen_args).to eq(['SELECT $1', ['Jo']])
+      expect(received).to eq(['SELECT $1', ['encrypted']])
+    end
+
+    it 'passes the replaced arguments to the plugins after the one that replaced them' do
+      first = TestPlugins::TestPluginReadsContext.new([], new_args: %w[replaced])
+      second = TestPlugins::TestPluginReadsContext.new([])
+      manager = build_manager_with_plugins([first, second, TestPlugins::TestPluginCallsTarget.new([])])
+      first.manager = manager
+      second.manager = manager
+
+      manager.execute('test_call_a', nil, ->(*) {}, 'original')
+
+      expect(second.seen_args).to eq(%w[replaced])
+    end
+
+    # A result method yields its rows rather than returning them, so decrypting them means
+    # replacing the block the driver is called with.
+    it 'lets a plugin replace the block the target method is called with' do
+      yielded = []
+      context_plugin = TestPlugins::TestPluginReadsContext.new([], new_block: ->(row) { yielded << "wrapped:#{row}" })
+      manager = build_manager_with_context_plugin(context_plugin)
+
+      manager.execute('test_call_a', nil, ->(&block) { block.call('row') }) { |row| yielded << row }
+
+      expect(yielded).to eq(['wrapped:row'])
+    end
+
+    # Reading a result runs inside the call that produced it, and neither call may see the other's
+    # SQL.
+    it 'restores the context of the outer call when a nested call returns' do
+      manager = build_manager_with_plugins([TestPlugins::TestPluginOne.new([])])
+      inner_sql = nil
+      outer_sql = nil
+
+      manager.execute('test_call_a', nil, lambda {
+        manager.execute('test_call_a', nil, -> { inner_sql = manager.current_sql }, sql: 'SELECT 2')
+        outer_sql = manager.current_sql
+      }, sql: 'SELECT 1')
+
+      expect(inner_sql).to eq('SELECT 2')
+      expect(outer_sql).to eq('SELECT 1')
+      expect(manager.current_call_context).to be_nil
+    end
+
+    it 'clears the context when the call raises' do
+      manager = build_manager_with_plugins([TestPlugins::TestPluginOne.new([])])
+
+      expect do
+        manager.execute('test_call_a', nil, -> { raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'test error' },
+                        sql: 'SELECT 1')
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
+
+      expect(manager.current_call_context).to be_nil
+    end
+
+    # The context belongs to the thread that is making the call, so a connection used from another
+    # thread cannot read its SQL.
+    it 'is not visible to another thread' do
+      manager = build_manager_with_plugins([TestPlugins::TestPluginOne.new([])])
+      other_thread_sql = :not_set
+
+      manager.execute('test_call_a', nil, lambda {
+        other_thread_sql = Thread.new { manager.current_sql }.value
+      }, sql: 'SELECT 1')
+
+      expect(other_thread_sql).to be_nil
     end
   end
 
@@ -353,6 +511,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       container = service_container_with_wrapper_props(wrapper_plugins: 'failover,failover')
       expect { described_class.new(container) }
         .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'Duplicate plugins detected')
+    end
+
+    it 'loads the KMS kms_encryption plugin for the kms_encryption code' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption', encryption_kms_region: 'us-east-1')
+      manager = described_class.new(container)
+
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin)).to be true
+    end
+
+    # The kms_encryption plugin has to see the parameters and the rows last on the way out and first on
+    # the way back, so that everything before it works with plaintext.
+    it 'orders the KMS kms_encryption plugin after the failover plugin' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption,failover', encryption_kms_region: 'us-east-1')
+      manager = described_class.new(container)
+
+      plugin_classes = manager.instance_variable_get(:@plugins).map(&:class)
+      expect(plugin_classes.index(AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin))
+        .to be > plugin_classes.index(AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin)
     end
 
     it 'does not raise an error when all plugin codes are unique' do
