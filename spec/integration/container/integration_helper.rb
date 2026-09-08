@@ -21,6 +21,7 @@ require 'aws_advanced_ruby_driver_wrapper/mysql'
 require_relative 'utils/condition_checker'
 require_relative 'utils/connection_utils'
 require_relative 'utils/database_engine_deployment'
+require_relative 'utils/log_obfuscator'
 require_relative 'utils/proxy_helper'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/spec_helper'
@@ -30,10 +31,13 @@ require_relative 'utils/test_environment_features'
 module Integration
   module IntegrationHelper
     AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG
+    # Obfuscate RDS endpoints in the wrapper's own logs (the bulk of integration log output) so CI logs do
+    # not leak the cluster's DNS domain. This only touches the test-run logger, not the wrapper's defaults.
+    LogObfuscator.install(AwsAdvancedRubyDriverWrapper.logger)
     $stderr.sync = true
     $stdout.sync = true
 
-    LOGGER = Logger.new($stdout, progname: 'Integration::IntegrationHelper')
+    LOGGER = LogObfuscator.install(Logger.new($stdout, progname: 'Integration::IntegrationHelper'))
 
     # Runs before each example. Call from a before(:each) hook in integration specs.
     def self.setup_test(current_driver: nil, test_name: nil)
