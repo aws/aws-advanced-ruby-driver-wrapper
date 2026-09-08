@@ -106,10 +106,10 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     before { enable_on_num_instances(min_instances: 2) }
 
     it 'substitutes a reader instance endpoint after waiting for topology on a cold cache' do
-      # Start from a cold topology cache so the plugin has nothing but the cluster endpoint to work
-      # with and must wait for the topology monitor, as during a real application startup.
-      AwsAdvancedRubyDriverWrapper.clear_caches
-
+      # The per-test reset (IntegrationHelper#reset_caches) already leaves the topology cache cold, so the
+      # plugin has nothing but the cluster endpoint to work with and must wait for the topology monitor,
+      # as during a real application startup.
+      #
       # The topology monitor will not start until the dialect is final, and on a cold cache the
       # dialect is only guessed from the URL until DefaultPlugin#connect confirms it, which happens
       # after the plugin has already decided. Setting the dialect explicitly makes it final up front

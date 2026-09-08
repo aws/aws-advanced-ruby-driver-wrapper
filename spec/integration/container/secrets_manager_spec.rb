@@ -56,11 +56,6 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
 
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
-    begin
-      AwsAdvancedRubyDriverWrapper.clear_caches
-    rescue StandardError
-      nil
-    end
   end
 
   it 'connects with fetched credentials' do

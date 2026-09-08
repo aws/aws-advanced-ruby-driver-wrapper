@@ -457,32 +457,60 @@ module Integration
       end
     end
 
+    # Per-attempt wait for the writer to change after a failover request. A real Aurora failover completes
+    # within a couple of minutes, so 5 minutes is generous; combined with the retry loop this re-issues a
+    # silently-dropped request rather than failing after a single long wait.
+    WRITER_CHANGE_TIMEOUT_SECS = 300
+    # Pause between failover attempts to let the cluster stabilize before re-issuing.
+    FAILOVER_STABILIZATION_SECS = 10
+
     def failover_cluster_and_wait_until_writer_changed(max_retries: 3, target_instance_id: nil)
-      env = TestEnvironment.current
-      cluster_id = env.cluster_name
+      cluster_id = TestEnvironment.current.cluster_name
       initial_writer_id = cluster_writer_instance_id(cluster_id)
 
       writer_changed = false
       max_retries.times do |attempt|
-        if target_instance_id
-          @client.failover_db_cluster(
-            db_cluster_identifier: cluster_id,
-            target_db_instance_identifier: target_instance_id
-          )
-        else
-          @client.failover_db_cluster(db_cluster_identifier: cluster_id)
-        end
+        request_cluster_failover(cluster_id, target_instance_id)
 
-        writer_changed = RetryHelper.retry_until(timeout_secs: 300, delay_secs: 5) do
-          current_writer = cluster_writer_instance_id(cluster_id)
-          current_writer != initial_writer_id
+        # Aurora occasionally accepts the failover request (returning success) but does not actually perform
+        # the failover, especially when failovers are triggered in rapid succession or shortly after another
+        # cluster modification (e.g. creating a custom endpoint). Poll for the writer to change.
+        writer_changed = RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 5) do
+          cluster_writer_instance_id(cluster_id) != initial_writer_id
         end
         break if writer_changed
+        break if attempt == max_retries - 1
 
+        # Pause to let the cluster settle, then re-check in case the writer changed during the pause.
         TestUtils.logger.warn("Failover attempt #{attempt + 1}/#{max_retries}: writer did not change, retrying")
+        sleep(FAILOVER_STABILIZATION_SECS)
+        writer_changed = cluster_writer_instance_id(cluster_id) != initial_writer_id
+        break if writer_changed
       end
 
       raise "Writer did not change after #{max_retries} failover attempts" unless writer_changed
+    end
+
+    # Issues a single failover_db_cluster request, tolerating transient cluster/instance states. The cluster
+    # or target instance may still be settling from a prior operation (a custom-endpoint change or an
+    # earlier failover), in which case failover_db_cluster raises InvalidDBClusterStateFault. Wait for both
+    # to reach 'available' first, then retry the request a few times so a transient rejection does not fail
+    # the whole failover.
+    def request_cluster_failover(cluster_id, target_instance_id, max_request_attempts: 10)
+      max_request_attempts.times do
+        wait_until_cluster_has_desired_status(cluster_id, 'available')
+        wait_until_instance_has_desired_status(target_instance_id, 15, 'available') if target_instance_id
+
+        params = { db_cluster_identifier: cluster_id }
+        params[:target_db_instance_identifier] = target_instance_id if target_instance_id
+        @client.failover_db_cluster(**params)
+        return
+      rescue Aws::RDS::Errors::InvalidDBClusterStateFault => e
+        TestUtils.logger.warn("failover_db_cluster rejected (#{e.message}), retrying")
+        sleep(1)
+      end
+
+      raise "Failed to request a cluster failover for #{cluster_id} after #{max_request_attempts} attempts"
     end
 
     def sleep_sql(seconds)

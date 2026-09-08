@@ -225,7 +225,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
 
       Thread.new { @rds_util.failover_cluster_and_wait_until_writer_changed }
 
-      failover_success = RetryHelper.retry_until(timeout_secs: 120, delay_secs: 1) do
+      failover_success = Integration::RetryHelper.retry_until(timeout_secs: 120, delay_secs: 1) do
         @rds_util.query_instance_id(conn)
         false
       rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
@@ -276,7 +276,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
 
       Thread.new { @rds_util.failover_cluster_and_wait_until_writer_changed }
 
-      failover_success = RetryHelper.retry_until(timeout_secs: 120, delay_secs: 1) do
+      failover_success = Integration::RetryHelper.retry_until(timeout_secs: 120, delay_secs: 1) do
         @rds_util.query_instance_id(conn)
         false
       rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError

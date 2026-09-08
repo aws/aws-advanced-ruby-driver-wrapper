@@ -81,8 +81,19 @@ module Integration
       ProxyHelper.enable_all_connectivity
     end
 
+    # Isolates topology state between examples. Every wrapper connection keys its topology cache and its
+    # cluster-topology monitor on the CLUSTER_ID property, which the harness fixes to env.cluster_name for
+    # all tests (see spec_helper.rb). Left alone, one example's cached topology - and its still-running
+    # monitor, which keeps repopulating that cache entry - leaks into the next, so a test that expects an
+    # unreachable cluster can instead reach a stale-but-live host and see FailoverSuccessError.
+    #
+    # CoreServices.reset! stops all monitors (joining their threads) and then swaps in fresh
+    # event/storage/monitor services, so no monitor can repopulate the cache mid-reset. clear_caches then
+    # wipes the remaining module-level caches (RDS URL/DNS regexes, endpoint dialects, host id cache) that
+    # CoreServices does not own.
     def self.reset_caches
-      AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.clear_cache
+      AwsAdvancedRubyDriverWrapper::Services::CoreServices.reset!
+      AwsAdvancedRubyDriverWrapper.clear_caches
     end
     private_class_method :reset_caches
 

@@ -486,11 +486,6 @@ RSpec.describe 'Failover', :integration,
 
     before do
       skip 'No allowed drivers for this environment' if drv.nil?
-      begin
-        AwsAdvancedRubyDriverWrapper.clear_caches
-      rescue StandardError
-        nil
-      end
     end
 
     let(:sm_failover_config) do
