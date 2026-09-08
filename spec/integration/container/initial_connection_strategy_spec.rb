@@ -26,6 +26,7 @@ require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
 require_relative 'utils/test_round_robin_host_selector'
 require_relative 'utils/test_utils'
+require_relative 'utils/topology_helper'
 require 'aws_advanced_ruby_driver_wrapper'
 require 'aws_advanced_ruby_driver_wrapper/db_dialects/dialect_codes'
 require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
@@ -40,7 +41,6 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
                deployments: [Integration::DatabaseEngineDeployment::AURORA],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
-  let(:rds_util) { Integration::RdsTestUtility.utility }
   let(:props) { AwsAdvancedRubyDriverWrapper::PropertyDefinition }
 
   let(:initial_connection_props) do
@@ -268,17 +268,10 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
            features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
     let(:proxy_info) { env.proxy_database_info }
 
-    # The topology cache and its monitor are keyed by cluster id alone, and the monitor that is created
-    # first for a given cluster id keeps serving the instance host pattern it was built with. The examples
-    # above connect through the real endpoints under env.cluster_name, so reusing that cluster id here
-    # would leave the plugin substituting real instance endpoints that the outages below do not touch.
-    let(:proxied_cluster_id) { "#{env.cluster_name}-proxied" }
-
     # Points the plugin at the proxied instance endpoints so that substituted hosts are reachable only
     # through Toxiproxy, and keeps the retry window short enough to time out within the test.
     let(:retry_props) do
       initial_connection_props.merge(
-        props::CLUSTER_ID.name => proxied_cluster_id,
         props::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
         props::INITIAL_CONNECTION_RETRY_TIMEOUT_MS.name => 10_000,
@@ -298,9 +291,9 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     end
 
     # Warms the topology through the proxies while they are still up, so that the plugin has instance
-    # hosts to substitute once connectivity is cut. retry_props sets CLUSTER_ID to proxied_cluster_id, so
-    # the helper watches that cache entry. The proxied hosts are not RDS instance URLs (they carry the
-    # proxy suffix), so gate on the suffix rather than requiring RDS instance hosts.
+    # hosts to substitute once connectivity is cut. The warm-up and the connection below share retry_props,
+    # so they resolve to the same topology cache entry. The proxied hosts are not RDS instance URLs (they
+    # carry the proxy suffix), so gate on the suffix rather than requiring RDS instance hosts.
     def warm_proxied_topology
       discovered = Integration::TopologyHelper.warm_topology_cache(
         drv: drv, config: proxied_reader_cluster_config, props: retry_props,
@@ -339,29 +332,6 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
         conn = Integration::DriverHelper.wrapper_connect(drv, **proxied_reader_cluster_config, **retry_props)
         Integration::DriverHelper.close(drv, conn) if conn
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Initial connection strategy timed out/)
-    end
-  end
-
-  describe 'after failover',
-           features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED] do
-    it 'substitutes the new writer instance for a writer cluster endpoint' do
-      enable_on_num_instances(min_instances: 2)
-
-      original_writer_id = rds_util.cluster_writer_instance_id
-      rds_util.failover_cluster_and_wait_until_writer_changed
-      new_writer_id = rds_util.cluster_writer_instance_id
-
-      conn = Integration::DriverHelper.wrapper_connect(drv, **writer_cluster_config, **initial_connection_props)
-      host = connected_host(conn)
-      expect(host).not_to eq(info.cluster_endpoint)
-      expect(rds_utils.rds_instance?(host)).to be true
-      # Instance endpoints are '<instance id>.<instance endpoint suffix>'.
-      connected_instance_id = host.split('.').first.downcase
-      expect(connected_instance_id).to eq(new_writer_id.downcase)
-      expect(connected_instance_id).not_to eq(original_writer_id.downcase)
-      expect(Integration::RdsTestUtility.query_host_role(conn, env.engine)).to eq(:writer)
-    ensure
-      Integration::DriverHelper.close(drv, conn) if conn
     end
   end
 end

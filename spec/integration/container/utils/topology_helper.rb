@@ -44,8 +44,7 @@ module Integration
     # @param props [Hash] wrapper properties
     # @return [String] the CLUSTER_ID property value, or its default when unset
     def cluster_id_from(props)
-      props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name] ||
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.get(props)
     end
 
     # Blocks until the topology cache for cluster_id satisfies the discovery criteria.
