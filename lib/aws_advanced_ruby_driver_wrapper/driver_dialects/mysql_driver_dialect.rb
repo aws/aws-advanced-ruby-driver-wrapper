@@ -55,7 +55,14 @@ module AwsAdvancedRubyDriverWrapper
         raise Mysql2::Error, 'MySQL client is not connected' if connection.nil? || connection.closed?
 
         stmt = connection.prepare(sql)
-        stmt.execute(*params)
+        result = stmt.execute(*params)
+        # Everything the caller needs must be read off the statement before the ensure closes its
+        # handle. A SELECT result is bound to the handle, so materialize its rows now - otherwise a
+        # later iteration (e.g. SqlRunner calling #to_a) raises "Statement handle already closed".
+        # A non-SELECT statement returns nil, and its affected-row count must come from the statement
+        # too: once the handle is closed the connection-level mysql_affected_rows returns its -1 error
+        # sentinel and mysql2 raises. So return that count for #affected_rows to hand back.
+        result.is_a?(::Mysql2::Result) ? result.to_a : stmt.affected_rows
       ensure
         stmt&.close
       end
@@ -75,9 +82,11 @@ module AwsAdvancedRubyDriverWrapper
         value.b
       end
 
-      # mysql2 reports the affected row count on the connection rather than the result.
-      def affected_rows(connection, _result)
-        connection.affected_rows.to_i
+      # A prepared statement (execute_with_params) hands back its own affected-row count, since the
+      # connection-level count is unreadable once the statement handle is closed. A plain
+      # connection.query (execute) leaves nil, so the count is read off the connection instead.
+      def affected_rows(connection, result)
+        result.is_a?(Integer) ? result : connection.affected_rows.to_i
       end
 
       # mysql2 has no RETURNING clause, so the generated id is read from the connection afterwards.

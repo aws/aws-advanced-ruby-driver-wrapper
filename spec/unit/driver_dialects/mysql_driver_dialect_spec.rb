@@ -62,6 +62,37 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
       allow(connection).to receive(:closed?).and_return(true)
       expect { dialect.execute_with_params(connection, 'SELECT ?', [1]) }.to raise_error(Mysql2::Error, /not connected/)
     end
+
+    it 'materializes a result before closing the statement so it survives the close' do
+      # A prepared-statement result is bound to the statement handle; if it is not materialized
+      # before the handle closes, iterating it raises "Statement handle already closed".
+      result_class = stub_const('Mysql2::Result', Class.new { def to_a; end })
+      rows = [{ 'present' => 1 }]
+      closed = false
+      result = result_class.new
+      allow(result).to receive(:to_a) do
+        raise 'statement already closed' if closed
+
+        rows
+      end
+
+      allow(connection).to receive(:prepare).with('SELECT ?').and_return(stmt)
+      allow(stmt).to receive(:execute).with(1).and_return(result)
+      allow(stmt).to receive(:close) { closed = true }
+
+      expect(dialect.execute_with_params(connection, 'SELECT ?', [1])).to eq(rows)
+      expect(stmt).to have_received(:close)
+    end
+
+    it 'returns the statement affected-row count for a non-SELECT statement' do
+      # mysql2 returns nil from #execute for a non-SELECT; the count must be read off the statement
+      # before the handle closes, because the connection-level count is unreadable afterwards.
+      stub_const('Mysql2::Result', Class.new)
+      allow(connection).to receive(:prepare).with('DELETE FROM t WHERE id = ?').and_return(stmt)
+      allow(stmt).to receive(:execute).with(1).and_return(nil)
+      allow(stmt).to receive(:affected_rows).and_return(3)
+      expect(dialect.execute_with_params(connection, 'DELETE FROM t WHERE id = ?', [1])).to eq(3)
+    end
   end
 
   describe '#ping' do
@@ -168,9 +199,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
   end
 
   describe '#affected_rows' do
-    it 'reads the affected row count from the connection' do
+    it 'reads the affected row count from the connection for a plain query result' do
       allow(connection).to receive(:affected_rows).and_return(3)
       expect(dialect.affected_rows(connection, nil)).to eq(3)
+    end
+
+    it 'uses the prepared-statement count handed back as an Integer' do
+      expect(dialect.affected_rows(connection, 5)).to eq(5)
     end
   end
 
