@@ -85,6 +85,33 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
     end
   end
 
+  describe '#wait_for_info?' do
+    let(:cached) do
+      info_class.new(
+        endpoint_identifier: endpoint_id, cluster_identifier: cluster_id,
+        url: custom_url, role: role_class::ANY,
+        members: ['member1'], member_list_type: member_list_type::STATIC_LIST
+      )
+    end
+
+    it 'returns true immediately when info is already cached' do
+      allow(mock_storage_service).to receive(:get).and_return(cached)
+      expect(build_monitor.wait_for_info?(1.0)).to be true
+    end
+
+    it 'returns false when info never becomes available within the timeout' do
+      allow(mock_storage_service).to receive(:get).and_return(nil)
+      expect(build_monitor.wait_for_info?(0.2)).to be false
+    end
+
+    it 'keeps polling and returns true once the monitor caches info during the wait' do
+      # Empty cache on the first checks, then populated - the poll must pick it up rather than giving up
+      # after a single check (the previous one-shot signal latched and stopped waiting after the first fetch).
+      allow(mock_storage_service).to receive(:get).and_return(nil, nil, cached)
+      expect(build_monitor.wait_for_info?(2.0)).to be true
+    end
+  end
+
   describe '#request_endpoint_info_update' do
     it 'does not raise when called normally' do
       monitor = build_monitor
