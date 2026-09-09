@@ -80,15 +80,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
 
     # The read fails closed: every value of a configured column is expected to be an encrypted
     # payload, so a value too short to be one (a value written before kms_encryption was turned on)
-    # is refused rather than returned. Matches the reference JDBC wrapper.
+    # is refused rather than returned.
     it 'raises on a value too short to be an encrypted payload' do
       expect { cipher.decrypt('123-45-6789', config) }.to raise_error(encryption_error)
     end
 
-    # A null value is passed through so a nullable column still reads null.
-    it 'leaves a null value untouched' do
-      expect(cipher.decrypt(42, config)).to eq(42)
+    # A NULL column value reads back as nil.
+    it 'reads a null value back as nil' do
       expect(cipher.decrypt(nil, config)).to be_nil
+    end
+
+    # Anything that is not the stored bytes of an encrypted column (a non-String) is refused rather
+    # than returned unverified.
+    it 'raises on a value that is not a string' do
+      expect { cipher.decrypt(42, config) }.to raise_error(encryption_error)
     end
 
     # A payload whose ciphertext or HMAC has been altered no longer verifies, so it is refused

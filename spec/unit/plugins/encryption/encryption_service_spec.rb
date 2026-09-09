@@ -308,7 +308,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
     end
 
     # An unparseable date fails the read rather than being handed back as a string, matching how the
-    # numeric and BIG_DECIMAL markers behave (and the JDBC wrapper).
+    # numeric and BIG_DECIMAL markers behave.
     it 'raises when a date cannot be parsed' do
       expect { described_class.deserialize_value('not a date', type_marker::LOCAL_DATE) }
         .to raise_error(encryption_error, /Failed to deserialize LOCAL_DATE/) do |error|
@@ -371,7 +371,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
         .to raise_error(encryption_error, /Cannot convert String to Array/)
     end
 
-    # Ruby's Integer("1.5", 10) raises rather than truncating (unlike JDBC, which rounds), so
+    # Ruby's Integer("1.5", 10) raises rather than truncating, so
     # decrypting a stored Float with an Integer target type fails instead of silently coercing.
     it 'fails to convert a stored Float to an Integer target type' do
       expect { round_trip(1.5, target_type: Integer) }

@@ -335,6 +335,56 @@ module Integration
       end
     end
 
+    def create_custom_endpoint(endpoint_id, cluster_id, instance_ids)
+      @client.create_db_cluster_endpoint(
+        db_cluster_endpoint_identifier: endpoint_id,
+        db_cluster_identifier: cluster_id,
+        endpoint_type: 'ANY',
+        static_members: instance_ids
+      )
+    end
+
+    def wait_until_custom_endpoint_available(endpoint_id, timeout_secs: 300)
+      deadline = Time.now + timeout_secs
+      loop do
+        raise "Timeout waiting for custom endpoint '#{endpoint_id}' to become available" if Time.now > deadline
+
+        endpoints = describe_custom_endpoints(endpoint_id)
+        return endpoints.first if endpoints.size == 1 && endpoints.first.status == 'available'
+
+        sleep(3)
+      end
+    end
+
+    def modify_custom_endpoint(endpoint_id, static_members:)
+      @client.modify_db_cluster_endpoint(
+        db_cluster_endpoint_identifier: endpoint_id,
+        static_members: static_members
+      )
+    end
+
+    def wait_until_custom_endpoint_has_members(endpoint_id, members, timeout_secs: 1200)
+      expected = members.to_set
+      deadline = Time.now + timeout_secs
+      loop do
+        raise "Timeout waiting for custom endpoint '#{endpoint_id}' to have members #{members}" if Time.now > deadline
+
+        endpoints = describe_custom_endpoints(endpoint_id)
+        if endpoints.size == 1 && endpoints.first.status == 'available' &&
+           endpoints.first.static_members.to_set == expected
+          return endpoints.first
+        end
+
+        sleep(3)
+      end
+    end
+
+    def delete_custom_endpoint(endpoint_id)
+      @client.delete_db_cluster_endpoint(db_cluster_endpoint_identifier: endpoint_id)
+    rescue Aws::RDS::Errors::DBClusterEndpointNotFoundFault
+      # already gone
+    end
+
     def simulate_temporary_failure(instance_name, delay_secs, failure_duration_secs)
       sleep(delay_secs) if delay_secs.positive?
 
@@ -407,14 +457,21 @@ module Integration
       end
     end
 
-    def failover_cluster_and_wait_until_writer_changed(max_retries: 3)
+    def failover_cluster_and_wait_until_writer_changed(max_retries: 3, target_instance_id: nil)
       env = TestEnvironment.current
       cluster_id = env.cluster_name
       initial_writer_id = cluster_writer_instance_id(cluster_id)
 
       writer_changed = false
       max_retries.times do |attempt|
-        @client.failover_db_cluster(db_cluster_identifier: cluster_id)
+        if target_instance_id
+          @client.failover_db_cluster(
+            db_cluster_identifier: cluster_id,
+            target_db_instance_identifier: target_instance_id
+          )
+        else
+          @client.failover_db_cluster(db_cluster_identifier: cluster_id)
+        end
 
         writer_changed = RetryHelper.retry_until(timeout_secs: 300, delay_secs: 5) do
           current_writer = cluster_writer_instance_id(cluster_id)
@@ -681,6 +738,13 @@ module Integration
         dbname: env.database_info.default_dbname
       )
       Integration::DriverHelper.native_connect(driver, **params, connect_timeout: 10)
+    end
+
+    def describe_custom_endpoints(endpoint_id)
+      @client.describe_db_cluster_endpoints(
+        db_cluster_endpoint_identifier: endpoint_id,
+        filters: [{ name: 'db-cluster-endpoint-type', values: ['custom'] }]
+      ).db_cluster_endpoints
     end
 
     def aurora_instance_ids(host)

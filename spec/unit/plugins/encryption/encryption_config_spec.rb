@@ -108,7 +108,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(described_class.from_props(props(encryption_kms_region: 'eu-west-1')).kms_region).to eq('eu-west-1')
     end
 
-    # No region is assumed: like the JDBC wrapper, the configuration is rejected rather than
+    # No region is assumed: the configuration is rejected rather than
     # defaulting to a region when neither the property nor the environment supplies one.
     it 'raises when no region is configured and none is in the environment' do
       without_region_env
