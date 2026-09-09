@@ -200,7 +200,10 @@ module AwsAdvancedRubyDriverWrapper
       )
       return result unless result.is_a?(Mysql2::Result)
 
-      Mysql2WrapperResult.new(result, @service_container, @connection, @sql)
+      # The statement is handed to the result so it can read column names from the statement's
+      # metadata rather than from Mysql2::Result#fields, which dereferences the result's field
+      # pointer and segfaults on a prepared statement that returned no rows.
+      Mysql2WrapperResult.new(result, @service_container, @connection, @sql, @mysql_stmt)
     end
 
     def close
@@ -248,26 +251,29 @@ module AwsAdvancedRubyDriverWrapper
 
     # @param sql [String, nil] the SQL that produced the result, kept so that plugins which
     #   inspect statements still see it when the rows are read
-    def initialize(result, service_container, connection, sql = nil)
+    # @param statement [Mysql2::Statement, nil] the prepared statement the result came from, if any,
+    #   used as a safe source of column names (see {#result_field_names})
+    def initialize(result, service_container, connection, sql = nil, statement = nil)
       @result = result
       @service_container = service_container
       @connection = connection
       @sql = sql
+      @statement = statement
     end
 
     def each(*args, &block)
       pm.execute(RubyMethod::RESULT_EACH, current_conn, ->(&blk) { @result.each(*args, &blk) },
-                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields }, &block)
+                 bounded_conn: @connection, sql: @sql, field_names: -> { result_field_names }, &block)
     end
 
     def to_a
       pm.execute(RubyMethod::RESULT_TO_A, current_conn, -> { @result.to_a },
-                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+                 bounded_conn: @connection, sql: @sql, field_names: -> { result_field_names })
     end
 
     def [](index)
       pm.execute(RubyMethod::RESULT_BRACKET, current_conn, ->(*a) { @result[*a] }, index,
-                 bounded_conn: @connection, sql: @sql, field_names: -> { @result.fields })
+                 bounded_conn: @connection, sql: @sql, field_names: -> { result_field_names })
     end
 
     # A buffered result is already in client memory, so letting it go is local. An unbuffered one,
@@ -280,7 +286,7 @@ module AwsAdvancedRubyDriverWrapper
 
     # Delegate non-network methods directly
     def fields
-      @result.fields
+      result_field_names
     end
 
     def field_types
@@ -300,6 +306,15 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     private
+
+    # The result's column names. For a prepared-statement result these are read from the statement's
+    # own metadata (mysql_stmt_result_metadata), which is populated safely whether or not any rows
+    # came back; Mysql2::Result#fields dereferences the result's field pointer, which mysql2 leaves
+    # NULL for a prepared statement that returned no rows, and reading it segfaults. Results from
+    # +query+ carry no statement, and Mysql2::Result#fields is safe for those.
+    def result_field_names
+      (@statement || @result).fields
+    end
 
     def current_conn
       @service_container.connection_service.current_connection

@@ -33,7 +33,8 @@ module AwsAdvancedRubyDriverWrapper
         :audit_logging_enabled,
         :data_key_cache_enabled,
         :data_key_cache_max_size,
-        :data_key_cache_expiration_sec
+        :data_key_cache_expiration_sec,
+        :return_unverified_data
       )
 
       class EncryptionConfig
@@ -59,7 +60,8 @@ module AwsAdvancedRubyDriverWrapper
               audit_logging_enabled: PropertyDefinition::ENCRYPTION_AUDIT_LOGGING_ENABLED.get_bool(props),
               data_key_cache_enabled: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_ENABLED.get_bool(props),
               data_key_cache_max_size: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_MAX_SIZE.get_int(props),
-              data_key_cache_expiration_sec: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC.get_int(props)
+              data_key_cache_expiration_sec: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC.get_int(props),
+              return_unverified_data: PropertyDefinition::ENCRYPTION_RETURN_UNVERIFIED_DATA.get_bool(props)
             )
           end
 
@@ -74,7 +76,7 @@ module AwsAdvancedRubyDriverWrapper
                        metadata_cache_expiration_sec:, metadata_cache_refresh_interval_sec:,
                        key_management_max_retries:, key_management_retry_backoff_base_ms:,
                        audit_logging_enabled:, data_key_cache_enabled:,
-                       data_key_cache_max_size:, data_key_cache_expiration_sec:)
+                       data_key_cache_max_size:, data_key_cache_expiration_sec:, return_unverified_data:)
           super(
             kms_region: kms_region,
             kms_endpoint: kms_endpoint,
@@ -87,7 +89,8 @@ module AwsAdvancedRubyDriverWrapper
             audit_logging_enabled: audit_logging_enabled,
             data_key_cache_enabled: data_key_cache_enabled,
             data_key_cache_max_size: data_key_cache_max_size,
-            data_key_cache_expiration_sec: data_key_cache_expiration_sec
+            data_key_cache_expiration_sec: data_key_cache_expiration_sec,
+            return_unverified_data: return_unverified_data
           )
           validate!
         end
