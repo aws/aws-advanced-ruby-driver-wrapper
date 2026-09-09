@@ -118,7 +118,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError do
     it 'masks the account and region of the master key ARN' do
       error = described_class.key_decryption_failed('x')
                              .with_master_key_arn('arn:aws:kms:us-east-1:123456789012:key/1234abcd-56ef')
-      expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/1234abcd-56ef')
+      expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/1234***56ef')
     end
 
     it 'records which retry failed' do

@@ -1,0 +1,96 @@
+name: Encryption Integration Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+# These workflows create real RDS clusters and a real KMS key. Only run one KMS-encryption job at a
+# time so the two engine matrix legs share (and do not race to create) the cached key.
+concurrency:
+  group: encryption-integration-tests
+  cancel-in-progress: false
+
+jobs:
+  encryption-integration-tests:
+    name: Run KMS Encryption Integration Tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        environment: [ 'mysql', 'pg' ]
+
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@v7
+
+      - name: 'Set up Ruby 3.3'
+        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: 'Set up JDK 8'
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'corretto'
+          java-version: 8
+
+      - name: 'Configure AWS Credentials'
+        id: creds
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_encryption_integration_tests
+          role-duration-seconds: 21600
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Find or create the test KMS key'
+        id: kms
+        run: |
+          ALIAS="alias/ruby-encryption-key"
+          KEY_ID=$(aws kms list-aliases \
+            --query "Aliases[?AliasName=='${ALIAS}'].TargetKeyId" --output text 2>/dev/null || echo "")
+
+          if [ -n "$KEY_ID" ]; then
+            STATE=$(aws kms describe-key --key-id "$KEY_ID" \
+              --query 'KeyMetadata.KeyState' --output text 2>/dev/null || echo "")
+            if [ "$STATE" != "Enabled" ]; then KEY_ID=""; fi
+          fi
+
+          if [ -z "$KEY_ID" ]; then
+            KEY_ID=$(aws kms create-key \
+              --description "aws-advanced-ruby-driver-wrapper encryption test key (cached)" \
+              --key-usage ENCRYPT_DECRYPT --key-spec SYMMETRIC_DEFAULT \
+              --tags TagKey=Project,TagValue=aws-advanced-ruby-driver-wrapper TagKey=Purpose,TagValue=testing \
+              --query 'KeyMetadata.KeyId' --output text)
+            aws kms create-alias --alias-name "$ALIAS" --target-key-id "$KEY_ID"
+            aws kms enable-key-rotation --key-id "$KEY_ID"
+          fi
+
+          echo "key_id=$KEY_ID" >> "$GITHUB_OUTPUT"
+          echo "Using KMS key: $KEY_ID"
+
+      - name: 'Run KMS Encryption Integration Tests'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-encryption --info
+        env:
+          RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
+          RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          KMS_KEY_ID: ${{ steps.kms.outputs.key_id }}
+          AURORA_MYSQL_DB_ENGINE_VERSION: lts
+          AURORA_PG_ENGINE_VERSION: lts
+
+      - name: 'Archive encryption results'
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rspec-encryption-report-${{ matrix.environment }}
+          path: ./spec/integration/host/build/reports/tests/test/
+          if-no-files-found: ignore
+          retention-days: 5

@@ -512,7 +512,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
       expect(plugin_classes['iam']).to eq(described_class)
     end
 
-    it 'has weight 1800 (after failover, matching JDBC ConnectionPluginChainBuilder)' do
+    it 'has weight 1800 (after failover)' do
       require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
       plugin_weights = AwsAdvancedRubyDriverWrapper::Services::PluginManager.plugin_weights
       expect(plugin_weights[described_class]).to eq(1800)

@@ -98,7 +98,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::AuditLogger do
       audit.log_key_creation(master_key_arn: 'arn:aws:kms:us-east-1:123456789012:key/abcd',
                              description: 'ruby wrapper key')
 
-      expect(line).to include('operation=KEY_CREATION', 'master_key_arn=arn:aws:kms:***:***:key/abcd',
+      expect(line).to include('operation=KEY_CREATION', 'master_key_arn=arn:aws:kms:***:***:key/***',
                               'description=ruby wrapper key')
     end
 

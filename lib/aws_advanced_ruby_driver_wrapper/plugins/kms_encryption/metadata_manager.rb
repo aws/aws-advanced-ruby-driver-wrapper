@@ -17,6 +17,7 @@
 require_relative '../../logging'
 require_relative '../../utils/conversion_utils'
 require_relative 'column_encryption_config'
+require_relative 'connection_source'
 require_relative 'encryption_algorithm'
 require_relative 'errors'
 require_relative 'key_metadata'
@@ -35,16 +36,20 @@ module AwsAdvancedRubyDriverWrapper
       class MetadataManager
         include Logging
         include Utils::ConversionUtils
+        include ConnectionSource
 
         # How long {shutdown} waits for the refresh thread to finish.
         SHUTDOWN_TIMEOUT_SEC = 5
 
-        # @param connection_provider [IndependentConnectionProvider]
+        # Exactly one of +connection+ or +service_container+ must be given (see {ConnectionSource}).
+        #
         # @param sql_runner [SqlRunner]
         # @param config [EncryptionConfig]
+        # @param connection [Object, nil] a caller-owned connection used for every operation
+        # @param service_container [Services::ServiceContainer, nil] opens a short-lived connection per operation
         # @param audit_logger [AuditLogger, nil]
-        def initialize(connection_provider:, sql_runner:, config:, audit_logger: nil)
-          @connection_provider = connection_provider
+        def initialize(sql_runner:, config:, connection: nil, service_container: nil, audit_logger: nil)
+          use_connection_source(connection: connection, service_container: service_container)
           @sql = sql_runner
           @config = config
           @audit_logger = audit_logger
@@ -91,7 +96,7 @@ module AwsAdvancedRubyDriverWrapper
         # @return [Hash{String => ColumnEncryptionConfig}] keyed by +"table.column"+
         # @raise [Errors::MetadataError] if the load fails
         def load_metadata
-          rows = @connection_provider.with_connection(operation: 'LOAD_ENCRYPTION_METADATA') do |connection|
+          rows = with_connection(operation: 'LOAD_ENCRYPTION_METADATA') do |connection|
             @sql.query(connection, load_metadata_sql)
           end
 
@@ -192,7 +197,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def column_encrypted_in_database?(table_name, column_name)
-          row = @connection_provider.with_connection(operation: 'CHECK_COLUMN_ENCRYPTED') do |connection|
+          row = with_connection(operation: 'CHECK_COLUMN_ENCRYPTED') do |connection|
             @sql.query(connection, check_column_encrypted_sql, [table_name, column_name]).first
           end
           !row.nil?
@@ -201,7 +206,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def column_config_from_database(table_name, column_name)
-          row = @connection_provider.with_connection(operation: 'GET_COLUMN_CONFIG') do |connection|
+          row = with_connection(operation: 'GET_COLUMN_CONFIG') do |connection|
             @sql.query(connection, column_config_sql, [table_name, column_name]).first
           end
           row && to_column_config(row)
@@ -215,7 +220,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def table_configs_from_database(table_name)
-          rows = @connection_provider.with_connection(operation: 'GET_TABLE_CONFIGS') do |connection|
+          rows = with_connection(operation: 'GET_TABLE_CONFIGS') do |connection|
             @sql.query(connection, table_configs_sql, [table_name])
           end
           rows.map { |row| to_column_config(row) }

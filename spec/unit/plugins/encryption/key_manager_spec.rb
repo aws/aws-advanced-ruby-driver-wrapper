@@ -18,7 +18,6 @@ require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/data_key_cache'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
-require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/independent_connection_provider'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_manager'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 
@@ -26,7 +25,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
   let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
   let(:key_error) { AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError }
   let(:kms_client) { instance_double(Aws::KMS::Client) }
-  let(:connection_provider) { instance_double(encryption::IndependentConnectionProvider) }
+  let(:connection) { double('Connection') }
   let(:sql_runner) { instance_double(encryption::SqlRunner) }
   let(:audit_logger) { encryption::AuditLogger.new(false) }
   let(:data_key_cache) { encryption::DataKeyCache.new(max_size: 10, ttl_sec: 60) }
@@ -43,16 +42,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
   let(:ciphertext_blob) { 'wrapped-key-bytes' }
   let(:encrypted_data_key) { Base64.strict_encode64(ciphertext_blob) }
   subject(:manager) do
-    described_class.new(kms_client: kms_client, connection_provider: connection_provider, sql_runner: sql_runner,
+    described_class.new(kms_client: kms_client, connection: connection, sql_runner: sql_runner,
                         config: config, data_key_cache: data_key_cache, audit_logger: audit_logger)
   end
 
   after { data_key_cache.shutdown }
 
-  # The provider hands out a short lived connection of its own for every metadata statement.
+  # The connection the manager runs its metadata statements on (yielded by its supplied connection).
   def stubbed_connection
-    connection = double('Connection')
-    allow(connection_provider).to receive(:with_connection).and_yield(connection)
     connection
   end
 
@@ -101,7 +98,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
         expect { manager.decrypt_data_key(empty, 'arn:aws:kms:us-east-1:123456789012:key/abcd') }
           .to raise_error(key_error, /The stored key metadata has no encrypted data key/) do |error|
             expect(error.code).to eq(key_error::INVALID_KEY_METADATA)
-            expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/abcd')
+            expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/***')
           end
       end
 
@@ -266,7 +263,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
 
     it 'does not retry when retries are turned off' do
       allow(kms_client).to receive(:decrypt).and_raise(throttling_error)
-      manager = described_class.new(kms_client: kms_client, connection_provider: connection_provider,
+      manager = described_class.new(kms_client: kms_client, connection: connection,
                                     sql_runner: sql_runner, config: config.with(key_management_max_retries: 0),
                                     data_key_cache: data_key_cache)
 

@@ -19,6 +19,7 @@ require 'digest'
 require 'securerandom'
 require_relative '../../logging'
 require_relative '../../utils/conversion_utils'
+require_relative 'connection_source'
 require_relative 'errors'
 require_relative 'key_metadata'
 
@@ -33,6 +34,7 @@ module AwsAdvancedRubyDriverWrapper
       class KeyManager
         include Logging
         include Utils::ConversionUtils
+        include ConnectionSource
 
         DATA_KEY_CACHE_PREFIX = 'datakey_'
         HMAC_KEY_LENGTH = 32
@@ -57,15 +59,19 @@ module AwsAdvancedRubyDriverWrapper
         # A freshly generated data key, in both its plaintext and stored forms.
         GeneratedDataKey = Data.define(:plaintext, :encrypted_data_key, :hmac_key)
 
+        # Exactly one of +connection+ or +service_container+ must be given (see {ConnectionSource}).
+        #
         # @param kms_client [Aws::KMS::Client]
-        # @param connection_provider [IndependentConnectionProvider]
         # @param sql_runner [SqlRunner]
         # @param config [EncryptionConfig]
         # @param data_key_cache [DataKeyCache]
+        # @param connection [Object, nil] a caller-owned connection used for every operation
+        # @param service_container [Services::ServiceContainer, nil] opens a short-lived connection per operation
         # @param audit_logger [AuditLogger, nil]
-        def initialize(kms_client:, connection_provider:, sql_runner:, config:, data_key_cache:, audit_logger: nil)
+        def initialize(kms_client:, sql_runner:, config:, data_key_cache:, connection: nil, service_container: nil,
+                       audit_logger: nil)
           @kms_client = kms_client
-          @connection_provider = connection_provider
+          use_connection_source(connection: connection, service_container: service_container)
           @sql = sql_runner
           @config = config
           @cache = data_key_cache
@@ -181,7 +187,7 @@ module AwsAdvancedRubyDriverWrapper
             last_used_at: key_metadata.last_used_at || now
           )
 
-          id = @connection_provider.with_connection(operation: 'STORE_KEY_METADATA') do |connection|
+          id = with_connection(operation: 'STORE_KEY_METADATA') do |connection|
             @sql.insert_returning_id(connection, insert_key_sql, [
                                        to_store.key_id,
                                        to_store.key_name,
@@ -205,7 +211,7 @@ module AwsAdvancedRubyDriverWrapper
         # @return [KeyMetadata, nil]
         # @raise [Errors::KeyManagementError] if the row cannot be read
         def key_metadata_by_id(id)
-          row = @connection_provider.with_connection(operation: 'GET_KEY_METADATA') do |connection|
+          row = with_connection(operation: 'GET_KEY_METADATA') do |connection|
             @sql.query(connection, select_key_sql, [id]).first
           end
           row && to_key_metadata(row)
@@ -220,7 +226,7 @@ module AwsAdvancedRubyDriverWrapper
         # @param key_id [String] the +key_storage.key_id+ value
         # @return [void]
         def touch_key(key_id)
-          @connection_provider.with_connection(operation: 'UPDATE_KEY_LAST_USED') do |connection|
+          with_connection(operation: 'UPDATE_KEY_LAST_USED') do |connection|
             @sql.execute(connection, update_last_used_sql, [Time.now, key_id])
           end
           nil
