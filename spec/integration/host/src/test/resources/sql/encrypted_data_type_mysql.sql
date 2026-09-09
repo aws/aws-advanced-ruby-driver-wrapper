@@ -2,7 +2,7 @@
 -- Rejects any write to an encrypted column that was not produced by the kms_encryption plugin.
 --
 -- Stored payload format:
---   [ HMAC-SHA256 : 32 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
+--   [ HMAC-SHA256 : 32 ][ key id : 4 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
 -- The HMAC covers everything after the first 32 bytes, and the HMAC key is stored (unencrypted) in
 -- key_storage, so the server can verify a value's integrity tag without ever holding the data key.
 --
@@ -62,8 +62,8 @@ RETURNS BOOLEAN
 DETERMINISTIC
 NO SQL
 BEGIN
-    -- Minimum payload: 32 (HMAC) + 1 (type) + 12 (IV) + 0 (ciphertext) + 16 (GCM tag) = 61.
-    IF data IS NULL OR LENGTH(data) < 61 THEN
+    -- Minimum payload: 32 (HMAC) + 4 (key id) + 1 (type) + 12 (IV) + 0 (ciphertext) + 16 (GCM tag) = 65.
+    IF data IS NULL OR LENGTH(data) < 65 THEN
         RETURN FALSE;
     END IF;
 

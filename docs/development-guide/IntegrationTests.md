@@ -17,6 +17,7 @@ To run the integration tests, please set up the following environment variables 
 | `REUSE_RDS_DB`            | Yes      | Set to true if you would like to use an existing cluster for your tests.                                                                                                                                         | `false`                                       |
 | `RDS_DB_REGION`           | Yes      | The database region.                                                                                                                                                                                             | `us-east-2`                                   |
 | `FILTER`                  | No       | Filter tests to a specific file or file:line. When unset, runs all tests in `spec/integration/container`.                                                                                                        | `spec/integration/container/failover_spec.rb` |
+| `KMS_KEY_ID`              | No       | KMS master key identifier (id, ARN, or alias) used by the KMS encryption tests. Required only for the encryption suite; those specs skip when it is unset. The credentials must allow `kms:GenerateDataKey` and `kms:Decrypt` (and `kms:CreateKey`/`kms:CreateAlias`/`kms:DescribeKey` to exercise `KeyManagementUtility.create_master_key`). | `arn:aws:kms:us-east-2:123456789012:key/abcd` |
 | `DEBUG_ENV`               | No       | The debugging environment, values are `VSCODE` (default) or `TERMINAL`                                                                                                                                           | `VSCODE`                                      |
 
 ## Managing Environment Variables
@@ -42,6 +43,20 @@ You can configure which test environments to run against by editing/adding syste
 from `build.gradle.kts`.
 For example, to skip mysql aurora tests you can add `systemProperty("exclude-mysql-engine", "true")` to the `test-aurora` task defined 
 in `build.gradle.kts`.
+
+### Running the KMS encryption tests
+
+The KMS encryption specs (`spec/integration/container/kms_encryption_*_spec.rb`) run in a dedicated
+"encryption-only" environment rather than alongside the normal suite, mirroring the JDBC wrapper. The
+`test-encryption`, `test-pg-encryption`, and `test-mysql-encryption` gradle tasks set
+`test-encryption-only=true`, which surfaces to the test container as `RUN_ENCRYPTION_ONLY` and selects
+only the `kms_encryption`-tagged specs; every other task excludes them. They require a KMS master key in
+`KMS_KEY_ID` and AWS credentials, and skip themselves when `KMS_KEY_ID` is unset.
+
+```bash
+KMS_KEY_ID=arn:aws:kms:us-east-2:123456789012:key/abcd ./gradlew test-mysql-encryption
+KMS_KEY_ID=arn:aws:kms:us-east-2:123456789012:key/abcd ./gradlew test-pg-encryption
+```
 
 ### Filtering to a specific file or test
 
