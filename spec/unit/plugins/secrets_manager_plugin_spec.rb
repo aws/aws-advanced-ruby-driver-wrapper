@@ -61,11 +61,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
   end
 
   describe '#initialize' do
-    it 'registers the secrets cache partition' do
+    it 'registers the secrets cache partition with the disposal lifetime' do
       build_plugin
-      default_expiration = AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_EXPIRATION_SEC.default_value
       expect(mock_storage_service).to have_received(:register).with(
-        :secrets_manager, ttl: default_expiration + described_class::CACHE_DISPOSAL_EXTRA_TIME_SEC
+        :secrets_manager, ttl: described_class::SECRET_CACHE_DISPOSAL_SEC
       )
     end
 
@@ -109,10 +108,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
 
     it 'clamps expiration below minimum to 300' do
       base_props[:secret_expiration_sec] = 100
+      allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
       build_plugin
-      expect(mock_storage_service).to have_received(:register).with(
-        :secrets_manager, ttl: described_class::MIN_EXPIRATION_SEC + described_class::CACHE_DISPOSAL_EXTRA_TIME_SEC
-      )
+      expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
+        .with(/expiration 100s below minimum #{described_class::MIN_EXPIRATION_SEC}s, clamping/o)
+    end
+
+    it 'clamps expiration above the cache lifetime cap' do
+      base_props[:secret_expiration_sec] = described_class::SECRET_CACHE_DISPOSAL_SEC + 60
+      allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
+      build_plugin
+      expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
+        .with(/exceeds the #{described_class::SECRET_CACHE_DISPOSAL_SEC}s cache lifetime cap, clamping/o)
     end
   end
 
