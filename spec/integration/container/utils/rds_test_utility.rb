@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'aws-sdk-rds'
+require 'resolv'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'driver_helper'
@@ -467,6 +468,7 @@ module Integration
     def failover_cluster_and_wait_until_writer_changed(max_retries: 3, target_instance_id: nil)
       cluster_id = TestEnvironment.current.cluster_name
       initial_writer_id = cluster_writer_instance_id(cluster_id)
+      initial_cluster_ip = aurora_deployment? ? resolve_ip(cluster_endpoint_host) : nil
 
       writer_changed = false
       max_retries.times do |attempt|
@@ -489,6 +491,50 @@ module Integration
       end
 
       raise "Writer did not change after #{max_retries} failover attempts" unless writer_changed
+
+      wait_for_failover_to_settle(cluster_id, initial_writer_id, initial_cluster_ip)
+    end
+
+    # After the control plane reports a new writer, the cluster endpoint DNS can still resolve to the old
+    # writer's IP for a while, and the demoted instance can briefly still report as the writer. A test that
+    # reconnects through the cluster endpoint right after failover needs both to settle first, otherwise it
+    # lands back on the old writer. Both waits are best-effort: if they time out we proceed rather than fail
+    # the failover.
+    def wait_for_failover_to_settle(cluster_id, initial_writer_id, initial_cluster_ip)
+      return unless aurora_deployment?
+
+      # Wait for the cluster endpoint DNS to stop resolving to the pre-failover IP. Skips the wait when the
+      # initial resolution failed (nothing to compare against).
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
+        initial_cluster_ip.nil? || resolve_ip(cluster_endpoint_host) != initial_cluster_ip
+      end
+
+      # Wait for the demoted instance to stop reporting as the writer in the cluster's member list.
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
+        !instance_still_writer?(initial_writer_id, cluster_id)
+      end
+    end
+
+    def aurora_deployment?
+      TestEnvironment.current.deployment == DatabaseEngineDeployment::AURORA
+    end
+
+    def cluster_endpoint_host
+      TestEnvironment.current.database_info.cluster_endpoint
+    end
+
+    def resolve_ip(host)
+      Resolv.getaddress(host)
+    rescue Resolv::ResolvError
+      nil
+    end
+
+    # A transient describe failure is treated as "still writer" so the caller keeps waiting rather than
+    # concluding the demotion finished early.
+    def instance_still_writer?(instance_id, cluster_id)
+      db_instance_writer?(instance_id, cluster_id: cluster_id)
+    rescue StandardError
+      true
     end
 
     # Issues a single failover_db_cluster request, tolerating transient cluster/instance states. The cluster
