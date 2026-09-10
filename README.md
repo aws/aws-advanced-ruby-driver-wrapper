@@ -112,7 +112,7 @@ Technical documentation regarding the functionality of the AWS Advanced Ruby Dri
 | AWS IAM Authentication Plugin        | [Using the IAM Authentication Plugin](./docs/UsingTheIamAuthenticationPlugin.md) |
 | AWS Secrets Manager Plugin           | [Using the AWS Secrets Manager Plugin](./docs/UsingTheAwsSecretsManagerPlugin.md) |
 | Configuring AWS Credentials          | [AWS Credentials](./docs/AwsCredentials.md)                                |
-| Configuring TLS/SSL                  | [Configuring TLS/SSL](./docs/ConfiguringTls.md)                            |
+| Configuring TLS/SSL                  | [Configuring TLS/SSL](docs/ConfiguringTLS.md)                            |
 | Running the integration tests        | [Integration Tests](./docs/development-guide/IntegrationTests.md)          |
 
 ### Known Limitations

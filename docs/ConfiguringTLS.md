@@ -28,7 +28,7 @@ So depending on your engine, version, and parameter group, the server may or may
 ```ruby
 AwsAdvancedRubyDriverWrapper::WrapperPgConnection.new(
   host: "my-cluster.cluster-xxxx.us-east-1.rds.amazonaws.com",
-  user: "admin",
+  user: "<user>",
   password: "<password>",
   dbname: "mydb",
   sslmode: "verify-full",
@@ -40,7 +40,7 @@ AwsAdvancedRubyDriverWrapper::WrapperPgConnection.new(
 ```ruby
 AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient.new(
   host: "my-cluster.cluster-xxxx.us-east-1.rds.amazonaws.com",
-  username: "admin",
+  username: "<username>",
   password: "<password>",
   database: "mydb",
   ssl_mode: "verify_identity",

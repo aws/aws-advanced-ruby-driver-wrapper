@@ -114,12 +114,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
         .with(/expiration 100s below minimum #{described_class::MIN_EXPIRATION_SEC}s, clamping/o)
     end
 
-    it 'clamps expiration above the cache lifetime cap' do
-      base_props[:secret_expiration_sec] = described_class::SECRET_CACHE_DISPOSAL_SEC + 60
+    it 'clamps expiration above the maximum, reserving the SWR revalidation window' do
+      base_props[:secret_expiration_sec] = described_class::SECRET_CACHE_DISPOSAL_SEC
       allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
       build_plugin
       expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
-        .with(/exceeds the #{described_class::SECRET_CACHE_DISPOSAL_SEC}s cache lifetime cap, clamping/o)
+        .with(/exceeds the #{described_class::MAX_EXPIRATION_SEC}s maximum/o)
     end
   end
 
