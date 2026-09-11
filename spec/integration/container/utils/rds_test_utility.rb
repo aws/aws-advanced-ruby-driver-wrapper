@@ -537,22 +537,21 @@ module Integration
       true
     end
 
-    # Issues a single failover_db_cluster request, tolerating transient cluster/instance states. The cluster
-    # or target instance may still be settling from a prior operation (a custom-endpoint change or an
-    # earlier failover), in which case failover_db_cluster raises InvalidDBClusterStateFault. Wait for both
-    # to reach 'available' first, then retry the request a few times so a transient rejection does not fail
-    # the whole failover.
+    # Issues a single failover_db_cluster request, tolerating transient failures. The cluster may still be
+    # settling from a prior operation (a custom-endpoint change or an earlier failover), in which case
+    # failover_db_cluster raises (e.g. InvalidDBClusterStateFault) or a transient networking error occurs.
+    # Wait for the cluster to reach 'available' first, then retry the request a few times so a transient
+    # failure does not fail the whole failover.
     def request_cluster_failover(cluster_id, target_instance_id, max_request_attempts: 10)
       max_request_attempts.times do
         wait_until_cluster_has_desired_status(cluster_id, 'available')
-        wait_until_instance_has_desired_status(target_instance_id, 15, 'available') if target_instance_id
 
         params = { db_cluster_identifier: cluster_id }
         params[:target_db_instance_identifier] = target_instance_id if target_instance_id
         @client.failover_db_cluster(**params)
         return
-      rescue Aws::RDS::Errors::InvalidDBClusterStateFault => e
-        TestUtils.logger.warn("failover_db_cluster rejected (#{e.message}), retrying")
+      rescue StandardError => e
+        TestUtils.logger.warn("failover_db_cluster request failed (#{e.message}), retrying")
         sleep(1)
       end
 

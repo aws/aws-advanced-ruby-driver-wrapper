@@ -346,7 +346,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
                             "Expected initial connection to the sole endpoint member '#{@member_id}' " \
                             "but connected to '#{initial_id}'"
 
-      # Break the connection with a cluster failover, as the JDBC suite does. When the member is the current
+      # Break the connection with a cluster failover. When the member is the current
       # writer an untargeted failover reliably changes the writer and drops this connection; otherwise fall
       # back to targeting it. After the failover the old writer rejoins as a reader and stays the sole member,
       # so a correct reconnect lands back on it rather than the new writer or another reader.
