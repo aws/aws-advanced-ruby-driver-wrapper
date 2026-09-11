@@ -292,6 +292,77 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
     end
   end
 
+  context 'membership enforcement: writer excluded from endpoint' do
+    before(:all) do
+      env = Integration::TestEnvironment.current
+      # Restricted to 2-instance clusters. With a single reader, an untargeted failover is forced to promote
+      # that reader, which reliably breaks its connection and lets it come back quickly as the new writer. On
+      # larger clusters the failover could promote a different reader, leaving this endpoint's connection alive
+      # and never triggering failover.
+      next if env.instances.size != 2
+
+      @driver = env.allowed_test_drivers.first
+      @rds_util = Integration::RdsTestUtility.utility
+      @endpoint_id = "test-ce-flt-#{SecureRandom.uuid[0..7]}"
+      @info = env.database_info
+
+      # Pin the endpoint to the reader only; the writer is a non-member. A correct reconnect after failover
+      # must stay on this reader (which the failover promotes to writer) and never fall back to the writer.
+      @reader_id = @rds_util.cluster_reader_instance_ids.first
+      @rds_util.create_custom_endpoint(@endpoint_id, env.cluster_name, [@reader_id])
+      @endpoint_info = @rds_util.wait_until_custom_endpoint_available(@endpoint_id)
+    end
+
+    after(:all) do
+      @rds_util&.delete_custom_endpoint(@endpoint_id)
+    end
+
+    it 'failover reconnects only to the allowed reader member, never the excluded writer' do
+      # This test has seen flaky failures on 3+ instances because it would require targeted failover to ensure the
+      # reader is disrupted, and targeted failover may accept failover requests without serving them. The likelihood
+      # of this scenario seems to increase when tests undergo many failovers and custom cluster operations.
+      # Consequently, the test would sometimes fail when waiting for the writer to change after failover.
+      # Using 2 instances guarantees that untargeted failover will disrupt the reader.
+      enable_on_num_instances(min_instances: 2, max_instances: 2)
+      pd = AwsAdvancedRubyDriverWrapper::PropertyDefinition
+      conn_config = Integration::DriverHelper.native_config(
+        @driver,
+        host: @endpoint_info.endpoint,
+        port: @info.cluster_endpoint_port,
+        user: @info.username,
+        password: @info.password,
+        dbname: @info.default_dbname
+      ).merge(
+        pd::PLUGINS.name => 'custom_endpoint,failover',
+        pd::FAILOVER_MODE.name => 'reader_or_writer',
+        pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
+          "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
+        connect_timeout: 10
+      )
+
+      conn = Integration::DriverHelper.wrapper_connect(@driver, **conn_config)
+      initial_id = @rds_util.query_instance_id(conn)
+      expect(initial_id).to eq(@reader_id),
+                            "Expected initial connection to the sole endpoint member '#{@reader_id}' " \
+                            "but connected to '#{initial_id}'"
+
+      # An untargeted failover on a 2-instance cluster is forced to promote this reader, breaking its
+      # connection.
+      @rds_util.failover_cluster_and_wait_until_writer_changed
+
+      expect { @rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
+
+      post_id = @rds_util.query_instance_id(conn)
+      expect(post_id).to eq(@reader_id),
+                         "Expected reconnect to the sole allowed member '#{@reader_id}' " \
+                         "but landed on '#{post_id}' - the excluded writer was not filtered"
+    ensure
+      Integration::DriverHelper.close(@driver, conn) if conn
+    end
+  end
+
   context 'plugin behavior' do
     before(:all) do
       env = Integration::TestEnvironment.current

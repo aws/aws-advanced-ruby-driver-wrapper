@@ -465,6 +465,11 @@ module Integration
     # Pause between failover attempts to let the cluster stabilize before re-issuing.
     FAILOVER_STABILIZATION_SECS = 10
 
+    # Note that providing an explicit target_instance_id, while allowed, can result in flaky test results.
+    # Aurora occasionally accepts the failover request (returning success) but does not actually perform
+    # the failover, especially when failovers are triggered in rapid succession or shortly after another
+    # cluster modification (e.g. creating a custom endpoint). This can cause the wait for the writer
+    # change to time out.
     def failover_cluster_and_wait_until_writer_changed(max_retries: 3, target_instance_id: nil)
       cluster_id = TestEnvironment.current.cluster_name
       initial_writer_id = cluster_writer_instance_id(cluster_id)
@@ -473,10 +478,6 @@ module Integration
       writer_changed = false
       max_retries.times do |attempt|
         request_cluster_failover(cluster_id, target_instance_id)
-
-        # Aurora occasionally accepts the failover request (returning success) but does not actually perform
-        # the failover, especially when failovers are triggered in rapid succession or shortly after another
-        # cluster modification (e.g. creating a custom endpoint). Poll for the writer to change.
         writer_changed = RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 5) do
           cluster_writer_instance_id(cluster_id) != initial_writer_id
         end
