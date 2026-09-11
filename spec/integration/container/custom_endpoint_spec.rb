@@ -274,15 +274,11 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       sleep(35)
 
       @rds_util.failover_cluster_and_wait_until_writer_changed
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
 
-      # After the failover the connection may be stale, so the first query can trigger an internal failover.
-      # We treat that FailoverSuccessError as acceptable (not required) and just verify the connection ends
-      # up on the sole remaining endpoint member.
-      post_id = begin
-        @rds_util.query_instance_id(conn)
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
-        @rds_util.query_instance_id(conn)
-      end
+      post_id = @rds_util.query_instance_id(conn)
       expect(post_id).to eq(@writer_id),
                          "Expected failover to land on the sole endpoint member '#{@writer_id}' " \
                          "but landed on '#{post_id}'"
