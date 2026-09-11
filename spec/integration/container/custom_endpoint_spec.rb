@@ -215,8 +215,6 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
           "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
         # Short expiration so the monitor re-creation path is also exercised during the sleep below
         pd::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_MS.name => 30_000,
-        # A member is briefly down while it is demoted during failover, so give failover room to wait.
-        pd::FAILOVER_TIMEOUT_SEC.name => 180,
         connect_timeout: 10
       )
 
@@ -260,8 +258,6 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
         pd::FAILOVER_MODE.name => 'reader_or_writer',
         pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
-        # The sole member is briefly down while it is demoted during failover, so give failover room to wait.
-        pd::FAILOVER_TIMEOUT_SEC.name => 180,
         connect_timeout: 10
       )
 
