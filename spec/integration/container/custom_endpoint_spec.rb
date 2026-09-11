@@ -226,15 +226,11 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       sleep(35) # allow one full monitor poll cycle (default 30s) to pick up the change
 
       @rds_util.failover_cluster_and_wait_until_writer_changed
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
 
-      # After the failover the connection may be stale, so the first query can trigger an internal failover.
-      # We treat that FailoverSuccessError as acceptable (not required) and just verify the connection ends
-      # up on one of the current endpoint members.
-      post_id = begin
-        @rds_util.query_instance_id(conn)
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
-        @rds_util.query_instance_id(conn)
-      end
+      post_id = @rds_util.query_instance_id(conn)
       expect([@writer_id, @reader_id]).to include(post_id),
                                           "Post-failover instance '#{post_id}' is not in the updated " \
                                           "endpoint members #{[@writer_id, @reader_id]}"
@@ -309,7 +305,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       # Pin the endpoint to exactly one member — every other instance is a non-member. With 3+ instances a
       # random reconnect would land on the allowed host only 1-in-N times by chance, so reconnecting to it is
       # deterministic proof of enforcement. The member is the current writer and the connection is later broken
-      # with a cluster failover (no instance reboot).
+      # with a cluster failover.
       @member_id = @rds_util.cluster_writer_instance_id
 
       @rds_util.create_custom_endpoint(@endpoint_id, env.cluster_name, [@member_id])
