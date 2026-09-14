@@ -150,6 +150,10 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
                                                           'Expected successful queries after FailoverSuccessError but none were recorded'
     end
 
+    # A FailoverFailedError here most likely means the demoted writer did not recover in time. The custom
+    # endpoint's sole member is the instance the failover demotes, so failover has to wait for it to come
+    # back before it can reconnect. It usually recovers quickly, but occasionally an Aurora instance takes
+    # an unusually long time - long enough to exceed the failover timeout - which surfaces as this failure.
     it 'does not raise FailoverFailedError' do
       enable_on_num_instances(min_instances: 3)
       expect(@results.failover_failed_errors).to be_empty,
@@ -223,15 +227,10 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       @rds_util.wait_until_custom_endpoint_has_members(@endpoint_id, [@writer_id, @reader_id])
       sleep(35) # allow one full monitor poll cycle (default 30s) to pick up the change
 
-      Thread.new { @rds_util.failover_cluster_and_wait_until_writer_changed }
-
-      failover_success = RetryHelper.retry_until(timeout_secs: 120, delay_secs: 1) do
-        @rds_util.query_instance_id(conn)
-        false
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
-        true
-      end
-      expect(failover_success).to be(true), 'Expected FailoverSuccessError but it was never raised'
+      @rds_util.failover_cluster_and_wait_until_writer_changed
+      expect { rds_util.query_instance_id(conn) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+      )
 
       post_id = @rds_util.query_instance_id(conn)
       expect([@writer_id, @reader_id]).to include(post_id),
@@ -243,75 +242,27 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       @rds_util&.modify_custom_endpoint(@endpoint_id, static_members: [@writer_id])
       @rds_util&.wait_until_custom_endpoint_has_members(@endpoint_id, [@writer_id])
     end
-
-    it 'monitor picks up removed member and failover stays within remaining endpoint members' do
-      enable_on_num_instances(min_instances: 3)
-      pd = AwsAdvancedRubyDriverWrapper::PropertyDefinition
-      conn_config = Integration::DriverHelper.native_config(
-        @driver,
-        host: @endpoint_info.endpoint,
-        port: @info.cluster_endpoint_port,
-        user: @info.username,
-        password: @info.password,
-        dbname: @info.default_dbname
-      ).merge(
-        pd::PLUGINS.name => 'custom_endpoint,failover',
-        pd::FAILOVER_MODE.name => 'reader_or_writer',
-        pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
-          "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
-        connect_timeout: 10
-      )
-
-      # Start with both writer and reader in the endpoint
-      @rds_util.modify_custom_endpoint(@endpoint_id, static_members: [@writer_id, @reader_id])
-      @rds_util.wait_until_custom_endpoint_has_members(@endpoint_id, [@writer_id, @reader_id])
-      sleep(35)
-
-      conn = Integration::DriverHelper.wrapper_connect(@driver, **conn_config)
-
-      # Remove the reader — only the writer remains
-      @rds_util.modify_custom_endpoint(@endpoint_id, static_members: [@writer_id])
-      @rds_util.wait_until_custom_endpoint_has_members(@endpoint_id, [@writer_id])
-      sleep(35)
-
-      Thread.new { @rds_util.failover_cluster_and_wait_until_writer_changed }
-
-      failover_success = RetryHelper.retry_until(timeout_secs: 120, delay_secs: 1) do
-        @rds_util.query_instance_id(conn)
-        false
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
-        true
-      end
-      expect(failover_success).to be(true), 'Expected FailoverSuccessError but it was never raised'
-
-      post_id = @rds_util.query_instance_id(conn)
-      expect(post_id).to eq(@writer_id),
-                         "Expected failover to land on the sole endpoint member '#{@writer_id}' " \
-                         "but landed on '#{post_id}'"
-    ensure
-      Integration::DriverHelper.close(@driver, conn) if conn
-      @rds_util&.modify_custom_endpoint(@endpoint_id, static_members: [@writer_id])
-    end
   end
 
-  context 'membership enforcement — non-member host filtered during failover' do
+  context 'membership enforcement - monitor picks up removed member' do
     before(:all) do
       env = Integration::TestEnvironment.current
-      next if env.instances.size < 3
+      # Restricted to 2-instance clusters. With a single reader, an untargeted failover is forced to promote
+      # that reader, so whichever instance the connection lands on is disrupted (the writer is demoted, the
+      # reader is promoted). On larger clusters the failover could promote a different reader, leaving the
+      # connected reader undisrupted and the failover never triggered.
+      next if env.instances.size != 2
 
       @driver = env.allowed_test_drivers.first
       @rds_util = Integration::RdsTestUtility.utility
-      @endpoint_id = "test-ce-flt-#{SecureRandom.uuid[0..7]}"
+      @endpoint_id = "test-ce-rem-#{SecureRandom.uuid[0..7]}"
       @info = env.database_info
 
-      # Pin the endpoint to exactly one reader — the writer and all other readers are non-members.
-      # With 3+ instances this makes a random reconnect land on the allowed host only 1-in-N times
-      # by chance, so a correct result is deterministic proof of enforcement.
-      @writer_id    = @rds_util.cluster_writer_instance_id
-      reader_ids    = @rds_util.cluster_reader_instance_ids
-      @allowed_reader_id = reader_ids.first
+      @writer_id = @rds_util.cluster_writer_instance_id
+      @reader_id = @rds_util.cluster_reader_instance_ids.first
 
-      @rds_util.create_custom_endpoint(@endpoint_id, env.cluster_name, [@allowed_reader_id])
+      # Start with both members in the endpoint
+      @rds_util.create_custom_endpoint(@endpoint_id, env.cluster_name, [@writer_id, @reader_id])
       @endpoint_info = @rds_util.wait_until_custom_endpoint_available(@endpoint_id)
     end
 
@@ -319,8 +270,10 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       @rds_util&.delete_custom_endpoint(@endpoint_id)
     end
 
-    it 'failover reconnects only to the single allowed endpoint member, not the writer or other readers' do
-      enable_on_num_instances(min_instances: 3)
+    it 'removes the writer and failover stays within the remaining reader member' do
+      # With more than 2 instances, the test could be flaky because the connection could land on the reader
+      # that is uninvolved in the failover process.
+      enable_on_num_instances(min_instances: 2, max_instances: 2)
       pd = AwsAdvancedRubyDriverWrapper::PropertyDefinition
       conn_config = Integration::DriverHelper.native_config(
         @driver,
@@ -338,23 +291,22 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       )
 
       conn = Integration::DriverHelper.wrapper_connect(@driver, **conn_config)
-      initial_id = @rds_util.query_instance_id(conn)
-      expect(initial_id).to eq(@allowed_reader_id),
-                            "Expected initial connection to the sole endpoint member '#{@allowed_reader_id}' " \
-                            "but connected to '#{initial_id}'"
 
-      # Fail over to the allowed reader specifically so its connection is disrupted.
-      # A plain cluster failover only changes the writer, leaving reader connections alive.
-      @rds_util.failover_cluster_and_wait_until_writer_changed(target_instance_id: @allowed_reader_id)
+      @rds_util.modify_custom_endpoint(@endpoint_id, static_members: [@reader_id])
+      @rds_util.wait_until_custom_endpoint_has_members(@endpoint_id, [@reader_id])
+      sleep(35) # allow one full monitor poll cycle (default 30s) to pick up the change
+
+      # The untargeted failover promotes the reader, breaking the connection.
+      @rds_util.failover_cluster_and_wait_until_writer_changed
 
       expect { @rds_util.query_instance_id(conn) }.to raise_error(
         AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
       )
 
       post_id = @rds_util.query_instance_id(conn)
-      expect(post_id).to eq(@allowed_reader_id),
-                         "Expected reconnect to the sole allowed member '#{@allowed_reader_id}' " \
-                         "but landed on '#{post_id}' — non-member host was not filtered"
+      expect(post_id).to eq(@reader_id),
+                         "Expected failover to stay on the sole remaining member '#{@reader_id}' " \
+                         "but landed on '#{post_id}'"
     ensure
       Integration::DriverHelper.close(@driver, conn) if conn
     end

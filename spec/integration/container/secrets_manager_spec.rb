@@ -56,11 +56,6 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
 
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
-    begin
-      AwsAdvancedRubyDriverWrapper.clear_caches
-    rescue StandardError
-      nil
-    end
   end
 
   it 'connects with fetched credentials' do
@@ -278,6 +273,9 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     it 'substitutes an instance endpoint and authenticates against it with the fetched secret' do
       enable_on_num_instances(min_instances: 2)
 
+      # Warm the topology (and finalize the dialect) with a throwaway connection so initial_connection has
+      # instance hosts to substitute. The wait-for-topology cold-start path is covered on its own in the
+      # initial_connection strategy specs; here we only need a known topology before the assertion.
       discovered = Integration::TopologyHelper.warm_topology_cache(
         drv: drv, config: writer_cluster_config, props: sm_initial_connection_props
       )

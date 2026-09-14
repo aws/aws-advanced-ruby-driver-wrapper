@@ -106,27 +106,6 @@ module AwsAdvancedRubyDriverWrapper
                  connection_type: Sanitizer.truncate(connection_type, Sanitizer::MAX_NAME_LENGTH))
         end
 
-        # Logged at debug level on failure, since the caller decides whether a failed
-        # independent connection is fatal.
-        #
-        # @param target [String, nil] the host the connection was attempted against
-        # @param used_fallback [Boolean] whether the connection had to fall back to sharing
-        # @return [void]
-        def log_independent_connection_creation(target:, success: true, error_message: nil, used_fallback: false)
-          return unless @enabled
-
-          fields = {
-            target: Sanitizer.connection_url(target),
-            used_fallback: used_fallback
-          }
-
-          if success
-            emit(used_fallback ? :warn : :info, 'INDEPENDENT_CONNECTION_CREATION', success, error_message, fields)
-          else
-            emit(:debug, 'INDEPENDENT_CONNECTION_CREATION', success, error_message, fields)
-          end
-        end
-
         # @param active [Boolean] whether connection sharing is currently in effect
         # @return [void]
         def log_connection_sharing_fallback(reason:, original_failure: nil, active: false)

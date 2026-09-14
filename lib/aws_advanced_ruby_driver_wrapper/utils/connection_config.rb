@@ -16,6 +16,7 @@
 
 require 'concurrent'
 require_relative '../property_definition'
+require_relative '../logging'
 
 module AwsAdvancedRubyDriverWrapper
   module Utils
@@ -49,6 +50,28 @@ module AwsAdvancedRubyDriverWrapper
 
       def cluster_id
         PropertyDefinition::CLUSTER_ID.get(wrapper_props)
+      end
+
+      # Redact sensitive property values (passwords, IAM tokens, Secrets Manager
+      # credentials) so they are never exposed if a config is logged, interpolated,
+      # or rendered in a backtrace. The property maps are the only fields that carry
+      # secrets; the rest are host/driver metadata that is safe to show.
+      def inspect
+        "#<#{self.class.name} " \
+          "wrapper_props=#{AwsAdvancedRubyDriverWrapper.mask_properties(wrapper_props)}, " \
+          "driver_props=#{AwsAdvancedRubyDriverWrapper.mask_properties(driver_props)}, " \
+          "prefixed_wrapper_config=#{AwsAdvancedRubyDriverWrapper.mask_properties(prefixed_wrapper_config)}, " \
+          "prefixed_driver_config=#{AwsAdvancedRubyDriverWrapper.mask_properties(prefixed_driver_config)}, " \
+          "initial_host_info=#{initial_host_info.inspect}, driver_name=#{driver_name.inspect}, " \
+          "original_host=#{original_host.inspect}, original_port=#{original_port.inspect}, " \
+          "multi_host_url=#{@multi_host_url.inspect}>"
+      end
+      alias to_s inspect
+
+      # `pp` / PrettyPrint does not call #inspect; route them through the redacted
+      # representation so `pp config` cannot leak credentials.
+      def pretty_print(pp)
+        pp.text(inspect)
       end
     end
   end
