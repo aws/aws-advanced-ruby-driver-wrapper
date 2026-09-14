@@ -247,11 +247,20 @@ module Integration
         next unless known_hosts.include?(host)
 
         instance_info = TestInstanceInfo.new('instanceId' => id, 'host' => host, 'port' => port)
+        logged_first_error = false
         loop do
           open_connection(instance_info).tap(&:close)
           break
-        rescue StandardError
-          raise "Instance #{id} did not come up within #{timeout_secs} seconds" if Time.now >= deadline
+        rescue StandardError => e
+          last_error = e
+          unless logged_first_error
+            TestUtils.logger.warn("make_sure_instances_up: first connection failure for #{host} - #{e.class}: #{e.message}")
+            logged_first_error = true
+          end
+          if Time.now >= deadline
+            raise "Instance #{id} did not come up within #{timeout_secs} seconds " \
+                  "(last error: #{last_error.class}: #{last_error.message})"
+          end
 
           sleep(1)
         end
