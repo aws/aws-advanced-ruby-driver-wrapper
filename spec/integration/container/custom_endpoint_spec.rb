@@ -41,9 +41,14 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
 
   let(:rds_util) { Integration::RdsTestUtility.utility }
 
+  def aurora_deployment?
+    Integration::TestEnvironment.current&.deployment == Integration::DatabaseEngineDeployment::AURORA
+  end
+
   context 'failover' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -175,6 +180,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'membership enforcement — dynamic endpoint changes' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -297,6 +303,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'membership enforcement — non-member host filtered during failover' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -363,6 +370,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'plugin behavior' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.allowed_test_drivers.empty?
 
       @pb_driver = env.allowed_test_drivers.first
