@@ -13,6 +13,7 @@ permissions:
 jobs:
   lts-integration-tests:
     name: Run LTS Integration Tests
+    if: false # TEMP: skip Aurora while validating the multi-az job. Revert before merge.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -62,6 +63,7 @@ jobs:
 
   latest-integration-tests:
     name: Run Latest Integration Tests
+    if: false # TEMP: skip Aurora while validating the multi-az job. Revert before merge.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
