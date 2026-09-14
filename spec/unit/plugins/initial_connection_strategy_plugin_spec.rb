@@ -321,6 +321,27 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
       plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
     end
 
+    it 'waits the retry interval between network-error retries instead of spinning' do
+      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      network_error = StandardError.new('connection refused')
+
+      call_count = 0
+      allow(mock_plugin_manager).to receive(:connect) do
+        call_count += 1
+        raise network_error if call_count == 1
+
+        mock_connection
+      end
+      allow(mock_dialect_service).to receive(:network_error?).with(network_error).and_return(true)
+      allow(mock_db_dialect).to receive(:host_role).and_return(host_role::WRITER)
+
+      # An unreachable candidate must back off by @retry_interval_sec (0.01s here) before looping,
+      # otherwise the retry window is burned in a tight busy-loop.
+      allow(plugin).to receive(:sleep)
+      plugin.connect(make_host_info(writer_cluster_host), {}, true, pipeline_callable)
+      expect(plugin).to have_received(:sleep).with(0.01).at_least(:once)
+    end
+
     it 'retries on read-only error when wanting writer' do
       plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
       readonly_error = StandardError.new('read only')

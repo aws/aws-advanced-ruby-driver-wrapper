@@ -191,17 +191,30 @@ module Integration
       end
     end
 
-    def self.query_host_role(conn, engine)
-      sql = case engine
-            when DatabaseEngine::MYSQL then 'SELECT @@innodb_read_only'
-            when DatabaseEngine::PG    then 'SELECT pg_catalog.pg_is_in_recovery()'
-            end
+    def self.query_host_role(conn, engine, deployment: nil)
+      deployment ||= TestEnvironment.current&.deployment
+      sql = reader_check_query(engine, deployment)
       driver  = Integration::RdsTestUtility.driver_for_engine(engine)
       dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
       value = row.is_a?(Hash) ? row.values.first : row[0]
       TRUE_VALUES.include?(value) ? :reader : :writer
+    end
+
+    # The read-only signal that identifies a reader differs by engine and deployment. Aurora MySQL
+    # reports it through @@innodb_read_only, whereas an RDS Multi-AZ cluster MySQL reader reports
+    # @@read_only (its @@innodb_read_only stays 0). PostgreSQL reports recovery state the same way
+    # across deployments. This mirrors the reader query each engine dialect uses internally.
+    def self.reader_check_query(engine, deployment)
+      case engine
+      when DatabaseEngine::PG
+        'SELECT pg_catalog.pg_is_in_recovery()'
+      when DatabaseEngine::MYSQL
+        deployment == DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER ? 'SELECT @@read_only' : 'SELECT @@innodb_read_only'
+      else
+        raise "Unsupported engine: #{engine}"
+      end
     end
 
     def self.sleep_sql(engine = nil)
