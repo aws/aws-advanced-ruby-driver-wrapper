@@ -37,9 +37,21 @@ module Integration
       )
     end
 
+    # Resolves the cluster id a connection with these props will cache its topology under. The RDS host
+    # list provider keys the topology cache on the CLUSTER_ID property, so watchers must use the same value
+    # or they gate on a different - possibly stale, cross-test - cache entry.
+    #
+    # @param props [Hash] wrapper properties
+    # @return [String] the CLUSTER_ID property value, or its default when unset
+    def cluster_id_from(props)
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.get(props)
+    end
+
     # Blocks until the topology cache for cluster_id satisfies the discovery criteria.
     #
-    # @param cluster_id [String] the cluster id the topology is cached under
+    # @param cluster_id [String] the cluster id the topology is cached under. This MUST match the CLUSTER_ID
+    #   property of the connection whose topology is being awaited (see #cluster_id_from); a mismatch silently
+    #   watches the wrong cache entry.
     # @param min_instances [Integer] minimum number of hosts that must be present (default: 1)
     # @param require_instance_hosts [Boolean] when true, at least one cached host must be an RDS
     #   instance endpoint (proves the monitor moved past the initial cluster endpoint)
@@ -66,12 +78,15 @@ module Integration
     # @param drv the test driver (Integration::TestDriver::PG / MYSQL)
     # @param config [Hash] native driver connection config
     # @param props [Hash] wrapper properties (must enable whatever populates topology)
-    # @param cluster_id [String] the cluster id the topology is cached under
+    # @param cluster_id [String, nil] the cluster id the topology is cached under. Defaults to the value
+    #   derived from props (see #cluster_id_from) so the watcher always matches the connection being warmed;
+    #   only override when intentionally awaiting a different cluster id.
     # @param (see #wait_for_topology) for the remaining discovery criteria
     # @return [Boolean] true if the topology was discovered within the timeout, false otherwise
-    def warm_topology_cache(drv:, config:, props:, cluster_id:
-          AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.default_value, min_instances: 1,
+    def warm_topology_cache(drv:, config:, props:, cluster_id: nil, min_instances: 1,
                             require_instance_hosts: true, instance_suffix: nil, timeout_secs: 30, delay_secs: 0.5)
+      cluster_id ||= cluster_id_from(props)
+
       warmup = Integration::DriverHelper.wrapper_connect(drv, **config, **props)
       Integration::DriverHelper.close(drv, warmup)
 

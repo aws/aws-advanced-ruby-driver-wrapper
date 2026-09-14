@@ -21,6 +21,7 @@ require 'aws_advanced_ruby_driver_wrapper/mysql'
 require_relative 'utils/condition_checker'
 require_relative 'utils/connection_utils'
 require_relative 'utils/database_engine_deployment'
+require_relative 'utils/log_obfuscator'
 require_relative 'utils/proxy_helper'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/spec_helper'
@@ -30,10 +31,13 @@ require_relative 'utils/test_environment_features'
 module Integration
   module IntegrationHelper
     AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG
+    # Obfuscate RDS endpoints in the wrapper's own logs (the bulk of integration log output) so CI logs do
+    # not leak the cluster's DNS domain. This only touches the test-run logger, not the wrapper's defaults.
+    LogObfuscator.install(AwsAdvancedRubyDriverWrapper.logger)
     $stderr.sync = true
     $stdout.sync = true
 
-    LOGGER = Logger.new($stdout, progname: 'Integration::IntegrationHelper')
+    LOGGER = LogObfuscator.install(Logger.new($stdout, progname: 'Integration::IntegrationHelper'))
 
     # Runs before each example. Call from a before(:each) hook in integration specs.
     def self.setup_test(current_driver: nil, test_name: nil)
@@ -81,8 +85,19 @@ module Integration
       ProxyHelper.enable_all_connectivity
     end
 
+    # Isolates topology state between examples. Every wrapper connection keys its topology cache and its
+    # cluster-topology monitor on the CLUSTER_ID property, which the harness fixes to env.cluster_name for
+    # all tests (see spec_helper.rb). Left alone, one example's cached topology - and its still-running
+    # monitor, which keeps repopulating that cache entry - leaks into the next, so a test that expects an
+    # unreachable cluster can instead reach a stale-but-live host and see FailoverSuccessError.
+    #
+    # CoreServices.reset! stops all monitors (joining their threads) and then swaps in fresh
+    # event/storage/monitor services, so no monitor can repopulate the cache mid-reset. clear_caches then
+    # wipes the remaining module-level caches (RDS URL/DNS regexes, endpoint dialects, host id cache) that
+    # CoreServices does not own.
     def self.reset_caches
-      AwsAdvancedRubyDriverWrapper::Utils::RdsUtils.clear_cache
+      AwsAdvancedRubyDriverWrapper::Services::CoreServices.reset!
+      AwsAdvancedRubyDriverWrapper.clear_caches
     end
     private_class_method :reset_caches
 

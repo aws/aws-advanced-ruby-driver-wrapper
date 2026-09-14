@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'aws-sdk-rds'
+require 'resolv'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'driver_helper'
@@ -457,32 +458,105 @@ module Integration
       end
     end
 
+    # Per-attempt wait for the writer to change after a failover request. A real Aurora failover completes
+    # within a couple of minutes, so 5 minutes is generous; combined with the retry loop this re-issues a
+    # silently-dropped request rather than failing after a single long wait.
+    WRITER_CHANGE_TIMEOUT_SECS = 300
+    # Pause between failover attempts to let the cluster stabilize before re-issuing.
+    FAILOVER_STABILIZATION_SECS = 10
+
+    # Note that providing an explicit target_instance_id, while allowed, can result in flaky test results.
+    # Aurora occasionally accepts the failover request (returning success) but does not actually perform
+    # the failover, especially when failovers are triggered in rapid succession or shortly after another
+    # cluster modification (e.g. creating a custom endpoint). This can cause the wait for the writer
+    # change to time out.
     def failover_cluster_and_wait_until_writer_changed(max_retries: 3, target_instance_id: nil)
-      env = TestEnvironment.current
-      cluster_id = env.cluster_name
+      cluster_id = TestEnvironment.current.cluster_name
       initial_writer_id = cluster_writer_instance_id(cluster_id)
+      initial_cluster_ip = aurora_deployment? ? resolve_ip(cluster_endpoint_host) : nil
 
       writer_changed = false
       max_retries.times do |attempt|
-        if target_instance_id
-          @client.failover_db_cluster(
-            db_cluster_identifier: cluster_id,
-            target_db_instance_identifier: target_instance_id
-          )
-        else
-          @client.failover_db_cluster(db_cluster_identifier: cluster_id)
-        end
-
-        writer_changed = RetryHelper.retry_until(timeout_secs: 300, delay_secs: 5) do
-          current_writer = cluster_writer_instance_id(cluster_id)
-          current_writer != initial_writer_id
+        request_cluster_failover(cluster_id, target_instance_id)
+        writer_changed = RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 5) do
+          cluster_writer_instance_id(cluster_id) != initial_writer_id
         end
         break if writer_changed
+        break if attempt == max_retries - 1
 
+        # Pause to let the cluster settle, then re-check in case the writer changed during the pause.
         TestUtils.logger.warn("Failover attempt #{attempt + 1}/#{max_retries}: writer did not change, retrying")
+        sleep(FAILOVER_STABILIZATION_SECS)
+        writer_changed = cluster_writer_instance_id(cluster_id) != initial_writer_id
+        break if writer_changed
       end
 
       raise "Writer did not change after #{max_retries} failover attempts" unless writer_changed
+
+      wait_for_failover_to_settle(cluster_id, initial_writer_id, initial_cluster_ip)
+    end
+
+    # After the control plane reports a new writer, the cluster endpoint DNS can still resolve to the old
+    # writer's IP for a while, and the demoted instance can briefly still report as the writer. A test that
+    # reconnects through the cluster endpoint right after failover needs both to settle first, otherwise it
+    # lands back on the old writer. Both waits are best-effort: if they time out we proceed rather than fail
+    # the failover.
+    def wait_for_failover_to_settle(cluster_id, initial_writer_id, initial_cluster_ip)
+      return unless aurora_deployment?
+
+      # Wait for the cluster endpoint DNS to stop resolving to the pre-failover IP. Skips the wait when the
+      # initial resolution failed (nothing to compare against).
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
+        initial_cluster_ip.nil? || resolve_ip(cluster_endpoint_host) != initial_cluster_ip
+      end
+
+      # Wait for the demoted instance to stop reporting as the writer in the cluster's member list.
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
+        !instance_still_writer?(initial_writer_id, cluster_id)
+      end
+    end
+
+    def aurora_deployment?
+      TestEnvironment.current.deployment == DatabaseEngineDeployment::AURORA
+    end
+
+    def cluster_endpoint_host
+      TestEnvironment.current.database_info.cluster_endpoint
+    end
+
+    def resolve_ip(host)
+      Resolv.getaddress(host)
+    rescue Resolv::ResolvError
+      nil
+    end
+
+    # A transient describe failure is treated as "still writer" so the caller keeps waiting rather than
+    # concluding the demotion finished early.
+    def instance_still_writer?(instance_id, cluster_id)
+      db_instance_writer?(instance_id, cluster_id: cluster_id)
+    rescue StandardError
+      true
+    end
+
+    # Issues a single failover_db_cluster request, tolerating transient failures. The cluster may still be
+    # settling from a prior operation (a custom-endpoint change or an earlier failover), in which case
+    # failover_db_cluster raises (e.g. InvalidDBClusterStateFault) or a transient networking error occurs.
+    # Wait for the cluster to reach 'available' first, then retry the request a few times so a transient
+    # failure does not fail the whole failover.
+    def request_cluster_failover(cluster_id, target_instance_id, max_request_attempts: 10)
+      max_request_attempts.times do
+        wait_until_cluster_has_desired_status(cluster_id, 'available')
+
+        params = { db_cluster_identifier: cluster_id }
+        params[:target_db_instance_identifier] = target_instance_id if target_instance_id
+        @client.failover_db_cluster(**params)
+        return
+      rescue StandardError => e
+        TestUtils.logger.warn("failover_db_cluster request failed (#{e.message}), retrying")
+        sleep(1)
+      end
+
+      raise "Failed to request a cluster failover for #{cluster_id} after #{max_request_attempts} attempts"
     end
 
     def sleep_sql(seconds)
