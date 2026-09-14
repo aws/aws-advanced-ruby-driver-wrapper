@@ -32,9 +32,22 @@ module AwsAdvancedRubyDriverWrapper
       SECRETS_ARN_PATTERN = %r{\Aarn:aws(?:-[a-z]+)*:secretsmanager:(?<region>[^:\n]+):[^:\n]*:(?:[^:/\n]*[:/])?}
       MAX_RETRY_DELAY_SEC = 8
 
-      # Entries remain in the shared cache longer than their expiration so expired-but-present
-      # entries can be served immediately while a background refresh runs (SWR).
-      CACHE_DISPOSAL_EXTRA_TIME_SEC = 30 * 60
+      # The maximum time a fetched secret stays in the shared cache, measured from when it was
+      # fetched (the cache anchors expiry at store time and does not renew on read). Until its
+      # logical expiration (@expiration_sec, default 14.5 min) the entry is served fresh;
+      # between logical expiration and this disposal time it is served stale while a background
+      # refresh runs (SWR); after this it is physically removed and the next use re-fetches from
+      # Secrets Manager. This is the hard cap on how long a cached secret can live.
+      SECRET_CACHE_DISPOSAL_SEC = 20 * 60
+
+      # The window reserved between logical expiration and physical disposal for a background
+      # refresh to complete. The logical expiration is clamped so that at least this much time
+      # remains for stale-while-revalidate. Sized to the synchronous fetch timeout so a refresh
+      # has a full fetch's worth of time to land.
+      SWR_REVALIDATION_BUDGET_SEC = SYNC_FETCH_TIMEOUT_SEC
+
+      # The largest logical expiration we allow, leaving room for the SWR refresh window.
+      MAX_EXPIRATION_SEC = SECRET_CACHE_DISPOSAL_SEC - SWR_REVALIDATION_BUDGET_SEC
 
       SecretEntry = Data.define(:username, :password, :expires_at) do
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
@@ -92,7 +105,7 @@ module AwsAdvancedRubyDriverWrapper
 
         service_container.storage_service.register(
           SECRETS_MANAGER_CACHE_NAME,
-          ttl: @expiration_sec + CACHE_DISPOSAL_EXTRA_TIME_SEC
+          ttl: SECRET_CACHE_DISPOSAL_SEC
         )
         @subscribed_methods = SUBSCRIBED_METHODS
       end
@@ -270,11 +283,20 @@ module AwsAdvancedRubyDriverWrapper
         match[:region] if match
       end
 
+      # The logical expiration must leave room for the stale-while-revalidate window: an entry is
+      # physically removed SECRET_CACHE_DISPOSAL_SEC after it was fetched, so once it expires it can
+      # only be served stale until then. Clamp it to the range [MIN_EXPIRATION_SEC, MAX_EXPIRATION_SEC],
+      # where MAX_EXPIRATION_SEC reserves SWR_REVALIDATION_BUDGET_SEC before disposal for the refresh to complete.
       def resolve_expiration(props)
         configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_int(props)
         if configured < MIN_EXPIRATION_SEC
           logger.warn("SecretsManagerPlugin: expiration #{configured}s below minimum #{MIN_EXPIRATION_SEC}s, clamping")
           MIN_EXPIRATION_SEC
+        elsif configured > MAX_EXPIRATION_SEC
+          logger.warn("SecretsManagerPlugin: expiration #{configured}s exceeds the #{MAX_EXPIRATION_SEC}s maximum " \
+                      "(leaving #{SWR_REVALIDATION_BUDGET_SEC}s before the #{SECRET_CACHE_DISPOSAL_SEC}s cache " \
+                      'lifetime cap for stale-while-revalidate), clamping')
+          MAX_EXPIRATION_SEC
         else
           configured
         end
