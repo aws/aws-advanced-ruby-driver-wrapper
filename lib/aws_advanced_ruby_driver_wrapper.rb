@@ -23,7 +23,7 @@ require_relative 'aws_advanced_ruby_driver_wrapper/utils/connection_config'
 require_relative 'aws_advanced_ruby_driver_wrapper/utils/connection_config_parser'
 require_relative 'aws_advanced_ruby_driver_wrapper/monitoring/monitor_state'
 require_relative 'aws_advanced_ruby_driver_wrapper/monitoring/monitor'
-require_relative 'aws_advanced_ruby_driver_wrapper/services/shutdown_service'
+require_relative 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/blue_green_plugin'
 
 module AwsAdvancedRubyDriverWrapper
   @config = Configuration.new
@@ -32,12 +32,11 @@ module AwsAdvancedRubyDriverWrapper
     attr_reader :config
   end
 
-  def self.shutdown_service
-    @shutdown_service ||= Services::ShutdownService.instance
-  end
-
+  # Gracefully tears down all background resources. Invoked by the at_exit hook (and thus
+  # indirectly by the TERM/INT signal traps, which just exit). Safe to call more than once.
   def self.shutdown(grace_period_sec: 10)
-    shutdown_service.shutdown(grace_period_sec)
+    Plugins::BlueGreen::BlueGreenPlugin.clean_up_providers
+    release_resources(grace_period_sec: grace_period_sec)
   end
 
   def self.clear_caches
@@ -49,21 +48,18 @@ module AwsAdvancedRubyDriverWrapper
     Services::HostService.clear_id_cache
   end
 
-  def self.release_resources
+  def self.release_resources(grace_period_sec: 5)
     require_relative 'aws_advanced_ruby_driver_wrapper/services/service_utility'
-    Services::CoreServices.monitor_service.shutdown(grace_period: 5)
+    Services::CoreServices.monitor_service.shutdown(grace_period: grace_period_sec)
     Services::CoreServices.event_publisher.release_resources
     clear_caches
   end
 end
 
-# Register signal traps and at_exit hook for graceful shutdown.
-%w[TERM INT].each do |signal|
-  trap(signal) do
-    AwsAdvancedRubyDriverWrapper.shutdown
-    exit(0)
-  end
-end
+# Register signal traps and at_exit hook for graceful shutdown. The traps only exit — the real
+# teardown runs in the at_exit hook, since acquiring locks / joining threads inside a signal-trap
+# context is unsafe in Ruby and can deadlock.
+%w[TERM INT].each { |signal| trap(signal) { exit(0) } }
 
 at_exit { AwsAdvancedRubyDriverWrapper.shutdown }
 

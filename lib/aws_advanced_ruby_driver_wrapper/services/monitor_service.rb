@@ -111,7 +111,6 @@ module AwsAdvancedRubyDriverWrapper
         end
       end
 
-      # Called by ShutdownService.
       def shutdown(grace_period:)
         @running = false
         begin
