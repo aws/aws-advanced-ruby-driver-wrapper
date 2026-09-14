@@ -107,6 +107,11 @@ module AwsAdvancedRubyDriverWrapper
           SECRETS_MANAGER_CACHE_NAME,
           ttl: SECRET_CACHE_DISPOSAL_SEC
         )
+
+        # The client is built lazily and reused for the plugin instance's lifetime. Concurrent::Delay guarantees
+        # the builder block runs at most once, so a racing fetch can never construct and discard a second client.
+        @secrets_client = Concurrent::Delay.new { build_secrets_client }
+
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
@@ -277,13 +282,16 @@ module AwsAdvancedRubyDriverWrapper
         driver_props[:password] = @secret.password
       end
 
+      # Returns the shared client, building it on first use. Thread-safe and build-once.
       def secrets_client
-        @secrets_client ||= begin
-          opts = { region: @region, credentials: @credentials_provider }
-          endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
-          opts[:endpoint] = endpoint if endpoint
-          Aws::SecretsManager::Client.new(**opts)
-        end
+        @secrets_client.value!
+      end
+
+      def build_secrets_client
+        opts = { region: @region, credentials: @credentials_provider }
+        endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
+        opts[:endpoint] = endpoint if endpoint
+        Aws::SecretsManager::Client.new(**opts)
       end
 
       def resolve_region(props)
