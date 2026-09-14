@@ -47,11 +47,8 @@ jobs:
       - name: 'Run GDB Integration Tests'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }} --info
         env:
-          RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           GDB_SECONDARY_REGION: ${{ secrets.GDB_SECONDARY_REGION }}
-          AURORA_MYSQL_DB_ENGINE_VERSION: lts
-          AURORA_PG_ENGINE_VERSION: lts
 
       - name: 'Archive GDB results'
         if: always()

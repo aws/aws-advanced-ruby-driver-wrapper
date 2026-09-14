@@ -39,9 +39,7 @@ jobs:
       - name: 'Run MySQL performance tests'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-mysql-performance --info
         env:
-          RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          AURORA_MYSQL_DB_ENGINE_VERSION: lts
 
       - name: 'Archive performance results'
         if: always()

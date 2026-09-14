@@ -46,7 +46,6 @@ jobs:
       - name: Run BG Integration Tests
         run: ./gradlew --no-parallel --no-daemon :integration-testing:${{ matrix.testTask }} --info
         env:
-          RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Archive results
