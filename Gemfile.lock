@@ -41,8 +41,8 @@ GEM
     aws-sdk-kms (1.131.0)
       aws-sdk-core (~> 3, >= 3.255.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-rds (1.321.0)
-      aws-sdk-core (~> 3, >= 3.254.0)
+    aws-sdk-rds (1.322.0)
+      aws-sdk-core (~> 3, >= 3.255.0)
       aws-sigv4 (~> 1.5)
     aws-sdk-secretsmanager (1.134.0)
       aws-sdk-core (~> 3, >= 3.254.0)
@@ -178,7 +178,7 @@ DEPENDENCIES
   activerecord (>= 7.2)
   aws-advanced-ruby-driver-wrapper!
   aws-sdk-kms
-  aws-sdk-rds (~> 1.321.0)
+  aws-sdk-rds (~> 1.322.0)
   aws-sdk-secretsmanager
   bundler
   debug
@@ -205,7 +205,7 @@ CHECKSUMS
   aws-partitions (1.1286.0) sha256=955672fb6cbeccff69b4566a32147d9b8b899afe59220ca786dc60a798f18950
   aws-sdk-core (3.256.0) sha256=54680a6818323ad1a977dd2aab88a98f294f11fd603852af53e5718e9ce11a12
   aws-sdk-kms (1.131.0) sha256=b60d28045cd93c604142cb691b15c7ddc1e6738c4ee5a90db4f2b91f0ada1d15
-  aws-sdk-rds (1.321.0) sha256=e2f15200dfb1ef69a4618e08bab360ddb544a3046b690a0bf3bc0d21f82fcf0d
+  aws-sdk-rds (1.322.0) sha256=a883f8f45e5b3dddc33a830ce9b864d9a2bd578641aaed7f0f80b321ef2a0ced
   aws-sdk-secretsmanager (1.134.0) sha256=4a76555706775a87fb70176cc93b1c351500bcdf8c058cc2082a76fdbb6c40b5
   aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
