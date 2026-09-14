@@ -17,6 +17,7 @@
 require 'concurrent'
 require 'timeout'
 require_relative 'blue_green_test_helper'
+require_relative 'log_obfuscator'
 require_relative 'blue_green_observer_threads'
 require_relative 'capturing_logger'
 require_relative 'driver_helper'
@@ -36,7 +37,7 @@ module Integration
     PRE_TRIGGER_DELAY_SEC    = 30    # 30 seconds — delay before triggering switchover
     THREAD_SHUTDOWN_SEC      = 5     # 5 seconds — grace period before force-kill
 
-    LOGGER = Logger.new($stdout, progname: 'BlueGreenSpecOrchestrator')
+    LOGGER = LogObfuscator.install(Logger.new($stdout, progname: 'BlueGreenSpecOrchestrator'))
 
     attr_reader :global_results, :instance_results, :combo_results, :capturing_logger
 

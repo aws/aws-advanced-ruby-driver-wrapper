@@ -413,6 +413,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError)
     end
 
+    it 'propagates the topology-discovery failure when the refresh is unsuccessful' do
+      allow(host_service).to receive(:force_refresh_host_list?).and_return(false)
+
+      expect do
+        plugin.send(:failover)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError, /discover the new topology/)
+    end
+
+    it 'propagates the writer-connect timeout rather than masking it' do
+      allow(retry_util).to receive(:connect_to_writer).and_raise(Timeout::Error)
+
+      expect do
+        plugin.send(:failover)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError, /Writer failover timed out/)
+    end
+
+    it 'raises the generic writer-connect failure when no writer connection is returned' do
+      allow(retry_util).to receive(:connect_to_writer).and_return(nil)
+
+      expect do
+        plugin.send(:failover)
+      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError, /Unable to connect to a writer instance/)
+    end
+
     context 'when in a transaction' do
       before do
         allow(session_state_service).to receive(:in_transaction?).and_return(true)
