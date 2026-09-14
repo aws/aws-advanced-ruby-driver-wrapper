@@ -242,9 +242,9 @@ module AwsAdvancedRubyDriverWrapper
 
       def fetch_and_store_secret
         response = secrets_client.get_secret_value(secret_id: @secret_id)
-        parsed = JSON.parse(response.secret_string)
+        parsed = parse_secret_string(response.secret_string)
 
-        unless parsed.key?(@username_key) && parsed.key?(@password_key)
+        unless parsed.is_a?(Hash) && parsed.key?(@username_key) && parsed.key?(@password_key)
           raise Errors::SecretsManagerAuthError,
                 "Secret JSON missing required keys: '#{@username_key}' and/or '#{@password_key}'"
         end
@@ -256,6 +256,17 @@ module AwsAdvancedRubyDriverWrapper
         )
         @service_container.storage_service.set(SECRETS_MANAGER_CACHE_NAME, @cache_key, entry)
         entry
+      end
+
+      # Parse the raw secret string as JSON. A plaintext (non-JSON) secret makes
+      # +JSON.parse+ raise a +JSON::ParserError+. Catch that error and re-raise a
+      # +SecretsManagerAuthError+ with a message that never includes the secret.
+      def parse_secret_string(secret_string)
+        JSON.parse(secret_string)
+      rescue JSON::ParserError
+        raise Errors::SecretsManagerAuthError,
+              'The secret is not in the expected JSON format. Ensure the secret stored in AWS ' \
+              'Secrets Manager is a JSON object containing the configured username and password keys.'
       end
 
       def apply_secret(driver_props)
