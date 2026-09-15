@@ -88,31 +88,22 @@ module Integration
 
     def self.wait_for_instances(rds_utility, num_instances, cluster_name)
       instances = []
-      deadline = Time.now + RdsTestUtility.setup_wait_timeout(300)
+      deadline = Time.now + 300
       # Try to fetch the topology through the writer instance endpoint first. The instance may be restarting due to
       # a previous failover test, so try the cluster endpoint if the writer instance endpoint fails.
       topology_hosts = [TestEnvironment.current.writer.host, TestEnvironment.current.database_info.cluster_endpoint]
-      attempt = 0
       loop do
-        attempt += 1
         instances = []
         topology_hosts.each do |host|
           instances = rds_utility.instance_ids(host: host)
           break unless instances.empty?
         rescue StandardError => e
-          LOGGER.warn("ExceptionWhileObtainingInstanceIDs (host #{host}): #{e.class}: #{e.message}")
+          LOGGER.warn("ExceptionWhileObtainingInstanceIDs: #{e.message}")
           instances = []
         end
-        writer_ok = false
-        if instances.size >= num_instances && !instances.empty?
-          begin
-            writer_ok = rds_utility.db_instance_writer?(instances.first, cluster_id: cluster_name)
-          rescue StandardError => e
-            LOGGER.warn("wait_for_instances: db_instance_writer?(#{instances.first}) raised: #{e.class}: #{e.message}")
-          end
-        end
-        LOGGER.info("wait_for_instances attempt #{attempt}: found #{instances.size}/#{num_instances} " \
-                    "#{instances.inspect}, writer_ok=#{writer_ok}")
+        writer_ok = instances.size >= num_instances &&
+                    !instances.empty? &&
+                    rds_utility.db_instance_writer?(instances.first, cluster_id: cluster_name)
         break if writer_ok
         break if Time.now >= deadline
 
@@ -125,10 +116,8 @@ module Integration
     private_class_method :wait_for_instances
 
     def self.wait_for_dns(cluster_endpoint, writer_host)
-      deadline = Time.now + RdsTestUtility.setup_wait_timeout(300)
-      attempt = 0
+      deadline = Time.now + 300
       loop do
-        attempt += 1
         cluster_ip = begin
           Resolv.getaddress(cluster_endpoint)
         rescue StandardError
@@ -139,8 +128,6 @@ module Integration
         rescue StandardError
           nil
         end
-        LOGGER.info("wait_for_dns attempt #{attempt}: cluster #{cluster_endpoint}=#{cluster_ip.inspect}, " \
-                    "writer #{writer_host}=#{writer_ip.inspect}")
         break if cluster_ip && cluster_ip == writer_ip
         break if Time.now >= deadline
 

@@ -13,7 +13,6 @@ permissions:
 jobs:
   lts-integration-tests:
     name: Run LTS Integration Tests
-    if: false # TEMP: skip Aurora while validating the multi-az job. Revert before merge.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -63,7 +62,6 @@ jobs:
 
   latest-integration-tests:
     name: Run Latest Integration Tests
-    if: false # TEMP: skip Aurora while validating the multi-az job. Revert before merge.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -118,8 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # TEMP: mysql only while diagnosing the multi-az setup hang. Restore [ 'mysql', 'pg' ] after.
-        environment: [ 'mysql' ]
+        environment: [ 'mysql', 'pg' ]
 
     steps:
       - name: 'Clone repository'
@@ -152,10 +149,6 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-multi-az --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          # TEMP: run a single test and cap each setup_test wait so this run finishes in ~5-10 min for
-          # fast diagnosis. Remove FILTER and IT_SETUP_WAIT_SECS to restore the full suite.
-          FILTER: spec/integration/container/initial_connection_strategy_spec.rb:112
-          IT_SETUP_WAIT_SECS: '60'
 
       - name: 'Archive Multi-AZ results'
         if: always()
