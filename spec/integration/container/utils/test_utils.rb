@@ -15,11 +15,12 @@
 #  limitations under the License.
 
 require 'logger'
+require_relative 'log_obfuscator'
 
 module Integration
   module TestUtils
     def self.logger
-      @logger ||= Logger.new($stdout, level: Logger::DEBUG)
+      @logger ||= LogObfuscator.install(Logger.new($stdout, level: Logger::DEBUG))
     end
   end
 end

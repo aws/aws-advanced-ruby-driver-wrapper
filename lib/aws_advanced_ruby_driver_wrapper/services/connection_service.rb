@@ -110,7 +110,7 @@ module AwsAdvancedRubyDriverWrapper
 
       # @return [Hash{String => Hash}] prefixed driver props keyed by prefix (already stripped)
       def prefixed_driver_config
-        @config.prefixed_wrapper_config
+        @config.prefixed_driver_config
       end
 
       # @return [Hash] driver-specific properties

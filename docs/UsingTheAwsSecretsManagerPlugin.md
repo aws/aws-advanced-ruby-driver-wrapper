@@ -40,3 +40,13 @@ The following properties are required for the Secrets Manager Plugin to retrieve
 ## Secret Data
 
 The secret stored in AWS Secrets Manager should be a JSON object containing the `username` and `password` keys. If the secret contains different key names, you can specify them with the `secret_username_key` and `secret_password_key` parameters.
+
+## Secret Rotation
+
+AWS Secrets Manager does not require credential rotation, and the wrapper does not enforce it. However, we recommend enabling [automatic rotation](https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html) for your database secret so that credentials are changed on a regular schedule and a leaked secret has a bounded lifetime.
+
+The plugin is designed to keep working across a rotation:
+
+- Fetched credentials are cached for `secret_expiration_sec` (default `870`), then re-fetched from Secrets Manager, so a rotated secret is picked up automatically once the cache entry expires.
+- If a connection attempt fails to authenticate with the cached credentials, the plugin forces an immediate re-fetch and retries once, which covers the common case where rotation happened between two connections.
+- During the brief window in which a rotation is in progress, you can have the plugin retry with exponential backoff by setting `secret_rotation_retry_timeout_ms` to a non-zero value (and, optionally, tuning `secret_rotation_retry_base_delay_ms`). This bridges the gap until the newly rotated credentials become valid.

@@ -250,33 +250,5 @@ module AwsAdvancedRubyDriverWrapper
         with_context(:sql, Sanitizer.sql(sql))
       end
     end
-
-    # Raised when the plugin cannot open the independent connection it uses to read the
-    # kms_encryption metadata and key storage tables.
-    class IndependentConnectionError < AwsError
-      attr_reader :attempted_parameters, :connection_attempt, :failure_reason
-
-      def initialize(message = nil, attempted_parameters: nil, connection_attempt: nil, failure_reason: nil)
-        @attempted_parameters = attempted_parameters
-        @connection_attempt = connection_attempt
-        @failure_reason = failure_reason
-        super(build_message(message))
-      end
-
-      private
-
-      # @return [String] the failure message with whatever context was supplied appended
-      def build_message(message)
-        parts = ['Independent connection creation failed']
-        parts << " while attempting: #{@connection_attempt}" if @connection_attempt
-        parts << " - #{message}" if message
-        parts << " (reason: #{@failure_reason})" if @failure_reason
-        if @attempted_parameters
-          url = Plugins::Encryption::Sanitizer.connection_url(@attempted_parameters.to_s)
-          parts << " (attempted target: #{url})"
-        end
-        parts.join
-      end
-    end
   end
 end

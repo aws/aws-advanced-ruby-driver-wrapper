@@ -17,6 +17,7 @@
 require 'concurrent'
 require_relative 'blue_green_test_helper'
 require_relative 'driver_helper'
+require_relative 'log_obfuscator'
 
 module Integration
   class CustomEndpointResults
@@ -50,7 +51,7 @@ module Integration
   module CustomEndpointObserverThreads
     module_function
 
-    LOGGER = Logger.new($stdout, progname: 'CustomEndpointObserverThreads')
+    LOGGER = LogObfuscator.install(Logger.new($stdout, progname: 'CustomEndpointObserverThreads'))
 
     def nano_time
       Process.clock_gettime(Process::CLOCK_MONOTONIC, :nanosecond)

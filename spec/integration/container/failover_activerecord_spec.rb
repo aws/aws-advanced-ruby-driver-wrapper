@@ -98,6 +98,26 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
     )
   end
 
+  def warm_failover_topology
+    config = Integration::DriverHelper.native_config(
+      drv,
+      host: proxy_info.cluster_endpoint,
+      port: proxy_info.cluster_endpoint_port,
+      user: proxy_info.username,
+      password: proxy_info.password,
+      dbname: proxy_info.default_dbname
+    )
+    props = {
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
+        "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}"
+    }
+    discovered = Integration::TopologyHelper.warm_topology_cache(
+      drv: drv, config: config, props: props, min_instances: proxy_info.instances.size
+    )
+    expect(discovered).to be(true), 'Topology was not discovered before failover'
+  end
+
   # The physical driver connection (PG::Connection / Mysql2::Client) currently held inside the
   # wrapper. Reaches into wrapper internals; used only to prove the failover swap actually replaced it.
   def physical_connection(wrapper)
@@ -263,6 +283,10 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
     it 'fails over from reader to writer when no other reader available',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2, max_instances: 2)
+
+      # Warm the topology cache first: this test connects to a bare reader instance, so without a cached
+      # writer host, writer failover would have only the dead reader to probe once connectivity is cut.
+      warm_failover_topology
 
       probe = session_probe
       reader_instance = proxy_info.instances[1]

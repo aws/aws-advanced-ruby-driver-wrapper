@@ -84,7 +84,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::AuditLogger do
       audit.log_metadata_operation(operation: 'load')
       audit.log_configuration_change(config_type: 'plugin')
       audit.log_connection_parameter_extraction(strategy: 'copy', connection_type: 'independent')
-      audit.log_independent_connection_creation(target: 'db')
       audit.log_connection_sharing_fallback(reason: 'no host')
       audit.log_connection_health_check(connection_type: 'independent', healthy: true, success_count: 1,
                                         failure_count: 0, success_rate: 1.0)
@@ -169,31 +168,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::AuditLogger do
   end
 
   describe 'connection records' do
-    it 'records an independent connection being opened' do
-      audit.log_independent_connection_creation(target: 'postgres://jo:hunter2@db.example.com/app')
-
-      expect(level).to eq(:info)
-      expect(line).to include('operation=INDEPENDENT_CONNECTION_CREATION',
-                              'target=postgres://***:***@db.example.com/app', 'used_fallback=false')
-    end
-
-    # Falling back to sharing the application's connection is worth a warning: it means the
-    # metadata queries now run on a connection the application also uses.
-    it 'warns when an independent connection had to fall back to sharing' do
-      audit.log_independent_connection_creation(target: 'db', used_fallback: true)
-
-      expect(level).to eq(:warn)
-      expect(line).to include('used_fallback=true')
-    end
-
-    # The caller decides whether a failed independent connection matters, so this is only debug.
-    it 'records a failed independent connection at debug level' do
-      audit.log_independent_connection_creation(target: 'db', success: false, error_message: 'ECONNREFUSED')
-
-      expect(level).to eq(:debug)
-      expect(line).to include('success=false', 'error=ECONNREFUSED')
-    end
-
     it 'records a fallback to connection sharing at debug level' do
       audit.log_connection_sharing_fallback(reason: 'no independent host', original_failure: 'ECONNREFUSED',
                                             active: true)
