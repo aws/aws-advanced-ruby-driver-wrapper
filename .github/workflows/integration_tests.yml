@@ -50,6 +50,8 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-${{ matrix.environment }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          MYSQL_VERSION: default
+          PG_VERSION: default
 
       - name: 'Archive LTS results'
         if: always()
@@ -99,6 +101,8 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-4.0-${{ matrix.environment }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          MYSQL_VERSION: latest
+          PG_VERSION: latest
 
       - name: 'Archive Latest results'
         if: always()
