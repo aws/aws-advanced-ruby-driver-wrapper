@@ -130,6 +130,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
       expect(plugin.instance_variable_get(:@home_region)).to eq('eu-central-1')
     end
 
+    it 'raises for a misspelled configured home region rather than silently misclassifying' do
+      props[:failover_home_region] = 'us-esat-1'
+      expect { init }.to raise_error(errors::AwsError, /failover_home_region 'us-esat-1' is an unknown or misspelled AWS region/)
+    end
+
     context 'when the initial endpoint carries no region' do
       let(:initial_host) { global_endpoint }
 

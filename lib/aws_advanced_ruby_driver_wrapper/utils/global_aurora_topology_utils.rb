@@ -81,11 +81,16 @@ module AwsAdvancedRubyDriverWrapper
           raise Errors::AwsError, "Unable to parse region from '#{entry}'" if region.nil? || region.empty?
           raise Errors::AwsError, "Unable to parse host from '#{entry}'" if host_pattern.nil? || host_pattern.empty?
 
+          # The region may be supplied explicitly in square brackets (e.g. "[us-east-1]..."), validate it.
+          unless RdsUtils.valid_region?(region)
+            raise Errors::AwsError, "Unknown or misspelled AWS region '#{region}' in instance template '#{entry}'"
+          end
+
           host_validator.call(host_pattern)
           url_type = RdsUtils.identify_rds_type(host_pattern)
           # assign HostRole of READER if using the reader cluster URL, otherwise assume a HostRole of WRITER
           role = url_type == RdsUrlType::RDS_READER_CLUSTER ? Host::HostRole::READER : Host::HostRole::WRITER
-          templates[region] = Host::HostInfo.new(id: '?', host: host_pattern, port:, role:)
+          templates[region.downcase] = Host::HostInfo.new(id: '?', host: host_pattern, port:, role:)
         end
 
         logger.debug("Detected global database patterns: #{templates}")
@@ -130,7 +135,7 @@ module AwsAdvancedRubyDriverWrapper
         instance_id = row_value(row, 'instance_id')
         is_writer = to_boolean(row_value(row, 'is_writer'))
         lag = to_float(row_value(row, 'instance_lag'))
-        aws_region = row_value(row, 'aws_region').to_s
+        aws_region = row_value(row, 'aws_region').to_s.downcase
 
         weight = (lag.round * 100)
 

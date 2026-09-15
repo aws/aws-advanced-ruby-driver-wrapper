@@ -76,7 +76,8 @@ module AwsAdvancedRubyDriverWrapper
       # @param props [Hash, nil]
       # @return [Host::HostInfo]
       def select_host(hosts, role, strategy, props = nil)
-        selector = self.class.host_selector(strategy)
+        normalized = strategy.to_s.strip.downcase
+        selector = self.class.host_selector(normalized)
         raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" if selector.nil?
 
         selector.select_host(hosts, role, props)
