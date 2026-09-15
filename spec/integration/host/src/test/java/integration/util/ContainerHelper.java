@@ -116,6 +116,13 @@ public class ContainerHelper {
     String filter = System.getenv("FILTER");
 
     ArrayList<String> commands = new ArrayList<>();
+    // TEMP (diagnostics): forward IT_SETUP_WAIT_SECS into the container so setup_test waits can be
+    // capped for a fast run. Without this prefix the host-side env var never reaches the rspec process.
+    String setupWaitSecs = System.getenv("IT_SETUP_WAIT_SECS");
+    if (!StringUtils.isNullOrEmpty(setupWaitSecs)) {
+      commands.add("env");
+      commands.add("IT_SETUP_WAIT_SECS=" + setupWaitSecs);
+    }
     commands.add("bundle");
     commands.add("exec");
     commands.add("rspec");
