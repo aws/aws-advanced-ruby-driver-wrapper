@@ -38,7 +38,7 @@ module AwsAdvancedRubyDriverWrapper
           current_topo_str = log_topology(current_topology)
 
           <<~STATUS
-            #{super} [
+            InterimStatus [
              phase #{blue_green_phase || '<null>'},
              version '#{version}',
              port #{port},
