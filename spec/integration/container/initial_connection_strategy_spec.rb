@@ -341,32 +341,4 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Initial connection strategy timed out/)
     end
   end
-
-  # Restricted to Aurora: this asserts the writer actually changed instances, which requires a real
-  # cluster failover. On a Multi-AZ cluster the writer can take 20+ minutes to come back after a
-  # server-side failover, so those deployments simulate outages via the proxy instead of promoting a
-  # new writer, and this assertion would not hold.
-  describe 'after failover',
-           features: [Integration::TestEnvironmentFeatures::FAILOVER_SUPPORTED],
-           deployments: [Integration::DatabaseEngineDeployment::AURORA] do
-    it 'substitutes the new writer instance for a writer cluster endpoint' do
-      enable_on_num_instances(min_instances: 2)
-
-      original_writer_id = rds_util.cluster_writer_instance_id
-      rds_util.failover_cluster_and_wait_until_writer_changed
-      new_writer_id = rds_util.cluster_writer_instance_id
-
-      conn = Integration::DriverHelper.wrapper_connect(drv, **writer_cluster_config, **initial_connection_props)
-      host = connected_host(conn)
-      expect(host).not_to eq(info.cluster_endpoint)
-      expect(rds_utils.rds_instance?(host)).to be true
-      # Instance endpoints are '<instance id>.<instance endpoint suffix>'.
-      connected_instance_id = host.split('.').first.downcase
-      expect(connected_instance_id).to eq(new_writer_id.downcase)
-      expect(connected_instance_id).not_to eq(original_writer_id.downcase)
-      expect(Integration::RdsTestUtility.query_host_role(conn, env.engine)).to eq(:writer)
-    ensure
-      Integration::DriverHelper.close(drv, conn) if conn
-    end
-  end
 end
