@@ -58,8 +58,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
   let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect, driver_dialect: driver_dialect) }
   let(:connection_config) do
     instance_double('ConnectionConfig', wrapper_props: {
-                      cluster_topology_refresh_rate_ms: 100,
-                      cluster_topology_high_refresh_rate_ms: 50,
+                      cluster_topology_refresh_rate_sec: 0.1,
+                      cluster_topology_high_refresh_rate_sec: 0.05,
                       cluster_topology_max_instance_monitors: 16
                     }, initial_host_info: instance_template)
   end

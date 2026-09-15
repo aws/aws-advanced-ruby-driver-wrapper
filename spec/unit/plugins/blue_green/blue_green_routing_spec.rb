@@ -116,7 +116,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
     context 'when status stays IN_PROGRESS past the timeout' do
       before do
-        props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
+        props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.name] = 0.05
         status = instance_double(bg::Status, current_phase: phase::IN_PROGRESS, wait: nil, notify: nil)
         allow(storage_service).to receive(:get).and_return(status)
       end
@@ -147,7 +147,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
     context 'when status stays IN_PROGRESS past the timeout' do
       before do
-        props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
+        props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.name] = 0.05
         status = instance_double(bg::Status, current_phase: phase::IN_PROGRESS, wait: nil, notify: nil)
         allow(storage_service).to receive(:get).and_return(status)
       end
@@ -278,7 +278,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
     context 'when timeout elapses before host is found' do
       before do
-        props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_MS.name] = 50
+        props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.name] = 0.05
         status = instance_double(bg::Status,
                                  current_phase: phase::POST,
                                  corresponding_hosts: { host_val => [host_info, nil] },

@@ -247,14 +247,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
 
   describe 'monitoring wrapper overrides' do
     let(:prefixed_wrapper_config) do
-      { AwsAdvancedRubyDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_ms: 1000 } }
+      { AwsAdvancedRubyDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_sec: 1 } }
     end
 
     it 'separates wrapper props from driver props' do
       wrapper = provider.instance_variable_get(:@monitoring_wrapper_props)
       driver = provider.instance_variable_get(:@monitoring_driver_props)
-      expect(wrapper[:cluster_topology_refresh_rate_ms]).to eq(1000)
-      expect(driver).not_to have_key(:cluster_topology_refresh_rate_ms)
+      expect(wrapper[:cluster_topology_refresh_rate_sec]).to eq(1)
+      expect(driver).not_to have_key(:cluster_topology_refresh_rate_sec)
     end
   end
 end

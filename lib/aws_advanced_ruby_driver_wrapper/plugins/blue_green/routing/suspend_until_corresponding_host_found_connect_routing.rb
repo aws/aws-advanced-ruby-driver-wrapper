@@ -40,7 +40,7 @@ module AwsAdvancedRubyDriverWrapper
             bg_status = storage_service.get(BlueGreenPlugin::BLUE_GREEN_NAME, @bgd_id)
             corresponding_pair = bg_status&.corresponding_hosts&.[](host_info.host)
 
-            timeout_sec = PropertyDefinition::BG_CONNECT_TIMEOUT_MS.get_int(wrapper_props) / 1000.0
+            timeout_sec = PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props)
             hold_start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
             end_time = hold_start_time + timeout_sec
 
@@ -67,7 +67,7 @@ module AwsAdvancedRubyDriverWrapper
               raise Errors::BlueGreenTimeoutError,
                     'Blue/Green Deployment switchover is still in progress and a corresponding ' \
                     "host for '#{host_info.host}' is not found after " \
-                    "#{PropertyDefinition::BG_CONNECT_TIMEOUT_MS.get_int(wrapper_props)} ms. Try to connect again later."
+                    "#{(PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props) * 1000).to_i} ms. Try to connect again later."
             end
 
             logger.debug do

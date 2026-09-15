@@ -120,7 +120,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       it 'raises AwsError when endpoint info is not available within timeout' do
         plugin = build_plugin_with_monitor(
           wait_for_custom_endpoint_info: 'true',
-          wait_for_custom_endpoint_info_timeout_ms: '1'
+          wait_for_custom_endpoint_info_timeout_sec: '0.001'
         )
         allow(mock_monitor).to receive(:endpoint_info?).and_return(false)
         allow(mock_monitor).to receive(:request_endpoint_info_update)
@@ -192,7 +192,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       it 'raises AwsError when endpoint info times out during execute' do
         plugin = build_plugin_with_monitor(
           wait_for_custom_endpoint_info: 'true',
-          wait_for_custom_endpoint_info_timeout_ms: '1'
+          wait_for_custom_endpoint_info_timeout_sec: '0.001'
         )
         allow(mock_monitor).to receive(:endpoint_info?).and_return(true)
         plugin.connect(custom_host_info, {}, true, -> {})

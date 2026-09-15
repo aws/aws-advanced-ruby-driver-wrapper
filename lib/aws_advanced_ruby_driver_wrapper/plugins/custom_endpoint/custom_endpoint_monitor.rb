@@ -38,9 +38,9 @@ module AwsAdvancedRubyDriverWrapper
           custom_endpoint_host,
           endpoint_id,
           region,
-          refresh_rate_ms,
+          refresh_rate_sec,
           refresh_rate_backoff_factor,
-          max_refresh_rate_ms,
+          max_refresh_rate_sec,
           rds_client_func: ->(_, region) { Aws::RDS::Client.new(region: region) }
         )
           super(termination_timeout_sec: TERMINATION_TIMEOUT_SEC)
@@ -48,10 +48,10 @@ module AwsAdvancedRubyDriverWrapper
           @service_container = service_container
           @custom_endpoint_host = custom_endpoint_host
           @endpoint_id = endpoint_id
-          @min_refresh_rate_sec = refresh_rate_ms / 1_000.0
-          @refresh_rate_sec = refresh_rate_ms / 1_000.0
+          @min_refresh_rate_sec = refresh_rate_sec
+          @refresh_rate_sec = refresh_rate_sec
           @refresh_rate_backoff_factor = refresh_rate_backoff_factor
-          @max_refresh_rate_sec = max_refresh_rate_ms / 1_000.0
+          @max_refresh_rate_sec = max_refresh_rate_sec
           @rds_client = rds_client_func.call(custom_endpoint_host, region)
 
           @refresh_mutex = Mutex.new
