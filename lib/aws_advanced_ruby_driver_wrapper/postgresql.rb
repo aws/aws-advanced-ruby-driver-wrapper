@@ -33,6 +33,7 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     def initialize(*, **)
+      ensure_pg!
       config = Utils::ConnectionConfigParser.parse(:postgresql, *, **)
       @service_container = Services::ServiceUtility.create_standard_container(config)
       @service_container.host_service.refresh_host_list
@@ -459,6 +460,12 @@ module AwsAdvancedRubyDriverWrapper
 
     def forget_large_object(_args, _result, _sql)
       @lo_conn = nil
+    end
+
+    def ensure_pg!
+      require 'pg'
+    rescue LoadError
+      raise LoadError, "WrapperPgConnection requires 'pg'. Add it to your Gemfile: gem 'pg'"
     end
 
     def current_conn
