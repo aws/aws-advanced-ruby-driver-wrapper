@@ -50,6 +50,13 @@ module Integration
       @pending_failures_mutex.synchronize { @pending_failures << thread }
     end
 
+    # TEMP (diagnostics): lets CI cap every setup_test wait so a single-test run finishes quickly.
+    # When IT_SETUP_WAIT_SECS is unset the original per-wait default is used, so normal runs are unchanged.
+    def self.setup_wait_timeout(default_secs)
+      override = ENV.fetch('IT_SETUP_WAIT_SECS', nil)
+      override.nil? || override.empty? ? default_secs : override.to_i
+    end
+
     def initialize(region, endpoint: nil)
       @region = region
       @endpoint = endpoint
@@ -126,11 +133,15 @@ module Integration
     end
 
     def wait_until_cluster_has_desired_status(cluster_id, desired_status)
-      stop_time = Time.now + 600
+      stop_time = Time.now + self.class.setup_wait_timeout(600)
+      attempt = 0
       loop do
         raise "Timeout: cluster #{cluster_id} did not reach '#{desired_status}'" if Time.now > stop_time
 
         cluster = db_cluster(cluster_id)
+        attempt += 1
+        TestUtils.logger.info("wait_until_cluster_has_desired_status attempt #{attempt}: cluster #{cluster_id} " \
+                              "status=#{cluster&.status.inspect}, want=#{desired_status}")
         return nil if cluster.nil? && desired_status == 'deleted'
         return if cluster&.status == desired_status
 
@@ -249,7 +260,7 @@ module Integration
 
     # Waits for every known instance in instance_ids to accept a connection. timeout_secs bounds the call as a
     # whole rather than each instance, so the worst case does not grow with the number of instances in the cluster.
-    def make_sure_instances_up(instance_ids, timeout_secs: DEFAULT_INSTANCES_UP_TIMEOUT_SECS)
+    def make_sure_instances_up(instance_ids, timeout_secs: self.class.setup_wait_timeout(DEFAULT_INSTANCES_UP_TIMEOUT_SECS))
       db_info = TestEnvironment.current.database_info
       suffix = db_info.instance_endpoint_suffix
       port = db_info.instance_endpoint_port
