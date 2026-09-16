@@ -28,7 +28,7 @@ The following properties are required for the Secrets Manager Plugin to retrieve
 | `secret_id` | String | Yes | The name or ARN of the secret to retrieve. | `'my-db-secret'` | `nil` |
 | `secret_region` | String | Yes, unless `secret_id` is an ARN | The AWS region your secret is in. If `secret_id` is an ARN, the region is parsed from it automatically. | `'us-east-2'` | `nil` |
 | `secret_endpoint` | String | No | Endpoint URL override for Secrets Manager. Must include a valid protocol (e.g. `http://`) and domain. A port number is not required. | `'http://localhost:1234'` | `nil` |
-| `secret_expiration_sec` | Float | No | Time in seconds that secrets are cached before being re-fetched. Minimum value is `300`. | `600` | `870.0` |
+| `secret_expiration_sec` | Float | No | Time in seconds that secrets are cached before being re-fetched. Minimum value is `300`. | `600.0` | `870.0` |
 | `secret_username_key` | String | No | The key in the JSON secret that contains the username for the database connection. | `'writerUsername'` | `'username'` |
 | `secret_password_key` | String | No | The key in the JSON secret that contains the password for the database connection. | `'readerPassword'` | `'password'` |
 | `secret_credentials_provider` | `Aws::CredentialProvider` | No | A custom AWS credentials provider instance for authenticating with Secrets Manager. | `Aws::AssumeRoleCredentials.new(...)` | AWS SDK default chain |

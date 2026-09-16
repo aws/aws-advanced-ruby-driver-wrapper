@@ -148,7 +148,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         raise Errors::AwsError,
-              "Initial connection strategy timed out after #{(@retry_timeout_sec * 1000).to_i}ms. " \
+              "Initial connection strategy timed out after #{@retry_timeout_sec}s. " \
               "Substitution: #{substitution_strategy}, verification: #{role_to_verify}"
       end
 

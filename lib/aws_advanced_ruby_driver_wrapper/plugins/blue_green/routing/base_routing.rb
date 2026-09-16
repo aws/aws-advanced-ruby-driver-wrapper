@@ -53,7 +53,7 @@ module AwsAdvancedRubyDriverWrapper
             end
 
             if bg_status&.current_phase == Phase::IN_PROGRESS
-              raise Errors::BlueGreenTimeoutError, yield((PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props) * 1000).to_i)
+              raise Errors::BlueGreenTimeoutError, yield(PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props))
             end
 
             bg_status

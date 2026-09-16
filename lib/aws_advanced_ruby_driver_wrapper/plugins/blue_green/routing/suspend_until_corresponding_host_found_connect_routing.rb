@@ -67,7 +67,7 @@ module AwsAdvancedRubyDriverWrapper
               raise Errors::BlueGreenTimeoutError,
                     'Blue/Green Deployment switchover is still in progress and a corresponding ' \
                     "host for '#{host_info.host}' is not found after " \
-                    "#{(PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props) * 1000).to_i} ms. Try to connect again later."
+                    "#{PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props)} s. Try to connect again later."
             end
 
             logger.debug do
