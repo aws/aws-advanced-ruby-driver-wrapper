@@ -431,4 +431,74 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
       expect(result).to be <= described_class::MAX_BACKOFF_SEC
     end
   end
+
+  describe '#cached_writer_verified? across a Blue/Green rename' do
+    def host_info(host, id)
+      AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
+        host: host, port: 5432, role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER, id: id
+      )
+    end
+
+    # The writer the monitor probed directly is the blue identifier.
+    let(:blue_writer) do
+      host_info('bugbash-aurora-pg-1.ccricdd22p6y.us-east-2.rds.amazonaws.com', 'bugbash-aurora-pg-1')
+    end
+
+    # The freshly cached topology, queried from a green node during POST, carries green-prefixed ids.
+    let(:green_cached_writer) do
+      host_info('bugbash-aurora-pg-1-green-gp5sed.ccricdd22p6y.us-east-2.rds.amazonaws.com',
+                'bugbash-aurora-pg-1-green-gp5sed')
+    end
+
+    before do
+      monitor.instance_variable_set(:@verified_writer, true)
+      monitor.instance_variable_set(:@writer_info, blue_writer)
+    end
+
+    it 'matches the green-prefixed cached writer to the verified blue writer' do
+      expect(monitor.send(:cached_writer_verified?, [green_cached_writer])).to be(true)
+    end
+
+    it 'still matches when both sides are the same blue writer' do
+      expect(monitor.send(:cached_writer_verified?, [blue_writer])).to be(true)
+    end
+
+    it 'does not match a green writer for a different instance' do
+      other_green = host_info('bugbash-aurora-pg-2-green-0560wg.ccricdd22p6y.us-east-2.rds.amazonaws.com',
+                              'bugbash-aurora-pg-2-green-0560wg')
+      expect(monitor.send(:cached_writer_verified?, [other_green])).to be(false)
+    end
+
+    it 'returns false when no writer has been verified yet' do
+      monitor.instance_variable_set(:@verified_writer, false)
+      expect(monitor.send(:cached_writer_verified?, [green_cached_writer])).to be(false)
+    end
+  end
+
+  describe '#open_any_connection_and_update_topology' do
+    # initial_host_info here is the cluster endpoint template ('?.cluster...'); the topology's writer is
+    # the instance writer_host ('writer.cluster...', id 'writer-instance').
+    it 'records the writer instance from topology, not the cluster endpoint, when the connection is a writer' do
+      result = monitor.send(:open_any_connection_and_update_topology)
+
+      expect(result).to eq([writer_host, reader_host])
+      expect(monitor.instance_variable_get(:@verified_writer)).to be(true)
+
+      recorded = monitor.instance_variable_get(:@writer_info)
+      expect(recorded.host).to eq(writer_host.host)
+      expect(recorded.id).to eq('writer-instance')
+      # Must not be the cluster endpoint (initial_host_info) - that never matches instance-level
+      # topology entries and would block writer verification until timeout.
+      expect(recorded.host).not_to eq(instance_template.host)
+    end
+
+    it 'does not mark a writer verified when the connected host is a reader' do
+      allow(db_dialect).to receive(:host_role).and_return(AwsAdvancedRubyDriverWrapper::Host::HostRole::READER)
+
+      monitor.send(:open_any_connection_and_update_topology)
+
+      expect(monitor.instance_variable_get(:@verified_writer)).to be(false)
+      expect(monitor.instance_variable_get(:@writer_info)).to be_nil
+    end
+  end
 end
