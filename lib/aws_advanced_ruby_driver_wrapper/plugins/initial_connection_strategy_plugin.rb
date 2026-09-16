@@ -138,7 +138,10 @@ module AwsAdvancedRubyDriverWrapper
                 next
               end
 
-              next if dialect_service.read_only_error?(e) && substitution_strategy == :substitute_writer
+              if dialect_service.read_only_error?(e) && substitution_strategy == :substitute_writer
+                sleep(@retry_interval_sec)
+                next
+              end
 
               raise
             end
