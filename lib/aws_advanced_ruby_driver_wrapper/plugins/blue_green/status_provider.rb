@@ -83,7 +83,9 @@ module AwsAdvancedRubyDriverWrapper
           if dialect.respond_to?(:blue_green_status_available?)
             init_monitoring
           else
-            logger.warn { "[bgd_id: '#{@bgd_id}'] Blue/Green Deployments isn't supported by database dialect #{dialect.class.name}." }
+            logger.warn do
+              "[bgd_id: '#{@bgd_id}'] Blue/Green Deployments isn't supported by database dialect #{dialect.class.name.split('::').last}."
+            end
           end
         end
 
