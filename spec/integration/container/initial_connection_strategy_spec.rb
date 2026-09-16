@@ -38,10 +38,14 @@ require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
 # is visible from the resulting connection object on its own. Both are observable through
 # ConnectionService#current_host_info.
 RSpec.describe 'InitialConnectionStrategy', :integration,
-               deployments: [Integration::DatabaseEngineDeployment::AURORA],
+               deployments: [
+                 Integration::DatabaseEngineDeployment::AURORA,
+                 Integration::DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
+               ],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
   let(:props) { AwsAdvancedRubyDriverWrapper::PropertyDefinition }
+  let(:dialect_codes) { AwsAdvancedRubyDriverWrapper::DialectCodes }
 
   let(:initial_connection_props) do
     base_wrapper_props.merge(
@@ -50,9 +54,12 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
   end
 
   let(:explicit_dialect) do
+    multi_az = env.deployment == Integration::DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
     case env.engine
-    when Integration::DatabaseEngine::PG then AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_PG
-    when Integration::DatabaseEngine::MYSQL then AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL
+    when Integration::DatabaseEngine::PG
+      multi_az ? dialect_codes::MULTI_AZ_PG_CLUSTER : dialect_codes::AURORA_PG
+    when Integration::DatabaseEngine::MYSQL
+      multi_az ? dialect_codes::MULTI_AZ_MYSQL_CLUSTER : dialect_codes::AURORA_MYSQL
     else raise "Unsupported engine: #{env.engine}"
     end
   end
