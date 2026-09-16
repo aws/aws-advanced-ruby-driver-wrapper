@@ -184,6 +184,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
                                      wrapper_props: { wrapper_dialect: 'nonexistent-dialect' })
         end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unknown dialect code/)
       end
+
+      it 'normalizes surrounding whitespace, newlines, and casing in the dialect setting' do
+        [" #{dialect_codes::AURORA_PG} ", "#{dialect_codes::AURORA_PG}\n", 'Aurora-PG', "\tAURORA-PG\n"].each do |value|
+          service = build_service(:postgresql, host: 'my-database.example.com',
+                                               wrapper_props: { wrapper_dialect: value })
+          expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraPgDialect)
+        end
+      end
     end
 
     context 'China region endpoints' do

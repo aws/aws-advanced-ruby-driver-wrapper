@@ -74,6 +74,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::HostService do
           .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy/)
       end
     end
+
+    context 'with surrounding whitespace, newlines, or mixed case' do
+      it 'normalizes the strategy before lookup' do
+        [' random', 'random ', "random\n", "\tRANDOM\n", 'Random'].each do |strategy|
+          result = service.select_host([reader], AwsAdvancedRubyDriverWrapper::Host::HostRole::READER, strategy)
+          expect(result).to eq(reader)
+        end
+      end
+
+      it 'still reports the original (un-normalized) value when the strategy is unknown' do
+        expect { service.select_host(hosts, nil, " incorrect\n") }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy: ' incorrect/)
+      end
+    end
   end
 
   describe '.register_host_selector' do

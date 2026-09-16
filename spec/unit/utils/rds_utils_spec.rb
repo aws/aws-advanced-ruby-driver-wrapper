@@ -646,3 +646,110 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RdsUrlType do
     expect(url_type::OTHER.to_s).to eq 'other'
   end
 end
+
+RSpec.describe 'RdsUtils.dns_pattern_valid?' do
+  let(:rds) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+  it 'accepts a valid pattern with exactly one placeholder' do
+    expect(rds.dns_pattern_valid?('?.xyz.us-east-1.rds.amazonaws.com')).to be true
+  end
+
+  it 'rejects a pattern with no placeholder' do
+    expect(rds.dns_pattern_valid?('example.rds.amazonaws.com')).to be false
+  end
+
+  it 'rejects a pattern with multiple placeholders' do
+    expect(rds.dns_pattern_valid?('?.?.us-east-1.rds.amazonaws.com')).to be false
+  end
+
+  it 'rejects an empty string' do
+    expect(rds.dns_pattern_valid?('')).to be false
+  end
+
+  it 'rejects nil' do
+    expect(rds.dns_pattern_valid?(nil)).to be false
+  end
+end
+
+RSpec.describe 'RdsUtils.valid_region?' do
+  let(:rds) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+  %w[us-east-1 us-west-2 eu-west-1 cn-north-1 us-gov-west-1 ap-southeast-1].each do |r|
+    it "accepts known region '#{r}'" do
+      expect(rds.valid_region?(r)).to be true
+    end
+  end
+
+  it 'is case insensitive' do
+    expect(rds.valid_region?('US-East-1')).to be true
+    expect(rds.valid_region?('AP-SOUTHEAST-1')).to be true
+  end
+
+  it 'rejects a plausible but misspelled region (typo)' do
+    expect(rds.valid_region?('us-esat-1')).to be false
+  end
+
+  it 'rejects a random string' do
+    expect(rds.valid_region?('incorrect')).to be false
+  end
+
+  it 'rejects nil' do
+    expect(rds.valid_region?(nil)).to be false
+  end
+
+  it 'rejects empty string' do
+    expect(rds.valid_region?('')).to be false
+  end
+end
+
+RSpec.describe 'RdsUtils.rds_region with invalid region' do
+  let(:rds) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+  before { rds.clear_cache }
+  after  { rds.clear_cache }
+
+  it 'returns the region for a valid RDS hostname' do
+    expect(rds.rds_region('db.cluster-xyz.us-east-1.rds.amazonaws.com')).to eq('us-east-1')
+  end
+
+  it 'returns nil for a hostname with a typo region' do
+    expect(rds.rds_region('db.cluster-xyz.us-esat-1.rds.amazonaws.com')).to be_nil
+  end
+
+  it 'returns nil for a hostname with a completely incorrect region segment' do
+    expect(rds.rds_region('db.cluster-xyz.incorrect.rds.amazonaws.com')).to be_nil
+  end
+end
+
+RSpec.describe 'RdsUtils.region_typo?' do
+  let(:rds) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
+
+  before { rds.clear_cache }
+  after  { rds.clear_cache }
+
+  it 'is false for a valid region' do
+    expect(rds.region_typo?('?.abc123.us-east-1.rds.amazonaws.com')).to be false
+  end
+
+  it 'is true for a misspelled region' do
+    expect(rds.region_typo?('?.abc123.us-esat-1.rds.amazonaws.com')).to be true
+  end
+
+  it 'is true for a incorrect region segment' do
+    expect(rds.region_typo?('?.abc123.incorrect.rds.amazonaws.com')).to be true
+  end
+
+  it 'is false for a non-RDS host with no region segment' do
+    expect(rds.region_typo?('?.custom-domain.com')).to be false
+  end
+
+  it 'is false for Aurora Global Database endpoints (literal "global" region slot)' do
+    expect(rds.region_typo?('?.abc123.global.rds.amazonaws.com')).to be false
+    expect(rds.region_typo?('mydb.global-abc123.global.rds.amazonaws.com')).to be false
+  end
+
+  it 'is false for nil/blank' do
+    expect(rds.region_typo?(nil)).to be false
+    expect(rds.region_typo?('')).to be false
+  end
+end

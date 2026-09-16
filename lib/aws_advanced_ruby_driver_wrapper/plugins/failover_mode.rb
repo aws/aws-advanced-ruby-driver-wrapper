@@ -22,9 +22,12 @@ module AwsAdvancedRubyDriverWrapper
       READER_OR_WRITER = :reader_or_writer
 
       def self.from_value(value)
-        return nil if value.nil? || value.to_s.empty?
+        return nil if value.nil?
 
-        case value.to_s.downcase
+        normalized = value.to_s.strip.downcase
+        return nil if normalized.empty?
+
+        case normalized
         when 'strict_writer', 'strict-writer', 'strictwriter'
           STRICT_WRITER
         when 'strict_reader', 'strict-reader', 'strictreader'

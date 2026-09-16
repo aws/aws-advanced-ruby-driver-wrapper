@@ -53,9 +53,12 @@ module AwsAdvancedRubyDriverWrapper
         # @return [Symbol, nil] the mode, or nil when no value was configured
         # @raise [ArgumentError] if the value does not name a known mode
         def self.from_value(value)
-          return nil if value.nil? || value.to_s.empty?
+          return nil if value.nil?
 
-          NAME_TO_VALUE.fetch(value.to_s.downcase) do
+          normalized = value.to_s.strip.downcase
+          return nil if normalized.empty?
+
+          NAME_TO_VALUE.fetch(normalized) do
             raise ArgumentError, "Invalid global database failover mode: '#{value}'"
           end
         end
