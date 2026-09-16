@@ -322,7 +322,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'waits the retry interval between network-error retries instead of spinning' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.2, initial_connection_retry_interval_sec: 0.01)
       network_error = StandardError.new('connection refused')
 
       call_count = 0
