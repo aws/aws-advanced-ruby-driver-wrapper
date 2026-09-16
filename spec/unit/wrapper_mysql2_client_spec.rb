@@ -28,7 +28,7 @@ require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 # either: a prepared statement is executed with its parameters alone, and an asynchronous result is
 # read by a call of its own. The client publishes it separately, so that a plugin which has to inspect
 # the statement can still read it.
-RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient do
+RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
   let(:mysql_result) { driver_result(Mysql2::Result, 'Mysql2::Result') }
   # A verifying double, so that a call the wrapper makes on a method mysql2 does not define fails
   # here rather than against a real server.

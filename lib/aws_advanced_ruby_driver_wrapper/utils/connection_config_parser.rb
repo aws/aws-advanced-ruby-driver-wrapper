@@ -32,13 +32,13 @@ module AwsAdvancedRubyDriverWrapper
       module_function
 
       # Main entry point. The driver_name is provided by the wrapper class
-      # (e.g. :postgresql from WrapperPgConnection, :mysql2 from Mysql2WrapperClient).
+      # (e.g. :postgresql from WrapperPgConnection, :mysql2 from WrapperMysql2Client).
       #
       # @param driver_name [Symbol] :postgresql or :mysql2
       def parse(driver_name, *args, **kwargs)
         if driver_name == :mysql2 && !args.empty? && !args.first.is_a?(Hash)
           raise ArgumentError,
-                "Mysql2WrapperClient only accepts keyword arguments (e.g. host: 'x', port: 3306). " \
+                "WrapperMysql2Client only accepts keyword arguments (e.g. host: 'x', port: 3306). " \
                 'URI strings and positional arguments are not supported.'
         end
 
