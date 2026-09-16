@@ -36,7 +36,7 @@ module AwsAdvancedRubyDriverWrapper
           def to_s
             port_str = @port ? ":#{@port}" : ''
             iam_hosts_str = @iam_hosts&.map(&:host_and_port)&.join(', ') || '<null>'
-            "#{self.class.name}@#{object_id.to_s(16)} [" \
+            "#{self.class.name.split('::').last}@#{object_id.to_s(16)} [" \
               "#{@host}#{port_str}, " \
               "role: #{@role}, " \
               "substitute: #{@substitute_host&.host_and_port || '<null>'}, " \

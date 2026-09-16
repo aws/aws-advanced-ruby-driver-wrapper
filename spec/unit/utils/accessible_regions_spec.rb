@@ -68,6 +68,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::AccessibleRegions do
       result = described_class.parse(props)
       expect(result).to eq(Set['us-east-1', 'us-west-2'])
     end
+
+    it 'raises for a incorrect region rather than silently filtering out all hosts' do
+      props = Concurrent::Map.new
+      props[:accessible_regions] = 'us-east-1,us-esat-1'
+      expect { described_class.parse(props) }.to raise_error(
+        AwsAdvancedRubyDriverWrapper::Errors::AwsError, /unknown or misspelled AWS region\(s\): us-esat-1/
+      )
+    end
   end
 
   describe '.filter_by_region' do

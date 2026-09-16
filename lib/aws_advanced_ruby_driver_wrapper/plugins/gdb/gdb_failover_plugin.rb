@@ -83,7 +83,14 @@ module AwsAdvancedRubyDriverWrapper
         # @raise [Errors::AwsError] if no home region is configured and none can be derived
         def resolve_home_region(initial_host)
           configured = PropertyDefinition::FAILOVER_HOME_REGION.get_string(@wrapper_props)
-          return configured unless configured.nil? || configured.strip.empty?
+          unless configured.nil? || configured.strip.empty?
+            normalized = configured.strip
+            unless Utils::RdsUtils.valid_region?(normalized)
+              raise Errors::AwsError,
+                    "#{PropertyDefinition::FAILOVER_HOME_REGION.name} '#{configured}' is an unknown or misspelled AWS region"
+            end
+            return normalized
+          end
 
           derived = @rds_url_type&.region? ? Utils::RdsUtils.rds_region(initial_host&.host) : nil
           if derived.nil? || derived.empty?

@@ -50,7 +50,7 @@ module AwsAdvancedRubyDriverWrapper
           execute_str = @execute_routing.join("\n")
 
           <<~STATUS
-            #{super} [
+            Status [
              bgd_id: '#{@bgd_id}',
              phase: #{@current_phase},
              Connect routing:

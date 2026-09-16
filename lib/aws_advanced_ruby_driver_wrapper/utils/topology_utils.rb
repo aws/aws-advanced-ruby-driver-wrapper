@@ -42,7 +42,7 @@ module AwsAdvancedRubyDriverWrapper
       # @return [AwsAdvancedRubyDriverWrapper::Host::HostInfo] a HostInfo representing the given information.
       def build_host(instance_id, instance_name, is_writer, weight, last_update_time, initial_host_info, instance_template)
         instance_name = '?' if instance_name.nil?
-        endpoint = instance_template.host.gsub('?', instance_name)
+        endpoint = instance_template.host.sub('?', instance_name)
         port = resolve_port(instance_template, initial_host_info)
         role = is_writer ? Host::HostRole::WRITER : Host::HostRole::READER
 

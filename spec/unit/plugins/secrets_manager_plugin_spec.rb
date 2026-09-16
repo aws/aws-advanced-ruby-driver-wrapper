@@ -239,6 +239,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
         plugin.connect(host_info, props, true, -> {})
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError, /missing required keys/)
     end
+
+    it 'does not leak the plaintext secret when the secret is not valid JSON' do
+      plaintext_secret = 'super-secret-plaintext-password-123'
+      allow(mock_sm_client).to receive(:get_secret_value)
+        .and_return(double('Response', secret_string: plaintext_secret))
+
+      plugin = build_plugin
+      props = Concurrent::Map.new
+
+      error = nil
+      begin
+        plugin.connect(host_info, props, true, -> {})
+      rescue AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError => e
+        error = e
+      end
+
+      expect(error).not_to be_nil
+      expect(error.message).not_to include(plaintext_secret)
+      expect(error.message).to match(/not in the expected JSON format/)
+    end
   end
 
   describe 'custom endpoint' do
