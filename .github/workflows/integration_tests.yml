@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  lts-integration-tests:
-    name: Run LTS Integration Tests
+  default-integration-tests:
+    name: Run Integration Tests (Ruby 3.3, RDS default)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -46,24 +46,24 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Run LTS Integration Tests'
+      - name: 'Run Integration Tests (Ruby 3.3, RDS default)'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-${{ matrix.environment }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           MYSQL_VERSION: default
           PG_VERSION: default
 
-      - name: 'Archive LTS results'
+      - name: 'Archive results (Ruby 3.3, RDS default)'
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: rspec-integration-report-3.3-${{ matrix.environment }}-lts
+          name: rspec-integration-report-3.3-${{ matrix.environment }}-default
           path: ./spec/integration/host/build/reports/tests/test/
           if-no-files-found: ignore
           retention-days: 5
 
   latest-integration-tests:
-    name: Run Latest Integration Tests
+    name: Run Integration Tests (Ruby 4.0, RDS latest)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -97,14 +97,14 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Run Latest Integration Tests'
+      - name: 'Run Integration Tests (Ruby 4.0, RDS latest)'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-4.0-${{ matrix.environment }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           MYSQL_VERSION: latest
           PG_VERSION: latest
 
-      - name: 'Archive Latest results'
+      - name: 'Archive results (Ruby 4.0, RDS latest)'
         if: always()
         uses: actions/upload-artifact@v7
         with:

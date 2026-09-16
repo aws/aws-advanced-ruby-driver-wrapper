@@ -48,7 +48,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'failover' do
     before(:all) do
       env = Integration::TestEnvironment.current
-      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -184,7 +184,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'membership enforcement — dynamic endpoint changes' do
     before(:all) do
       env = Integration::TestEnvironment.current
-      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -253,7 +253,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'membership enforcement - monitor picks up removed member' do
     before(:all) do
       env = Integration::TestEnvironment.current
-      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       # Restricted to 2-instance clusters. With a single reader, an untargeted failover is forced to promote
       # that reader, so whichever instance the connection lands on is disrupted (the writer is demoted, the
       # reader is promoted). On larger clusters the failover could promote a different reader, leaving the
@@ -322,7 +322,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'plugin behavior' do
     before(:all) do
       env = Integration::TestEnvironment.current
-      next unless aurora_deployment?  # Custom (cluster) endpoints are an Aurora-only feature.
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.allowed_test_drivers.empty?
 
       @pb_driver = env.allowed_test_drivers.first
