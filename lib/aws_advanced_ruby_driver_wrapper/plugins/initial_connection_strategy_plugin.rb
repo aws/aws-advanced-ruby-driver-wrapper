@@ -131,10 +131,17 @@ module AwsAdvancedRubyDriverWrapper
 
               if dialect_service.network_error?(e)
                 host_service.set_availability(candidate_host, Host::HostAvailability::UNAVAILABLE) if candidate_host
+                # Back off before retrying, as the other retry paths do. Without this, a persistently
+                # unreachable topology (e.g. every instance down) busy-loops to the deadline, spinning the
+                # CPU and flooding the logs.
+                sleep(@retry_interval_sec)
                 next
               end
 
-              next if dialect_service.read_only_error?(e) && substitution_strategy == :substitute_writer
+              if dialect_service.read_only_error?(e) && substitution_strategy == :substitute_writer
+                sleep(@retry_interval_sec)
+                next
+              end
 
               raise
             end

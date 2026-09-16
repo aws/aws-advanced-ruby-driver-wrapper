@@ -301,6 +301,18 @@ module AwsAdvancedRubyDriverWrapper
       OPERATION_BY_SPELLING.key?(method) || current_conn.respond_to?(method, include_private) || super
     end
 
+    # A concise representation that never exposes the connection config (which carries
+    # credentials) or the cached SQL text this instance holds. Defined so a default
+    # dump - via logging, interpolation, `pp`, or a backtrace - cannot leak either.
+    def inspect
+      format('#<%<class>s:0x%<addr>016x>', class: self.class.name, addr: object_id << 1)
+    end
+    alias to_s inspect
+
+    def pretty_print(pp)
+      pp.text(inspect)
+    end
+
     private
 
     # Runs one canonical operation through the pipeline, passing the operation's `bound_to` connection and
@@ -590,6 +602,15 @@ module AwsAdvancedRubyDriverWrapper
 
     def respond_to_missing?(method, include_private = false)
       @result.respond_to?(method, include_private) || super
+    end
+
+    def inspect
+      format('#<%<class>s:0x%<addr>016x>', class: self.class.name, addr: object_id << 1)
+    end
+    alias to_s inspect
+
+    def pretty_print(pp)
+      pp.text(inspect)
     end
 
     private

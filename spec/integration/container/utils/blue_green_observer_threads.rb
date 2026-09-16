@@ -17,6 +17,7 @@
 require 'concurrent'
 require 'resolv'
 require_relative 'blue_green_test_helper'
+require_relative 'log_obfuscator'
 require_relative 'driver_helper'
 require_relative 'database_engine'
 
@@ -26,7 +27,7 @@ module Integration
   module BlueGreenObserverThreads
     module_function
 
-    LOGGER = Logger.new($stdout, progname: 'BlueGreenObserverThreads')
+    LOGGER = LogObfuscator.install(Logger.new($stdout, progname: 'BlueGreenObserverThreads'))
 
     def open_direct_connection_with_retry(driver, config, max_retries: 10)
       retries = 0

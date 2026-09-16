@@ -137,6 +137,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
         )
       end
     end
+
+    context 'with a host pattern containing a typo in the region' do
+      let(:wrapper_props) { { cluster_instance_host_pattern: '?.abc123.us-esat-1.rds.amazonaws.com' } }
+
+      it 'fails fast rather than letting monitors spin on a non-existent region' do
+        expect { provider }.to raise_error(
+          AwsAdvancedRubyDriverWrapper::Errors::AwsError, /unknown or misspelled AWS region/
+        )
+      end
+    end
+
+    context 'with a host pattern containing a valid region' do
+      let(:wrapper_props) { { cluster_instance_host_pattern: '?.abc123.us-east-1.rds.amazonaws.com' } }
+
+      it 'accepts the pattern' do
+        expect(provider.instance_template.host).to eq('?.abc123.us-east-1.rds.amazonaws.com')
+      end
+    end
   end
 
   describe '#refresh' do

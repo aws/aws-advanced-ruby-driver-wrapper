@@ -56,7 +56,6 @@ module AwsAdvancedRubyDriverWrapper
 
           @refresh_mutex = Mutex.new
           @refresh_cv = ConditionVariable.new
-          @info_available = Concurrent::Event.new
           @refresh_required = false
           @connection_issue = false
         end
@@ -67,11 +66,18 @@ module AwsAdvancedRubyDriverWrapper
           !info.nil?
         end
 
+        # Waits up to timeout_sec for the monitor to place endpoint info in the cache. Polls rather than
+        # waiting on a one-shot signal: #endpoint_info? re-checks the cache and re-requests a refresh
+        # (waking the monitor) on each pass, so a transient empty cache - e.g. an entry that aged out
+        # between monitor iterations - is repopulated within the window instead of failing immediately.
         def wait_for_info?(timeout_sec)
-          return true if cached_info
+          deadline = monotonic_time + timeout_sec
+          loop do
+            return true if endpoint_info?
+            return false if monotonic_time >= deadline
 
-          @info_available.wait(timeout_sec)
-          !cached_info.nil?
+            sleep(0.1)
+          end
         end
 
         def request_endpoint_info_update
@@ -240,7 +246,6 @@ module AwsAdvancedRubyDriverWrapper
 
         def cache_info(info)
           storage_service.set(ENDPOINT_INFO_CACHE_NAME, @custom_endpoint_host.url, info)
-          @info_available.set
         end
 
         def remove_cached_info

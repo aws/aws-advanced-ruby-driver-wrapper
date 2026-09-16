@@ -185,6 +185,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         user_dialect_setting = PropertyDefinition::DIALECT.get(@connection_service.wrapper_props)&.to_s
+        user_dialect_setting = user_dialect_setting&.strip&.downcase
         host = @connection_service.initial_host_info&.host
 
         dialect_code = if user_dialect_setting.nil? || user_dialect_setting.empty?

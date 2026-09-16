@@ -61,11 +61,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
   end
 
   describe '#initialize' do
-    it 'registers the secrets cache partition' do
+    it 'registers the secrets cache partition with the disposal lifetime' do
       build_plugin
-      default_expiration = AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_EXPIRATION_SEC.default_value
       expect(mock_storage_service).to have_received(:register).with(
-        :secrets_manager, ttl: default_expiration + described_class::CACHE_DISPOSAL_EXTRA_TIME_SEC
+        :secrets_manager, ttl: described_class::SECRET_CACHE_DISPOSAL_SEC
       )
     end
 
@@ -109,10 +108,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
 
     it 'clamps expiration below minimum to 300' do
       base_props[:secret_expiration_sec] = 100
+      allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
       build_plugin
-      expect(mock_storage_service).to have_received(:register).with(
-        :secrets_manager, ttl: described_class::MIN_EXPIRATION_SEC + described_class::CACHE_DISPOSAL_EXTRA_TIME_SEC
-      )
+      expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
+        .with(/expiration 100s below minimum #{described_class::MIN_EXPIRATION_SEC}s, clamping/o)
+    end
+
+    it 'clamps expiration above the maximum, reserving the SWR revalidation window' do
+      base_props[:secret_expiration_sec] = described_class::SECRET_CACHE_DISPOSAL_SEC
+      allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
+      build_plugin
+      expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
+        .with(/exceeds the #{described_class::MAX_EXPIRATION_SEC}s maximum/o)
     end
   end
 
@@ -231,6 +238,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       expect do
         plugin.connect(host_info, props, true, -> {})
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError, /missing required keys/)
+    end
+
+    it 'does not leak the plaintext secret when the secret is not valid JSON' do
+      plaintext_secret = 'super-secret-plaintext-password-123'
+      allow(mock_sm_client).to receive(:get_secret_value)
+        .and_return(double('Response', secret_string: plaintext_secret))
+
+      plugin = build_plugin
+      props = Concurrent::Map.new
+
+      error = nil
+      begin
+        plugin.connect(host_info, props, true, -> {})
+      rescue AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError => e
+        error = e
+      end
+
+      expect(error).not_to be_nil
+      expect(error.message).not_to include(plaintext_secret)
+      expect(error.message).to match(/not in the expected JSON format/)
     end
   end
 

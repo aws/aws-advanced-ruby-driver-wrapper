@@ -32,9 +32,22 @@ module AwsAdvancedRubyDriverWrapper
       SECRETS_ARN_PATTERN = %r{\Aarn:aws(?:-[a-z]+)*:secretsmanager:(?<region>[^:\n]+):[^:\n]*:(?:[^:/\n]*[:/])?}
       MAX_RETRY_DELAY_SEC = 8
 
-      # Entries remain in the shared cache longer than their expiration so expired-but-present
-      # entries can be served immediately while a background refresh runs (SWR).
-      CACHE_DISPOSAL_EXTRA_TIME_SEC = 30 * 60
+      # The maximum time a fetched secret stays in the shared cache, measured from when it was
+      # fetched (the cache anchors expiry at store time and does not renew on read). Until its
+      # logical expiration (@expiration_sec, default 14.5 min) the entry is served fresh;
+      # between logical expiration and this disposal time it is served stale while a background
+      # refresh runs (SWR); after this it is physically removed and the next use re-fetches from
+      # Secrets Manager. This is the hard cap on how long a cached secret can live.
+      SECRET_CACHE_DISPOSAL_SEC = 20 * 60
+
+      # The window reserved between logical expiration and physical disposal for a background
+      # refresh to complete. The logical expiration is clamped so that at least this much time
+      # remains for stale-while-revalidate. Sized to the synchronous fetch timeout so a refresh
+      # has a full fetch's worth of time to land.
+      SWR_REVALIDATION_BUDGET_SEC = SYNC_FETCH_TIMEOUT_SEC
+
+      # The largest logical expiration we allow, leaving room for the SWR refresh window.
+      MAX_EXPIRATION_SEC = SECRET_CACHE_DISPOSAL_SEC - SWR_REVALIDATION_BUDGET_SEC
 
       SecretEntry = Data.define(:username, :password, :expires_at) do
         def expired?(now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
@@ -92,8 +105,13 @@ module AwsAdvancedRubyDriverWrapper
 
         service_container.storage_service.register(
           SECRETS_MANAGER_CACHE_NAME,
-          ttl: @expiration_sec + CACHE_DISPOSAL_EXTRA_TIME_SEC
+          ttl: SECRET_CACHE_DISPOSAL_SEC
         )
+
+        # The client is built lazily and reused for the plugin instance's lifetime. Concurrent::Delay guarantees
+        # the builder block runs at most once, so a racing fetch can never construct and discard a second client.
+        @secrets_client = Concurrent::Delay.new { build_secrets_client }
+
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
@@ -229,9 +247,9 @@ module AwsAdvancedRubyDriverWrapper
 
       def fetch_and_store_secret
         response = secrets_client.get_secret_value(secret_id: @secret_id)
-        parsed = JSON.parse(response.secret_string)
+        parsed = parse_secret_string(response.secret_string)
 
-        unless parsed.key?(@username_key) && parsed.key?(@password_key)
+        unless parsed.is_a?(Hash) && parsed.key?(@username_key) && parsed.key?(@password_key)
           raise Errors::SecretsManagerAuthError,
                 "Secret JSON missing required keys: '#{@username_key}' and/or '#{@password_key}'"
         end
@@ -245,6 +263,17 @@ module AwsAdvancedRubyDriverWrapper
         entry
       end
 
+      # Parse the raw secret string as JSON. A plaintext (non-JSON) secret makes
+      # +JSON.parse+ raise a +JSON::ParserError+. Catch that error and re-raise a
+      # +SecretsManagerAuthError+ with a message that never includes the secret.
+      def parse_secret_string(secret_string)
+        JSON.parse(secret_string)
+      rescue JSON::ParserError
+        raise Errors::SecretsManagerAuthError,
+              'The secret is not in the expected JSON format. Ensure the secret stored in AWS ' \
+              'Secrets Manager is a JSON object containing the configured username and password keys.'
+      end
+
       def apply_secret(driver_props)
         raise Errors::SecretsManagerAuthError, 'Failed to fetch database credentials from AWS Secrets Manager' unless @secret
 
@@ -253,13 +282,16 @@ module AwsAdvancedRubyDriverWrapper
         driver_props[:password] = @secret.password
       end
 
+      # Returns the shared client, building it on first use. Thread-safe and build-once.
       def secrets_client
-        @secrets_client ||= begin
-          opts = { region: @region, credentials: @credentials_provider }
-          endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
-          opts[:endpoint] = endpoint if endpoint
-          Aws::SecretsManager::Client.new(**opts)
-        end
+        @secrets_client.value!
+      end
+
+      def build_secrets_client
+        opts = { region: @region, credentials: @credentials_provider }
+        endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
+        opts[:endpoint] = endpoint if endpoint
+        Aws::SecretsManager::Client.new(**opts)
       end
 
       def resolve_region(props)
@@ -270,11 +302,20 @@ module AwsAdvancedRubyDriverWrapper
         match[:region] if match
       end
 
+      # The logical expiration must leave room for the stale-while-revalidate window: an entry is
+      # physically removed SECRET_CACHE_DISPOSAL_SEC after it was fetched, so once it expires it can
+      # only be served stale until then. Clamp it to the range [MIN_EXPIRATION_SEC, MAX_EXPIRATION_SEC],
+      # where MAX_EXPIRATION_SEC reserves SWR_REVALIDATION_BUDGET_SEC before disposal for the refresh to complete.
       def resolve_expiration(props)
         configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_int(props)
         if configured < MIN_EXPIRATION_SEC
           logger.warn("SecretsManagerPlugin: expiration #{configured}s below minimum #{MIN_EXPIRATION_SEC}s, clamping")
           MIN_EXPIRATION_SEC
+        elsif configured > MAX_EXPIRATION_SEC
+          logger.warn("SecretsManagerPlugin: expiration #{configured}s exceeds the #{MAX_EXPIRATION_SEC}s maximum " \
+                      "(leaving #{SWR_REVALIDATION_BUDGET_SEC}s before the #{SECRET_CACHE_DISPOSAL_SEC}s cache " \
+                      'lifetime cap for stale-while-revalidate), clamping')
+          MAX_EXPIRATION_SEC
         else
           configured
         end

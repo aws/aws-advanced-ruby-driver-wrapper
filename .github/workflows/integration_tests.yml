@@ -11,9 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  lts-integration-tests:
-    name: Run LTS Integration Tests
-    if: false # TEMP: skip Aurora while validating the multi-az job. Revert before merge.
+  default-integration-tests:
+    name: Run Integration Tests (Ruby 3.3, RDS default)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -25,7 +24,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: 'Set up Ruby 3.3'
-        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
         with:
           ruby-version: '3.3'
           bundler-cache: true
@@ -37,7 +36,7 @@ jobs:
           java-version: 8
 
       - name: 'Set up Gradle'
-        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: 'Configure AWS Credentials'
         uses: aws-actions/configure-aws-credentials@v6
@@ -47,23 +46,24 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Run LTS Integration Tests'
+      - name: 'Run Integration Tests (Ruby 3.3, RDS default)'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-${{ matrix.environment }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          MYSQL_VERSION: default
+          PG_VERSION: default
 
-      - name: 'Archive LTS results'
+      - name: 'Archive results (Ruby 3.3, RDS default)'
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: rspec-integration-report-3.3-${{ matrix.environment }}-lts
+          name: rspec-integration-report-3.3-${{ matrix.environment }}-default
           path: ./spec/integration/host/build/reports/tests/test/
           if-no-files-found: ignore
           retention-days: 5
 
   latest-integration-tests:
-    name: Run Latest Integration Tests
-    if: false # TEMP: skip Aurora while validating the multi-az job. Revert before merge.
+    name: Run Integration Tests (Ruby 4.0, RDS latest)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: 'Set up Ruby 4.0'
-        uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1
         with:
           ruby-version: '4.0'
           bundler-cache: true
@@ -87,7 +87,7 @@ jobs:
           java-version: 8
 
       - name: 'Set up Gradle'
-        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
       - name: 'Configure AWS Credentials'
         uses: aws-actions/configure-aws-credentials@v6
@@ -97,12 +97,14 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Run Latest Integration Tests'
+      - name: 'Run Integration Tests (Ruby 4.0, RDS latest)'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-4.0-${{ matrix.environment }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          MYSQL_VERSION: latest
+          PG_VERSION: latest
 
-      - name: 'Archive Latest results'
+      - name: 'Archive results (Ruby 4.0, RDS latest)'
         if: always()
         uses: actions/upload-artifact@v7
         with:

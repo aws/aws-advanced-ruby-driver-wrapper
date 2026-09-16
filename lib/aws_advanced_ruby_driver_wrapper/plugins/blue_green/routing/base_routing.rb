@@ -32,7 +32,7 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           def to_s
-            "#{self.class.name}@#{object_id.to_s(16)} [" \
+            "#{self.class.name.split('::').last}@#{object_id.to_s(16)} [" \
               "host: #{@host || '<null>'}, " \
               "port: #{@port || '<null>'}, " \
               "role: #{@role || '<null>'}, " \

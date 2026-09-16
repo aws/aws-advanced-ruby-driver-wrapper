@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'aws-sdk-rds'
+require 'resolv'
 require_relative 'database_engine'
 require_relative 'database_engine_deployment'
 require_relative 'driver_helper'
@@ -191,17 +192,30 @@ module Integration
       end
     end
 
-    def self.query_host_role(conn, engine)
-      sql = case engine
-            when DatabaseEngine::MYSQL then 'SELECT @@innodb_read_only'
-            when DatabaseEngine::PG    then 'SELECT pg_catalog.pg_is_in_recovery()'
-            end
+    def self.query_host_role(conn, engine, deployment: nil)
+      deployment ||= TestEnvironment.current&.deployment
+      sql = reader_check_query(engine, deployment)
       driver  = Integration::RdsTestUtility.driver_for_engine(engine)
       dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
       value = row.is_a?(Hash) ? row.values.first : row[0]
       TRUE_VALUES.include?(value) ? :reader : :writer
+    end
+
+    # The read-only signal that identifies a reader differs by engine and deployment. Aurora MySQL
+    # reports it through @@innodb_read_only, whereas an RDS Multi-AZ cluster MySQL reader reports
+    # @@read_only (its @@innodb_read_only stays 0). PostgreSQL reports recovery state the same way
+    # across deployments. This mirrors the reader query each engine dialect uses internally.
+    def self.reader_check_query(engine, deployment)
+      case engine
+      when DatabaseEngine::PG
+        'SELECT pg_catalog.pg_is_in_recovery()'
+      when DatabaseEngine::MYSQL
+        deployment == DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER ? 'SELECT @@read_only' : 'SELECT @@innodb_read_only'
+      else
+        raise "Unsupported engine: #{engine}"
+      end
     end
 
     def self.sleep_sql(engine = nil)
@@ -457,32 +471,105 @@ module Integration
       end
     end
 
+    # Per-attempt wait for the writer to change after a failover request. A real Aurora failover completes
+    # within a couple of minutes, so 5 minutes is generous; combined with the retry loop this re-issues a
+    # silently-dropped request rather than failing after a single long wait.
+    WRITER_CHANGE_TIMEOUT_SECS = 300
+    # Pause between failover attempts to let the cluster stabilize before re-issuing.
+    FAILOVER_STABILIZATION_SECS = 10
+
+    # Note that providing an explicit target_instance_id, while allowed, can result in flaky test results.
+    # Aurora occasionally accepts the failover request (returning success) but does not actually perform
+    # the failover, especially when failovers are triggered in rapid succession or shortly after another
+    # cluster modification (e.g. creating a custom endpoint). This can cause the wait for the writer
+    # change to time out.
     def failover_cluster_and_wait_until_writer_changed(max_retries: 3, target_instance_id: nil)
-      env = TestEnvironment.current
-      cluster_id = env.cluster_name
+      cluster_id = TestEnvironment.current.cluster_name
       initial_writer_id = cluster_writer_instance_id(cluster_id)
+      initial_cluster_ip = aurora_deployment? ? resolve_ip(cluster_endpoint_host) : nil
 
       writer_changed = false
       max_retries.times do |attempt|
-        if target_instance_id
-          @client.failover_db_cluster(
-            db_cluster_identifier: cluster_id,
-            target_db_instance_identifier: target_instance_id
-          )
-        else
-          @client.failover_db_cluster(db_cluster_identifier: cluster_id)
-        end
-
-        writer_changed = RetryHelper.retry_until(timeout_secs: 300, delay_secs: 5) do
-          current_writer = cluster_writer_instance_id(cluster_id)
-          current_writer != initial_writer_id
+        request_cluster_failover(cluster_id, target_instance_id)
+        writer_changed = RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 5) do
+          cluster_writer_instance_id(cluster_id) != initial_writer_id
         end
         break if writer_changed
+        break if attempt == max_retries - 1
 
+        # Pause to let the cluster settle, then re-check in case the writer changed during the pause.
         TestUtils.logger.warn("Failover attempt #{attempt + 1}/#{max_retries}: writer did not change, retrying")
+        sleep(FAILOVER_STABILIZATION_SECS)
+        writer_changed = cluster_writer_instance_id(cluster_id) != initial_writer_id
+        break if writer_changed
       end
 
       raise "Writer did not change after #{max_retries} failover attempts" unless writer_changed
+
+      wait_for_failover_to_settle(cluster_id, initial_writer_id, initial_cluster_ip)
+    end
+
+    # After the control plane reports a new writer, the cluster endpoint DNS can still resolve to the old
+    # writer's IP for a while, and the demoted instance can briefly still report as the writer. A test that
+    # reconnects through the cluster endpoint right after failover needs both to settle first, otherwise it
+    # lands back on the old writer. Both waits are best-effort: if they time out we proceed rather than fail
+    # the failover.
+    def wait_for_failover_to_settle(cluster_id, initial_writer_id, initial_cluster_ip)
+      return unless aurora_deployment?
+
+      # Wait for the cluster endpoint DNS to stop resolving to the pre-failover IP. Skips the wait when the
+      # initial resolution failed (nothing to compare against).
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
+        initial_cluster_ip.nil? || resolve_ip(cluster_endpoint_host) != initial_cluster_ip
+      end
+
+      # Wait for the demoted instance to stop reporting as the writer in the cluster's member list.
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
+        !instance_still_writer?(initial_writer_id, cluster_id)
+      end
+    end
+
+    def aurora_deployment?
+      TestEnvironment.current.deployment == DatabaseEngineDeployment::AURORA
+    end
+
+    def cluster_endpoint_host
+      TestEnvironment.current.database_info.cluster_endpoint
+    end
+
+    def resolve_ip(host)
+      Resolv.getaddress(host)
+    rescue Resolv::ResolvError
+      nil
+    end
+
+    # A transient describe failure is treated as "still writer" so the caller keeps waiting rather than
+    # concluding the demotion finished early.
+    def instance_still_writer?(instance_id, cluster_id)
+      db_instance_writer?(instance_id, cluster_id: cluster_id)
+    rescue StandardError
+      true
+    end
+
+    # Issues a single failover_db_cluster request, tolerating transient failures. The cluster may still be
+    # settling from a prior operation (a custom-endpoint change or an earlier failover), in which case
+    # failover_db_cluster raises (e.g. InvalidDBClusterStateFault) or a transient networking error occurs.
+    # Wait for the cluster to reach 'available' first, then retry the request a few times so a transient
+    # failure does not fail the whole failover.
+    def request_cluster_failover(cluster_id, target_instance_id, max_request_attempts: 10)
+      max_request_attempts.times do
+        wait_until_cluster_has_desired_status(cluster_id, 'available')
+
+        params = { db_cluster_identifier: cluster_id }
+        params[:target_db_instance_identifier] = target_instance_id if target_instance_id
+        @client.failover_db_cluster(**params)
+        return
+      rescue StandardError => e
+        TestUtils.logger.warn("failover_db_cluster request failed (#{e.message}), retrying")
+        sleep(1)
+      end
+
+      raise "Failed to request a cluster failover for #{cluster_id} after #{max_request_attempts} attempts"
     end
 
     def sleep_sql(seconds)
@@ -776,18 +863,36 @@ module Integration
       conn&.close
     end
 
+    # Returns the writer instance's id (its value in mysql.rds_topology / rds_tools.show_topology()),
+    # used to order the topology so the writer sorts first. When connected to a reader the writer id
+    # comes from the replication source; when connected to the writer that query is empty, so we fall
+    # back to the connection's own instance id. Must return a scalar (not the whole result row) so the
+    # topology ORDER BY can match it against the id column.
     def multi_az_writer_id(conn, driver, engine)
       case engine
       when DatabaseEngine::MYSQL
-        execute(conn, 'SHOW REPLICA STATUS', driver).first ||
-          execute(conn, 'SELECT @@server_id', driver).first
+        replica_status = execute(conn, 'SHOW REPLICA STATUS', driver).first
+        return row_value(replica_status, 'Source_Server_Id') if replica_status
+
+        row_value(execute(conn, 'SELECT @@server_id AS writer_id', driver).first, 'writer_id')
       when DatabaseEngine::PG
-        sql = 'SELECT multi_az_db_cluster_source_dbi_resource_id FROM ' \
-              'rds_tools.multi_az_db_cluster_source_dbi_resource_id()'
-        execute(conn, sql, driver).first ||
-          execute(conn, 'SELECT dbi_resource_id FROM rds_tools.dbi_resource_id()', driver).first
+        source = execute(conn, 'SELECT multi_az_db_cluster_source_dbi_resource_id ' \
+                               'FROM rds_tools.multi_az_db_cluster_source_dbi_resource_id()', driver).first
+        return row_value(source, 'multi_az_db_cluster_source_dbi_resource_id') if source
+
+        row_value(execute(conn, 'SELECT dbi_resource_id FROM rds_tools.dbi_resource_id()', driver).first,
+                  'dbi_resource_id')
       else raise "Unsupported engine: #{engine}"
       end
+    end
+
+    # Extracts a single scalar value from a driver result row, tolerating Hash rows (string or symbol
+    # keys) and array-shaped rows.
+    def row_value(row, key)
+      return nil if row.nil?
+      return row[key] || row[key.to_sym] || row.values.first if row.is_a?(Hash)
+
+      row[0]
     end
 
     def aurora_topology_sql(engine)

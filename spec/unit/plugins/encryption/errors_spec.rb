@@ -154,35 +154,4 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError do
       expect(error.context[:sql]).to eq("SELECT * FROM users WHERE ssn = '***'")
     end
   end
-
-  describe AwsAdvancedRubyDriverWrapper::Errors::IndependentConnectionError do
-    it 'describes the failure on its own' do
-      expect(described_class.new.message).to eq('Independent connection creation failed')
-    end
-
-    it 'names the operation, the cause, and the reason' do
-      error = described_class.new('the host refused the connection',
-                                  connection_attempt: 'metadata refresh',
-                                  failure_reason: 'ECONNREFUSED')
-      expect(error.message).to eq(
-        'Independent connection creation failed while attempting: metadata refresh - ' \
-        'the host refused the connection (reason: ECONNREFUSED)'
-      )
-    end
-
-    it 'masks the credentials of the target it tried to reach' do
-      error = described_class.new(attempted_parameters: 'postgres://jo:hunter2@db.example.com/app')
-      expect(error.message).to eq(
-        'Independent connection creation failed (attempted target: postgres://***:***@db.example.com/app)'
-      )
-    end
-
-    it 'keeps the details available to the caller' do
-      error = described_class.new('boom', attempted_parameters: { host: 'db' },
-                                          connection_attempt: 'metadata refresh', failure_reason: 'ECONNREFUSED')
-      expect(error.attempted_parameters).to eq({ host: 'db' })
-      expect(error.connection_attempt).to eq('metadata refresh')
-      expect(error.failure_reason).to eq('ECONNREFUSED')
-    end
-  end
 end

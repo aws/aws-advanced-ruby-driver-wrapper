@@ -38,6 +38,19 @@ module AwsAdvancedRubyDriverWrapper
           def expired?(ttl_sec, now = Process.clock_gettime(Process::CLOCK_MONOTONIC))
             now >= created_at + ttl_sec
           end
+
+          # Redact the plaintext data key so it is never exposed if an instance is
+          # logged, interpolated, or rendered in a backtrace.
+          def inspect
+            "#<data CacheEntry data_key=#{AwsAdvancedRubyDriverWrapper::REDACTED.inspect}, created_at=#{created_at.inspect}>"
+          end
+          alias_method :to_s, :inspect
+
+          # `pp` / PrettyPrint does not call #inspect; route them through the
+          # redacted representation so `pp entry` cannot leak the data key.
+          def pretty_print(pp)
+            pp.text(inspect)
+          end
         end
 
         # A point-in-time snapshot of the cache counters.
