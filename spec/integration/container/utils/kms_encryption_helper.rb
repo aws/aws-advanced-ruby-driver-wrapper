@@ -123,7 +123,7 @@ module Integration
 
     # An application connection with the kms_encryption plugin enabled.
     #
-    # @return [Object] a WrapperPgConnection or Mysql2WrapperClient
+    # @return [Object] a WrapperPgConnection or WrapperMysql2Client
     def encryption_connect(**extra_props)
       DriverHelper.wrapper_connect(drv, **native_params, **encryption_props, **extra_props)
     end
