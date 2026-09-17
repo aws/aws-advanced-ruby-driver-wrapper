@@ -36,7 +36,8 @@ module AwsAdvancedRubyDriverWrapper
 
     # -- General --
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
-    PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover', type: String)
+    PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover,initial_connection',
+                                                                                            type: String)
     DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.', type: String)
     AWS_CREDENTIALS_PROVIDER = WrapperProperty.new(:aws_credentials_provider,
                                                    'AWS credentials provider for IAM token generation or Secrets Manager',

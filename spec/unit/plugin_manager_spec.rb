@@ -492,12 +492,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin)).to be true
     end
 
-    it 'loads default plugins (failover + default) when no plugins option specified' do
+    it 'loads default plugins (failover + initial_connection + default) when no plugins option specified' do
       container = service_container_with_wrapper_props
       manager = described_class.new(container)
 
-      expect(manager.num_plugins).to eq(2)
+      expect(manager.num_plugins).to eq(3)
       expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin)).to be true
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyPlugin)).to be true
       expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin)).to be true
     end
 
