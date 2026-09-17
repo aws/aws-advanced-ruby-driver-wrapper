@@ -37,8 +37,9 @@ AwsAdvancedRubyDriverWrapper::WrapperPgConnection.new(
 ```
 
 **MySQL (`mysql2`):**
+
 ```ruby
-AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient.new(
+AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(
   host: "my-cluster.cluster-xxxx.us-east-1.rds.amazonaws.com",
   username: "<username>",
   password: "<password>",

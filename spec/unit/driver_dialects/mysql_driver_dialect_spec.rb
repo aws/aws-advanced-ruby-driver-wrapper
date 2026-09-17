@@ -257,7 +257,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     # missed, so they are checked against the driver itself rather than against a list written out by
     # hand, which is what let async_result go unlisted to begin with.
     it 'covers every mysql2 call that runs a statement or moves its results' do
-      wrapper = AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient
+      wrapper = AwsAdvancedRubyDriverWrapper::WrapperMysql2Client
       # The client's own options, and the info libmysql buffered about the last statement, none of
       # which is a call to the server.
       local = %i[query_options query_info query_info_string]
@@ -291,7 +291,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     # long ago the statement it is reading was sent. The names inherited from every dialect are left
     # out, as they are above: reset has no mysql2 counterpart and connect is not a call on a connection.
     it 'is answered by a client method or a DYNAMIC_METHODS entry for every call it lists of its own' do
-      wrapper = AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient
+      wrapper = AwsAdvancedRubyDriverWrapper::WrapperMysql2Client
       common = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialect::COMMON_NETWORK_BOUND_METHODS
       listed = (dialect.network_bound_methods - common).select { |entry| entry.start_with?('connection.') }
 

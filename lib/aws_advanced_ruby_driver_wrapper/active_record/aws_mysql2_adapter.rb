@@ -30,7 +30,7 @@ module ActiveRecord
       def adapter_name = ADAPTER_NAME
 
       def self.new_client(config)
-        AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient.new(**config.except(*AR_ONLY_KEYS))
+        AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(**config.except(*AR_ONLY_KEYS))
       end
 
       def connect
