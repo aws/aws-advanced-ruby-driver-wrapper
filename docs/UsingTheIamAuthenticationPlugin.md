@@ -96,13 +96,13 @@ The host (or `iam_host` property if connecting to a custom domain or IP address)
 | `iam_host` | String | No | Overrides the hostname used to generate the IAM token. Required when connecting via a custom endpoint. | Derived from connection host |
 | `iam_port` | Integer | No | Overrides the port used to generate the IAM token. | Derived from connection or dialect default |
 | `iam_region` | String | No | Overrides the AWS region used to generate the IAM token. | Parsed from the RDS hostname |
-| `iam_expiration` | Integer | No | Seconds before a cached IAM token is considered expired and regenerated. | `870` (14.5 min) |
+| `iam_expiration_sec` | Float | No | Seconds before a cached IAM token is considered expired and regenerated. | `870.0` (14.5 min) |
 | `iam_access_token_property_name` | Symbol | No | The driver property key the token is injected into. | `:password` |
 | `iam_credentials_provider` | Object | No | A custom `Aws::CredentialProvider` instance. | AWS SDK default chain |
 
 ## Token Caching
 
-The plugin caches generated tokens keyed by `region:host:port:user`. A cached token is reused until it expires (controlled by `iam_expiration`). If a login error occurs with a cached token, the plugin automatically fetches a fresh token and retries the connection once.
+The plugin caches generated tokens keyed by `region:host:port:user`. A cached token is reused until it expires (controlled by `iam_expiration_sec`). If a login error occurs with a cached token, the plugin automatically fetches a fresh token and retries the connection once.
 
 ## Using IAM Authentication with Global Databases
 

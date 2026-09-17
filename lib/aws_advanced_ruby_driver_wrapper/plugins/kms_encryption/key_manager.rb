@@ -322,7 +322,7 @@ module AwsAdvancedRubyDriverWrapper
 
         # base * 2**attempt, plus or minus a quarter, at least the base delay.
         def backoff_sec(attempt)
-          base_sec = @config.key_management_retry_backoff_base_ms / 1000.0
+          base_sec = @config.key_management_retry_backoff_base_sec
           exponential = base_sec * (2**attempt)
           jitter = exponential * JITTER_RATIO * ((SecureRandom.random_number * 2) - 1)
           # Not clamp: the configured base delay is allowed to be longer than the cap, and the cap

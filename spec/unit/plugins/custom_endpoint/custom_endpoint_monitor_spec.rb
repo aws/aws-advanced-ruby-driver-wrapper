@@ -38,15 +38,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
   let(:service_container)    { double('ServiceContainer', storage_service: mock_storage_service) }
   let(:rds_client_func)      { ->(_host, _region) { mock_rds_client } }
 
-  def build_monitor(refresh_rate_ms: 50, backoff_factor: 2, max_refresh_rate_ms: 500)
+  def build_monitor(refresh_rate_sec: 0.05, backoff_factor: 2, max_refresh_rate_sec: 0.5)
     described_class.new(
       service_container,
       host_info,
       endpoint_id,
       region,
-      refresh_rate_ms,
+      refresh_rate_sec,
       backoff_factor,
-      max_refresh_rate_ms,
+      max_refresh_rate_sec,
       rds_client_func: rds_client_func
     )
   end
@@ -144,7 +144,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       stub_rds_response(static_members: %w[member1 member2])
       allow(mock_storage_service).to receive(:get).and_return(nil)
 
-      monitor = build_monitor(refresh_rate_ms: 30)
+      monitor = build_monitor(refresh_rate_sec: 0.03)
       monitor.start
 
       sleep(0.15)
@@ -165,7 +165,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       allow(mock_rds_client).to receive(:describe_db_cluster_endpoints).and_return(response)
       allow(mock_storage_service).to receive(:get).and_return(nil)
 
-      monitor = build_monitor(refresh_rate_ms: 30)
+      monitor = build_monitor(refresh_rate_sec: 0.03)
       monitor.start
       sleep(0.1)
       monitor.stop
@@ -181,7 +181,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       allow(mock_rds_client).to receive(:describe_db_cluster_endpoints).and_raise(throttle_error)
       allow(mock_storage_service).to receive(:get).and_return(nil)
 
-      monitor = build_monitor(refresh_rate_ms: 30)
+      monitor = build_monitor(refresh_rate_sec: 0.03)
       monitor.start
       sleep(0.1)
       expect { monitor.stop }.not_to raise_error
@@ -195,7 +195,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       allow(mock_rds_client).to receive(:describe_db_cluster_endpoints).and_raise(auth_error)
       allow(mock_storage_service).to receive(:get).and_return(nil)
 
-      monitor = build_monitor(refresh_rate_ms: 30)
+      monitor = build_monitor(refresh_rate_sec: 0.03)
       monitor.start
       sleep(0.1)
       expect { monitor.stop }.not_to raise_error
@@ -205,7 +205,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       stub_rds_response
       allow(mock_storage_service).to receive(:get).and_return(nil)
 
-      monitor = build_monitor(refresh_rate_ms: 30)
+      monitor = build_monitor(refresh_rate_sec: 0.03)
       monitor.start
       sleep(0.05)
       monitor.stop
@@ -235,7 +235,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       end
       allow(mock_storage_service).to receive(:get).and_return(nil)
 
-      monitor = build_monitor(refresh_rate_ms: 20, backoff_factor: 2, max_refresh_rate_ms: 200)
+      monitor = build_monitor(refresh_rate_sec: 0.02, backoff_factor: 2, max_refresh_rate_sec: 0.2)
       monitor.start
       sleep(0.1)
       monitor.stop

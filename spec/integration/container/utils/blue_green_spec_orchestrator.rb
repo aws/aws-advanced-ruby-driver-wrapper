@@ -354,8 +354,8 @@ module Integration
       config[:bgd_id] = @env.bg_deployment_id
       config[:cluster_id] = "#{combo.tr(',', '-')}-test-#{host_id}"
       config[:wrapper_dialect] = wrapper_dialect if wrapper_dialect
-      config[:bg_switchover_timeout_ms] = 180_000
-      config[:bg_connect_timeout_ms] = 60_000
+      config[:bg_switchover_timeout_sec] = 180.0
+      config[:bg_connect_timeout_sec] = 60.0
       config[:connect_timeout] = 10
       config[:read_timeout] = 10 if @driver == TestDriver::MYSQL
 

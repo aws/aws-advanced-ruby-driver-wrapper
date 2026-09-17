@@ -160,7 +160,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'retries when connection has wrong role' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 100, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.1, initial_connection_retry_interval_sec: 0.01)
 
       call_count = 0
       allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
@@ -209,7 +209,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'retries when reader cluster endpoint resolves to writer (stale DNS)' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.2, initial_connection_retry_interval_sec: 0.01)
 
       call_count = 0
       allow(mock_host_service).to receive(:select_host).and_return(reader_host_info)
@@ -256,7 +256,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
 
   describe '#connect timeout' do
     it 'raises an error when retry timeout is exceeded' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 50, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.05, initial_connection_retry_interval_sec: 0.01)
 
       allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_return(host_role::READER)
@@ -271,7 +271,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
 
   describe '#connect error handling' do
     it 'raises immediately on login error' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 500)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.5)
       login_error = StandardError.new('login failed')
 
       allow(mock_plugin_manager).to receive(:connect).and_raise(login_error)
@@ -283,7 +283,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'retries on network error' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.2, initial_connection_retry_interval_sec: 0.01)
       network_error = StandardError.new('connection refused')
 
       call_count = 0
@@ -302,7 +302,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'marks host unavailable on network error' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.2, initial_connection_retry_interval_sec: 0.01)
       network_error = StandardError.new('connection refused')
 
       call_count = 0
@@ -322,7 +322,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'waits the retry interval between network-error retries instead of spinning' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.2, initial_connection_retry_interval_sec: 0.01)
       network_error = StandardError.new('connection refused')
 
       call_count = 0
@@ -343,7 +343,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'retries on read-only error when wanting writer' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 200, initial_connection_retry_interval_ms: 10)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.2, initial_connection_retry_interval_sec: 0.01)
       readonly_error = StandardError.new('read only')
 
       call_count = 0
@@ -361,7 +361,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
 
     it 'raises on unknown error' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 500)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.5)
       unknown_error = StandardError.new('something unexpected')
 
       allow(mock_plugin_manager).to receive(:connect).and_raise(unknown_error)
@@ -377,7 +377,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
 
   describe '#connect connection cleanup' do
     it 'closes connection on unexpected error' do
-      plugin = build_plugin(initial_connection_retry_timeout_ms: 500)
+      plugin = build_plugin(initial_connection_retry_timeout_sec: 0.5)
       allow(mock_plugin_manager).to receive(:connect).and_return(mock_connection)
       allow(mock_db_dialect).to receive(:host_role).and_raise(RuntimeError, 'unexpected')
 
@@ -391,7 +391,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
 
   describe '#connect with wait_for_topology' do
     it 'waits for topology then connects to instance' do
-      plugin = build_plugin(initial_connection_wait_for_topology_ms: 5000)
+      plugin = build_plugin(initial_connection_wait_for_topology_sec: 5.0)
 
       # First call: topology empty, then after refresh it's available
       topology_call_count = 0

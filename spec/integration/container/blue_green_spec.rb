@@ -136,7 +136,7 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
       max_hold_ms = held_durations_ms.max
       expect(max_hold_ms).to be < 180_000,
                              "BG plugin held a call for #{max_hold_ms}ms which exceeds the configured " \
-                             'bg_switchover_timeout_ms of 180,000ms. Longest holds (ms): ' \
+                             'bg_switchover_timeout_sec of 180s. Longest holds (ms): ' \
                              "#{held_durations_ms.sort.last(5).reverse.join(', ')}"
     end
 

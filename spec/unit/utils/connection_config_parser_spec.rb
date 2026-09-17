@@ -448,14 +448,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfigParser do
       end.to raise_error(ArgumentError, /failover_timeout_sec.*0/)
     end
 
-    it 'raises ArgumentError for a negative NON_NEGATIVE_INTEGER prop' do
+    it 'raises ArgumentError for a negative NON_NEGATIVE_FLOAT prop' do
       expect do
-        parser.parse(:postgresql, host: 'h', secret_rotation_retry_timeout_ms: -1)
-      end.to raise_error(ArgumentError, /secret_rotation_retry_timeout_ms.*-1/)
+        parser.parse(:postgresql, host: 'h', secret_rotation_retry_timeout_sec: -1)
+      end.to raise_error(ArgumentError, /secret_rotation_retry_timeout_sec.*-1/)
     end
 
-    it 'does not raise for zero on a NON_NEGATIVE_INTEGER prop' do
-      expect { parser.parse(:postgresql, host: 'h', secret_rotation_retry_timeout_ms: 0) }.not_to raise_error
+    it 'does not raise for zero on a NON_NEGATIVE_FLOAT prop' do
+      expect { parser.parse(:postgresql, host: 'h', secret_rotation_retry_timeout_sec: 0) }.not_to raise_error
     end
 
     it 'raises ArgumentError for a negative prefixed POSITIVE_INTEGER prop' do

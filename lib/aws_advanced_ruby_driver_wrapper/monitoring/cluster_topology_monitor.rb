@@ -63,8 +63,8 @@ module AwsAdvancedRubyDriverWrapper
         service_container.dialect_service.driver_dialect.apply_monitoring_defaults(@monitoring_driver_props)
 
         props = service_container.connection_service.wrapper_props
-        @refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_REFRESH_RATE_MS.get_int(props) / 1000.0
-        @high_refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_MS.get_int(props) / 1000.0
+        @refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_REFRESH_RATE_SEC.get_float(props)
+        @high_refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_SEC.get_float(props)
         @max_instance_monitors = PropertyDefinition::CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS.get_int(props)
 
         @monitoring_connection = MonitorConnection.new(service_container.dialect_service.driver_dialect)

@@ -100,8 +100,8 @@ module AwsAdvancedRubyDriverWrapper
         @password_key = PropertyDefinition::SECRET_PASSWORD_KEY.get_string(props)
         @expiration_sec = resolve_expiration(props)
         @cache_key = "#{@secret_id}:#{@region}"
-        @rotation_retry_timeout_sec = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_MS.get_int(props) / 1000.0
-        @rotation_retry_base_delay_sec = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_MS.get_int(props) / 1000.0
+        @rotation_retry_timeout_sec = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_SEC.get_float(props)
+        @rotation_retry_base_delay_sec = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_SEC.get_float(props)
 
         service_container.storage_service.register(
           SECRETS_MANAGER_CACHE_NAME,
@@ -307,7 +307,7 @@ module AwsAdvancedRubyDriverWrapper
       # only be served stale until then. Clamp it to the range [MIN_EXPIRATION_SEC, MAX_EXPIRATION_SEC],
       # where MAX_EXPIRATION_SEC reserves SWR_REVALIDATION_BUDGET_SEC before disposal for the refresh to complete.
       def resolve_expiration(props)
-        configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_int(props)
+        configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_float(props)
         if configured < MIN_EXPIRATION_SEC
           logger.warn("SecretsManagerPlugin: expiration #{configured}s below minimum #{MIN_EXPIRATION_SEC}s, clamping")
           MIN_EXPIRATION_SEC
