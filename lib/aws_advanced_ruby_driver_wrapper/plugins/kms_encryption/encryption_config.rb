@@ -29,7 +29,7 @@ module AwsAdvancedRubyDriverWrapper
         :metadata_cache_expiration_sec,
         :metadata_cache_refresh_interval_sec,
         :key_management_max_retries,
-        :key_management_retry_backoff_base_ms,
+        :key_management_retry_backoff_base_sec,
         :audit_logging_enabled,
         :data_key_cache_enabled,
         :data_key_cache_max_size,
@@ -51,16 +51,16 @@ module AwsAdvancedRubyDriverWrapper
               kms_endpoint: PropertyDefinition::ENCRYPTION_KMS_ENDPOINT.get_string(props),
               metadata_schema: SchemaName.of(PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.get_string(props)),
               metadata_cache_enabled: PropertyDefinition::ENCRYPTION_METADATA_CACHE_ENABLED.get_bool(props),
-              metadata_cache_expiration_sec: PropertyDefinition::ENCRYPTION_METADATA_CACHE_EXPIRATION_SEC.get_int(props),
+              metadata_cache_expiration_sec: PropertyDefinition::ENCRYPTION_METADATA_CACHE_EXPIRATION_SEC.get_float(props),
               metadata_cache_refresh_interval_sec:
-                PropertyDefinition::ENCRYPTION_METADATA_CACHE_REFRESH_INTERVAL_SEC.get_int(props),
+                PropertyDefinition::ENCRYPTION_METADATA_CACHE_REFRESH_INTERVAL_SEC.get_float(props),
               key_management_max_retries: PropertyDefinition::ENCRYPTION_KEY_MANAGEMENT_MAX_RETRIES.get_int(props),
-              key_management_retry_backoff_base_ms:
-                PropertyDefinition::ENCRYPTION_KEY_MANAGEMENT_RETRY_BACKOFF_BASE_MS.get_int(props),
+              key_management_retry_backoff_base_sec:
+                PropertyDefinition::ENCRYPTION_KEY_MANAGEMENT_RETRY_BACKOFF_BASE_SEC.get_float(props),
               audit_logging_enabled: PropertyDefinition::ENCRYPTION_AUDIT_LOGGING_ENABLED.get_bool(props),
               data_key_cache_enabled: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_ENABLED.get_bool(props),
               data_key_cache_max_size: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_MAX_SIZE.get_int(props),
-              data_key_cache_expiration_sec: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC.get_int(props),
+              data_key_cache_expiration_sec: PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC.get_float(props),
               return_unverified_data: PropertyDefinition::ENCRYPTION_RETURN_UNVERIFIED_DATA.get_bool(props)
             )
           end
@@ -74,7 +74,7 @@ module AwsAdvancedRubyDriverWrapper
 
         def initialize(kms_region:, kms_endpoint:, metadata_schema:, metadata_cache_enabled:,
                        metadata_cache_expiration_sec:, metadata_cache_refresh_interval_sec:,
-                       key_management_max_retries:, key_management_retry_backoff_base_ms:,
+                       key_management_max_retries:, key_management_retry_backoff_base_sec:,
                        audit_logging_enabled:, data_key_cache_enabled:,
                        data_key_cache_max_size:, data_key_cache_expiration_sec:, return_unverified_data:)
           super(
@@ -85,7 +85,7 @@ module AwsAdvancedRubyDriverWrapper
             metadata_cache_expiration_sec: metadata_cache_expiration_sec,
             metadata_cache_refresh_interval_sec: metadata_cache_refresh_interval_sec,
             key_management_max_retries: key_management_max_retries,
-            key_management_retry_backoff_base_ms: key_management_retry_backoff_base_ms,
+            key_management_retry_backoff_base_sec: key_management_retry_backoff_base_sec,
             audit_logging_enabled: audit_logging_enabled,
             data_key_cache_enabled: data_key_cache_enabled,
             data_key_cache_max_size: data_key_cache_max_size,
@@ -108,7 +108,7 @@ module AwsAdvancedRubyDriverWrapper
           PropertyDefinition::ENCRYPTION_METADATA_CACHE_EXPIRATION_SEC.validate!(metadata_cache_expiration_sec)
           PropertyDefinition::ENCRYPTION_METADATA_CACHE_REFRESH_INTERVAL_SEC.validate!(metadata_cache_refresh_interval_sec)
           PropertyDefinition::ENCRYPTION_KEY_MANAGEMENT_MAX_RETRIES.validate!(key_management_max_retries)
-          PropertyDefinition::ENCRYPTION_KEY_MANAGEMENT_RETRY_BACKOFF_BASE_MS.validate!(key_management_retry_backoff_base_ms)
+          PropertyDefinition::ENCRYPTION_KEY_MANAGEMENT_RETRY_BACKOFF_BASE_SEC.validate!(key_management_retry_backoff_base_sec)
           PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_MAX_SIZE.validate!(data_key_cache_max_size)
           PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC.validate!(data_key_cache_expiration_sec)
           self

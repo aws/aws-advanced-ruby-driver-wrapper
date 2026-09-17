@@ -45,6 +45,34 @@ module AwsAdvancedRubyDriverWrapper
     module RdsUtils
       extend self
 
+      # Authoritative allow-list of AWS regions that can host an RDS/Aurora endpoint.
+      KNOWN_REGIONS = %w[
+        af-south-1
+        ap-east-1 ap-east-2
+        ap-northeast-1 ap-northeast-2 ap-northeast-3
+        ap-south-1 ap-south-2
+        ap-southeast-1 ap-southeast-2 ap-southeast-3 ap-southeast-4
+        ap-southeast-5 ap-southeast-6 ap-southeast-7
+        ca-central-1 ca-west-1
+        cn-north-1 cn-northwest-1
+        eu-central-1 eu-central-2
+        eu-isoe-west-1
+        eu-north-1
+        eu-south-1 eu-south-2
+        eu-west-1 eu-west-2 eu-west-3
+        eusc-de-east-1
+        il-central-1
+        me-central-1 me-south-1
+        mx-central-1
+        sa-east-1
+        us-east-1 us-east-2
+        us-gov-east-1 us-gov-west-1
+        us-iso-east-1 us-iso-west-1
+        us-isob-east-1 us-isob-west-1
+        us-isof-east-1 us-isof-south-1
+        us-west-1 us-west-2
+      ].to_set.freeze
+
       # -- Standard commercial regions --
       AURORA_DNS_PATTERN = /
         ^(?<instance>.+)\.
@@ -356,10 +384,45 @@ module AwsAdvancedRubyDriverWrapper
 
         groups = cache_match(prepared, *DNS_PATTERNS)
         region = groups&.[]('region')
-        return region if region
+        return region if valid_region?(region)
 
         elb_match = ELB_PATTERN.match(prepared)
-        elb_match&.[]('region')
+        elb_region = elb_match&.[]('region')
+        valid_region?(elb_region) ? elb_region : nil
+      end
+
+      # Whether the given value is a real AWS region known to this wrapper.
+      #
+      # Case-insensitive. Returns false for nil/blank and for typos or otherwise
+      # incorrect values (e.g. "us-esat-1").
+      #
+      # @param region [String, nil]
+      # @return [Boolean]
+      def valid_region?(region)
+        return false if blank?(region)
+
+        KNOWN_REGIONS.include?(region.downcase)
+      end
+
+      # Whether the host carries a region segment that was parsed out of the
+      # endpoint but is NOT a real AWS region (i.e. a likely typo such as
+      # "us-esat-1").
+      #
+      # @param host [String, nil]
+      # @return [Boolean] true only when a region was captured and is invalid
+      def region_typo?(host)
+        prepared = prepared_host(host)
+        return false if blank?(prepared)
+
+        # Aurora Global Database endpoints carry the literal "global" in the region
+        # slot (e.g. "<id>.global.rds.amazonaws.com"), must never be treated as a typo.
+        return false if AURORA_GLOBAL_WRITER_DNS_PATTERN.match?(prepared)
+
+        groups = cache_match(prepared, *DNS_PATTERNS)
+        captured = groups&.[]('region')
+        return false if captured.nil? || captured.empty?
+
+        !valid_region?(captured)
       end
 
       def same_region?(host1, host2)
@@ -385,7 +448,9 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def dns_pattern_valid?(pattern)
-        pattern.include?('?')
+        return false if blank?(pattern)
+
+        pattern.count('?') == 1
       end
 
       def remove_port(host_and_port)

@@ -80,11 +80,8 @@ jobs:
       - name: 'Run KMS Encryption Integration Tests'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-encryption --info
         env:
-          RDS_CLUSTER_DOMAIN: ${{ secrets.DB_CONN_SUFFIX }}
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           KMS_KEY_ID: ${{ steps.kms.outputs.key_id }}
-          AURORA_MYSQL_DB_ENGINE_VERSION: lts
-          AURORA_PG_ENGINE_VERSION: lts
 
       - name: 'Archive encryption results'
         if: always()

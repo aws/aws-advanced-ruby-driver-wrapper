@@ -69,8 +69,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::GlobalClusterTopologyMo
   let(:initial_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'global.endpoint.rds.amazonaws.com', port: 5432) }
   let(:connection_config) do
     instance_double('ConnectionConfig', wrapper_props: {
-                      cluster_topology_refresh_rate_ms: 100,
-                      cluster_topology_high_refresh_rate_ms: 50,
+                      cluster_topology_refresh_rate_sec: 0.1,
+                      cluster_topology_high_refresh_rate_sec: 0.05,
                       cluster_topology_max_host_threads: 16
                     }, initial_host_info: initial_host_info)
   end

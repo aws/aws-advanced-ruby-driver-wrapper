@@ -111,7 +111,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
       build_plugin
       expect(AwsAdvancedRubyDriverWrapper.logger).to have_received(:warn)
-        .with(/expiration 100s below minimum #{described_class::MIN_EXPIRATION_SEC}s, clamping/o)
+        .with(/expiration 100\.0s below minimum #{described_class::MIN_EXPIRATION_SEC}s, clamping/o)
     end
 
     it 'clamps expiration above the maximum, reserving the SWR revalidation window' do
@@ -239,6 +239,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
         plugin.connect(host_info, props, true, -> {})
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError, /missing required keys/)
     end
+
+    it 'does not leak the plaintext secret when the secret is not valid JSON' do
+      plaintext_secret = 'super-secret-plaintext-password-123'
+      allow(mock_sm_client).to receive(:get_secret_value)
+        .and_return(double('Response', secret_string: plaintext_secret))
+
+      plugin = build_plugin
+      props = Concurrent::Map.new
+
+      error = nil
+      begin
+        plugin.connect(host_info, props, true, -> {})
+      rescue AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError => e
+        error = e
+      end
+
+      expect(error).not_to be_nil
+      expect(error.message).not_to include(plaintext_secret)
+      expect(error.message).to match(/not in the expected JSON format/)
+    end
   end
 
   describe 'custom endpoint' do
@@ -305,8 +325,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       props = Concurrent::Map.new
       props[:secret_id] = 'my-secret'
       props[:secret_region] = 'us-west-2'
-      props[:secret_rotation_retry_timeout_ms] = 5000
-      props[:secret_rotation_retry_base_delay_ms] = 50
+      props[:secret_rotation_retry_timeout_sec] = 5.0
+      props[:secret_rotation_retry_base_delay_sec] = 0.05
       props
     end
 
@@ -331,7 +351,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       allow(mock_storage_service).to receive(:get).and_return(cached)
       allow(mock_dialect_service).to receive(:login_error?).and_return(true)
 
-      plugin = build_plugin # default: rotation_retry_timeout_ms = 0
+      plugin = build_plugin # default: rotation_retry_timeout_sec = 0
       props = Concurrent::Map.new
       call_count = 0
 
@@ -379,7 +399,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
         secret_response
       end
 
-      short_budget = rotation_props.tap { |p| p[:secret_rotation_retry_timeout_ms] = 400 }
+      short_budget = rotation_props.tap { |p| p[:secret_rotation_retry_timeout_sec] = 0.4 }
       plugin = build_plugin(short_budget)
 
       error = nil
@@ -416,10 +436,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       allow(mock_storage_service).to receive(:get).and_return(nil)
       allow(mock_dialect_service).to receive(:login_error?).and_return(true)
 
-      budget_ms = 1000
+      budget_sec = 1.0
       props = rotation_props.tap do |p|
-        p[:secret_rotation_retry_timeout_ms] = budget_ms
-        p[:secret_rotation_retry_base_delay_ms] = 100
+        p[:secret_rotation_retry_timeout_sec] = budget_sec
+        p[:secret_rotation_retry_base_delay_sec] = 0.1
       end
       plugin = build_plugin(props)
 
@@ -439,7 +459,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       expect(slept).not_to be_empty
       expect(slept.max).to be <= described_class::MAX_RETRY_DELAY_SEC
       expect(slept.first).to be <= slept.last
-      expect(elapsed).to be < (budget_ms / 1000.0) + 0.5
+      expect(elapsed).to be < budget_sec + 0.5
     end
 
     it 'serves a stale entry and refreshes in the background through the real storage layer' do

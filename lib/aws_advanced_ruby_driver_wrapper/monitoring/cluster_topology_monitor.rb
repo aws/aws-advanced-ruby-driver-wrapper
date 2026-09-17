@@ -63,8 +63,8 @@ module AwsAdvancedRubyDriverWrapper
         service_container.dialect_service.driver_dialect.apply_monitoring_defaults(@monitoring_driver_props)
 
         props = service_container.connection_service.wrapper_props
-        @refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_REFRESH_RATE_MS.get_int(props) / 1000.0
-        @high_refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_MS.get_int(props) / 1000.0
+        @refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_REFRESH_RATE_SEC.get_float(props)
+        @high_refresh_rate_sec = PropertyDefinition::CLUSTER_TOPOLOGY_HIGH_REFRESH_RATE_SEC.get_float(props)
         @max_instance_monitors = PropertyDefinition::CLUSTER_TOPOLOGY_MAX_INSTANCE_MONITORS.get_int(props)
 
         @monitoring_connection = MonitorConnection.new(service_container.dialect_service.driver_dialect)
@@ -447,18 +447,26 @@ module AwsAdvancedRubyDriverWrapper
             return fetch_topology_and_update_cache(@monitoring_connection.get)
           end
 
-          role = check_host_role(conn)
-          if role == Host::HostRole::WRITER
-            @verified_writer = true
-            @writer_info = initial_host_info
-          end
-
           hosts = fetch_topology_and_update_cache(conn)
           if hosts.nil?
             @monitoring_connection.set(nil)
             @verified_writer = false
             @writer_info = nil
+            return nil
           end
+
+          # When the connected endpoint is the writer, record the writer as the actual instance from the
+          # fetched topology rather than initial_host_info, which is typically the cluster endpoint. The
+          # writer-verification check compares against instance-level topology entries, so recording the
+          # cluster endpoint (which never appears in the topology) would block verification until timeout.
+          if check_host_role(conn) == Host::HostRole::WRITER
+            writer = hosts.find { |h| h.role == Host::HostRole::WRITER }
+            if writer
+              @verified_writer = true
+              @writer_info = writer
+            end
+          end
+
           hosts
         end
       rescue StandardError => e
@@ -575,10 +583,22 @@ module AwsAdvancedRubyDriverWrapper
         cached_writer = hosts.find { |h| h.role == Host::HostRole::WRITER }
         return false if cached_writer.nil?
 
-        # Direct match by host or id
-        return true if cached_writer.host == verified_writer.host
+        # During a Blue/Green switchover the freshly cached topology is read from a green node, so its
+        # writer carries a green-prefixed identifier (e.g. "instance-green-abc123") while the writer this
+        # monitor verified by probing is the blue identifier. Strip the green marker from both sides so
+        # the same logical instance matches across the rename.
+        return true if green_normalized(cached_writer.host) == green_normalized(verified_writer.host)
 
-        cached_writer.id && verified_writer.id && cached_writer.id == verified_writer.id
+        cached_writer.id && verified_writer.id &&
+          green_normalized(cached_writer.id) == green_normalized(verified_writer.id)
+      end
+
+      # Strips a Blue/Green "-green-xxxxxx" marker from a host or instance id so blue and green
+      # identifiers for the same instance compare equal. Non-green values are returned unchanged.
+      def green_normalized(value)
+        return value if value.nil?
+
+        Utils::RdsUtils.remove_green_instance_prefix(value)
       end
 
       # --- Reset ---

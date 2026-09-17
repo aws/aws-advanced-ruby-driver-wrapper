@@ -242,6 +242,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::GlobalAuroraTopologyUtils do
       end
     end
 
+    context 'with a bracket-supplied region' do
+      it 'raises for a misspelled region rather than silently keying a bad template' do
+        expect do
+          subject.parse_instance_templates('[us-esat-1]?.abc-123.global.rds.amazonaws.com:5432', host_validator)
+        end.to raise_error(StandardError, /Unknown or misspelled AWS region 'us-esat-1'/)
+      end
+
+      it 'accepts a valid region regardless of case and keys it lowercase' do
+        templates = subject.parse_instance_templates(
+          '[US-East-1]?.abc-123.global.rds.amazonaws.com:5432',
+          host_validator
+        )
+
+        expect(templates.keys).to eq(['us-east-1'])
+        expect(templates['us-east-1'].host).to eq('?.abc-123.global.rds.amazonaws.com')
+      end
+    end
+
     context 'with invalid entries' do
       it 'raises an error when region cannot be determined' do
         expect do

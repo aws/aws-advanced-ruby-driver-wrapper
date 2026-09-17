@@ -41,9 +41,14 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
 
   let(:rds_util) { Integration::RdsTestUtility.utility }
 
+  def aurora_deployment?
+    Integration::TestEnvironment.current&.deployment == Integration::DatabaseEngineDeployment::AURORA
+  end
+
   context 'failover' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -179,6 +184,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'membership enforcement — dynamic endpoint changes' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.instances.size < 3
 
       @driver = env.allowed_test_drivers.first
@@ -214,7 +220,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
         pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
         # Short expiration so the monitor re-creation path is also exercised during the sleep below
-        pd::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_MS.name => 30_000,
+        pd::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_SEC.name => 30.0,
         connect_timeout: 10
       )
 
@@ -247,6 +253,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'membership enforcement - monitor picks up removed member' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       # Restricted to 2-instance clusters. With a single reader, an untargeted failover is forced to promote
       # that reader, so whichever instance the connection lands on is disrupted (the writer is demoted, the
       # reader is promoted). On larger clusters the failover could promote a different reader, leaving the
@@ -315,6 +322,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
   context 'plugin behavior' do
     before(:all) do
       env = Integration::TestEnvironment.current
+      next unless aurora_deployment? # Custom (cluster) endpoints are an Aurora-only feature.
       next if env.allowed_test_drivers.empty?
 
       @pb_driver = env.allowed_test_drivers.first
@@ -366,7 +374,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
       ).merge(
         pd::PLUGINS.name => 'custom_endpoint',
         pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO.name => true,
-        pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_MS.name => 100,
+        pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_SEC.name => 0.1,
         connect_timeout: 3
       )
       expect do
@@ -378,7 +386,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
     it 'waitForCustomEndpointInfoTimeoutMs long enough on cold cache — connection succeeds' do
       props = base_custom_endpoint_props.merge(
         pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO.name => true,
-        pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_MS.name => 5_000,
+        pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_SEC.name => 5.0,
         pd::CLUSTER_ID.name => "custom-endpoint-wait-success-#{SecureRandom.uuid[0..7]}"
       )
       conn = nil
@@ -423,7 +431,7 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
     it 'monitor re-creation after expiry — connection after monitor expires re-fetches info and succeeds' do
       props = base_custom_endpoint_props.merge(
         pd::WAIT_FOR_CUSTOM_ENDPOINT_INFO.name => true,
-        pd::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_MS.name => 1_000
+        pd::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_SEC.name => 1.0
       )
 
       # First connection — warms the cache and starts the monitor

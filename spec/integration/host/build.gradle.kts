@@ -300,6 +300,7 @@ tasks.register<Test>("test-multi-az") {
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-bg", "true")
     }
 }
@@ -311,6 +312,7 @@ tasks.register<Test>("test-pg-multi-az") {
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-mysql-driver", "true")
         systemProperty("exclude-mysql-engine", "true")
         systemProperty("exclude-bg", "true")
@@ -324,6 +326,7 @@ tasks.register<Test>("test-mysql-multi-az") {
         systemProperty("exclude-docker", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-instance", "true")
         systemProperty("exclude-pg-driver", "true")
         systemProperty("exclude-pg-engine", "true")
         systemProperty("exclude-bg", "true")

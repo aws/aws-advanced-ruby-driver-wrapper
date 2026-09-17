@@ -49,9 +49,9 @@ module AwsAdvancedRubyDriverWrapper
       def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
 
-        @retry_timeout_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_TIMEOUT_MS.get_int(props) / 1000.0
-        @retry_interval_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_INTERVAL_MS.get_int(props) / 1000.0
-        @wait_for_topology_sec = PropertyDefinition::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS.get_int(props) / 1000.0
+        @retry_timeout_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_TIMEOUT_SEC.get_float(props)
+        @retry_interval_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_INTERVAL_SEC.get_float(props)
+        @wait_for_topology_sec = PropertyDefinition::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_SEC.get_float(props)
         @host_selector_strategy = PropertyDefinition::INITIAL_CONNECTION_HOST_SELECTOR_STRATEGY.get(props)
         @accessible_regions = Utils::AccessibleRegions.parse(props)
         @subscribed_methods = SUBSCRIBED_METHODS
@@ -138,7 +138,10 @@ module AwsAdvancedRubyDriverWrapper
                 next
               end
 
-              next if dialect_service.read_only_error?(e) && substitution_strategy == :substitute_writer
+              if dialect_service.read_only_error?(e) && substitution_strategy == :substitute_writer
+                sleep(@retry_interval_sec)
+                next
+              end
 
               raise
             end
@@ -148,7 +151,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         raise Errors::AwsError,
-              "Initial connection strategy timed out after #{(@retry_timeout_sec * 1000).to_i}ms. " \
+              "Initial connection strategy timed out after #{@retry_timeout_sec}s. " \
               "Substitution: #{substitution_strategy}, verification: #{role_to_verify}"
       end
 
@@ -160,13 +163,13 @@ module AwsAdvancedRubyDriverWrapper
 
         # No instance URL available to substitute. This happens when topology hasn't been successfully queried yet.
         # Fall back to connecting via the initial endpoint.
-        # Callers that want to wait for topology first opt in via INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS (handled in #connect).
+        # Callers that want to wait for topology first opt in via INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_SEC (handled in #connect).
         logger.debug("Unable to resolve a substitute instance host for strategy '#{substitution_strategy}'; \
           connecting via the original endpoint '#{original_host_info&.host}'")
         original_host_info
       end
 
-      # When INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS is positive and only the initial (non-instance)
+      # When INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_SEC is positive and only the initial (non-instance)
       # endpoint is known, block up to the timeout for the topology monitor to discover instance URLs
       # before making substitution/verification decisions. Limitation: force_refresh_host_list returns
       # the initial host list when the dialect is not final, so topology may still be unavailable after waiting.

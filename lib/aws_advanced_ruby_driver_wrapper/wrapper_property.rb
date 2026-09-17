@@ -43,6 +43,11 @@ module AwsAdvancedRubyDriverWrapper
       val.is_a?(Integer) ? val : val.to_i
     end
 
+    def get_float(props, override = nil)
+      val = get(props, override)
+      val.is_a?(Float) ? val : val.to_f
+    end
+
     def get_string(props, override = nil)
       val = get(props, override)
       val&.to_s

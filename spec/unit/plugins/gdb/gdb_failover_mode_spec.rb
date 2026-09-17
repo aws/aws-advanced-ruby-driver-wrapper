@@ -27,6 +27,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverMode do
       expect(described_class.from_value('')).to be_nil
     end
 
+    it 'returns nil for a whitespace-only string' do
+      expect(described_class.from_value('   ')).to be_nil
+      expect(described_class.from_value("\n")).to be_nil
+      expect(described_class.from_value("\t \n")).to be_nil
+    end
+
+    it 'tolerates surrounding whitespace and newlines' do
+      expect(described_class.from_value(' strict-home-reader ')).to eq(described_class::STRICT_HOME_READER)
+      expect(described_class.from_value("strict_writer\n")).to eq(described_class::STRICT_WRITER)
+      expect(described_class.from_value("\tAny-Reader-Or-Writer\n")).to eq(described_class::ANY_READER_OR_WRITER)
+    end
+
     it 'parses kebab-case values' do
       expect(described_class.from_value('strict-writer')).to eq(described_class::STRICT_WRITER)
       expect(described_class.from_value('strict-home-reader')).to eq(described_class::STRICT_HOME_READER)

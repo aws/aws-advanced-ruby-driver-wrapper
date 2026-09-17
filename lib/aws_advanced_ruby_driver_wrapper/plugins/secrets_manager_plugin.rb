@@ -100,13 +100,18 @@ module AwsAdvancedRubyDriverWrapper
         @password_key = PropertyDefinition::SECRET_PASSWORD_KEY.get_string(props)
         @expiration_sec = resolve_expiration(props)
         @cache_key = "#{@secret_id}:#{@region}"
-        @rotation_retry_timeout_sec = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_MS.get_int(props) / 1000.0
-        @rotation_retry_base_delay_sec = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_MS.get_int(props) / 1000.0
+        @rotation_retry_timeout_sec = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_SEC.get_float(props)
+        @rotation_retry_base_delay_sec = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_SEC.get_float(props)
 
         service_container.storage_service.register(
           SECRETS_MANAGER_CACHE_NAME,
           ttl: SECRET_CACHE_DISPOSAL_SEC
         )
+
+        # The client is built lazily and reused for the plugin instance's lifetime. Concurrent::Delay guarantees
+        # the builder block runs at most once, so a racing fetch can never construct and discard a second client.
+        @secrets_client = Concurrent::Delay.new { build_secrets_client }
+
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
@@ -242,9 +247,9 @@ module AwsAdvancedRubyDriverWrapper
 
       def fetch_and_store_secret
         response = secrets_client.get_secret_value(secret_id: @secret_id)
-        parsed = JSON.parse(response.secret_string)
+        parsed = parse_secret_string(response.secret_string)
 
-        unless parsed.key?(@username_key) && parsed.key?(@password_key)
+        unless parsed.is_a?(Hash) && parsed.key?(@username_key) && parsed.key?(@password_key)
           raise Errors::SecretsManagerAuthError,
                 "Secret JSON missing required keys: '#{@username_key}' and/or '#{@password_key}'"
         end
@@ -258,6 +263,17 @@ module AwsAdvancedRubyDriverWrapper
         entry
       end
 
+      # Parse the raw secret string as JSON. A plaintext (non-JSON) secret makes
+      # +JSON.parse+ raise a +JSON::ParserError+. Catch that error and re-raise a
+      # +SecretsManagerAuthError+ with a message that never includes the secret.
+      def parse_secret_string(secret_string)
+        JSON.parse(secret_string)
+      rescue JSON::ParserError
+        raise Errors::SecretsManagerAuthError,
+              'The secret is not in the expected JSON format. Ensure the secret stored in AWS ' \
+              'Secrets Manager is a JSON object containing the configured username and password keys.'
+      end
+
       def apply_secret(driver_props)
         raise Errors::SecretsManagerAuthError, 'Failed to fetch database credentials from AWS Secrets Manager' unless @secret
 
@@ -266,13 +282,16 @@ module AwsAdvancedRubyDriverWrapper
         driver_props[:password] = @secret.password
       end
 
+      # Returns the shared client, building it on first use. Thread-safe and build-once.
       def secrets_client
-        @secrets_client ||= begin
-          opts = { region: @region, credentials: @credentials_provider }
-          endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
-          opts[:endpoint] = endpoint if endpoint
-          Aws::SecretsManager::Client.new(**opts)
-        end
+        @secrets_client.value!
+      end
+
+      def build_secrets_client
+        opts = { region: @region, credentials: @credentials_provider }
+        endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
+        opts[:endpoint] = endpoint if endpoint
+        Aws::SecretsManager::Client.new(**opts)
       end
 
       def resolve_region(props)
@@ -288,7 +307,7 @@ module AwsAdvancedRubyDriverWrapper
       # only be served stale until then. Clamp it to the range [MIN_EXPIRATION_SEC, MAX_EXPIRATION_SEC],
       # where MAX_EXPIRATION_SEC reserves SWR_REVALIDATION_BUDGET_SEC before disposal for the refresh to complete.
       def resolve_expiration(props)
-        configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_int(props)
+        configured = PropertyDefinition::SECRET_EXPIRATION_SEC.get_float(props)
         if configured < MIN_EXPIRATION_SEC
           logger.warn("SecretsManagerPlugin: expiration #{configured}s below minimum #{MIN_EXPIRATION_SEC}s, clamping")
           MIN_EXPIRATION_SEC
