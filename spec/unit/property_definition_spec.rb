@@ -91,8 +91,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::PropertyDefinition do
     end
   end
 
+  describe 'WrapperProperty#get_float' do
+    it 'returns float from float value' do
+      result = described_class::FAILOVER_TIMEOUT_SEC.get_float({ failover_timeout_sec: 1.5 })
+      expect(result).to eq(1.5)
+    end
+
+    it 'returns float from string value' do
+      result = described_class::FAILOVER_TIMEOUT_SEC.get_float({ failover_timeout_sec: '1.5' })
+      expect(result).to eq(1.5)
+    end
+
+    it 'returns the float default when not present' do
+      result = described_class::FAILOVER_TIMEOUT_SEC.get_float({})
+      expect(result).to eq(300.0)
+    end
+  end
+
   describe 'WrapperProperty#validate!' do
-    context 'POSITIVE_INTEGER validator' do
+    context 'POSITIVE_FLOAT validator' do
       it 'raises for a negative value' do
         expect { described_class::FAILOVER_TIMEOUT_SEC.validate!(-1) }.to raise_error(ArgumentError, /failover_timeout_sec.*-1/)
       end
@@ -104,21 +121,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::PropertyDefinition do
       it 'does not raise for a positive value' do
         expect { described_class::FAILOVER_TIMEOUT_SEC.validate!(100) }.not_to raise_error
       end
+
+      it 'does not raise for a positive fractional value' do
+        expect { described_class::FAILOVER_TIMEOUT_SEC.validate!(0.1) }.not_to raise_error
+      end
     end
 
-    context 'NON_NEGATIVE_INTEGER validator' do
+    context 'NON_NEGATIVE_FLOAT validator' do
       it 'raises for a negative value' do
         expect do
-          described_class::SECRET_ROTATION_RETRY_TIMEOUT_MS.validate!(-1)
-        end.to raise_error(ArgumentError, /secret_rotation_retry_timeout_ms.*-1/)
+          described_class::SECRET_ROTATION_RETRY_TIMEOUT_SEC.validate!(-1)
+        end.to raise_error(ArgumentError, /secret_rotation_retry_timeout_sec.*-1/)
       end
 
       it 'does not raise for zero' do
-        expect { described_class::SECRET_ROTATION_RETRY_TIMEOUT_MS.validate!(0) }.not_to raise_error
+        expect { described_class::SECRET_ROTATION_RETRY_TIMEOUT_SEC.validate!(0) }.not_to raise_error
       end
 
       it 'does not raise for a positive value' do
-        expect { described_class::SECRET_ROTATION_RETRY_TIMEOUT_MS.validate!(100) }.not_to raise_error
+        expect { described_class::SECRET_ROTATION_RETRY_TIMEOUT_SEC.validate!(100) }.not_to raise_error
       end
     end
 

@@ -32,7 +32,7 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           def to_s
-            "#{self.class.name}@#{object_id.to_s(16)} [" \
+            "#{self.class.name.split('::').last}@#{object_id.to_s(16)} [" \
               "host: #{@host || '<null>'}, " \
               "port: #{@port || '<null>'}, " \
               "role: #{@role || '<null>'}, " \
@@ -43,7 +43,7 @@ module AwsAdvancedRubyDriverWrapper
           # configured timeout elapses.
           def wait_while_in_progress(wrapper_props, storage_service, bgd_id, sleep_time_sec = MINIMUM_SLEEP_CHUNK_SEC)
             bg_status = storage_service.get(BlueGreenPlugin::BLUE_GREEN_NAME, bgd_id)
-            remaining_sec = PropertyDefinition::BG_CONNECT_TIMEOUT_MS.get_int(wrapper_props) / 1000.0
+            remaining_sec = PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props)
 
             while remaining_sec.positive? && bg_status&.current_phase == Phase::IN_PROGRESS
               sleep_sec = [sleep_time_sec, remaining_sec].min
@@ -53,7 +53,7 @@ module AwsAdvancedRubyDriverWrapper
             end
 
             if bg_status&.current_phase == Phase::IN_PROGRESS
-              raise Errors::BlueGreenTimeoutError, yield(PropertyDefinition::BG_CONNECT_TIMEOUT_MS.get_int(wrapper_props))
+              raise Errors::BlueGreenTimeoutError, yield(PropertyDefinition::BG_CONNECT_TIMEOUT_SEC.get_float(wrapper_props))
             end
 
             bg_status

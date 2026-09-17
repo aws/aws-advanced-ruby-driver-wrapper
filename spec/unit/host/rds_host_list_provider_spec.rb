@@ -137,6 +137,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
         )
       end
     end
+
+    context 'with a host pattern containing a typo in the region' do
+      let(:wrapper_props) { { cluster_instance_host_pattern: '?.abc123.us-esat-1.rds.amazonaws.com' } }
+
+      it 'fails fast rather than letting monitors spin on a non-existent region' do
+        expect { provider }.to raise_error(
+          AwsAdvancedRubyDriverWrapper::Errors::AwsError, /unknown or misspelled AWS region/
+        )
+      end
+    end
+
+    context 'with a host pattern containing a valid region' do
+      let(:wrapper_props) { { cluster_instance_host_pattern: '?.abc123.us-east-1.rds.amazonaws.com' } }
+
+      it 'accepts the pattern' do
+        expect(provider.instance_template.host).to eq('?.abc123.us-east-1.rds.amazonaws.com')
+      end
+    end
   end
 
   describe '#refresh' do
@@ -229,14 +247,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
 
   describe 'monitoring wrapper overrides' do
     let(:prefixed_wrapper_config) do
-      { AwsAdvancedRubyDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_ms: 1000 } }
+      { AwsAdvancedRubyDriverWrapper::PropertyDefinition::TOPOLOGY_MONITORING_PREFIX => { cluster_topology_refresh_rate_sec: 1 } }
     end
 
     it 'separates wrapper props from driver props' do
       wrapper = provider.instance_variable_get(:@monitoring_wrapper_props)
       driver = provider.instance_variable_get(:@monitoring_driver_props)
-      expect(wrapper[:cluster_topology_refresh_rate_ms]).to eq(1000)
-      expect(driver).not_to have_key(:cluster_topology_refresh_rate_ms)
+      expect(wrapper[:cluster_topology_refresh_rate_sec]).to eq(1)
+      expect(driver).not_to have_key(:cluster_topology_refresh_rate_sec)
     end
   end
 end

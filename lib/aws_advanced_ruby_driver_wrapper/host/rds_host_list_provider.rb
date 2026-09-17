@@ -176,9 +176,14 @@ module AwsAdvancedRubyDriverWrapper
           raise Errors::AwsError, "cluster_instance_host_pattern is not supported for RDS Proxy: '#{pattern}'"
         end
 
-        return unless url_type == Utils::RdsUrlType::RDS_CUSTOM_CLUSTER
+        if url_type == Utils::RdsUrlType::RDS_CUSTOM_CLUSTER
+          raise Errors::AwsError, "cluster_instance_host_pattern is not supported for RDS Custom Clusters: '#{pattern}'"
+        end
 
-        raise Errors::AwsError, "cluster_instance_host_pattern is not supported for RDS Custom Clusters: '#{pattern}'"
+        return unless Utils::RdsUtils.region_typo?(pattern)
+
+        raise Errors::AwsError,
+              "cluster_instance_host_pattern '#{pattern}' contains an unknown or misspelled AWS region"
       end
 
       def register_monitor_type

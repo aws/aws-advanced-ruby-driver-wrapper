@@ -37,13 +37,13 @@ module AwsAdvancedRubyDriverWrapper
           @service_container = service_container
           @props = props
           @should_wait_for_info = PropertyDefinition::WAIT_FOR_CUSTOM_ENDPOINT_INFO.get_bool(props)
-          @wait_timeout_sec = PropertyDefinition::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_MS.get_int(props) / 1000.0
+          @wait_timeout_sec = PropertyDefinition::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_SEC.get_float(props)
 
           @custom_endpoint_host = nil
           @endpoint_id = nil
           @region = nil
 
-          monitor_expiration_sec = PropertyDefinition::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_MS.get_int(props) / 1000.0
+          monitor_expiration_sec = PropertyDefinition::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_SEC.get_float(props)
           service_container.monitor_service.register_type(
             MONITOR_TYPE,
             expiration_timeout_sec: monitor_expiration_sec,
@@ -126,9 +126,9 @@ module AwsAdvancedRubyDriverWrapper
               @custom_endpoint_host,
               @endpoint_id,
               @region,
-              PropertyDefinition::CUSTOM_ENDPOINT_INFO_REFRESH_RATE_MS.get_int(props),
+              PropertyDefinition::CUSTOM_ENDPOINT_INFO_REFRESH_RATE_SEC.get_float(props),
               PropertyDefinition::CUSTOM_ENDPOINT_INFO_REFRESH_RATE_BACKOFF_FACTOR.get_int(props),
-              PropertyDefinition::CUSTOM_ENDPOINT_INFO_MAX_REFRESH_RATE_MS.get_int(props)
+              PropertyDefinition::CUSTOM_ENDPOINT_INFO_MAX_REFRESH_RATE_SEC.get_float(props)
             )
           end
         end

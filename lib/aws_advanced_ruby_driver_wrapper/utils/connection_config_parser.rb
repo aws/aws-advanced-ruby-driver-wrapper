@@ -191,7 +191,8 @@ module AwsAdvancedRubyDriverWrapper
 
       # Validates that values in a config hash match the expected type of their corresponding WrapperProperty.
       # Raises TypeError if a value is present but incompatible. Strings that represent valid integers
-      # are accepted for Integer-typed properties.
+      # are accepted for Integer-typed properties. Float-typed properties also accept Integers and
+      # strings that represent a valid integer or decimal number.
       def validate_props!(config)
         config.each do |key, value|
           prop = PropertyDefinition::KNOWN_PROPERTIES[key]
@@ -202,6 +203,9 @@ module AwsAdvancedRubyDriverWrapper
           valid = if prop.type == :boolean
                     value.is_a?(TrueClass) || value.is_a?(FalseClass) ||
                       (value.is_a?(String) && BOOLEAN_STRINGS.include?(value.downcase))
+                  elsif prop.type == Float
+                    value.is_a?(Float) || value.is_a?(Integer) ||
+                      (value.is_a?(String) && value.match?(/\A-?\d+(\.\d+)?\z/))
                   else
                     value.is_a?(prop.type) ||
                       (prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/))

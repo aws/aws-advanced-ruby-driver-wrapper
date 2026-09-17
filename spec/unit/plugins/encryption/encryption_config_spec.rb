@@ -47,7 +47,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(config.metadata_cache_expiration_sec).to eq(3600)
       expect(config.metadata_cache_refresh_interval_sec).to eq(300)
       expect(config.key_management_max_retries).to eq(3)
-      expect(config.key_management_retry_backoff_base_ms).to eq(100)
+      expect(config.key_management_retry_backoff_base_sec).to eq(0.1)
       expect(config.audit_logging_enabled).to be(false)
       expect(config.data_key_cache_enabled).to be(true)
       expect(config.data_key_cache_max_size).to eq(1000)
@@ -65,7 +65,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
           encryption_metadata_cache_expiration_sec: 60,
           encryption_metadata_cache_refresh_interval_sec: 0,
           encryption_key_management_max_retries: 5,
-          encryption_key_management_retry_backoff_base_ms: 250,
+          encryption_key_management_retry_backoff_base_sec: 0.25,
           encryption_audit_logging_enabled: true,
           encryption_data_key_cache_enabled: false,
           encryption_data_key_cache_max_size: 10,
@@ -81,7 +81,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(config.metadata_cache_expiration_sec).to eq(60)
       expect(config.metadata_cache_refresh_interval_sec).to eq(0)
       expect(config.key_management_max_retries).to eq(5)
-      expect(config.key_management_retry_backoff_base_ms).to eq(250)
+      expect(config.key_management_retry_backoff_base_sec).to eq(0.25)
       expect(config.audit_logging_enabled).to be(true)
       expect(config.data_key_cache_enabled).to be(false)
       expect(config.data_key_cache_max_size).to eq(10)
@@ -171,15 +171,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
 
     it 'rejects a cache expiration that is not positive' do
       expect { build_config(metadata_cache_expiration_sec: 0) }
-        .to raise_error(ArgumentError, /encryption_metadata_cache_expiration_sec must be a positive integer/)
+        .to raise_error(ArgumentError, /encryption_metadata_cache_expiration_sec must be a positive number/)
       expect { build_config(data_key_cache_expiration_sec: -1) }
-        .to raise_error(ArgumentError, /encryption_data_key_cache_expiration_sec must be a positive integer/)
+        .to raise_error(ArgumentError, /encryption_data_key_cache_expiration_sec must be a positive number/)
     end
 
     # A zero refresh interval is how background refresh is turned off, so it has to be allowed.
     it 'rejects a negative refresh interval but allows zero' do
       expect { build_config(metadata_cache_refresh_interval_sec: -1) }
-        .to raise_error(ArgumentError, /encryption_metadata_cache_refresh_interval_sec must be a non-negative integer/)
+        .to raise_error(ArgumentError, /encryption_metadata_cache_refresh_interval_sec must be a non-negative number/)
       expect { build_config(metadata_cache_refresh_interval_sec: 0) }.not_to raise_error
     end
 
@@ -190,8 +190,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
     end
 
     it 'rejects a backoff base that is not positive' do
-      expect { build_config(key_management_retry_backoff_base_ms: 0) }
-        .to raise_error(ArgumentError, /encryption_key_management_retry_backoff_base_ms must be a positive integer/)
+      expect { build_config(key_management_retry_backoff_base_sec: 0) }
+        .to raise_error(ArgumentError, /encryption_key_management_retry_backoff_base_sec must be a positive number/)
     end
 
     it 'rejects a cache size that is not positive' do

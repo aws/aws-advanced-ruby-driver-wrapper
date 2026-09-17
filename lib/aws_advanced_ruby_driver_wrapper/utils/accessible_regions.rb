@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative '../errors'
 require_relative '../property_definition'
 require_relative 'rds_utils'
 
@@ -27,6 +28,14 @@ module AwsAdvancedRubyDriverWrapper
         return nil if value.nil? || value.strip.empty?
 
         regions = value.split(',').map { |r| r.strip.downcase }.reject(&:empty?)
+
+        invalid = regions.reject { |r| RdsUtils.valid_region?(r) }
+        unless invalid.empty?
+          raise Errors::AwsError,
+                "#{PropertyDefinition::ACCESSIBLE_REGIONS.name} contains unknown or misspelled AWS " \
+                "region(s): #{invalid.join(', ')}"
+        end
+
         regions.empty? ? nil : regions.to_set
       end
 

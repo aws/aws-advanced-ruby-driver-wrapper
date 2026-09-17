@@ -38,10 +38,14 @@ require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
 # is visible from the resulting connection object on its own. Both are observable through
 # ConnectionService#current_host_info.
 RSpec.describe 'InitialConnectionStrategy', :integration,
-               deployments: [Integration::DatabaseEngineDeployment::AURORA],
+               deployments: [
+                 Integration::DatabaseEngineDeployment::AURORA,
+                 Integration::DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
+               ],
                disable_on_features: [Integration::TestEnvironmentFeatures::PERFORMANCE] do
   let(:rds_utils) { AwsAdvancedRubyDriverWrapper::Utils::RdsUtils }
   let(:props) { AwsAdvancedRubyDriverWrapper::PropertyDefinition }
+  let(:dialect_codes) { AwsAdvancedRubyDriverWrapper::DialectCodes }
 
   let(:initial_connection_props) do
     base_wrapper_props.merge(
@@ -50,9 +54,12 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
   end
 
   let(:explicit_dialect) do
+    multi_az = env.deployment == Integration::DatabaseEngineDeployment::RDS_MULTI_AZ_CLUSTER
     case env.engine
-    when Integration::DatabaseEngine::PG then AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_PG
-    when Integration::DatabaseEngine::MYSQL then AwsAdvancedRubyDriverWrapper::DialectCodes::AURORA_MYSQL
+    when Integration::DatabaseEngine::PG
+      multi_az ? dialect_codes::MULTI_AZ_PG_CLUSTER : dialect_codes::AURORA_PG
+    when Integration::DatabaseEngine::MYSQL
+      multi_az ? dialect_codes::MULTI_AZ_MYSQL_CLUSTER : dialect_codes::AURORA_MYSQL
     else raise "Unsupported engine: #{env.engine}"
     end
   end
@@ -116,7 +123,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       # so the plugin genuinely waits for topology rather than falling back to the cluster endpoint.
       cold_props = initial_connection_props.merge(
         props::DIALECT.name => explicit_dialect,
-        props::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS.name => 30_000
+        props::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_SEC.name => 30.0
       )
 
       conn = Integration::DriverHelper.wrapper_connect(drv, **reader_cluster_config, **cold_props)
@@ -274,8 +281,8 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       initial_connection_props.merge(
         props::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
-        props::INITIAL_CONNECTION_RETRY_TIMEOUT_MS.name => 10_000,
-        props::INITIAL_CONNECTION_RETRY_INTERVAL_MS.name => 1000
+        props::INITIAL_CONNECTION_RETRY_TIMEOUT_SEC.name => 10.0,
+        props::INITIAL_CONNECTION_RETRY_INTERVAL_SEC.name => 1.0
       )
     end
 
