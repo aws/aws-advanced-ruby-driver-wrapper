@@ -50,3 +50,8 @@ The plugin is designed to keep working across a rotation:
 - Fetched credentials are cached for `secret_expiration_sec` (default `870`), then re-fetched from Secrets Manager, so a rotated secret is picked up automatically once the cache entry expires.
 - If a connection attempt fails to authenticate with the cached credentials, the plugin forces an immediate re-fetch and retries once, which covers the common case where rotation happened between two connections.
 - During the brief window in which a rotation is in progress, you can have the plugin retry with exponential backoff by setting `secret_rotation_retry_timeout_sec` to a non-zero value (and, optionally, tuning `secret_rotation_retry_base_delay_sec`). This bridges the gap until the newly rotated credentials become valid.
+
+## Plugin Compatibility
+
+> [!IMPORTANT]
+> **`secrets_manager` and `iam` are mutually exclusive.** Only one authentication plugin may be active at a time. Configuring both will raise a `PluginConflictError` at connection initialization.

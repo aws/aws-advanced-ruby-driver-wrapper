@@ -537,4 +537,36 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       expect { described_class.new(container) }.not_to raise_error
     end
   end
+
+  describe '#ensure_single_auth_plugin' do
+    it 'raises when both iam and secrets_manager are specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'iam,secrets_manager')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /Only one authentication plugin may be used at a time/)
+    end
+
+    it 'raises when secrets_manager and iam are specified in reverse order' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'secrets_manager,iam')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /Only one authentication plugin may be used at a time/)
+    end
+
+    it 'includes both conflicting plugin names in the error message' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'iam,secrets_manager')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /iam.*secrets_manager|secrets_manager.*iam/)
+    end
+
+    it 'does not raise when neither auth plugin is specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'failover')
+      expect { described_class.new(container) }.not_to raise_error
+    end
+
+    it 'raises before instantiating any plugins' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'iam,secrets_manager')
+      expect(AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin).not_to receive(:new)
+      expect(AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin).not_to receive(:new)
+      expect { described_class.new(container) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError)
+    end
+  end
 end
