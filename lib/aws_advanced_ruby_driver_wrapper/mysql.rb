@@ -20,7 +20,7 @@ require_relative 'ruby_method'
 require_relative 'errors'
 
 module AwsAdvancedRubyDriverWrapper
-  class Mysql2WrapperClient
+  class WrapperMysql2Client
     def self.new(**)
       instance = allocate
       instance.send(:initialize, **)
