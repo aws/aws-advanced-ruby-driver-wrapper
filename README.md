@@ -39,6 +39,9 @@ The plugin-based design ensures applications only load the functionality they ne
 | Initial Connection Strategy    | Controls how the initial connection to a cluster is established and verified.                                                                                              |
 | KMS Encryption                 | Transparently encrypts and decrypts individual table columns using data keys held in AWS KMS. See [Using the KMS Encryption Plugin](./docs/UsingTheKmsEncryptionPlugin.md). |
 
+> [!IMPORTANT]
+> **`iam` and `secrets_manager` are mutually exclusive.** Only one authentication plugin may be active at a time. Configuring both will raise a `PluginConflictError` at connection initialization.
+
 ### Preserve Existing Workflows
 
 The wrapper design allows developers to continue using their preferred Ruby drivers and existing ActiveRecord code while gaining service-specific enhancements. No application rewrites are required — you only change the adapter name in your database configuration.

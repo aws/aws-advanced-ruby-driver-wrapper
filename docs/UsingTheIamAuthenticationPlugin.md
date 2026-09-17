@@ -124,3 +124,8 @@ Example IAM policy:
   ]
 }
 ```
+
+## Plugin Compatibility
+
+> [!IMPORTANT]
+> **`iam` and `secrets_manager` are mutually exclusive.** Only one authentication plugin may be active at a time. Configuring both will raise a `PluginConflictError` at connection initialization.

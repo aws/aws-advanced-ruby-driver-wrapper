@@ -52,6 +52,7 @@ module AwsAdvancedRubyDriverWrapper
 
     class IamAuthError < AwsError; end
     class SecretsManagerAuthError < AwsError; end
+    class PluginConflictError < AwsError; end
     class BlueGreenTimeoutError < AwsError; end
     class BlueGreenSwitchoverError < AwsError; end
   end
