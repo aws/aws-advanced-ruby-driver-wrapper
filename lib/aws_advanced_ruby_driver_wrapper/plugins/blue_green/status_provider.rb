@@ -62,14 +62,14 @@ module AwsAdvancedRubyDriverWrapper
           @monitor_generation    = 0
 
           @status_check_interval_map = {
-            IntervalRate::BASELINE => PropertyDefinition::BG_INTERVAL_BASELINE_MS.get(wrapper_props),
-            IntervalRate::INCREASED => PropertyDefinition::BG_INTERVAL_INCREASED_MS.get(wrapper_props),
-            IntervalRate::HIGH => PropertyDefinition::BG_INTERVAL_HIGH_MS.get(wrapper_props)
+            IntervalRate::BASELINE => PropertyDefinition::BG_INTERVAL_BASELINE_SEC.get_float(wrapper_props) * 1000,
+            IntervalRate::INCREASED => PropertyDefinition::BG_INTERVAL_INCREASED_SEC.get_float(wrapper_props) * 1000,
+            IntervalRate::HIGH => PropertyDefinition::BG_INTERVAL_HIGH_SEC.get_float(wrapper_props) * 1000
           }
 
           @green_topology_recognized_logged = false
 
-          @timer           = SwitchoverTimer.new(PropertyDefinition::BG_SWITCHOVER_TIMEOUT_MS.get(wrapper_props) * 1_000_000)
+          @timer           = SwitchoverTimer.new(PropertyDefinition::BG_SWITCHOVER_TIMEOUT_SEC.get_float(wrapper_props) * 1_000_000_000)
           @event_log       = PhaseEventLog.new
           @host_mapper     = HostMapper.new
           @iam_tracker     = IamHostTracker.new(on_all_changed: method(:on_all_green_hosts_changed))

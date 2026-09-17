@@ -123,7 +123,7 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       # so the plugin genuinely waits for topology rather than falling back to the cluster endpoint.
       cold_props = initial_connection_props.merge(
         props::DIALECT.name => explicit_dialect,
-        props::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_MS.name => 30_000
+        props::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_SEC.name => 30.0
       )
 
       conn = Integration::DriverHelper.wrapper_connect(drv, **reader_cluster_config, **cold_props)
@@ -281,8 +281,8 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
       initial_connection_props.merge(
         props::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
-        props::INITIAL_CONNECTION_RETRY_TIMEOUT_MS.name => 10_000,
-        props::INITIAL_CONNECTION_RETRY_INTERVAL_MS.name => 1000
+        props::INITIAL_CONNECTION_RETRY_TIMEOUT_SEC.name => 10.0,
+        props::INITIAL_CONNECTION_RETRY_INTERVAL_SEC.name => 1.0
       )
     end
 

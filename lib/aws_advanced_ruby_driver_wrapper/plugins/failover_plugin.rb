@@ -38,7 +38,7 @@ module AwsAdvancedRubyDriverWrapper
         @wrapper_props = props
 
         @retry_util = Utils::RetryUtil.new(service_container)
-        @failover_timeout = PropertyDefinition::FAILOVER_TIMEOUT_SEC.get_int(props)
+        @failover_timeout = PropertyDefinition::FAILOVER_TIMEOUT_SEC.get_float(props)
         @reader_selector_strategy = PropertyDefinition::FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
         @failover_mode = nil
         @rds_url_type = nil

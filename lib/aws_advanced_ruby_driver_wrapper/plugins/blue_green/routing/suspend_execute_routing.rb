@@ -34,8 +34,8 @@ module AwsAdvancedRubyDriverWrapper
           def apply(method_name, wrapper_props, storage_service)
             hold_start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
-            wait_while_in_progress(wrapper_props, storage_service, @bgd_id, SLEEP_TIME_SEC) do |timeout_ms|
-              "Blue/Green Deployment switchover is still in progress after #{timeout_ms} ms. Try '#{method_name}' again later."
+            wait_while_in_progress(wrapper_props, storage_service, @bgd_id, SLEEP_TIME_SEC) do |timeout_sec|
+              "Blue/Green Deployment switchover is still in progress after #{timeout_sec} s. Try '#{method_name}' again later."
             end
 
             elapsed_ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - hold_start_time) * 1000).round
