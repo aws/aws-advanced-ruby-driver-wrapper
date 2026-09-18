@@ -2,6 +2,7 @@
 /.yardoc
 /_yardoc/
 /coverage/
+/benchmarks/results/
 /pkg/
 /spec/reports/
 /spec/examples.txt

@@ -1,0 +1,70 @@
+# Benchmarks for the AWS Advanced Ruby Driver Wrapper
+
+Micro-benchmarks measuring the wrapper's own overhead, using
+[benchmark-ips](https://github.com/evanphx/benchmark-ips). Results are reported in
+iterations per second (higher is better).
+
+## Benchmark files
+
+| File | Measures | Needs a database? |
+| --- | --- | --- |
+| `wrapper_overhead_benchmarks.rb` | The wrapper's own overhead versus the driver it wraps: each wrapped call (query, prepare, escape, ping, result iteration) paired with the identical raw call against the same fake driver | No |
+| `connection_plugin_manager_benchmarks.rb` | Plugin manager pipeline overhead (connect, internal connect, execute) as the plugin count scales across 0, 1, 2, 5, and 10 plugins | No |
+| `real_plugin_chain_benchmarks.rb` | Cost of the `execute` pipeline with each real plugin enabled individually, plus the default plugin combo and a no-plugin baseline | No |
+| `service_benchmarks.rb` | Per-call cost of the collaborating services (connection, host, session-state, error handler) that back the plugins | No |
+| `rds_utils_benchmarks.rb` | RDS endpoint classification and metadata extraction, cached and uncached | No |
+| `connection_url_parser_benchmarks.rb` | Per-connection URL and libpq conninfo parsing, and host-list splitting | No |
+| `sql_method_analyzer_benchmarks.rb` | The per-statement SQL inspection that runs on every executed statement (transaction open/close, autocommit) | No |
+| `storage_benchmarks.rb` | The caches behind topology and monitor lookups: expiration cache, sliding expiration cache, storage service | No |
+
+## Running
+
+Install the benchmark dependency, then run any file directly:
+
+```bash
+bundle install
+bundle exec ruby benchmarks/wrapper_overhead_benchmarks.rb
+# ...and likewise for any other file in benchmarks/
+```
+
+Each report prints an iterations-per-second figure, `compare!` prints the relative
+speeds, and a summary table is printed at the end.
+
+## Results output
+
+Each run writes machine-readable results to `benchmarks/results/` (gitignored), one CSV per
+benchmark (the plugin-manager benchmark writes one CSV per pipeline: `connect.csv`,
+`internal_connect.csv`, `execute.csv`). Every row carries ops/second and an error percentage;
+`wrapper_overhead.csv` additionally carries the raw ops/second and the overhead in nanoseconds
+per call.
+
+## Charts
+
+Charts are produced by hand, not by this code: run the benchmark, then load the CSV into
+whatever chart tool you prefer and export the images the docs embed. The benchmark
+deliberately stops at emitting the data.
+
+## Reading the results
+
+Read how a pipeline's ops/second falls as the plugin count rises, not the absolute numbers.
+The absolute figures depend on the machine and are meaningless on their own; the shape of
+the curve, and the gap between 0 and 10 plugins, is the cost the plugin chain adds.
+
+The services behind the terminal default plugin are replaced with constant-cost stubs
+(`support/benchmark_services.rb`), so no real connection is opened and the terminal call is
+close to free. What remains as the count grows is the pipeline's own per-call cost. The
+plugins are no-op pass-throughs (`support/benchmark_plugin.rb`) that only hand control to the
+next plugin.
+
+Comparing across wrappers: compare the **overhead per plugin** (the slope of the curve, in
+time per call), not the raw ops/second. Absolute numbers differ by runtime and by what each
+wrapper's benchmark stubs, so only the incremental per-plugin cost is comparable.
+
+## What is covered, and what is not
+
+The plugin manager drives three pipelines: `connect`, `internal_connect`, and `execute`.
+`connect` and `execute` have direct counterparts in the other wrappers; `internal_connect` is
+the counterpart to `forceConnect`. Operations that other wrappers route through their plugin manager -
+initializing the host list provider, connection-changed and host-list-changed notifications,
+and releasing resources - are handled by separate services here rather than by the plugin
+manager, so they are not part of this benchmark.
