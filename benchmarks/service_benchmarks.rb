@@ -41,7 +41,7 @@ require 'benchmark/ips'
 require 'csv'
 require 'fileutils'
 require 'aws_advanced_ruby_driver_wrapper'
-require_relative 'support/services_fixtures'
+require_relative 'support/service_fixtures'
 
 include AwsAdvancedRubyDriverWrapper # rubocop:disable Style/MixinUsage
 
