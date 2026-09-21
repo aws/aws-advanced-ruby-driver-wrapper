@@ -296,4 +296,53 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
       end
     end
   end
+
+  # transaction_effect computes opens/closes/autocommit in one pass; it must agree with the
+  # individual predicates it replaces on the hot path.
+  describe '.transaction_effect' do
+    it 'reports a transaction start as opening' do
+      effect = analyzer.transaction_effect(EXEC, ['BEGIN'], autocommit: true, autocommit_before: true)
+      expect(effect.opens_transaction).to be(true)
+      expect(effect.closes_transaction).to be(false)
+    end
+
+    it 'reports a statement under autocommit-off as opening a transaction scope' do
+      effect = analyzer.transaction_effect(EXEC, ['SELECT * FROM t'], autocommit: false, autocommit_before: false)
+      expect(effect.opens_transaction).to be(true)
+    end
+
+    it 'reports a plain statement under autocommit-on as neither opening nor closing' do
+      effect = analyzer.transaction_effect(QUERY, ['SELECT * FROM t'], autocommit: true, autocommit_before: true)
+      expect(effect.opens_transaction).to be(false)
+      expect(effect.closes_transaction).to be(false)
+      expect(effect.autocommit_value).to be_nil
+    end
+
+    it 'reports COMMIT as closing' do
+      effect = analyzer.transaction_effect(EXEC, ['COMMIT'], autocommit: false, autocommit_before: false)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'reports a close method as closing without any SQL' do
+      effect = analyzer.transaction_effect(CLOSE, nil, autocommit: true, autocommit_before: true)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'reports the transaction method as closing' do
+      effect = analyzer.transaction_effect(TXN, nil, autocommit: true, autocommit_before: true)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'captures the autocommit value and closes on an autocommit-off-to-on switch' do
+      effect = analyzer.transaction_effect(EXEC, ['SET AUTOCOMMIT = 1'], autocommit: false, autocommit_before: false)
+      expect(effect.autocommit_value).to be(true)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'captures a false autocommit value without closing' do
+      effect = analyzer.transaction_effect(EXEC, ['SET AUTOCOMMIT = 0'], autocommit: true, autocommit_before: true)
+      expect(effect.autocommit_value).to be(false)
+      expect(effect.closes_transaction).to be(false)
+    end
+  end
 end

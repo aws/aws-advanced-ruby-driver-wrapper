@@ -36,7 +36,35 @@ module AwsAdvancedRubyDriverWrapper
 
       QUOTE_CHARS = ["'", '"', '`'].freeze
 
+      # The combined transaction-state decision for one executed statement. +autocommit_value+ is nil
+      # when the statement does not set autocommit.
+      TransactionEffect = Data.define(:opens_transaction, :closes_transaction, :autocommit_value)
+
       module_function
+
+      # Computes every transaction-state effect of a statement in a single pass, normalizing the SQL
+      # once rather than once per predicate. This is the hot path: it runs on every executed
+      # statement, so the individual predicates below (each of which re-normalizes) are avoided here.
+      def transaction_effect(method_name, args, autocommit:, autocommit_before:, mysql_backslash_escapes: false)
+        method_closes = CLOSE_TRANSACTION_METHODS.include?(method_name) ||
+                        method_name == RubyMethod::CONNECTION_TRANSACTION.name
+
+        unless EXECUTE_SQL_METHODS.include?(method_name)
+          return TransactionEffect.new(opens_transaction: false, closes_transaction: method_closes, autocommit_value: nil)
+        end
+
+        stmt = first_statement(args&.first, mysql_backslash_escapes: mysql_backslash_escapes)
+        return TransactionEffect.new(opens_transaction: false, closes_transaction: method_closes, autocommit_value: nil) unless stmt
+
+        sets_autocommit = stmt.start_with?('SET AUTOCOMMIT')
+        autocommit_value = sets_autocommit ? parse_autocommit_value(stmt) : nil
+
+        opens = starts_transaction?(stmt) || (!autocommit && opens_transaction_scope?(stmt))
+        closes = method_closes || ends_transaction?(stmt) ||
+                 (!autocommit_before && sets_autocommit && autocommit_value == true)
+
+        TransactionEffect.new(opens_transaction: opens, closes_transaction: closes, autocommit_value: autocommit_value)
+      end
 
       def opens_transaction?(method_name, args, autocommit:, mysql_backslash_escapes: false)
         return false unless EXECUTE_SQL_METHODS.include?(method_name)
@@ -71,20 +99,25 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def autocommit_value(args)
-        sql = first_statement(args&.first)
-        return nil unless sql
+        stmt = first_statement(args&.first)
+        return nil unless stmt
 
-        sep = sql.index('=')
+        parse_autocommit_value(stmt)
+      end
+
+      # Extracts the boolean autocommit value from an already-normalized statement.
+      def parse_autocommit_value(stmt)
+        sep = stmt.index('=')
         if sep
           val_start = sep + 1
         else
-          to_idx = sql.index(' TO ')
+          to_idx = stmt.index(' TO ')
           return nil unless to_idx
 
           val_start = to_idx + 4
         end
 
-        val = sql[val_start..].split(';', 2).first.strip
+        val = stmt[val_start..].split(';', 2).first.strip
         case val
         when 'TRUE', '1', 'ON' then true
         when 'FALSE', '0', 'OFF' then false

@@ -33,18 +33,17 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def update_transaction_state(method_name, args, autocommit_before)
-        if Utils::SqlMethodAnalyzer.opens_transaction?(method_name, args, autocommit: autocommit?)
+        effect = Utils::SqlMethodAnalyzer.transaction_effect(
+          method_name, args, autocommit: autocommit?, autocommit_before: autocommit_before
+        )
+
+        if effect.opens_transaction
           self.in_transaction = true
-        elsif Utils::SqlMethodAnalyzer.closes_transaction?(method_name, args) ||
-              (!autocommit_before && Utils::SqlMethodAnalyzer.sets_autocommit?(method_name, args) &&
-               Utils::SqlMethodAnalyzer.autocommit_value(args) == true)
+        elsif effect.closes_transaction
           self.in_transaction = false
         end
 
-        return unless Utils::SqlMethodAnalyzer.sets_autocommit?(method_name, args)
-
-        val = Utils::SqlMethodAnalyzer.autocommit_value(args)
-        self.autocommit = val unless val.nil?
+        self.autocommit = effect.autocommit_value unless effect.autocommit_value.nil?
       end
 
       # Begin tracking session state changes for a connection switch.
