@@ -58,7 +58,8 @@ managers = PLUGIN_COUNTS.to_h do |count|
   [count, manager_for(wrapper_plugins: plugin_codes.first(count).join(','))]
 end
 managers[DEFAULT_SERIES] = manager_for(
-  wrapper_plugins: AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.default_value)
+  wrapper_plugins: AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.default_value
+)
 
 host_info = Host::HostInfo.new(host: Benchmarks::BenchmarkServices::REALISTIC_HOST, port: '5432')
 driver_props = {}

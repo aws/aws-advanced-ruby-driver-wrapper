@@ -15,6 +15,7 @@ iterations per second (higher is better).
 | `rds_utils_benchmarks.rb` | RDS endpoint classification and metadata extraction, cached and uncached | No |
 | `connection_url_parser_benchmarks.rb` | Per-connection URL and libpq conninfo parsing, and host-list splitting | No |
 | `sql_method_analyzer_benchmarks.rb` | The per-statement SQL inspection that runs on every executed statement (transaction open/close, autocommit) | No |
+| `sql_parser_benchmarks.rb` | Column/table SQL analysis used by the encryption plugin: the PostgreSQL AST parser (pg_query) versus the MySQL regex parser | No |
 | `storage_benchmarks.rb` | The caches behind topology and monitor lookups: expiration cache, sliding expiration cache, storage service | No |
 
 ## Running
