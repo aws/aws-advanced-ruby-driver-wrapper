@@ -16,10 +16,10 @@
 
 require_relative '../../spec_helper'
 
-# Guards the assumptions the SQL method analyzer benchmark relies on: that each analyzer method the
-# benchmark drives still exists with the shape it calls, and still classifies the sample statements
-# the way the benchmark's case labels claim. The benchmark itself is not run in CI, so drift in the
-# analyzer's API or behaviour fails here instead of the benchmark silently measuring the wrong thing.
+# Guards the assumptions the SQL method analyzer benchmark relies on: that transaction_effect still
+# exists with the shape the benchmark calls, and still classifies the sample statements the way the
+# benchmark's case labels claim. The benchmark itself is not run in CI, so drift in the analyzer's
+# API or behaviour fails here instead of the benchmark silently measuring the wrong thing.
 module AwsAdvancedRubyDriverWrapper
   RSpec.describe Utils::SqlMethodAnalyzer do
     simple_select = 'SELECT id, name FROM users WHERE id = 42'
@@ -31,65 +31,39 @@ module AwsAdvancedRubyDriverWrapper
     non_sql_method = RubyMethod::CONNECTION_PING.name
     close_method = RubyMethod::CONNECTION_CLOSE.name
 
-    describe '.opens_transaction?' do
+    def effect(method_name, args)
+      described_class.transaction_effect(method_name, args, autocommit: false, autocommit_before: false)
+    end
+
+    describe '.transaction_effect' do
       it 'short-circuits on a method that carries no SQL' do
-        expect(described_class.opens_transaction?(non_sql_method, nil, autocommit: true)).to be(false)
+        result = effect(non_sql_method, nil)
+        expect(result.opens_transaction).to be(false)
+        expect(result.closes_transaction).to be(false)
+      end
+
+      it 'treats a close call as closing via the method set alone' do
+        expect(effect(close_method, nil).closes_transaction).to be(true)
       end
 
       it 'reports a plain statement as opening a transaction scope when autocommit is off' do
-        expect(described_class.opens_transaction?(execute_method, [simple_select], autocommit: false)).to be(true)
+        expect(effect(execute_method, [simple_select]).opens_transaction).to be(true)
       end
 
       it 'reads through leading comments to the statement underneath' do
-        expect(described_class.opens_transaction?(execute_method, [commented_select], autocommit: false)).to be(true)
+        expect(effect(execute_method, [commented_select]).opens_transaction).to be(true)
       end
 
       it 'reports a BEGIN-led batch as opening a transaction' do
-        expect(described_class.opens_transaction?(execute_method, [multi_statement], autocommit: false)).to be(true)
-      end
-    end
-
-    describe '.closes_transaction?' do
-      it 'short-circuits on a method that carries no SQL' do
-        expect(described_class.closes_transaction?(non_sql_method, nil)).to be(false)
+        expect(effect(execute_method, [multi_statement]).opens_transaction).to be(true)
       end
 
-      it 'reports a plain select as not closing a transaction' do
-        expect(described_class.closes_transaction?(execute_method, [simple_select])).to be(false)
+      it 'reads the autocommit value out of a SET AUTOCOMMIT statement' do
+        expect(effect(execute_method, [set_autocommit]).autocommit_value).to be(true)
       end
 
-      it 'treats a close call as closing a transaction via the method set alone' do
-        expect(described_class.closes_transaction?(close_method, nil)).to be(true)
-      end
-    end
-
-    describe 'the autocommit false->true switch the benchmark reconstructs' do
-      def switches?(method_name, args)
-        described_class.sets_autocommit?(method_name, args) && described_class.autocommit_value(args) == true
-      end
-
-      it 'is false for a plain select' do
-        expect(switches?(execute_method, [simple_select])).to be(false)
-      end
-
-      it 'is true for SET AUTOCOMMIT = 1' do
-        expect(switches?(execute_method, [set_autocommit])).to be(true)
-      end
-    end
-
-    describe '.sets_autocommit?' do
-      it 'is true for a SET AUTOCOMMIT statement' do
-        expect(described_class.sets_autocommit?(execute_method, [set_autocommit])).to be(true)
-      end
-
-      it 'is false for a plain select' do
-        expect(described_class.sets_autocommit?(execute_method, [simple_select])).to be(false)
-      end
-    end
-
-    describe '.autocommit_value' do
-      it 'reads the target value out of the statement' do
-        expect(described_class.autocommit_value([set_autocommit])).to be(true)
+      it 'reports no autocommit change for a plain select' do
+        expect(effect(execute_method, [simple_select]).autocommit_value).to be_nil
       end
     end
   end

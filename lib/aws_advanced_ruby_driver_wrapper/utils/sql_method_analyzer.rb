@@ -42,9 +42,9 @@ module AwsAdvancedRubyDriverWrapper
 
       module_function
 
-      # Computes every transaction-state effect of a statement in a single pass, normalizing the SQL
-      # once rather than once per predicate. This is the hot path: it runs on every executed
-      # statement, so the individual predicates below (each of which re-normalizes) are avoided here.
+      # Computes every transaction-state effect of a statement in a single pass. It runs on every
+      # executed statement, so the SQL is normalized once here rather than once per question asked
+      # of it (open? close? set autocommit?).
       def transaction_effect(method_name, args, autocommit:, autocommit_before:, mysql_backslash_escapes: false)
         method_closes = CLOSE_TRANSACTION_METHODS.include?(method_name) ||
                         method_name == RubyMethod::CONNECTION_TRANSACTION.name
@@ -64,45 +64,6 @@ module AwsAdvancedRubyDriverWrapper
                  (!autocommit_before && sets_autocommit && autocommit_value == true)
 
         TransactionEffect.new(opens_transaction: opens, closes_transaction: closes, autocommit_value: autocommit_value)
-      end
-
-      def opens_transaction?(method_name, args, autocommit:, mysql_backslash_escapes: false)
-        return false unless EXECUTE_SQL_METHODS.include?(method_name)
-
-        sql = first_statement(args&.first, mysql_backslash_escapes: mysql_backslash_escapes)
-        return false unless sql
-
-        return true if starts_transaction?(sql)
-        return true if !autocommit && opens_transaction_scope?(sql)
-
-        false
-      end
-
-      def closes_transaction?(method_name, args, mysql_backslash_escapes: false)
-        return true if CLOSE_TRANSACTION_METHODS.include?(method_name)
-        return true if method_name == RubyMethod::CONNECTION_TRANSACTION.name
-        return false unless EXECUTE_SQL_METHODS.include?(method_name)
-
-        sql = first_statement(args&.first, mysql_backslash_escapes: mysql_backslash_escapes)
-        return false unless sql
-
-        ends_transaction?(sql)
-      end
-
-      def sets_autocommit?(method_name, args, mysql_backslash_escapes: false)
-        return false unless EXECUTE_SQL_METHODS.include?(method_name)
-
-        sql = first_statement(args&.first, mysql_backslash_escapes: mysql_backslash_escapes)
-        return false unless sql
-
-        sql.start_with?('SET AUTOCOMMIT')
-      end
-
-      def autocommit_value(args)
-        stmt = first_statement(args&.first)
-        return nil unless stmt
-
-        parse_autocommit_value(stmt)
       end
 
       # Extracts the boolean autocommit value from an already-normalized statement.
