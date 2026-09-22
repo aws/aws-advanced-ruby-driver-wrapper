@@ -49,13 +49,13 @@ SQL = 'SELECT id, name FROM users WHERE id = 42'
 ROW_COUNTS = { 1 => '1_row', 100 => '100_rows', 1000 => '1000_rows' }.freeze
 RESULTS_DIR = File.expand_path('results', __dir__)
 
-# Builds a Mysql2WrapperClient over a fake driver connection, with a real plugin-free plugin manager,
+# Builds a WrapperMysql2Client over a fake driver connection, with a real plugin-free plugin manager,
 # without opening a real connection.
 def build_wrapped_client(fake_connection)
   container = Benchmarks::BenchmarkServices.container({ wrapper_plugins: '' }, current_connection: fake_connection)
   container.plugin_manager = Services::PluginManager.new(container)
 
-  client = Mysql2WrapperClient.allocate
+  client = WrapperMysql2Client.allocate
   client.instance_variable_set(:@service_container, container)
   client.instance_variable_set(:@async_conn, nil)
   client.instance_variable_set(:@async_sql, nil)

@@ -29,7 +29,7 @@ module AwsAdvancedRubyDriverWrapper
       container = Benchmarks::BenchmarkServices.container({ wrapper_plugins: '' }, current_connection: fake_connection)
       container.plugin_manager = Services::PluginManager.new(container)
 
-      client = Mysql2WrapperClient.allocate
+      client = WrapperMysql2Client.allocate
       client.instance_variable_set(:@service_container, container)
       client.instance_variable_set(:@async_conn, nil)
       client.instance_variable_set(:@async_sql, nil)
