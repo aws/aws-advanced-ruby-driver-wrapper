@@ -39,48 +39,15 @@ benchmark (the plugin-manager benchmark writes one CSV per pipeline: `connect.cs
 `wrapper_overhead.csv` additionally carries the raw ops/second and the overhead in nanoseconds
 per call.
 
-## Real-database overhead (co-located run)
+## End-to-end overhead against a real database
 
-The benchmarks above use a fake driver, so they run anywhere and isolate the wrapper's own
-machinery. To measure end-to-end overhead against a real database instead, use the integration
-spec `spec/integration/wrapper_perf_spec.rb`, which runs each operation through the wrapper (with
-its default plugins) and through the raw driver against the same cluster, and reports the wrapper's
-overhead as a percentage.
-
-For that percentage to be representative, run it from a host **co-located with the cluster** - an EC2
-instance in the same region (ideally same AZ as the writer) and VPC. A laptop over the internet is
-latency-dominated (each connect is several round trips at tens to hundreds of milliseconds each),
-which overstates the absolute times.
-
-Steps:
-
-1. Provision an EC2 instance in the cluster's VPC and region; prefer a non-burstable type (for
-   example `m5`/`c5.large`) so CPU-credit throttling does not skew timings. Allow the DB port
-   (5432 / 3306) from the instance's security group to the cluster.
-2. Install Ruby (matching `.ruby-version`) and the driver build dependencies (`libpq-dev`,
-   `default-libmysqlclient-dev` or the platform equivalents), clone the repo, and `bundle install`.
-3. Set the connection env vars (`PG_HOST`/`PG_PORT`/`PG_USERNAME`/`PG_PASSWORD`/`PG_DATABASE`, and the
-   `MYSQL_*` equivalents) to the cluster endpoint. Use a least-privilege, read-only database user -
-   the spec only issues `SELECT 1`, a no-op transaction, `connect`, and `server_version` - and prefer
-   a non-production cluster.
-4. Warm up once, then record. The first connection to an endpoint pays a one-time dialect and
-   topology discovery cost (then cached), and the results CSV appends across runs, so clear it
-   between runs:
-
-   ```bash
-   rm -f spec/integration/results/wrapper_perf.csv
-   bundle exec rspec spec/integration/wrapper_perf_spec.rb -e PostgreSQL   # warm-up (discard)
-   rm -f spec/integration/results/wrapper_perf.csv
-   bundle exec rspec spec/integration/wrapper_perf_spec.rb -e PostgreSQL   # recorded run
-   ```
-
-   Use `-e PostgreSQL` / `-e MySQL` to pick a context, or omit `-e` to run both when both databases
-   are reachable.
-5. Read the overhead percentages from the console output and from
-   `spec/integration/results/wrapper_perf.csv`.
-
-A quick way to confirm you are actually co-located: `time nc -zv $PG_HOST 5432` should report roughly
-a millisecond, not tens or hundreds.
+The benchmarks here use a fake driver, so they run anywhere and isolate the wrapper's own machinery -
+which is the precise figure you want. For a whole-system sanity check against a real database, there
+is a separate integration spec, `spec/integration/wrapper_perf_spec.rb` (see its header and
+`docs/development-guide/Benchmarks.md`). It is a coarse check, not a precise benchmark: the wrapper's
+per-call cost is a few microseconds, which is below the noise floor of a real database round trip, so
+its per-query numbers are not meaningful in isolation. Use these fake-target benchmarks for the
+per-call overhead figure.
 
 ## Reading the results of `connection_plugin_manager_benchmarks.rb`
 

@@ -10,20 +10,15 @@ small to measure, dwarfed by the network round trip to the database.
 
 ## Per-query overhead against a real database: negligible
 
-Measured end to end with the **default plugins**, running each operation through the wrapper and
+Measured end to end with the **default plugins** in `wrapper_perf_spec.rb`, running each operation through the wrapper and
 through the raw driver against the same cluster, from a host co-located with it (sub-millisecond
 round trips).
 
-The result: the wrapper's per-query overhead is **below the measurement noise floor**. Across repeated
-runs the measured difference between wrapper and raw bounced between slightly negative and a small
-positive - a negative result being impossible in reality (the wrapper strictly does more work), which
-is the tell that the wrapper's cost is **smaller than the natural run-to-run variation in a database
-round trip**. In other words, on a real query you cannot distinguish the wrapper from the raw driver.
-
-This is expected: the wrapper's work is a fixed handful of microseconds (see below), while even a
-fast same-region query is hundreds of microseconds to milliseconds, most of it network. The faster
-the query, the larger the wrapper's *relative* share - and even against the fastest same-AZ query it
-stayed in the noise.
+The result: the wrapper's per-query overhead is **too small to distinguish from normal round-trip
+variation** - on a real query you cannot tell the wrapper from the raw driver. This is expected: the
+wrapper adds a fixed handful of microseconds (see below), while even a fast same-region query is
+hundreds of microseconds to milliseconds, most of it network. The wrapper's share is a rounding
+error, even against the fastest same-AZ query.
 
 ## Per-call fixed cost
 
