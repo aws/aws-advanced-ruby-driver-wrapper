@@ -3,6 +3,7 @@
 /_yardoc/
 /coverage/
 /benchmarks/results/
+/spec/integration/results/
 /pkg/
 /spec/reports/
 /spec/examples.txt

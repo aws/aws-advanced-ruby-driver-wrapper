@@ -1,51 +1,67 @@
-# Benchmarks
+# Performance and Overhead
 
-The wrapper ships micro-benchmarks that measure its own overhead - the cost the wrapper adds on top
-of the underlying `mysql2`/`pg` driver. They live in [`benchmarks/`](../../benchmarks) and are run
-with `benchmark-ips`; see the [benchmarks README](../../benchmarks/README.md) for how to run them and
-regenerate the data.
+Every database operation goes through the wrapper's plugin pipeline before reaching the underlying
+`mysql2`/`pg` driver, which adds some cost. The short version: the wrapper adds a **small, fixed
+amount of work per call** - on the order of a microsecond - and against a real query that cost is too
+small to measure, dwarfed by the network round trip to the database.
 
-## Wrapper overhead
+> All numbers below are **indicative and machine-dependent**. Regenerate them on your own hardware
+> before relying on them. See the [benchmarks README](../../benchmarks/README.md) to reproduce.
 
-`wrapper_overhead_benchmarks.rb` pairs each wrapped call with the identical call made directly
-against the same target, so the difference between the pair is the wrapper's own contribution. The
-figure that matters is the **overhead added per call**:
+## Per-query overhead against a real database: negligible
+
+Measured end to end with the **default plugins**, running each operation through the wrapper and
+through the raw driver against the same cluster, from a host co-located with it (sub-millisecond
+round trips).
+
+The result: the wrapper's per-query overhead is **below the measurement noise floor**. Across repeated
+runs the measured difference between wrapper and raw bounced between slightly negative and a small
+positive - a negative result being impossible in reality (the wrapper strictly does more work), which
+is the tell that the wrapper's cost is **smaller than the natural run-to-run variation in a database
+round trip**. In other words, on a real query you cannot distinguish the wrapper from the raw driver.
+
+This is expected: the wrapper's work is a fixed handful of microseconds (see below), while even a
+fast same-region query is hundreds of microseconds to milliseconds, most of it network. The faster
+the query, the larger the wrapper's *relative* share - and even against the fastest same-AZ query it
+stayed in the noise.
+
+## Per-call fixed cost
+
+To measure the fixed cost directly - without network noise - each wrapped call is run against an
+in-memory fake driver (no database, no plugins) paired with the identical raw call, so the difference
+is purely the wrapper's own machinery (the plugin pipeline, call-context handling, result wrapping).
 
 | Operation | Overhead per call |
 | --- | --- |
 | `query` | ~0.9 µs |
-| `prepare` | ~0.85 µs |
-| `escape` | ~0.75 µs |
-| `ping` | ~0.85 µs |
+| `prepare` | ~0.8 µs |
+| `escape` | ~0.7 µs |
+| `ping` | ~0.8 µs |
+| a call routed through `method_missing` | ~2 µs |
 
-Result iteration is charged **once per `each` call, not per row**, because the wrapper routes the
-whole iteration through a single pipeline call. The overhead is therefore roughly flat as the result
-grows:
+Result iteration is charged **once per `each` call, not per row** - the wrapper routes the whole
+iteration through a single pipeline call - so its overhead stays roughly flat (about 2 µs) whether the
+result has one row or a thousand.
 
-| Rows iterated | Overhead per iteration |
-| --- | --- |
-| 1 | ~1.9 µs |
-| 100 | ~1.8 µs |
-| 1,000 | ~2.4 µs |
+These figures are stable because there is no network involved. They are the fixed cost that, against
+a real query, disappears into the round-trip noise as described above. Do not read the raw-vs-wrapped
+*ratio* here as a real-world slowdown: against a near-zero fake target the ratio looks large, but the
+meaningful figure is the microseconds added, and a microsecond is nothing next to any real query.
 
-### How to read these numbers
+## Connecting
 
-- **This is the wrapper's fixed per-call cost, not query throughput.** The benchmark runs against a
-  fake in-memory driver with no plugins enabled, so it isolates the wrapper's own machinery (the
-  plugin pipeline, call-context handling, and result wrapping). There is no database round trip in
-  these numbers.
-- **Put it in perspective against a real query.** The wrapper adds roughly a microsecond of fixed
-  overhead per call. A database round trip is typically hundreds of microseconds to milliseconds, so
-  this overhead is a fraction of a percent of a real query.
-- **Do not read the absolute call rates as throughput**, and do not compare these numbers against a
-  raw driver as a "how many times slower" ratio - the raw side has no database work either, so that
-  ratio has no bearing on real-world performance. Only the per-call overhead above is meaningful.
-- **The numbers are indicative and machine-dependent.** They come from one run on one machine;
-  regenerate them on your own reference hardware before treating any value as authoritative.
+Establishing a connection with the default plugins is the one place the wrapper does measurably more than the raw
+driver: on the initial connection it performs an extra round trip or two to verify the endpoint role. This is a
+**one-time cost per connection**, not per query, and with a connection pool - as Active Record uses - it is paid at
+pool-fill and amortized across every query on that connection. Its size scales with connection latency, so it is larger
+from a distant client and small close to the cluster.
 
-## Plugin pipeline overhead
+## Reproducing and going deeper
 
-`connection_plugin_manager_benchmarks.rb` measures how the plugin manager's per-call cost scales with
-the number of plugins in the chain (0, 1, 2, 5, 10, and the default plugin set), across the
-`connect`, `internal_connect`, and `execute` pipelines. The same "read the shape, not the absolute
-numbers" guidance applies; see the [benchmarks README](../../benchmarks/README.md) for details.
+- `benchmarks/` holds the fake-target micro-benchmarks (per-call overhead, plugin-chain scaling, SQL
+  inspection, endpoint classification, caches) - stable, no infrastructure required.
+- `spec/integration/wrapper_perf_spec.rb` is the end-to-end real-database comparison; run it from a
+  host co-located with the cluster (a laptop over the internet is latency-dominated and its absolute
+  numbers are not representative).
+
+See the [benchmarks README](../../benchmarks/README.md) for how to run everything.
