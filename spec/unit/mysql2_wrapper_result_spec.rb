@@ -223,10 +223,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
   describe '#fields' do
     let(:connection) { instance_double(Mysql2::Client) }
     let(:container) { build_service_container_with_plugins([TrackingPlugin.new], connection) }
-    # A statement is supplied to prove #fields ignores it and reads the result even so.
+    # A statement is supplied to prove #fields ignores it and reads the result even so. The
+    # statement's fields are always strings, so a symbol result here can only have come from the
+    # result - which is where mysql2 applies options such as symbolize_keys.
     let(:statement) { double('Mysql2::Statement', fields: %w[ssn]) }
 
-    it 'delegates to the result, honoring symbolize_keys, rather than the statement' do
+    it 'reads the result rather than the statement' do
       result = double('Mysql2::Result', fields: %i[ssn])
 
       wrapper_result = described_class.new(result, container, connection, nil, statement)
