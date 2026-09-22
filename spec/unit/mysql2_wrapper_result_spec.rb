@@ -175,18 +175,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
       end
     end
 
-    # A prepared-statement result reads its column names from the statement's metadata rather than
-    # from Mysql2::Result#fields: mysql2 leaves the result's field pointer NULL for a prepared
-    # statement that returned no rows, so reading it there would segfault.
-    it 'reads column names from the statement when the result came from one' do
+    # A prepared-statement result that fetched no rows reads its column names from the statement's
+    # metadata rather than from Mysql2::Result#fields: mysql2 leaves the result's field pointer
+    # unpopulated for an empty prepared-statement result, so reading it there loses the column names
+    # or, on some client libraries, segfaults.
+    it 'reads column names from the statement when an empty result came from one' do
       statement = double('Mysql2::Statement', fields: %w[ssn])
-      allow(mysql_result).to receive(:to_a).and_return([])
+      allow(mysql_result).to receive_messages(count: 0, to_a: [])
 
       # mysql_result is a plain double with no :fields stub, so if the result's fields were read
       # instead of the statement's, this would raise rather than return the statement's columns.
       described_class.new(mysql_result, container, connection, sql, statement).to_a
 
       expect(plugin.field_names_for('result.to_a')).to eq([%w[ssn]])
+    end
+
+    # Once a prepared-statement result has fetched rows its field cache is populated, so its own
+    # fields are safe to read and are the only source that reflects options like symbolize_keys.
+    it 'reads column names from the result when a prepared-statement result has rows' do
+      statement = double('Mysql2::Statement', fields: %w[ssn])
+      allow(mysql_result).to receive_messages(count: 1, fields: %i[ssn], to_a: [{ ssn: '1' }])
+
+      described_class.new(mysql_result, container, connection, sql, statement).to_a
+
+      expect(plugin.field_names_for('result.to_a')).to eq([%i[ssn]])
     end
 
     # A result built by a call whose SQL the wrapper does not know, such as one that went through
@@ -205,6 +217,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
       wrapper_result.free
 
       expect(plugin.sql_for('result.free')).to eq([sql])
+    end
+  end
+
+  describe '#fields' do
+    let(:connection) { instance_double(Mysql2::Client) }
+    let(:container) { build_service_container_with_plugins([TrackingPlugin.new], connection) }
+    # A statement is supplied to prove #fields ignores it and reads the result even so.
+    let(:statement) { double('Mysql2::Statement', fields: %w[ssn]) }
+
+    it 'delegates to the result, honoring symbolize_keys, rather than the statement' do
+      result = double('Mysql2::Result', fields: %i[ssn])
+
+      wrapper_result = described_class.new(result, container, connection, nil, statement)
+
+      expect(wrapper_result.fields).to eq(%i[ssn])
+    end
+
+    it 'surfaces an error from a freed result instead of masking it with the statement' do
+      result = double('Mysql2::Result')
+      allow(result).to receive(:fields).and_raise(Mysql2::Error, 'Result set has already been freed')
+
+      wrapper_result = described_class.new(result, container, connection, nil, statement)
+
+      expect { wrapper_result.fields }.to raise_error(Mysql2::Error, /already been freed/)
     end
   end
 

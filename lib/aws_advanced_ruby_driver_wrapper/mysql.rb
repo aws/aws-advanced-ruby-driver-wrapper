@@ -314,7 +314,7 @@ module AwsAdvancedRubyDriverWrapper
 
     # Delegate non-network methods directly
     def fields
-      result_field_names
+      @result.fields
     end
 
     def field_types
@@ -344,13 +344,21 @@ module AwsAdvancedRubyDriverWrapper
 
     private
 
-    # The result's column names. For a prepared-statement result these are read from the statement's
-    # own metadata (mysql_stmt_result_metadata), which is populated safely whether or not any rows
-    # came back; Mysql2::Result#fields dereferences the result's field pointer, which mysql2 leaves
-    # NULL for a prepared statement that returned no rows, and reading it segfaults. Results from
-    # +query+ carry no statement, and Mysql2::Result#fields is safe for those.
+    # Column names for the plugins that inspect a result as it is read, such as one that decrypts
+    # certain columns and has to know which position each holds. This is internal plumbing, not the
+    # driver's own #fields - so unlike #fields it must always yield the real column names, including
+    # for a prepared-statement result that fetched no rows. Mysql2::Result#fields cannot supply them
+    # there: it dereferences the result's field pointer, which mysql2 never populates until a row is
+    # fetched, so it returns an empty list or, on some client libraries, segfaults. In that one case
+    # the names come from the statement's own metadata (mysql_stmt_result_metadata), which carries
+    # them whether or not any rows came back. Once a row has been fetched the field cache is in place
+    # and the result's own fields are safe; results from +query+ carry no statement and read directly.
     def result_field_names
-      (@statement || @result).fields
+      # none? would iterate the result and consume an unbuffered one; count reads the driver's own
+      # row count without touching the rows.
+      return @statement.fields if @statement && @result.count.zero? # rubocop:disable Style/CollectionQuerying
+
+      @result.fields
     end
 
     def current_conn
