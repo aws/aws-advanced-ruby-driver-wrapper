@@ -251,4 +251,41 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
       expect(result).not_to have_received(:free)
     end
   end
+
+  describe '#method_missing' do
+    let(:result) { double('Mysql2::Result') }
+    let(:connection) { double('Mysql2::Client') }
+    subject(:wrapper_result) do
+      described_class.new(result, build_service_container_with_plugins([], connection), connection)
+    end
+
+    context 'when the method exists on the underlying result but is not explicitly delegated' do
+      before do
+        allow(result).to receive(:respond_to?).and_return(false)
+        allow(result).to receive(:respond_to?).with(:undelegated_method).and_return(true)
+        allow(result).to receive(:respond_to?).with(:undelegated_method, false).and_return(true)
+        allow(result).to receive(:undelegated_method).and_return(:delegated)
+      end
+
+      it 'delegates transparently to the underlying result' do
+        expect(wrapper_result.undelegated_method).to eq(:delegated)
+      end
+
+      it 'returns true from respond_to?' do
+        expect(wrapper_result.respond_to?(:undelegated_method)).to be true
+      end
+    end
+
+    context 'when the method does not exist on the underlying result either' do
+      before { allow(result).to receive(:respond_to?).and_return(false) }
+
+      it 'raises a NoMethodError' do
+        expect { wrapper_result.nonexistent_method }.to raise_error(NoMethodError)
+      end
+
+      it 'returns false from respond_to?' do
+        expect(wrapper_result.respond_to?(:nonexistent_method)).to be false
+      end
+    end
+  end
 end
