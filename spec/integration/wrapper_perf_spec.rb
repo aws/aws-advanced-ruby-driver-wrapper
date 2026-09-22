@@ -36,7 +36,7 @@
 # benchmarks/wrapper_overhead_benchmarks.rb - it has no network, so it is stable and reproducible.
 #
 # Run from a host co-located with the cluster; a laptop over the internet is latency-dominated and
-# its absolute numbers are not representative. See docs/development-guide/Benchmarks.md.
+# its absolute numbers are not representative. See docs/development-guide/Performance.md.
 
 require 'benchmark'
 require 'csv'

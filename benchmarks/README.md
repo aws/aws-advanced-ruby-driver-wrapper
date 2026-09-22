@@ -44,7 +44,7 @@ per call.
 The benchmarks here use a fake driver, so they run anywhere and isolate the wrapper's own machinery -
 which is the precise figure you want. For a whole-system sanity check against a real database, there
 is a separate integration spec, `spec/integration/wrapper_perf_spec.rb` (see its header and
-`docs/development-guide/Benchmarks.md`). It is a coarse check, not a precise benchmark: the wrapper's
+`docs/development-guide/Performance.md`). It is a coarse check, not a precise benchmark: the wrapper's
 per-call cost is a few microseconds, which is below the noise floor of a real database round trip, so
 its per-query numbers are not meaningful in isolation. Use these fake-target benchmarks for the
 per-call overhead figure.
