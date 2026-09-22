@@ -20,7 +20,7 @@ require_relative 'ruby_method'
 require_relative 'errors'
 
 module AwsAdvancedRubyDriverWrapper
-  class Mysql2WrapperClient
+  class WrapperMysql2Client
     def self.new(**)
       instance = allocate
       instance.send(:initialize, **)
@@ -28,6 +28,7 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     def initialize(**)
+      ensure_mysql2!
       config = Utils::ConnectionConfigParser.parse(:mysql2, **)
       @service_container = Services::ServiceUtility.create_standard_container(config)
       @service_container.host_service.refresh_host_list
@@ -173,6 +174,12 @@ module AwsAdvancedRubyDriverWrapper
         @async_sql = nil
       end
       wrap_mysql_result(result)
+    end
+
+    def ensure_mysql2!
+      require 'mysql2'
+    rescue LoadError
+      raise LoadError, "WrapperMysql2Client requires 'mysql2'. Add it to your Gemfile: gem 'mysql2'"
     end
 
     def current_conn

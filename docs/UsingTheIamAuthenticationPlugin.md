@@ -12,7 +12,7 @@ The IAM Authentication Plugin enables [AWS IAM database authentication](https://
 >
 > **MySQL (`mysql2`):**
 > ```ruby
-> AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient.new(
+> AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(
 >   host: "db-identifier.cluster-XYZ.us-east-2.rds.amazonaws.com",
 >   username: "iam_user",
 >   wrapper_plugins: "iam",
@@ -64,7 +64,7 @@ The IAM Authentication Plugin enables [AWS IAM database authentication](https://
 Add `iam` to the `wrapper_plugins` property:
 
 ```ruby
-AwsAdvancedRubyDriverWrapper::Mysql2WrapperClient.new(
+AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(
   host: "db-identifier.cluster-XYZ.us-east-2.rds.amazonaws.com",
   username: "iam_user",
   wrapper_plugins: "failover,iam",
