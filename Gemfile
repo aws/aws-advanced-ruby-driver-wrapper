@@ -31,6 +31,10 @@ group :development do
   gem 'yard', '>= 0.9.44'
 end
 
+group :benchmark do
+  gem 'benchmark-ips', '~> 2.14'
+end
+
 group :test do
   gem 'aws-sdk-kms'
   gem 'aws-sdk-rds', '~> 1.323.0'
