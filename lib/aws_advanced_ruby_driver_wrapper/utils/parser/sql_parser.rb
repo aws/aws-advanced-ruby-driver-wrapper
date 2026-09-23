@@ -33,22 +33,36 @@ module AwsAdvancedRubyDriverWrapper
           end
         end
 
+        # Upper bound on cached analyses. A parser is used by a single connection, and the same SQL
+        # (a prepared statement, or a repeated query) is otherwise re-parsed on every execution, so
+        # the cache turns that into one parse per distinct statement while bounding memory.
+        MAX_CACHE_ENTRIES = 1000
+
         def initialize(driver_dialect)
           @analyzer = resolve_analyzer(driver_dialect)
+          # A parser belongs to one connection, which is used by one thread at a time, so this plain
+          # hash needs no lock. Insertion order is used as the eviction order (least-recently-used).
+          @cache = {}
         end
 
+        # Returns the analysis for +sql+, parsing it only on the first sight of a given statement and
+        # serving repeats from a bounded cache. The result is a pure function of the SQL for this
+        # parser's dialect, so caching by the SQL string is safe.
+        #
         # @raise [StandardError] whatever the underlying analyzer raises on SQL it cannot read
         def analyze_sql(sql)
           return empty_result unless sql.is_a?(String) && !sql.strip.empty?
 
-          analysis = @analyzer.analyze(sql)
-          SqlAnalysisResult.new(
-            query_type: analysis.query_type,
-            affected_tables: analysis.tables.to_set { |table_name| strip_schema_prefix(table_name) },
-            parameter_column_names: mapping_of(analysis),
-            unbound_write_columns: analysis.unbound_write_columns,
-            write_columns_complete: analysis.write_columns_complete
-          )
+          cached = @cache.delete(sql)
+          unless cached.nil?
+            @cache[sql] = cached # re-insert so it counts as most-recently-used
+            return cached
+          end
+
+          result = build_analysis(sql)
+          @cache[sql] = result
+          @cache.shift if @cache.size > MAX_CACHE_ENTRIES # evict the least-recently-used entry
+          result
         end
 
         # Maps 1-based parameter indices to column names.
@@ -66,6 +80,17 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         private
+
+        def build_analysis(sql)
+          analysis = @analyzer.analyze(sql)
+          SqlAnalysisResult.new(
+            query_type: analysis.query_type,
+            affected_tables: analysis.tables.to_set { |table_name| strip_schema_prefix(table_name) },
+            parameter_column_names: mapping_of(analysis),
+            unbound_write_columns: analysis.unbound_write_columns,
+            write_columns_complete: analysis.write_columns_complete
+          )
+        end
 
         def mapping_of(analysis)
           case analysis.query_type
