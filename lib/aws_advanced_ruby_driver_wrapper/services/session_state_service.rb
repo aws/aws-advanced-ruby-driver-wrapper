@@ -45,30 +45,6 @@ module AwsAdvancedRubyDriverWrapper
 
         self.autocommit = effect.autocommit_value unless effect.autocommit_value.nil?
       end
-
-      # Begin tracking session state changes for a connection switch.
-      def begin
-        raise NotImplementedError
-      end
-
-      # Finalize session state tracking after a connection switch.
-      def complete
-        raise NotImplementedError
-      end
-
-      # Apply the current session state to the given connection.
-      #
-      # @param connection [Object]
-      def apply_current_session_state(connection)
-        raise NotImplementedError
-      end
-
-      # Apply the original session state to the given connection.
-      #
-      # @param connection [Object]
-      def apply_original_session_state(connection)
-        raise NotImplementedError
-      end
     end
   end
 end
