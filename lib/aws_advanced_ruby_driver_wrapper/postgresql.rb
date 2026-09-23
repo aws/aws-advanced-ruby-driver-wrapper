@@ -25,7 +25,13 @@ module AwsAdvancedRubyDriverWrapper
       def new(*, **)
         instance = allocate
         instance.send(:initialize, *, **)
-        instance
+        return instance unless block_given?
+
+        begin
+          yield instance
+        ensure
+          instance.close
+        end
       end
 
       alias open new
