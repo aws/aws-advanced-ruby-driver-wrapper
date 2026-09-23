@@ -356,7 +356,7 @@ module AwsAdvancedRubyDriverWrapper
     def result_field_names
       # none? would iterate the result and consume an unbuffered one; count reads the driver's own
       # row count without touching the rows.
-      return @statement.fields if @result.count.zero? && @statement # rubocop:disable Style/CollectionQuerying
+      return @statement.fields if @statement && @result.count.zero? # rubocop:disable Style/CollectionQuerying
 
       @result.fields
     end
