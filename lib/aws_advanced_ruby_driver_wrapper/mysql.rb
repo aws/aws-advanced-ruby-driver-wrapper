@@ -333,6 +333,28 @@ module AwsAdvancedRubyDriverWrapper
       @result.server_flags
     end
 
+    def query_time
+      @result.query_time
+    end
+
+    def tables
+      @result.tables
+    end
+
+    def dbs
+      @result.dbs
+    end
+
+    def method_missing(method_name, ...)
+      return @result.send(method_name, ...) if @result.respond_to?(method_name)
+
+      super
+    end
+
+    def respond_to_missing?(method_name, include_private = false)
+      @result.respond_to?(method_name, include_private) || super
+    end
+
     def inspect
       format('#<%<class>s:0x%<addr>016x>', class: self.class.name, addr: object_id << 1)
     end
