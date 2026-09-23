@@ -195,6 +195,38 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#reported_in_transaction' do
+    it 'returns true when inside a valid transaction block' do
+      allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_INTRANS)
+      expect(dialect.reported_in_transaction(connection)).to be true
+    end
+
+    it 'returns true when inside a failed transaction block' do
+      allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_INERROR)
+      expect(dialect.reported_in_transaction(connection)).to be true
+    end
+
+    it 'returns false when idle' do
+      allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_IDLE)
+      expect(dialect.reported_in_transaction(connection)).to be false
+    end
+
+    it 'returns nil when a command is in progress (ACTIVE), deferring to SQL inference' do
+      allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_ACTIVE)
+      expect(dialect.reported_in_transaction(connection)).to be_nil
+    end
+
+    it 'returns nil when the connection state is unknown, deferring to SQL inference' do
+      allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_UNKNOWN)
+      expect(dialect.reported_in_transaction(connection)).to be_nil
+    end
+
+    it 'returns false when the connection raises PG::ConnectionBad' do
+      allow(connection).to receive(:transaction_status).and_raise(PG::ConnectionBad)
+      expect(dialect.reported_in_transaction(connection)).to be false
+    end
+  end
+
   describe '#network_bound_methods' do
     it 'returns a frozen Set' do
       expect(dialect.network_bound_methods).to be_a(Set)

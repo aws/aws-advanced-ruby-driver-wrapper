@@ -32,17 +32,23 @@ module AwsAdvancedRubyDriverWrapper
         @autocommit = true
       end
 
-      def update_transaction_state(method_name, args, autocommit_before)
+      def update_transaction_state(method_name, args, autocommit_before, dialect, connection, succeeded: true)
+        connection_in_transaction = dialect.reported_in_transaction(connection)
+        unless connection_in_transaction.nil?
+          self.in_transaction = connection_in_transaction
+          return
+        end
+        # When the statement failed, SQL inference can't tell what took effect, so keep the current state.
+        return unless succeeded
+
         effect = Utils::SqlMethodAnalyzer.transaction_effect(
           method_name, args, autocommit: autocommit?, autocommit_before: autocommit_before
         )
-
         if effect.opens_transaction
           self.in_transaction = true
         elsif effect.closes_transaction
           self.in_transaction = false
         end
-
         self.autocommit = effect.autocommit_value unless effect.autocommit_value.nil?
       end
     end
