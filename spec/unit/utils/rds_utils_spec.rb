@@ -593,6 +593,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RdsUtils do
       utils.clear_cache
       expect(utils.rds_dns?(host)).to be true
     end
+
+    it 'identify_rds_type returns a consistent classification on repeated calls' do
+      host = ENDPOINTS.first[:host]
+      3.times { expect(utils.identify_rds_type(host)).to eq(ENDPOINTS.first[:type]) }
+    end
+
+    it 'identify_rds_type reclassifies after prepare_host_func changes, without an explicit clear_cache' do
+      suffixed = "#{ENDPOINTS.first[:host]}.proxied"
+      expect(utils.identify_rds_type(suffixed)).to eq(URL_TYPE::OTHER)
+
+      utils.prepare_host_func = ->(host) { host.delete_suffix('.proxied') }
+      expect(utils.identify_rds_type(suffixed)).to eq(ENDPOINTS.first[:type])
+    ensure
+      utils.reset_prepare_host_func
+    end
   end
 end
 
