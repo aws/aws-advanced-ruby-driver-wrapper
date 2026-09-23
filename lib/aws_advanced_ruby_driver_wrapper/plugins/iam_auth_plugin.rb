@@ -37,6 +37,7 @@ module AwsAdvancedRubyDriverWrapper
         @credentials_provider = PropertyDefinition::AWS_CREDENTIALS_PROVIDER.get(props) ||
                                 Aws::CredentialProviderChain.new.resolve
         expiration = PropertyDefinition::IAM_EXPIRATION_SEC.get_float(props)
+        PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)
         service_container.storage_service.register(IAM_TOKEN_CACHE_NAME, ttl: expiration)
         @subscribed_methods = SUBSCRIBED_METHODS
       end
@@ -92,6 +93,7 @@ module AwsAdvancedRubyDriverWrapper
         cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
         entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
         expiration = PropertyDefinition::IAM_EXPIRATION_SEC.get_float(wrapper_props_override)
+        PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)
 
         if Utils::IamAuthUtils.valid_entry?(entry)
           driver_props[token_prop] = entry.token

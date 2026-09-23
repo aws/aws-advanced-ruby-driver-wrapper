@@ -505,6 +505,32 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
     end
   end
 
+  describe '#initialize iam_expiration_sec bound enforcement' do
+    it 'raises when iam_expiration_sec exceeds the maximum' do
+      props = Concurrent::Map.new
+      props[:iam_expiration_sec] = AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_MAX_EXPIRATION_SEC + 1
+      expect { build_plugin(props) }.to raise_error(ArgumentError, /iam_expiration_sec/)
+    end
+
+    it 'raises for the 15-minute token validity itself (900s)' do
+      props = Concurrent::Map.new
+      props[:iam_expiration_sec] = 900.0
+      expect { build_plugin(props) }.to raise_error(ArgumentError, /iam_expiration_sec/)
+    end
+
+    it 'accepts the maximum allowed value' do
+      props = Concurrent::Map.new
+      props[:iam_expiration_sec] = AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_MAX_EXPIRATION_SEC
+      expect { build_plugin(props) }.not_to raise_error
+    end
+
+    it 'registers the cache with the default (max) ttl when unset' do
+      build_plugin
+      expect(mock_storage_service).to have_received(:register)
+        .with(IAM_TOKEN_CACHE_NAME, ttl: AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_MAX_EXPIRATION_SEC)
+    end
+  end
+
   describe "PluginManager registration under code 'iam'" do
     it "is registered under the code 'iam'" do
       require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'

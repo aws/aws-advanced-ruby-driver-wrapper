@@ -34,6 +34,20 @@ module AwsAdvancedRubyDriverWrapper
       raise ArgumentError, "#{name} must be a non-negative number, got: #{val.inspect}" if val&.to_f&.negative?
     end
 
+    # Upper bound for the IAM token cache TTL. An RDS IAM auth token is only valid for 15 minutes
+    # (900s), so the cache must expire strictly before then to guarantee a cached token is never
+    # reused past its lifetime.
+    IAM_MAX_EXPIRATION_SEC = 870.0
+
+    IAM_EXPIRATION_SEC_BOUND = lambda do |val, name|
+      f = val&.to_f
+      unless f&.positive? && f <= IAM_MAX_EXPIRATION_SEC
+        raise ArgumentError,
+              "#{name} must be greater than 0 and at most #{IAM_MAX_EXPIRATION_SEC} seconds " \
+              "(the maximum keeps the IAM token cache below its 15-minute validity), got: #{val.inspect}"
+      end
+    end
+
     # -- General --
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover,initial_connection',
@@ -151,8 +165,9 @@ module AwsAdvancedRubyDriverWrapper
     IAM_PORT = WrapperProperty.new(:iam_port, 'Overrides the port used to generate the IAM token', default_value: nil, type: Integer)
     IAM_REGION = WrapperProperty.new(:iam_region, 'Overrides the AWS region used to generate the IAM token', default_value: nil,
                                                                                                              type: String)
-    IAM_EXPIRATION_SEC = WrapperProperty.new(:iam_expiration_sec, 'IAM token cache expiration in seconds',
-                                             default_value: 870.0, type: Float, validator: POSITIVE_FLOAT)
+    IAM_EXPIRATION_SEC = WrapperProperty.new(:iam_expiration_sec,
+                                             'IAM token cache expiration in seconds.',
+                                             default_value: IAM_MAX_EXPIRATION_SEC, type: Float, validator: IAM_EXPIRATION_SEC_BOUND)
     IAM_ACCESS_TOKEN_PROPERTY_NAME = WrapperProperty.new(:iam_access_token_property_name, 'Property name used to pass the IAM token',
                                                          default_value: :password, type: Symbol)
 
