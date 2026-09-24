@@ -525,6 +525,46 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
     end
   end
 
+  describe '#reset' do
+    let(:session_state_service) { AwsAdvancedRubyDriverWrapper::Services::SessionStateService.new }
+
+    before do
+      container.session_state_service = session_state_service
+      allow(connection).to receive(:reset).and_return(connection)
+    end
+
+    it 'takes the reset through the pipeline' do
+      wrapper.reset
+
+      expect(plugin.method_names).to eq(['connection.reset'])
+    end
+
+    # A caller assigns the return value back and keeps using it, so reset has to hand back the wrapper
+    # rather than the bare driver connection the pipeline returns.
+    it 'returns the wrapper so the connection stays usable through it' do
+      expect(wrapper.reset).to be(wrapper)
+    end
+
+    it 'resets the tracked session state, since the reset drops it on the server' do
+      session_state_service.in_transaction = true
+      session_state_service.autocommit = false
+
+      wrapper.reset
+
+      expect(session_state_service.in_transaction?).to be(false)
+      expect(session_state_service.autocommit?).to be(true)
+    end
+
+    it 'also resets the tracked session state for the async_reset spelling' do
+      allow(connection).to receive(:async_reset).and_return(connection)
+      session_state_service.in_transaction = true
+
+      wrapper.async_reset
+
+      expect(session_state_service.in_transaction?).to be(false)
+    end
+  end
+
   # The dialect's list is what enrolls a call in the pipeline and what failover subscribes to, and
   # OPERATIONS is what says how each of those calls is performed. Neither is derivable from the other,
   # so they are checked against each other here rather than by eye.

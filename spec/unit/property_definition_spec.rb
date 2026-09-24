@@ -143,6 +143,36 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::PropertyDefinition do
       end
     end
 
+    context 'IAM_EXPIRATION_SEC_BOUND validator' do
+      let(:max) { described_class::IAM_MAX_EXPIRATION_SEC }
+
+      it 'raises for a negative value' do
+        expect { described_class::IAM_EXPIRATION_SEC.validate!(-1) }.to raise_error(ArgumentError, /iam_expiration_sec.*-1/)
+      end
+
+      it 'raises for zero' do
+        expect { described_class::IAM_EXPIRATION_SEC.validate!(0) }.to raise_error(ArgumentError, /iam_expiration_sec.*0/)
+      end
+
+      it 'raises for a value above the maximum' do
+        expect do
+          described_class::IAM_EXPIRATION_SEC.validate!(max + 1)
+        end.to raise_error(ArgumentError, /iam_expiration_sec.*15-minute/)
+      end
+
+      it 'raises for the 15-minute token validity itself (900s)' do
+        expect { described_class::IAM_EXPIRATION_SEC.validate!(900.0) }.to raise_error(ArgumentError)
+      end
+
+      it 'does not raise for the maximum allowed value' do
+        expect { described_class::IAM_EXPIRATION_SEC.validate!(max) }.not_to raise_error
+      end
+
+      it 'does not raise for a positive value below the maximum' do
+        expect { described_class::IAM_EXPIRATION_SEC.validate!(60) }.not_to raise_error
+      end
+    end
+
     it 'does not raise when the property has no validator' do
       expect { described_class::CLUSTER_ID.validate!('anything') }.not_to raise_error
     end

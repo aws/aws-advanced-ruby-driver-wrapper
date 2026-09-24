@@ -167,6 +167,7 @@ module AwsAdvancedRubyDriverWrapper
         plugin_codes = PropertyDefinition::PLUGINS.get(wrapper_props)
         codes_list = plugin_codes.split(',').map(&:strip)
         ensure_single_auth_plugin(codes_list)
+        ensure_single_failover_plugin(codes_list)
         raise Errors::AwsError, 'Duplicate plugins detected' if codes_list.length != codes_list.uniq.length
 
         plugin_classes = plugin_codes.empty? ? [] : get_plugin_classes(codes_list, wrapper_props)
@@ -186,6 +187,15 @@ module AwsAdvancedRubyDriverWrapper
 
         raise Errors::PluginConflictError,
               "Only one authentication plugin may be used at a time. Found: #{auth_plugins_used.join(', ')}"
+      end
+
+      def ensure_single_failover_plugin(plugin_code_list)
+        failover_plugins_used = plugin_code_list & %w[failover gdb_failover].freeze
+
+        return unless failover_plugins_used.length > 1
+
+        raise Errors::PluginConflictError,
+              "Only one failover plugin may be used at a time. Found: #{failover_plugins_used.join(', ')}"
       end
 
       def get_plugin_classes(plugin_code_list, _wrapper_props)
