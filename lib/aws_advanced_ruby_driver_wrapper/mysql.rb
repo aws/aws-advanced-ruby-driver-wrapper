@@ -14,6 +14,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+# Loads the gem's top-level setup (version constant, global configuration) that this client relies on,
+# so requiring this file alone is enough to use the MySQL client.
+require_relative '../aws_advanced_ruby_driver_wrapper'
 require_relative 'utils/connection_config_parser'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'
