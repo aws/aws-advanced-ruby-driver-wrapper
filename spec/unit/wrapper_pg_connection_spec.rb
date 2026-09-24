@@ -745,6 +745,46 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
     end
   end
 
+  # pg lets a connection be opened with a block: the connection is yielded, closed when the block
+  # returns, and the block's value is handed back.
+  describe '.new with a block' do
+    # A wrapper that has already been "connected", so new can be exercised without talking to a server:
+    # allocate hands back this instance and initialize is a no-op on it.
+    let(:new_wrapper) { build_wrapper(container).tap { |w| allow(w).to receive(:initialize) } }
+
+    before do
+      allow(described_class).to receive(:allocate).and_return(new_wrapper)
+      allow(new_wrapper).to receive(:close)
+    end
+
+    it 'yields the connection and returns the block result' do
+      yielded = nil
+      result = described_class.new do |conn|
+        yielded = conn
+        'block value'
+      end
+
+      expect(yielded).to be(new_wrapper)
+      expect(result).to eq('block value')
+    end
+
+    it 'closes the connection when the block finishes' do
+      described_class.new { |conn| conn }
+
+      expect(new_wrapper).to have_received(:close)
+    end
+
+    it 'closes the connection even when the block raises' do
+      expect { described_class.new { raise 'boom' } }.to raise_error('boom')
+      expect(new_wrapper).to have_received(:close)
+    end
+
+    it 'returns the connection itself when no block is given' do
+      expect(described_class.new).to be(new_wrapper)
+      expect(new_wrapper).not_to have_received(:close)
+    end
+  end
+
   # Nothing else in the call chain has any SQL to publish, and a plugin that inspects statements must
   # not be handed the SQL of a statement that is already finished.
   describe 'a call that has no SQL of its own' do

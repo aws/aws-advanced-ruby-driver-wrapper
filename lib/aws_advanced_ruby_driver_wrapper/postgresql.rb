@@ -14,6 +14,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+# Loads the gem's top-level setup (version constant, global configuration) that this client relies on,
+# so requiring this file alone is enough to use the PostgreSQL client.
+require_relative '../aws_advanced_ruby_driver_wrapper'
 require_relative 'utils/connection_config_parser'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'
@@ -25,7 +28,13 @@ module AwsAdvancedRubyDriverWrapper
       def new(*, **)
         instance = allocate
         instance.send(:initialize, *, **)
-        instance
+        return instance unless block_given?
+
+        begin
+          yield instance
+        ensure
+          instance.close
+        end
       end
 
       alias open new
