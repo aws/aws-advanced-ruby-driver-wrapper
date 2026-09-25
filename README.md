@@ -28,16 +28,16 @@ Built-in support for [AWS Identity and Access Management (IAM)](https://aws.amaz
 
 The plugin-based design ensures applications only load the functionality they need, reducing dependencies and overhead. The following plugins are currently available:
 
-| Plugin                         | Description                                                                                                                                                                |
-|--------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Failover                       | Reduces connection recovery time during Aurora/RDS failovers by using cached cluster topology.                                                                             |
-| Global Database (GDB) Failover | Adds awareness of Amazon Aurora Global Databases to the failover logic.                                                                                                    |
-| IAM Authentication             | Connects using short-lived IAM authentication tokens instead of a database password. See [Using the IAM Authentication Plugin](./docs/UsingTheIamAuthenticationPlugin.md). |
-| AWS Secrets Manager            | Retrieves database credentials from AWS Secrets Manager. See [Using the AWS Secrets Manager Plugin](./docs/UsingTheAwsSecretsManagerPlugin.md).                            |
-| Custom Endpoint                | Adds awareness of Aurora custom endpoints to topology and host selection.                                                                                                  |
-| Blue/Green Deployment          | Adds awareness of Amazon RDS/Aurora Blue/Green deployments to minimize downtime during switchover.                                                                         |
-| Initial Connection Strategy    | Controls how the initial connection to a cluster is established and verified.                                                                                              |
-| KMS Encryption                 | Transparently encrypts and decrypts individual table columns using data keys held in AWS KMS. See [Using the KMS Encryption Plugin](./docs/UsingTheKmsEncryptionPlugin.md). |
+| Plugin                         | Description                                                                                                                                                                                                             |
+|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Failover                       | Reduces connection recovery time during Aurora/RDS failovers by using cached cluster topology. See [Enhanced Failover Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/enhanced-failover).                  |
+| Global Database (GDB) Failover | Adds awareness of Amazon Aurora Global Databases to the failover logic. See [Global Database Failover Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/gdb-failover).                         |
+| IAM Authentication             | Connects using short-lived IAM authentication tokens instead of a database password. See [IAM Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/iam-authentication).            |
+| AWS Secrets Manager            | Retrieves database credentials from AWS Secrets Manager. See [AWS Secrets Manager Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/aws-secrets-manager).                                      |
+| Custom Endpoint                | Adds awareness of Aurora custom endpoints to topology and host selection. See [Custom Endpoint Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/custom-endpoint).                             |
+| Blue/Green Deployment          | Adds awareness of Amazon RDS/Aurora Blue/Green deployments to minimize downtime during switchover. See [Blue/Green Deployment Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/blue-green).   |
+| Initial Connection Strategy    | Controls how the initial connection to a cluster is established and verified. See [Initial Connection Strategy Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/initial-connection-strategy). |
+| KMS Encryption                 | Transparently encrypts and decrypts individual table columns using data keys held in AWS KMS. See [KMS Encryption Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption).           |
 
 > [!IMPORTANT]
 > **`iam` and `secrets_manager` are mutually exclusive.** Only one authentication plugin may be active at a time. Configuring both will raise a `PluginConflictError` at connection initialization.
@@ -108,15 +108,23 @@ production:
 
 ## Documentation
 
-Technical documentation regarding the functionality of the AWS Advanced Ruby Driver Wrapper is maintained in this GitHub repository under the [`docs`](./docs) folder. Since the wrapper requires an underlying Ruby driver, please refer to the individual driver's documentation for driver-specific information.
+Technical documentation regarding the functionality of the AWS Advanced Ruby Driver Wrapper is published at the [AWS Advanced Wrapper documentation site](https://aws.github.io/aws-advanced-wrapper-docs/ruby/overview). Since the wrapper requires an underlying Ruby driver, please refer to the individual driver's documentation for driver-specific information.
 
-| Topic                                | Documentation                                                              |
-|--------------------------------------|----------------------------------------------------------------------------|
-| AWS IAM Authentication Plugin        | [Using the IAM Authentication Plugin](./docs/UsingTheIamAuthenticationPlugin.md) |
-| AWS Secrets Manager Plugin           | [Using the AWS Secrets Manager Plugin](./docs/UsingTheAwsSecretsManagerPlugin.md) |
-| Configuring AWS Credentials          | [AWS Credentials](./docs/AwsCredentials.md)                                |
-| Configuring TLS/SSL                  | [Configuring TLS/SSL](docs/ConfiguringTLS.md)                            |
-| Running the integration tests        | [Integration Tests](./docs/development-guide/IntegrationTests.md)          |
+| Topic                              | Documentation                                                                                                                        |
+|------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| Overview                           | [Overview](https://aws.github.io/aws-advanced-wrapper-docs/ruby/overview)                                                            |
+| Failover Plugin                    | [Enhanced Failover Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/enhanced-failover)                                   |
+| Global Database Failover Plugin    | [Global Database Failover Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/gdb-failover)                   |
+| AWS IAM Authentication Plugin      | [IAM Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/iam-authentication)                   |
+| AWS Secrets Manager Plugin         | [AWS Secrets Manager Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/aws-secrets-manager)                 |
+| Custom Endpoint Plugin             | [Custom Endpoint Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/custom-endpoint)                         |
+| Blue/Green Deployment Plugin       | [Blue/Green Deployment Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/blue-green)                        |
+| Initial Connection Strategy Plugin | [Initial Connection Strategy Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/initial-connection-strategy) |
+| KMS Encryption Plugin              | [KMS Encryption Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption)                           |
+| Configuring AWS Credentials        | [AWS Credentials](https://aws.github.io/aws-advanced-wrapper-docs/ruby/aws-credentials)                                              |
+| Configuring TLS/SSL                | [Configuring TLS/SSL](https://aws.github.io/aws-advanced-wrapper-docs/ruby/configuring-tls)                                          |
+| Plugin Compatibility               | [Plugin Compatibility](https://aws.github.io/aws-advanced-wrapper-docs/ruby/compatibility)                                           |
+| Running the integration tests      | [Integration Tests](https://aws.github.io/aws-advanced-wrapper-docs/ruby/development-guide/integration-tests)                        |
 
 ### Known Limitations
 
