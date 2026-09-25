@@ -5,7 +5,21 @@ updates:
     target-branch: "main"
     schedule:
       interval: "weekly"
+    groups:
+      bundler-dev:
+        dependency-type: "development"
+        patterns:
+          - "*"
+      bundler-production:
+        dependency-type: "production"
+        patterns:
+          - "*"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
