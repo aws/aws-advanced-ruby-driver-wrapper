@@ -326,6 +326,8 @@ module AwsAdvancedRubyDriverWrapper
       # Guard against a missing connection. Fail loudly instead.
       raise NoMethodError, 'Connection not initialized' if conn.nil?
 
+      args = transcode_args(args, conn)
+
       # Only forward keyword arguments when there are any.
       sql = sql_for(spec, args)
       result =
@@ -344,6 +346,29 @@ module AwsAdvancedRubyDriverWrapper
         end
       Array(spec[:after]).each { |hook| send(hook, args, result, sql) }
       wrap_pg_result(result, sql)
+    end
+
+    # Transcode string arguments to the connection's internal_encoding so that
+    # non-UTF-8 strings (e.g. UTF-16, EUC-JP) are accepted by libpq.
+    def transcode_args(args, conn)
+      enc = conn.respond_to?(:internal_encoding) && conn.internal_encoding
+      return args unless enc
+
+      args.map { |arg| transcode_arg(arg, enc) }
+    end
+
+    def transcode_arg(arg, enc)
+      case arg
+      when String
+        return arg if arg.encoding == Encoding::BINARY
+        return arg if arg.encoding == enc
+
+        arg.encode(enc)
+      when Array
+        arg.map { |a| transcode_arg(a, enc) }
+      else
+        arg
+      end
     end
 
     # The operation a call performs, whatever spelling it arrived under, or nil for a call that does not

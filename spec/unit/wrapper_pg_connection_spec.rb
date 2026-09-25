@@ -718,4 +718,136 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
       expect(plugin.sql_for('connection.consume_input')).to eq([nil])
     end
   end
+
+  describe 'character encoding normalization' do
+    before do
+      allow(connection).to receive(:internal_encoding).and_return(Encoding::UTF_8)
+    end
+
+    context 'when the connection internal_encoding is UTF-8' do
+      it 'transcodes a UTF-16BE SQL string to UTF-8 before exec' do
+        received = nil
+        allow(connection).to receive(:exec) { |sql, *|
+          received = sql
+          pg_result
+        }
+        wrapper.exec("SELECT 'grün'".encode('UTF-16BE'))
+        expect(received.encoding).to eq(Encoding::UTF_8)
+        expect(received).to eq("SELECT 'grün'")
+      end
+
+      it 'transcodes a UTF-16LE SQL string to UTF-8 before exec_params' do
+        received = nil
+        allow(connection).to receive(:exec_params) { |sql, *|
+          received = sql
+          pg_result
+        }
+        wrapper.exec_params('VALUES($1)'.encode('UTF-16LE'), ['grün'.encode('UTF-16BE')])
+        expect(received.encoding).to eq(Encoding::UTF_8)
+      end
+
+      it 'transcodes params nested in an array before exec_params' do
+        received_params = nil
+        allow(connection).to receive(:exec_params) { |_sql, params, *|
+          received_params = params
+          pg_result
+        }
+        wrapper.exec_params('VALUES($1, $2)',
+                            ['grün'.encode('UTF-16BE'), 'weiß'.encode('UTF-32LE')])
+        expect(received_params.map(&:encoding)).to all(eq(Encoding::UTF_8))
+        expect(received_params).to eq(%w[grün weiß])
+      end
+
+      it 'transcodes a UTF-32LE SQL string to UTF-8 before send_query' do
+        received = nil
+        allow(connection).to receive(:send_query) { |sql, *| received = sql }
+        wrapper.send_query("SELECT 'grün'".encode('UTF-32LE'))
+        expect(received.encoding).to eq(Encoding::UTF_8)
+      end
+
+      it 'transcodes a UTF-16LE SQL string to UTF-8 before send_query_params' do
+        received = nil
+        allow(connection).to receive(:send_query_params) { |sql, *| received = sql }
+        wrapper.send_query_params('VALUES($1)'.encode('UTF-16LE'), ['grün'.encode('UTF-16BE')])
+        expect(received.encoding).to eq(Encoding::UTF_8)
+      end
+
+      it 'transcodes a UTF-16BE statement name and SQL before prepare' do
+        received_name = nil
+        received_sql = nil
+        allow(connection).to receive(:prepare) { |name, sql, *|
+          received_name = name
+          received_sql = sql
+        }
+        wrapper.prepare('weiß1'.encode('UTF-16BE'), 'VALUES($1)'.encode('UTF-16BE'))
+        expect(received_name.encoding).to eq(Encoding::UTF_8)
+        expect(received_sql.encoding).to eq(Encoding::UTF_8)
+      end
+
+      it 'leaves binary strings unchanged' do
+        received = nil
+        allow(connection).to receive(:exec) { |sql, *|
+          received = sql
+          pg_result
+        }
+        binary = "\x00\xFF".b
+        wrapper.exec(binary)
+        expect(received.encoding).to eq(Encoding::BINARY)
+      end
+
+      it 'leaves non-string args unchanged' do
+        received = nil
+        allow(connection).to receive(:exec_params) { |_sql, params, *|
+          received = params
+          pg_result
+        }
+        wrapper.exec_params('SELECT $1', [42])
+        expect(received).to eq([42])
+      end
+    end
+
+    context 'when the connection internal_encoding is EUC-JP' do
+      before do
+        allow(connection).to receive(:internal_encoding).and_return(Encoding::EUC_JP)
+      end
+
+      it 'transcodes a UTF-16BE SQL string to EUC-JP before exec' do
+        received = nil
+        allow(connection).to receive(:exec) { |sql, *|
+          received = sql
+          pg_result
+        }
+        wrapper.exec("VALUES('世界線航跡蔵')".encode('UTF-16BE'))
+        expect(received.encoding).to eq(Encoding::EUC_JP)
+        expect(received.encode('UTF-8')).to eq("VALUES('世界線航跡蔵')")
+      end
+
+      it 'transcodes params to EUC-JP before exec_params' do
+        received_params = nil
+        allow(connection).to receive(:exec_params) { |_sql, params, *|
+          received_params = params
+          pg_result
+        }
+        wrapper.exec_params('VALUES($1)', ['grün'.encode('UTF-16BE')])
+        expect(received_params.first.encoding).to eq(Encoding::EUC_JP)
+      end
+    end
+
+    context 'when the connection internal_encoding returns nil' do
+      before do
+        allow(connection).to receive(:internal_encoding).and_return(nil)
+      end
+
+      it 'passes args through unchanged' do
+        received = nil
+        allow(connection).to receive(:exec) { |sql, *|
+          received = sql
+          pg_result
+        }
+        sql = 'SELECT 1'
+        wrapper.exec(sql)
+        expect(received).to equal(sql)
+      end
+    end
+  end
 end

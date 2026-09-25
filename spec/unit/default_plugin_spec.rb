@@ -201,6 +201,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin do
                autocommit?: true,
                update_transaction_state: nil)
       end
+
+      it 'calls update_transaction_state on success' do
+        plugin.execute('connection.exec', -> { 'ok' })
+        expect(session_state_service).to have_received(:update_transaction_state)
+      end
     end
 
     context 'without session state service' do
@@ -209,6 +214,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin do
       it 'does not raise when session_state_service is nil' do
         result = plugin.execute('connection.exec', ->(*_) { 'ok' }, 'BEGIN')
         expect(result).to eq('ok')
+      end
+
+      it 'propagates exceptions when session_state_service is nil' do
+        expect do
+          plugin.execute('connection.copy_data', -> { raise 'boom' })
+        end.to raise_error(RuntimeError, 'boom')
       end
     end
   end
