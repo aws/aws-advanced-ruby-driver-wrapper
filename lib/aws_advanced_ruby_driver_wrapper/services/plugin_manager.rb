@@ -118,7 +118,9 @@ module AwsAdvancedRubyDriverWrapper
 
       # @param sql [String, nil] the SQL the call originated from, for plugins that inspect
       #   statements; it is published as valid UTF-8 (see {Utils::SqlEncoding.inspectable}), and is
-      #   consumed here and never forwarded to the target driver method
+      #   consumed here and never forwarded to the target driver method. Since invalid bytes in the
+      #   published copy are replaced, a plugin that rewrites the SQL builds the new statement from
+      #   the call's arguments rather than from this copy
       # @param field_names [Array<String>, Proc, nil] the result's column names in order, for a
       #   plugin that reads rows as arrays; like +sql+, it is consumed here rather than forwarded
       def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, sql: nil, field_names: nil, **kwargs, &block)
