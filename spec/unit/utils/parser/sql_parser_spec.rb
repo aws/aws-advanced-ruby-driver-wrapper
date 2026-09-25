@@ -205,6 +205,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
       allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).with('pg_query')
     end
 
+    describe 'creation' do
+      it 'loads pg_query up front' do
+        pg_parser
+
+        expect(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to have_received(:require).with('pg_query')
+      end
+
+      it 'fails with advice to add pg_query when the gem is not installed' do
+        allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer)
+          .to receive(:require).with('pg_query').and_raise(LoadError)
+
+        expect { pg_parser }.to raise_error(LoadError, /Add gem "pg_query" to your Gemfile/)
+      end
+    end
+
     describe '#analyze_sql query_type' do
       it 'returns INSERT' do
         allow(PgQuery).to receive(:parse).and_return(
