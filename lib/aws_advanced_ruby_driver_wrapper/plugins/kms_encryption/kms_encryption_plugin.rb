@@ -201,6 +201,9 @@ module AwsAdvancedRubyDriverWrapper
       def initialize(service_container, props = ::Concurrent::Map.new, encryption_utility: nil)
         @service_container = service_container
         @encryption_utility = encryption_utility || Encryption::KmsEncryptionUtility.new(service_container, props)
+        # Built up front so that a parser dependency the application has not installed (pg_query, on
+        # PostgreSQL) fails the connection as it is set up rather than its first statement.
+        @sql_parser = Utils::Parser::SqlParser.new(service_container.dialect_service.driver_dialect)
         @subscribed_methods = SUBSCRIBED_METHODS
       end
 
@@ -808,9 +811,7 @@ module AwsAdvancedRubyDriverWrapper
         @encryption_utility.sql_runner
       end
 
-      def sql_parser
-        @sql_parser ||= Utils::Parser::SqlParser.new(@service_container.dialect_service.driver_dialect)
-      end
+      attr_reader :sql_parser
     end
   end
 end

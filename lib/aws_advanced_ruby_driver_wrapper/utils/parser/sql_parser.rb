@@ -112,6 +112,9 @@ module AwsAdvancedRubyDriverWrapper
         def resolve_analyzer(driver_dialect)
           if pg_dialect?(driver_dialect)
             require_relative 'pg_statement_analyzer'
+            # Loaded now rather than on the first statement, so a missing pg_query gem is reported
+            # when the parser is created instead of in the middle of a query.
+            PgStatementAnalyzer.load_parser
             PgStatementAnalyzer
           else
             require_relative 'mysql_statement_analyzer'
