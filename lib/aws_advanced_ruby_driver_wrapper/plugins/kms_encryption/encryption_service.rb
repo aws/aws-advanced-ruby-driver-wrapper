@@ -148,7 +148,7 @@ module AwsAdvancedRubyDriverWrapper
           def serialize_value(value, marker = TypeMarker.from_object(value))
             case marker
             # Ruby has no time-of-day type, so a LOCAL_TIME value is serialized as its own string.
-            when TypeMarker::STRING, TypeMarker::GENERIC, TypeMarker::LOCAL_TIME then value.to_s.b
+            when TypeMarker::STRING, TypeMarker::GENERIC, TypeMarker::LOCAL_TIME then utf8_bytes(value.to_s)
             when TypeMarker::BYTE_ARRAY then value.b
             when TypeMarker::INTEGER then [value].pack('l>')
             when TypeMarker::LONG then [value].pack('q>')
@@ -342,6 +342,32 @@ module AwsAdvancedRubyDriverWrapper
 
           def utf8(bytes)
             bytes.dup.force_encoding(Encoding::UTF_8)
+          end
+
+          # The string's text as UTF-8 bytes, which is how {deserialize_value} reads a string back. A
+          # string in another encoding is converted first, so that it decrypts to the same text rather
+          # than to its own bytes read as UTF-8.
+          #
+          # A string that cannot be converted is refused rather than stored in a form that would not
+          # decrypt to what was written. The error names only the encoding, since the conversion
+          # error's own message quotes the character it stopped at, which is part of the plaintext.
+          #
+          # @param string [String]
+          # @return [String] binary
+          # @raise [Errors::EncryptionError] if the string has no UTF-8 form
+          def utf8_bytes(string)
+            return string.b if string.encoding == Encoding::UTF_8
+            return string.b if string.ascii_only? && string.encoding.ascii_compatible?
+
+            converted = string.encode(Encoding::UTF_8)
+            converted.b
+          rescue EncodingError => e
+            raise Errors::EncryptionError
+              .encryption_failed("Cannot encrypt a #{string.encoding} string as UTF-8 (#{e.class})")
+              .with_data_type(string.class.to_s)
+          ensure
+            # The converted copy holds the plaintext too, so it is wiped along with the serialized one.
+            wipe(converted)
           end
 
           def to_millis(value)
