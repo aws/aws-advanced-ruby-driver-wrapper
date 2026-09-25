@@ -24,7 +24,9 @@ jobs:
       - uses: tcort/github-action-markdown-link-check@e047c5b37f24ab722bbef1a27b6fab7f96bc4068 # v1
         with:
           use-quiet-mode: 'yes'
-          folder-path: 'docs'
+          config-file: 'mlc_config.json'
+          folder-path: '.'
+          max-depth: 0
 
   lint:
     runs-on: ubuntu-latest
