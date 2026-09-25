@@ -2,7 +2,7 @@ PATH
   remote: .
   specs:
     aws-advanced-ruby-driver-wrapper (0.0.1)
-      concurrent-ruby (>= 1.3.7)
+      concurrent-ruby (~> 1.3, >= 1.3.7)
 
 GEM
   remote: https://rubygems.org/

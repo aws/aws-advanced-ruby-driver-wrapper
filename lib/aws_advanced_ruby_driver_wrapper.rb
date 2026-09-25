@@ -28,6 +28,13 @@ require_relative 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/blue_green
 module AwsAdvancedRubyDriverWrapper
   @config = Configuration.new
 
+  # Direct-driver connection classes are autoloaded so requiring this file alone is enough to use them:
+  # referencing either constant loads its driver-specific file on demand. Loading stays lazy - a client
+  # for one driver never loads the other driver's code, and the underlying 'pg'/'mysql2' gem is only
+  # required when a connection is actually opened.
+  autoload :WrapperPgConnection, 'aws_advanced_ruby_driver_wrapper/postgresql'
+  autoload :WrapperMysql2Client, 'aws_advanced_ruby_driver_wrapper/mysql'
+
   class << self
     attr_reader :config
   end
@@ -63,19 +70,29 @@ end
 
 at_exit { AwsAdvancedRubyDriverWrapper.shutdown }
 
-# Register adapters with ActiveRecord if it is loaded.
-# The register call is lazy — the adapter file is only loaded when a connection is first established.
-# Users will not load the code for both adapters if they are only using one of them.
-if defined?(ActiveRecord::ConnectionAdapters) && ActiveRecord::ConnectionAdapters.respond_to?(:register)
-  ActiveRecord::ConnectionAdapters.register(
-    'aws_postgresql',
-    'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
-    'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
-  )
+# Register adapters with ActiveRecord via a lazy-load hook so the require order between this file and
+# ActiveRecord does not matter. The block runs the first time ActiveRecord::Base is referenced, whether
+# ActiveRecord is loaded before or after this file. The register call is itself lazy — each adapter file
+# is only loaded when a connection using that adapter is first established, so users of a single adapter
+# never load the other.
+begin
+  require 'active_support/lazy_load_hooks'
+rescue LoadError
+  # ActiveSupport is absent (raw-driver-only usage with no ActiveRecord); there is nothing to register.
+end
 
-  ActiveRecord::ConnectionAdapters.register(
-    'aws_mysql2',
-    'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
-    'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
-  )
+if defined?(ActiveSupport) && ActiveSupport.respond_to?(:on_load)
+  ActiveSupport.on_load(:active_record) do
+    ActiveRecord::ConnectionAdapters.register(
+      'aws_postgresql',
+      'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
+      'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
+    )
+
+    ActiveRecord::ConnectionAdapters.register(
+      'aws_mysql2',
+      'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
+      'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+    )
+  end
 end
