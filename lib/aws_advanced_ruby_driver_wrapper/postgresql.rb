@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative 'utils/connection_config_parser'
+require_relative 'utils/sql_encoding'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'
 require_relative 'errors'
@@ -326,8 +327,6 @@ module AwsAdvancedRubyDriverWrapper
       # Guard against a missing connection. Fail loudly instead.
       raise NoMethodError, 'Connection not initialized' if conn.nil?
 
-      args = transcode_args(args, conn)
-
       # Only forward keyword arguments when there are any.
       sql = sql_for(spec, args)
       result =
@@ -346,29 +345,6 @@ module AwsAdvancedRubyDriverWrapper
         end
       Array(spec[:after]).each { |hook| send(hook, args, result, sql) }
       wrap_pg_result(result, sql)
-    end
-
-    # Transcode string arguments to the connection's internal_encoding so that
-    # non-UTF-8 strings (e.g. UTF-16, EUC-JP) are accepted by libpq.
-    def transcode_args(args, conn)
-      enc = conn.respond_to?(:internal_encoding) && conn.internal_encoding
-      return args unless enc
-
-      args.map { |arg| transcode_arg(arg, enc) }
-    end
-
-    def transcode_arg(arg, enc)
-      case arg
-      when String
-        return arg if arg.encoding == Encoding::BINARY
-        return arg if arg.encoding == enc
-
-        arg.encode(enc)
-      when Array
-        arg.map { |a| transcode_arg(a, enc) }
-      else
-        arg
-      end
     end
 
     # The operation a call performs, whatever spelling it arrived under, or nil for a call that does not
@@ -400,15 +376,20 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     # @return [String, nil] the SQL the operation carries, taken from its arguments when it names a
-    #   statement of its own and from whatever it is bound to when it does not
+    #   statement of its own and from whatever it is bound to when it does not, as a copy that is
+    #   safe to inspect
     def sql_for(spec, args)
-      return args[spec[:sql_at]] if spec[:sql_at]
-
-      case spec[:bound_to]
-      when :prepared then @prepared_sql[args.first]
-      when :async then @async_sql
-      when :copy then @copy_sql
-      end
+      sql =
+        if spec[:sql_at]
+          args[spec[:sql_at]]
+        else
+          case spec[:bound_to]
+          when :prepared then @prepared_sql[args.first]
+          when :async then @async_sql
+          when :copy then @copy_sql
+          end
+        end
+      Utils::SqlEncoding.inspectable(sql)
     end
 
     # -- What an operation leaves behind, named by the +after+ entries of {OPERATIONS} --

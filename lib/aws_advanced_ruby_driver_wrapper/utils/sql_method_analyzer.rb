@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative '../ruby_method'
+require_relative 'sql_encoding'
 
 module AwsAdvancedRubyDriverWrapper
   module Utils
@@ -92,6 +93,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def first_statement(sql, mysql_backslash_escapes: false)
+        sql = SqlEncoding.inspectable(sql)
         return nil unless sql.is_a?(String) && !sql.strip.empty?
 
         stmts = strip_comments(sql, mysql_backslash_escapes: mysql_backslash_escapes).split(';')

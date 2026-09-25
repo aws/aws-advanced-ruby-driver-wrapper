@@ -18,6 +18,7 @@ require 'logger'
 require_relative '../errors'
 require_relative '../property_definition'
 require_relative '../ruby_method'
+require_relative '../utils/sql_encoding'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
@@ -116,7 +117,8 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       # @param sql [String, nil] the SQL the call originated from, for plugins that inspect
-      #   statements; it is consumed here and never forwarded to the target driver method
+      #   statements; it is published as valid UTF-8 (see {Utils::SqlEncoding.inspectable}), and is
+      #   consumed here and never forwarded to the target driver method
       # @param field_names [Array<String>, Proc, nil] the result's column names in order, for a
       #   plugin that reads rows as arrays; like +sql+, it is consumed here rather than forwarded
       def execute(ruby_method, current_conn, target_callable, *args, bounded_conn: nil, sql: nil, field_names: nil, **kwargs, &block)
@@ -131,7 +133,7 @@ module AwsAdvancedRubyDriverWrapper
           method_name = ruby_method.to_s
         end
 
-        context = PluginCallContext.new(sql, args, block, field_names)
+        context = PluginCallContext.new(Utils::SqlEncoding.inspectable(sql), args, block, field_names)
         previous_context = Thread.current[CURRENT_CALL_CONTEXT_KEY]
         Thread.current[CURRENT_CALL_CONTEXT_KEY] = context
 
