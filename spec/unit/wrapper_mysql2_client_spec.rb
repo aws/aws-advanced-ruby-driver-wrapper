@@ -100,6 +100,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
 
       expect(plugin.sql_for('statement.execute')).to eq(['INSERT INTO users (name, ssn) VALUES (?, ?)'])
     end
+
+    # A statement is executed any number of times, so the SQL it hands on is converted once, when it is
+    # prepared, rather than on every execution.
+    it 'converts SQL that is not UTF-8 once, however many times the statement is executed' do
+      sql = 'INSERT INTO users (name) VALUES (?)'.encode('UTF-16LE')
+      mysql_stmt = instance_double(Mysql2::Statement)
+      allow(connection).to receive(:prepare).and_return(mysql_stmt)
+      allow(mysql_stmt).to receive(:execute).and_return(mysql_result)
+      allow(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to receive(:inspectable).and_call_original
+
+      statement = client.prepare(sql)
+      3.times { statement.execute('Jo') }
+
+      expect(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to have_received(:inspectable).with(sql).once
+      expect(plugin.sql_for('statement.execute')).to eq(['INSERT INTO users (name) VALUES (?)'] * 3)
+      expect(connection).to have_received(:prepare).with(equal(sql))
+    end
   end
 
   # mysql2 has no query_async: a statement is sent asynchronously by passing async: true to query, and

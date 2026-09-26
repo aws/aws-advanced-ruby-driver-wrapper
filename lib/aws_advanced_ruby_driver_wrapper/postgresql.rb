@@ -276,10 +276,11 @@ module AwsAdvancedRubyDriverWrapper
 
     # The connection and the statement are held for as long as the block runs and let go afterward even
     # if the block raises. The rows the block feeds or reads belong to that statement, and it is the only
-    # place they are named, so it is what the calls inside the block publish.
+    # place they are named, so it is what the calls inside the block publish. It is held as the copy
+    # plugins inspect, made once here rather than on every row.
     def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
-      @copy_sql = sql
+      @copy_sql = Utils::SqlEncoding.inspectable(sql)
       execute_operation(:copy_data, [sql, coder], &)
     ensure
       @copy_conn = nil
