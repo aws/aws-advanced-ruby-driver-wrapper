@@ -17,6 +17,7 @@
 require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/sql_parser'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/query_type'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/mysql_statement_analyzer'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 
@@ -24,6 +25,28 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
   let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
   let(:pg_dialect)    { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:mysql_parser) { described_class.new(mysql_dialect) }
+
+  describe 'parse caching' do
+    let(:analyzer) { AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyzer }
+
+    it 'parses a repeated statement only once' do
+      allow(analyzer).to receive(:analyze).and_call_original
+      3.times { mysql_parser.analyze_sql('SELECT * FROM customers WHERE id = ?') }
+      expect(analyzer).to have_received(:analyze).once
+    end
+
+    it 'parses distinct statements separately' do
+      allow(analyzer).to receive(:analyze).and_call_original
+      mysql_parser.analyze_sql('SELECT * FROM a WHERE id = ?')
+      mysql_parser.analyze_sql('SELECT * FROM b WHERE id = ?')
+      expect(analyzer).to have_received(:analyze).twice
+    end
+
+    it 'returns the same analysis on a cache hit' do
+      sql = 'UPDATE customers SET email = ? WHERE id = ?'
+      expect(mysql_parser.analyze_sql(sql)).to eq(mysql_parser.analyze_sql(sql))
+    end
+  end
 
   describe '#analyze_sql query_type' do
     it 'returns INSERT for a simple INSERT' do
@@ -180,6 +203,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
       mod.const_set(:ParseError, Class.new(StandardError))
       stub_const('PgQuery', mod)
       allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).with('pg_query')
+    end
+
+    describe 'creation' do
+      it 'loads pg_query up front' do
+        pg_parser
+
+        expect(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to have_received(:require).with('pg_query')
+      end
+
+      it 'fails with advice to add pg_query when the gem is not installed' do
+        allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer)
+          .to receive(:require).with('pg_query').and_raise(LoadError)
+
+        expect { pg_parser }.to raise_error(LoadError, /Add gem "pg_query" to your Gemfile/)
+      end
     end
 
     describe '#analyze_sql query_type' do

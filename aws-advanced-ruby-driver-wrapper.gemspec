@@ -27,43 +27,32 @@ Gem::Specification.new do |spec|
   spec.license = 'Apache-2.0'
   spec.required_ruby_version = '>= 3.3.0'
 
-  spec.metadata['homepage_uri'] = spec.homepage
   spec.metadata['source_code_uri'] = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper'
   spec.metadata['changelog_uri'] = 'https://github.com/aws/aws-advanced-ruby-driver-wrapper/blob/main/CHANGELOG.md'
   spec.metadata['rubygems_mfa_required'] = 'true'
 
-  # Specify which files should be added to the gem when it is released.
-  # Prefer `git ls-files` for an accurate, tracked-file list, but fall back to a
-  # pure-Ruby directory glob when git is unavailable (e.g. inside a build/test
-  # container where the .git directory is not present). This keeps `bundle install`
-  # from emitting "fatal: not a git repository" and works identically offline.
+  # Specify which files ship in the released gem via an explicit allow-list: the
+  # runtime library plus the top-level legal/informational files. An allow-list is
+  # used deliberately so packaging never depends on git being present and can never
+  # sweep up unrelated files that happen to sit in the build directory (local
+  # credentials, logs, editor state, previously built gems, etc.).
   spec.files = Dir.chdir(__dir__) do
-    in_git_repo =
-      File.directory?(File.join(__dir__, '.git')) &&
-      begin
-        system('git', 'rev-parse', '--is-inside-work-tree',
-               out: File::NULL, err: File::NULL)
-      rescue StandardError
-        false
-      end
+    root_files = %w[
+      LICENSE
+      NOTICE
+      README.md
+      CHANGELOG.md
+      aws-advanced-ruby-driver-wrapper.gemspec
+    ]
 
-    tracked =
-      if in_git_repo
-        `git ls-files -z`.split("\x0")
-      else
-        Dir.glob('**/*', File::FNM_DOTMATCH).reject { |f| File.directory?(f) }
-      end
-
-    tracked.reject do |f|
-      (File.expand_path(f) == __FILE__) ||
-        f.start_with?(*%w[bin/ test/ spec/ features/ .git .circleci appveyor])
-    end
+    Dir.glob('lib/**/*', File::FNM_DOTMATCH).reject { |f| File.directory?(f) } +
+      root_files.select { |f| File.file?(f) }
   end
   spec.bindir = 'exe'
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']
 
-  spec.add_dependency 'concurrent-ruby', '>= 1.3.7'
+  spec.add_dependency 'concurrent-ruby', '~> 1.3', '>= 1.3.7'
 
   spec.post_install_message = <<~MSG
     ═══════════════════════════════════════════════════════════════

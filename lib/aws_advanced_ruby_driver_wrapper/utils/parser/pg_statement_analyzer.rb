@@ -24,13 +24,19 @@ module AwsAdvancedRubyDriverWrapper
       module PgStatementAnalyzer
         module_function
 
+        # Loads pg_query. The gem is not a dependency of the wrapper, so applications that never parse
+        # PostgreSQL statements are not made to install it (and compile its C extension).
+        #
+        # @raise [LoadError] when the pg_query gem is not installed
+        def load_parser
+          require 'pg_query'
+        rescue LoadError
+          raise LoadError,
+                'pg_query gem is required for PostgreSQL SQL parsing. Add gem "pg_query" to your Gemfile.'
+        end
+
         def analyze(sql)
-          begin
-            require 'pg_query'
-          rescue LoadError
-            raise LoadError,
-                  'pg_query gem is required for PostgreSQL SQL parsing. Add gem "pg_query" to your Gemfile.'
-          end
+          load_parser
 
           return QueryAnalysis.unknown unless sql.is_a?(String) && !sql.strip.empty?
 

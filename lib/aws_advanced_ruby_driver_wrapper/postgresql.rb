@@ -14,6 +14,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+# Loads the gem's top-level setup (version constant, global configuration) that this client relies on,
+# so requiring this file alone is enough to use the PostgreSQL client.
+require_relative '../aws_advanced_ruby_driver_wrapper'
 require_relative 'utils/connection_config_parser'
 require_relative 'utils/sql_encoding'
 require_relative 'services/service_utility'
@@ -26,7 +29,13 @@ module AwsAdvancedRubyDriverWrapper
       def new(*, **)
         instance = allocate
         instance.send(:initialize, *, **)
-        instance
+        return instance unless block_given?
+
+        begin
+          yield instance
+        ensure
+          instance.close
+        end
       end
 
       alias open new
@@ -63,7 +72,7 @@ module AwsAdvancedRubyDriverWrapper
       exec_params: { method: RubyMethod::CONNECTION_EXEC_PARAMS, sql_at: 0, after: :remember_sql_prepared },
       transaction: { method: RubyMethod::CONNECTION_TRANSACTION },
       close: { method: RubyMethod::CONNECTION_CLOSE },
-      reset: { method: RubyMethod::CONNECTION_RESET },
+      reset: { method: RubyMethod::CONNECTION_RESET, after: :reset_session_state },
       reset_start: { method: RubyMethod::CONNECTION_RESET_START },
       reset_poll: { method: RubyMethod::CONNECTION_RESET_POLL },
 
@@ -215,8 +224,12 @@ module AwsAdvancedRubyDriverWrapper
 
     alias finish close
 
+    # Resets the connection through the pipeline and returns this wrapper, so the reset connection stays
+    # usable through it. The driver's own reset tears down and re-establishes the underlying socket, which
+    # clears any server-side session state, so the tracked session state is reset to match.
     def reset
       execute_operation(:reset)
+      self
     end
 
     # -- Prepared statements --
@@ -393,6 +406,12 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     # -- What an operation leaves behind, named by the +after+ entries of {OPERATIONS} --
+
+    # A reset re-establishes the underlying socket, dropping any server-side session state (open
+    # transaction, autocommit setting), so the tracked state is reset to match the fresh connection.
+    def reset_session_state(_args, _result, _sql)
+      @service_container.session_state_service.reset
+    end
 
     def remember_prepared(args, _result, sql)
       @prepared_on[args.first] = current_conn

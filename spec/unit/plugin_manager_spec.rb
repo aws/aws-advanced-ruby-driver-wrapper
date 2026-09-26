@@ -583,4 +583,37 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       expect { described_class.new(container) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError)
     end
   end
+
+  describe '#ensure_single_failover_plugin' do
+    it 'raises when failover and gdb_failover are specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'failover,gdb_failover')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /Only one failover plugin may be used at a time/)
+    end
+
+    it 'raises when gdb_failover and failover are specified in reverse order' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'gdb_failover,failover')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /Only one failover plugin may be used at a time/)
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /failover.*gdb_failover|gdb_failover.*failover/)
+    end
+
+    it 'does not raise when only one failover plugin is specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'failover')
+      expect { described_class.new(container) }.not_to raise_error
+    end
+
+    it 'does not raise when only gdb_failover is specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'gdb_failover')
+      expect { described_class.new(container) }.not_to raise_error
+    end
+
+    it 'raises before instantiating any plugins' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'failover,gdb_failover')
+      expect(AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin).not_to receive(:new)
+      expect(AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverPlugin).not_to receive(:new)
+      expect { described_class.new(container) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError)
+    end
+  end
 end

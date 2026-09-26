@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative 'rds_url_type'
 
 module AwsAdvancedRubyDriverWrapper
@@ -226,22 +227,40 @@ module AwsAdvancedRubyDriverWrapper
         RDS_PROXY_ENDPOINT_OLD_CHINA_DNS_PATTERN
       ].freeze
 
-      @cached_matches = {}
+      # Caches the regex match groups per host. Only positive matches are ever stored (never nil),
+      # so a lock-free concurrent map is safe here and its reads avoid a mutex on the hot path.
+      @cached_matches = Concurrent::Map.new
+
+      # Caches the DNS-group token per host. Unlike the other two, this caches nil results (a host
+      # with no DNS group), which a concurrent map cannot hold, so it stays a plain hash guarded by
+      # @mutex.
       @cached_dns_groups = {}
       @mutex = Mutex.new
       @prepare_host_func = nil
 
+      # Caches the final endpoint classification per host. Values are never nil, so like
+      # @cached_matches it uses a lock-free concurrent map; a hit skips the whole pattern sweep.
+      @cached_url_types = Concurrent::Map.new
+
       def clear_cache
-        @mutex.synchronize do
-          @cached_matches.clear
-          @cached_dns_groups.clear
-        end
+        @cached_matches.clear
+        @cached_url_types.clear
+        @mutex.synchronize { @cached_dns_groups.clear }
       end
 
-      attr_accessor :prepare_host_func
+      attr_reader :prepare_host_func
+
+      # Changing how hosts are prepared can change their classification, so the classification cache
+      # (keyed by the raw host) must be dropped when the prepare function changes. The pattern caches
+      # are keyed by the prepared host and self-invalidate, so they do not need clearing here.
+      def prepare_host_func=(func)
+        @prepare_host_func = func
+        @cached_url_types.clear
+      end
 
       def reset_prepare_host_func
         @prepare_host_func = nil
+        @cached_url_types.clear
       end
 
       def rds_dns?(host)
@@ -332,6 +351,10 @@ module AwsAdvancedRubyDriverWrapper
       def identify_rds_type(host)
         return RdsUrlType::OTHER if blank?(host)
 
+        @cached_url_types.compute_if_absent(host) { classify_rds_type(host) }
+      end
+
+      def classify_rds_type(host)
         RDS_TYPE_CHECKS.each do |check, type|
           return type if send(check, host)
         end
@@ -513,14 +536,16 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def cache_match(host, *patterns)
-        @mutex.synchronize { return @cached_matches[host] if @cached_matches.key?(host) }
+        # Only non-nil match groups are stored, so a nil lookup means "not cached".
+        cached = @cached_matches[host]
+        return cached if cached
 
         patterns.each do |pattern|
           m = pattern.match(host)
           next unless m
 
           groups = m.named_captures
-          @mutex.synchronize { @cached_matches[host] = groups }
+          @cached_matches[host] = groups
           return groups
         end
 

@@ -15,10 +15,12 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_plugin'
 require 'aws_advanced_ruby_driver_wrapper/services/plugin_call_context'
 require 'aws_advanced_ruby_driver_wrapper/services/service_container'
+require 'aws_advanced_ruby_driver_wrapper/utils/parser/pg_statement_analyzer'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
   let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
@@ -127,6 +129,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
 
       expect(described_class.new(service_container, props).encryption_utility).to be(encryption_utility)
       expect(encryption::KmsEncryptionUtility).to have_received(:new).with(service_container, props)
+    end
+
+    it 'fails as it is set up on PostgreSQL when pg_query is not installed' do
+      allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer)
+        .to receive(:require).with('pg_query').and_raise(LoadError)
+
+      expect { plugin }.to raise_error(LoadError, /Add gem "pg_query" to your Gemfile/)
+    end
+
+    context 'with MySQL' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+
+      it 'does not need pg_query' do
+        allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).and_raise(LoadError)
+
+        expect { plugin }.not_to raise_error
+      end
     end
   end
 

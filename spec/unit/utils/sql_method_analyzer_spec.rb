@@ -77,10 +77,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ["INSERT with '--' in string value",                EXEC, ["INSERT INTO test_table VALUES ('-- 1')"], false, true]
   ].freeze
 
-  describe '.opens_transaction?' do
+  describe '.transaction_effect (opens_transaction)' do
     OPENS_TRANSACTION_CASES.each do |desc, method, args, autocommit, expected|
       it "#{desc} → #{expected}" do
-        expect(analyzer.opens_transaction?(method, args, autocommit: autocommit)).to eq(expected)
+        effect = analyzer.transaction_effect(method, args, autocommit: autocommit, autocommit_before: true)
+        expect(effect.opens_transaction).to eq(expected)
       end
     end
   end
@@ -111,10 +112,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ['-- COMMIT\nSELECT 1 (COMMIT hidden)',              EXEC, ["-- COMMIT\nSELECT 1"],             false]
   ].freeze
 
-  describe '.closes_transaction?' do
+  describe '.transaction_effect (closes_transaction)' do
     CLOSES_TRANSACTION_CASES.each do |desc, method, args, expected|
       it "#{desc} → #{expected}" do
-        expect(analyzer.closes_transaction?(method, args)).to eq(expected)
+        effect = analyzer.transaction_effect(method, args, autocommit: true, autocommit_before: true)
+        expect(effect.closes_transaction).to eq(expected)
       end
     end
   end
@@ -131,10 +133,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ['-- COMMENT set autocommit = 1 (hidden)',    EXEC, ['-- COMMENT set autocommit = 1'], false]
   ].freeze
 
-  describe '.sets_autocommit?' do
+  # A statement "sets autocommit" exactly when transaction_effect reports a non-nil autocommit value.
+  describe '.transaction_effect (recognizes SET AUTOCOMMIT)' do
     SETS_AUTOCOMMIT_CASES.each do |desc, method, args, expected|
       it "#{desc} → #{expected}" do
-        expect(analyzer.sets_autocommit?(method, args)).to eq(expected)
+        effect = analyzer.transaction_effect(method, args, autocommit: true, autocommit_before: true)
+        expect(!effect.autocommit_value.nil?).to eq(expected)
       end
     end
   end
@@ -157,10 +161,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ['SET AUTOCOMMIT = 0 # COMMENT',        ['SET AUTOCOMMIT = 0 # COMMENT'], false]
   ].freeze
 
-  describe '.autocommit_value' do
+  describe '.transaction_effect (autocommit_value)' do
     AUTOCOMMIT_VALUE_CASES.each do |desc, args, expected|
       it "#{desc} → #{expected.inspect}" do
-        expect(analyzer.autocommit_value(args)).to eq(expected)
+        effect = analyzer.transaction_effect(EXEC, args, autocommit: true, autocommit_before: true)
+        expect(effect.autocommit_value).to eq(expected)
       end
     end
   end
@@ -296,26 +301,76 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
       end
     end
 
-    context 'mysql_backslash_escapes threading through public API' do
-      it 'opens_transaction? respects backslash escape flag' do
+    context 'mysql_backslash_escapes threading through transaction_effect' do
+      def effect(sql)
+        analyzer.transaction_effect(EXEC, [sql], autocommit: false, autocommit_before: false, mysql_backslash_escapes: true)
+      end
+
+      it 'respects the backslash escape flag when opening a transaction' do
         # Without the flag, 'it\'s -- x' ends the literal at the backslash-quote,
         # making the rest look like a comment; with the flag the literal is preserved
         # and the INSERT is still seen as opening a transaction.
-        sql = "INSERT INTO t VALUES ('it\\'s value')"
-        expect(analyzer.opens_transaction?(EXEC, [sql], autocommit: false, mysql_backslash_escapes: true)).to eq(true)
+        expect(effect("INSERT INTO t VALUES ('it\\'s value')").opens_transaction).to be(true)
       end
 
-      it 'closes_transaction? is not fooled by backslash-escaped quote hiding COMMIT' do
+      it 'is not fooled by a backslash-escaped quote hiding COMMIT' do
         # 'don\'t COMMIT yet' — without the flag the literal ends at \', leaving
         # COMMIT yet' as bare SQL which would be misread as a COMMIT statement.
-        sql = "INSERT INTO audit_log (note) VALUES ('don\\'t COMMIT yet')"
-        expect(analyzer.closes_transaction?(EXEC, [sql], mysql_backslash_escapes: true)).to eq(false)
+        expect(effect("INSERT INTO audit_log (note) VALUES ('don\\'t COMMIT yet')").closes_transaction).to be(false)
       end
 
-      it 'sets_autocommit? is not fooled by backslash-escaped quote hiding SET AUTOCOMMIT' do
-        sql = "INSERT INTO settings (val) VALUES ('don\\'t SET AUTOCOMMIT = 0')"
-        expect(analyzer.sets_autocommit?(EXEC, [sql], mysql_backslash_escapes: true)).to eq(false)
+      it 'is not fooled by a backslash-escaped quote hiding SET AUTOCOMMIT' do
+        expect(effect("INSERT INTO settings (val) VALUES ('don\\'t SET AUTOCOMMIT = 0')").autocommit_value).to be_nil
       end
+    end
+  end
+
+  # transaction_effect computes opens/closes/autocommit in one pass; it must agree with the
+  # individual predicates it replaces on the hot path.
+  describe '.transaction_effect' do
+    it 'reports a transaction start as opening' do
+      effect = analyzer.transaction_effect(EXEC, ['BEGIN'], autocommit: true, autocommit_before: true)
+      expect(effect.opens_transaction).to be(true)
+      expect(effect.closes_transaction).to be(false)
+    end
+
+    it 'reports a statement under autocommit-off as opening a transaction scope' do
+      effect = analyzer.transaction_effect(EXEC, ['SELECT * FROM t'], autocommit: false, autocommit_before: false)
+      expect(effect.opens_transaction).to be(true)
+    end
+
+    it 'reports a plain statement under autocommit-on as neither opening nor closing' do
+      effect = analyzer.transaction_effect(QUERY, ['SELECT * FROM t'], autocommit: true, autocommit_before: true)
+      expect(effect.opens_transaction).to be(false)
+      expect(effect.closes_transaction).to be(false)
+      expect(effect.autocommit_value).to be_nil
+    end
+
+    it 'reports COMMIT as closing' do
+      effect = analyzer.transaction_effect(EXEC, ['COMMIT'], autocommit: false, autocommit_before: false)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'reports a close method as closing without any SQL' do
+      effect = analyzer.transaction_effect(CLOSE, nil, autocommit: true, autocommit_before: true)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'reports the transaction method as closing' do
+      effect = analyzer.transaction_effect(TXN, nil, autocommit: true, autocommit_before: true)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'captures the autocommit value and closes on an autocommit-off-to-on switch' do
+      effect = analyzer.transaction_effect(EXEC, ['SET AUTOCOMMIT = 1'], autocommit: false, autocommit_before: false)
+      expect(effect.autocommit_value).to be(true)
+      expect(effect.closes_transaction).to be(true)
+    end
+
+    it 'captures a false autocommit value without closing' do
+      effect = analyzer.transaction_effect(EXEC, ['SET AUTOCOMMIT = 0'], autocommit: true, autocommit_before: true)
+      expect(effect.autocommit_value).to be(false)
+      expect(effect.closes_transaction).to be(false)
     end
   end
 end
