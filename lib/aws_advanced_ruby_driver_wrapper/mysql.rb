@@ -18,6 +18,7 @@
 # so requiring this file alone is enough to use the MySQL client.
 require_relative '../aws_advanced_ruby_driver_wrapper'
 require_relative 'utils/connection_config_parser'
+require_relative 'utils/sql_encoding'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'
 require_relative 'errors'
@@ -48,19 +49,26 @@ module AwsAdvancedRubyDriverWrapper
     # nothing and the result is read afterward by +async_result+. The connection the statement was
     # sent on is remembered for that read, and so is its SQL, since the read is a call of its own and
     # carries neither.
+    #
+    # What is remembered is the copy of the SQL that plugins inspect, made once here rather than on
+    # every call that is handed it later. The driver is sent the SQL as the application wrote it.
     def query(sql, options = {})
-      result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options, sql: sql)
-      @last_sql = sql
+      inspected = Utils::SqlEncoding.inspectable(sql)
+      result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options,
+                          sql: inspected)
+      @last_sql = inspected
       if options[:async]
         @async_conn = current_conn
-        @async_sql = sql
+        @async_sql = inspected
       end
-      wrap_mysql_result(result, sql)
+      wrap_mysql_result(result, inspected)
     end
 
     def prepare(sql)
-      mysql_stmt = pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, sql, sql: sql)
-      Mysql2WrapperStatement.new(@service_container, current_conn, mysql_stmt, sql)
+      inspected = Utils::SqlEncoding.inspectable(sql)
+      mysql_stmt = pm.execute(RubyMethod::CONNECTION_PREPARE, current_conn, ->(*a) { current_conn.prepare(*a) }, sql,
+                              sql: inspected)
+      Mysql2WrapperStatement.new(@service_container, current_conn, mysql_stmt, inspected)
     end
 
     def escape(string)

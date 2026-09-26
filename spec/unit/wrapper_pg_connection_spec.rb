@@ -869,6 +869,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
       expect(plugin.sql_for('connection.exec')).to eq(["SELECT 'grün'", 'SELECT 1'])
     end
 
+    # A COPY can feed any number of rows, so its statement is converted once rather than on every row.
+    it 'is not converted again for every row of a COPY it opened' do
+      sql = 'COPY users FROM STDIN'.encode('UTF-16BE')
+      allow(connection).to receive(:copy_data).and_yield
+      allow(connection).to receive(:put_copy_data)
+      allow(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to receive(:inspectable).and_call_original
+
+      wrapper.copy_data(sql) { 3.times { wrapper.put_copy_data("Jo\n") } }
+
+      expect(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to have_received(:inspectable).with(sql).twice
+    end
+
     it 'is published as UTF-8 for every row of a COPY it opened' do
       allow(connection).to receive(:copy_data).and_yield
       allow(connection).to receive(:put_copy_data)
