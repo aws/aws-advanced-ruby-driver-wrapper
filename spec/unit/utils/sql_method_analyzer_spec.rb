@@ -200,19 +200,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
   # The driver sends SQL in whatever encoding the application wrote it in, so reading it must not raise
   # after the statement has already run.
   describe 'SQL that is not UTF-8' do
+    def effect_of(sql)
+      analyzer.transaction_effect(EXEC, [sql], autocommit: true, autocommit_before: true)
+    end
+
     it 'is read as opening a transaction' do
-      expect(analyzer.opens_transaction?(EXEC, ['BEGIN'.encode('UTF-16LE')], autocommit: true)).to eq(true)
+      expect(effect_of('BEGIN'.encode('UTF-16LE')).opens_transaction).to eq(true)
     end
 
     it 'is read as closing a transaction' do
-      expect(analyzer.closes_transaction?(EXEC, ['COMMIT'.encode('UTF-32BE')])).to eq(true)
+      expect(effect_of('COMMIT'.encode('UTF-32BE')).closes_transaction).to eq(true)
     end
 
     it 'is read as setting autocommit' do
-      args = ['SET AUTOCOMMIT = 0'.encode('UTF-16BE')]
-
-      expect(analyzer.sets_autocommit?(EXEC, args)).to eq(true)
-      expect(analyzer.autocommit_value(args)).to eq(false)
+      expect(effect_of('SET AUTOCOMMIT = 0'.encode('UTF-16BE')).autocommit_value).to eq(false)
     end
   end
 
