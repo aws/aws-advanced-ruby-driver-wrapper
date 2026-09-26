@@ -27,21 +27,30 @@ module AwsAdvancedRubyDriverWrapper
       # converts it to the connection's encoding itself.
       #
       # A character with no UTF-8 equivalent, or a byte that is invalid, is replaced rather than raised on,
-      # so that inspecting a statement never fails a call the driver would have made. The same goes for
-      # the few encodings Ruby has no converter to UTF-8 for, whose statements go uninspected.
+      # so that inspecting a statement never fails a call the driver would have made.
+      #
+      # SQL that is binary, or in one of the few encodings Ruby has no converter to UTF-8 for, has no
+      # text to convert. The driver sends such SQL as the bytes it is, so its bytes are read as UTF-8,
+      # which is how the server reads them on a UTF-8 connection. Replacing or skipping them instead
+      # would leave the checks reading a different statement from the one the server runs.
       #
       # @param sql [Object] the SQL to inspect
-      # @return [String, Object, nil] the SQL as valid UTF-8, anything that is not a String as it is,
-      #   or nil for SQL that cannot be converted
+      # @return [String, Object] the SQL as valid UTF-8, or anything that is not a String as it is
       def inspectable(sql)
         return sql unless sql.is_a?(String)
         return sql.valid_encoding? ? sql : sql.scrub if sql.encoding == Encoding::UTF_8
         return sql if sql.ascii_only? && sql.encoding.ascii_compatible?
+        return bytes_as_utf8(sql) if sql.encoding == Encoding::BINARY
 
         sql.encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
       rescue Encoding::ConverterNotFoundError
-        nil
+        bytes_as_utf8(sql)
       end
+
+      def bytes_as_utf8(sql)
+        sql.b.force_encoding(Encoding::UTF_8).scrub
+      end
+      private_class_method :bytes_as_utf8
     end
   end
 end

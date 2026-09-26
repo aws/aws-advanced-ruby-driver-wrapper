@@ -181,7 +181,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ['quoted string preserves -- inside',      "SELECT '--' AS x",         "SELECT '--' AS X"],
     ['UTF-16 SQL is read as UTF-8',            'begin'.encode('UTF-16BE'), 'BEGIN'],
     ['invalid UTF-8 bytes are replaced',       "begin \xFF",               "BEGIN \uFFFD"],
-    ['SQL with no UTF-8 converter',            'begin'.dup.force_encoding(Encoding::UTF_7), nil]
+    ['SQL with no UTF-8 converter',            'begin'.dup.force_encoding(Encoding::UTF_7), 'BEGIN']
   ].freeze
 
   describe '.first_statement' do

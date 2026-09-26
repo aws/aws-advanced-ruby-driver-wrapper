@@ -149,6 +149,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect_encrypted(ssn, '123-45-6789')
     end
 
+    context 'when the SQL is binary' do
+      let(:configs) { { 'users.größe' => ssn_config } }
+
+      # SQL read from a file or socket is often binary. The pipeline publishes it as the UTF-8 the
+      # server reads it as, so an encrypted column whose name is not ASCII is still found.
+      it 'encrypts the parameter of an encrypted column' do
+        binary = 'INSERT INTO users (name, größe) VALUES ($1, $2)'.b
+        call('connection.exec_params', args: [binary, %w[Jo 123-45-6789]],
+                                       sql: AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding.inspectable(binary))
+
+        expect_encrypted(bound_args[1][1], '123-45-6789')
+      end
+    end
+
     # The array belongs to the application, which is free to reuse it after the call.
     it 'leaves the parameter array the application passed as it was' do
       parameters = %w[Jo 123-45-6789]

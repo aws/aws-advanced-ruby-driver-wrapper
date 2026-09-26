@@ -48,12 +48,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding do
       expect(described_class.inspectable(sql)).to be_valid_encoding
     end
 
-    it 'replaces bytes that have no character in UTF-8' do
+    # The driver sends binary SQL as the bytes it is, and the server reads them as UTF-8.
+    it 'reads binary SQL as the UTF-8 it is sent as' do
+      expect(described_class.inspectable('INSERT INTO t (grün) VALUES ($1)'.b)).to eq('INSERT INTO t (grün) VALUES ($1)')
+    end
+
+    it 'replaces bytes in binary SQL that are invalid in UTF-8' do
       expect(described_class.inspectable("SELECT '\xFF'".b)).to eq("SELECT '�'")
     end
 
-    it 'returns nil for SQL that has no converter to UTF-8' do
-      expect(described_class.inspectable('SELECT 1'.dup.force_encoding(Encoding::UTF_7))).to be_nil
+    it 'reads SQL that has no converter to UTF-8 as the UTF-8 it is sent as' do
+      expect(described_class.inspectable('SELECT 1'.dup.force_encoding(Encoding::UTF_7))).to eq('SELECT 1')
     end
 
     it 'returns anything that is not a String as it is' do

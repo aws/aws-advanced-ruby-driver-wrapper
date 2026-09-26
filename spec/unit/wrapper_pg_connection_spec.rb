@@ -779,12 +779,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
       expect(connection).to have_received(:exec).with(equal(sql))
     end
 
-    it 'is not published when there is no converting it to UTF-8' do
+    # pg sends SQL it has no text for as the bytes it is, so those bytes are what is published.
+    it 'is published as the UTF-8 it is sent as when it is binary or cannot be converted' do
       allow(connection).to receive(:exec).and_return(pg_result)
 
+      wrapper.exec("SELECT 'grün'".b)
       wrapper.exec('SELECT 1'.dup.force_encoding(Encoding::UTF_7))
 
-      expect(plugin.sql_for('connection.exec')).to eq([nil])
+      expect(plugin.sql_for('connection.exec')).to eq(["SELECT 'grün'", 'SELECT 1'])
     end
 
     it 'is published as UTF-8 for every row of a COPY it opened' do
