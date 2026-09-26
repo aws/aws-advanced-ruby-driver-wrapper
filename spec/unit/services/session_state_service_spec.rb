@@ -46,6 +46,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::SessionStateService do
       expect(service.in_transaction?).to be true
     end
 
+    it 'marks in_transaction on a BEGIN that is not UTF-8' do
+      service.update_transaction_state('connection.exec', ['BEGIN'.encode('UTF-16LE')], true)
+      expect(service.in_transaction?).to be true
+    end
+
+    it 'does not raise on SQL with bytes that are invalid in its encoding' do
+      expect { service.update_transaction_state('connection.exec', ["SELECT '\xFF'"], true) }.not_to raise_error
+    end
+
     it 'clears in_transaction on COMMIT' do
       service.in_transaction = true
       service.update_transaction_state('connection.exec', ['COMMIT'], true)

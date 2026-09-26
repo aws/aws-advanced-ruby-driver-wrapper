@@ -68,6 +68,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
 
       expect(plugin.sql_for('result.to_a')).to eq(['SELECT ssn FROM users'])
     end
+
+    # mysql2 converts the SQL to the connection's encoding itself, so it is sent as the application
+    # wrote it, while plugins read it as UTF-8.
+    it 'publishes SQL that is not UTF-8 as UTF-8' do
+      sql = "SELECT 'grün'".encode('UTF-16BE')
+      allow(connection).to receive(:query).and_return(mysql_result)
+
+      client.query(sql)
+
+      expect(plugin.sql_for('connection.query')).to eq(["SELECT 'grün'"])
+      expect(connection).to have_received(:query).with(equal(sql), anything)
+    end
   end
 
   describe '#prepare' do
