@@ -278,8 +278,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(encryption_utility).not_to have_received(:ensure_initialized)
     end
 
-    # A column configured for encryption but with no usable key material cannot be encrypted, so the
-    # value is left for the database's enforcement to reject rather than the statement being refused.
     # A name read with a character its encoding had no UTF-8 form for cannot be matched against the
     # configuration, so it is left to the server-side enforcement rather than taken as not encrypted.
     context 'when a column name could not be read' do
@@ -294,6 +292,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
         expect(plugin.send(:logger)).to have_received(:warn).with(/cannot read the name users\.gr\uFFFDe/)
       end
 
+      it 'warns once for a name, however many statements touch it' do
+        3.times { call('connection.exec_params', args: [unreadable, %w[Jo 123-45-6789]], sql: unreadable) }
+
+        expect(plugin.send(:logger)).to have_received(:warn).with(/cannot read the name users\.gr\uFFFDe/).once
+      end
+
       it 'does not look the name up' do
         call('connection.exec_params', args: [unreadable, %w[Jo 123-45-6789]], sql: unreadable)
 
@@ -301,6 +305,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       end
     end
 
+    # A column configured for encryption but with no usable key material cannot be encrypted, so the
+    # value is left for the database's enforcement to reject rather than the statement being refused.
     it 'passes a value through when its column configuration has no key material' do
       configs['users.ssn'] = column_config('users', 'ssn', nil)
       allow(plugin.send(:logger)).to receive(:warn)

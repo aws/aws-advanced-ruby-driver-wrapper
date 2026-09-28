@@ -210,6 +210,9 @@ module AwsAdvancedRubyDriverWrapper
         # PostgreSQL) fails the connection as it is set up rather than its first statement.
         @sql_parser = Utils::Parser::SqlParser.new(service_container.dialect_service.driver_dialect)
         @subscribed_methods = SUBSCRIBED_METHODS
+        # The names already warned about by {#unreadable_name?}, which is asked on every lookup and so
+        # would otherwise repeat the same warning for every row and statement that touches the name.
+        @unreadable_names = ::Concurrent::Set.new
       end
 
       # The call's block is taken from the call context rather than from a block parameter, since
@@ -748,12 +751,13 @@ module AwsAdvancedRubyDriverWrapper
       # configuration reliably: looking it up would miss, and the column would be treated as though it
       # were not encrypted without anyone knowing. So it is not looked up. The column is left as the
       # database holds it, which is where the required server-side enforcement stops a plaintext being
-      # stored, and a warning says why, since it only happens when the connection's encoding is one Ruby
-      # cannot fully read.
+      # stored, and a warning says why, once for each name, since it only happens when the connection's
+      # encoding is one Ruby cannot fully read.
       #
       # @param name [String] a table, or a +"table.column"+ reference
       def unreadable_name?(name)
         return false unless name.include?(UNREADABLE_CHARACTER)
+        return true unless @unreadable_names.add?(name)
 
         logger.warn(
           "The kms_encryption plugin cannot read the name #{name} in the connection's encoding, so it cannot " \
