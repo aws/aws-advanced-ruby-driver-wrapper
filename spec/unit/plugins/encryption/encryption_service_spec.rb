@@ -111,12 +111,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
       expect(value).to eq('grün'.encode('UTF-16LE'))
     end
 
-    # The conversion error's message quotes the character it stopped at, which is plaintext.
+    # The conversion error's message quotes the character it stopped at, which is plaintext, so it is
+    # neither quoted in the error nor attached as its cause, where a logger printing the whole error
+    # would show it.
     it 'refuses a string that has no UTF-8 form without quoting it' do
       value = "secret \xFF".dup.force_encoding(Encoding::Shift_JIS)
 
-      expect { encrypt_value(value, data_key, hmac_key) }
-        .to raise_error(encryption_error) { |error| expect(error.message).not_to include('secret', 'FF') }
+      expect { encrypt_value(value, data_key, hmac_key) }.to raise_error(encryption_error) { |error|
+        expect(error.cause).to be_nil
+        expect(error.full_message(highlight: false)).not_to include('secret', 'FF')
+      }
     end
 
     it 'restores an empty string' do

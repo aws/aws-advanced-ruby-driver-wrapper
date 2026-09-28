@@ -349,8 +349,9 @@ module AwsAdvancedRubyDriverWrapper
           # than to its own bytes read as UTF-8.
           #
           # A string that cannot be converted is refused rather than stored in a form that would not
-          # decrypt to what was written. The error names only the encoding, since the conversion
-          # error's own message quotes the character it stopped at, which is part of the plaintext.
+          # decrypt to what was written. The error names only the encoding, and is raised without the
+          # conversion error as its cause, since that error's message quotes the character it stopped
+          # at, which is part of the plaintext.
           #
           # @param string [String]
           # @return [String] binary
@@ -364,7 +365,7 @@ module AwsAdvancedRubyDriverWrapper
           rescue EncodingError => e
             raise Errors::EncryptionError
               .encryption_failed("Cannot encrypt a #{string.encoding} string as UTF-8 (#{e.class})")
-              .with_data_type(string.class.to_s)
+              .with_data_type(string.class.to_s), cause: nil
           ensure
             # The converted copy holds the plaintext too, so it is wiped along with the serialized one.
             wipe(converted)
