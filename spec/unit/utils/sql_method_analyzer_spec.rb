@@ -183,7 +183,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
     ['strips -- line comment',                 "-- note\nBEGIN",          'BEGIN'],
     ['strips # line comment',                  "# note\nBEGIN",           'BEGIN'],
     ['-- comment with ; does not split early', "-- COMMENT; MORE\nCOMMIT", 'COMMIT'],
-    ['quoted string preserves -- inside',      "SELECT '--' AS x",         "SELECT '--' AS X"]
+    ['quoted string preserves -- inside',      "SELECT '--' AS x",         "SELECT '--' AS X"],
+    ['UTF-16 SQL is read as UTF-8',            'begin'.encode('UTF-16BE'), 'BEGIN'],
+    ['invalid UTF-8 bytes are replaced',       "begin \xFF",               "BEGIN \uFFFD"],
+    ['SQL with no UTF-8 converter',            'begin'.dup.force_encoding(Encoding::UTF_7), 'BEGIN']
   ].freeze
 
   describe '.first_statement' do
@@ -191,6 +194,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::SqlMethodAnalyzer do
       it "#{desc} → #{expected.inspect}" do
         expect(analyzer.first_statement(input)).to eq(expected)
       end
+    end
+  end
+
+  # The driver sends SQL in whatever encoding the application wrote it in, so reading it must not raise
+  # after the statement has already run.
+  describe 'SQL that is not UTF-8' do
+    def effect_of(sql)
+      analyzer.transaction_effect(EXEC, [sql], autocommit: true, autocommit_before: true)
+    end
+
+    it 'is read as opening a transaction' do
+      expect(effect_of('BEGIN'.encode('UTF-16LE')).opens_transaction).to eq(true)
+    end
+
+    it 'is read as closing a transaction' do
+      expect(effect_of('COMMIT'.encode('UTF-32BE')).closes_transaction).to eq(true)
+    end
+
+    it 'is read as setting autocommit' do
+      expect(effect_of('SET AUTOCOMMIT = 0'.encode('UTF-16BE')).autocommit_value).to eq(false)
     end
   end
 

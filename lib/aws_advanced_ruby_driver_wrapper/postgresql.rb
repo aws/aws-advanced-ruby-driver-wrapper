@@ -18,6 +18,7 @@
 # so requiring this file alone is enough to use the PostgreSQL client.
 require_relative '../aws_advanced_ruby_driver_wrapper'
 require_relative 'utils/connection_config_parser'
+require_relative 'utils/sql_encoding'
 require_relative 'services/service_utility'
 require_relative 'ruby_method'
 require_relative 'errors'
@@ -275,10 +276,11 @@ module AwsAdvancedRubyDriverWrapper
 
     # The connection and the statement are held for as long as the block runs and let go afterward even
     # if the block raises. The rows the block feeds or reads belong to that statement, and it is the only
-    # place they are named, so it is what the calls inside the block publish.
+    # place they are named, so it is what the calls inside the block publish. It is held as the copy
+    # plugins inspect, made once here rather than on every row.
     def copy_data(sql, coder = nil, &)
       @copy_conn = current_conn
-      @copy_sql = sql
+      @copy_sql = Utils::SqlEncoding.inspectable(sql)
       execute_operation(:copy_data, [sql, coder], &)
     ensure
       @copy_conn = nil
@@ -388,15 +390,20 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     # @return [String, nil] the SQL the operation carries, taken from its arguments when it names a
-    #   statement of its own and from whatever it is bound to when it does not
+    #   statement of its own and from whatever it is bound to when it does not, as a copy that is
+    #   safe to inspect
     def sql_for(spec, args)
-      return args[spec[:sql_at]] if spec[:sql_at]
-
-      case spec[:bound_to]
-      when :prepared then @prepared_sql[args.first]
-      when :async then @async_sql
-      when :copy then @copy_sql
-      end
+      sql =
+        if spec[:sql_at]
+          args[spec[:sql_at]]
+        else
+          case spec[:bound_to]
+          when :prepared then @prepared_sql[args.first]
+          when :async then @async_sql
+          when :copy then @copy_sql
+          end
+        end
+      Utils::SqlEncoding.inspectable(sql)
     end
 
     # -- What an operation leaves behind, named by the +after+ entries of {OPERATIONS} --

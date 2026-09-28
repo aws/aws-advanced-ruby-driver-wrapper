@@ -798,4 +798,122 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
       expect(plugin.sql_for('connection.consume_input')).to eq([nil])
     end
   end
+
+  # The SQL a plugin inspects has to be readable by a pattern or the parser, whatever encoding the
+  # application wrote it in. What pg is sent is the application's own, since pg converts SQL itself and
+  # sends some arguments as the bytes they are.
+  describe 'a statement that is not UTF-8' do
+    it 'is read when it is a PREPARE' do
+      allow(connection).to receive(:exec).and_return(pg_result)
+      allow(connection).to receive(:exec_prepared).and_return(pg_result)
+
+      wrapper.exec('PREPARE insert_user AS INSERT INTO users (name) VALUES ($1)'.encode('UTF-16BE'))
+      wrapper.exec_prepared('insert_user', ['Jo'])
+
+      expect(plugin.sql_for('connection.exec_prepared')).to eq(['INSERT INTO users (name) VALUES ($1)'])
+    end
+
+    it 'is published as UTF-8' do
+      allow(connection).to receive(:send_query)
+      allow(connection).to receive(:get_result).and_return(nil)
+
+      wrapper.send_query("SELECT 'grün'".encode('UTF-32LE'))
+      wrapper.get_result
+
+      expect(plugin.sql_for('connection.send_query')).to eq(["SELECT 'grün'"])
+      expect(plugin.sql_for('connection.get_result').map(&:encoding)).to eq([Encoding::UTF_8])
+    end
+
+    it 'is sent to pg as the application wrote it' do
+      sql = "SELECT 'grün'".encode('UTF-16LE')
+      params = ['weiß'.encode('UTF-16BE')]
+      allow(connection).to receive(:exec_params).and_return(pg_result)
+
+      wrapper.exec_params(sql, params)
+
+      expect(connection).to have_received(:exec_params) do |sent_sql, sent_params, *|
+        expect(sent_sql).to equal(sql)
+        expect(sent_params.first).to equal(params.first)
+      end
+    end
+
+    # pg sends a UTF-8 statement as it is when the connection's encoding cannot hold it, as on a
+    # SQL_ASCII database, so inspecting it must not raise either.
+    it 'is sent as it is whatever the connection encoding' do
+      sql = "SELECT 'grün'"
+      allow(connection).to receive(:internal_encoding).and_return(Encoding::ASCII_8BIT)
+      allow(connection).to receive(:exec).and_return(pg_result)
+
+      wrapper.exec(sql)
+
+      expect(connection).to have_received(:exec).with(equal(sql))
+    end
+
+    it 'is published with its invalid bytes replaced' do
+      sql = "SELECT '\xFF'".dup.force_encoding(Encoding::UTF_8)
+      allow(connection).to receive(:exec).and_return(pg_result)
+
+      wrapper.exec(sql)
+
+      expect(plugin.sql_for('connection.exec')).to eq(["SELECT '\uFFFD'"])
+      expect(connection).to have_received(:exec).with(equal(sql))
+    end
+
+    # pg sends SQL it has no text for as the bytes it is, so those bytes are what is published.
+    it 'is published as the UTF-8 it is sent as when it is binary or cannot be converted' do
+      allow(connection).to receive(:exec).and_return(pg_result)
+
+      wrapper.exec("SELECT 'grün'".b)
+      wrapper.exec('SELECT 1'.dup.force_encoding(Encoding::UTF_7))
+
+      expect(plugin.sql_for('connection.exec')).to eq(["SELECT 'grün'", 'SELECT 1'])
+    end
+
+    # A COPY can feed any number of rows, so its statement is converted once rather than on every row.
+    it 'is not converted again for every row of a COPY it opened' do
+      sql = 'COPY users FROM STDIN'.encode('UTF-16BE')
+      allow(connection).to receive(:copy_data).and_yield
+      allow(connection).to receive(:put_copy_data)
+      allow(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to receive(:inspectable).and_call_original
+
+      wrapper.copy_data(sql) { 3.times { wrapper.put_copy_data("Jo\n") } }
+
+      expect(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to have_received(:inspectable).with(sql).twice
+    end
+
+    it 'is published as UTF-8 for every row of a COPY it opened' do
+      allow(connection).to receive(:copy_data).and_yield
+      allow(connection).to receive(:put_copy_data)
+
+      wrapper.copy_data('COPY users FROM STDIN'.encode('UTF-16BE')) { wrapper.put_copy_data("Jo\n") }
+
+      expect(plugin.sql_for('connection.put_copy_data')).to eq(['COPY users FROM STDIN'])
+    end
+  end
+
+  # The rows of a COPY and the contents of a large object are sent as the bytes they are, in whatever
+  # encoding the statement or the application says they are in.
+  describe 'data that is not SQL' do
+    before { allow(connection).to receive(:internal_encoding).and_return(Encoding::UTF_8) }
+
+    it 'is fed to a COPY as it is' do
+      row = "J\xFCrgen\n".dup.force_encoding(Encoding::ISO_8859_1)
+      allow(connection).to receive(:copy_data).and_yield
+      allow(connection).to receive(:put_copy_data)
+
+      wrapper.copy_data("COPY users FROM STDIN WITH (ENCODING 'LATIN1')") { wrapper.put_copy_data(row) }
+
+      expect(connection).to have_received(:put_copy_data).with(equal(row), nil)
+      expect(row.bytes).to include(0xFC)
+    end
+
+    it 'is written to a large object as it is' do
+      buffer = "\xFF\xFE".dup.force_encoding(Encoding::ISO_8859_1)
+      allow(connection).to receive(:lo_write).and_return(2)
+
+      wrapper.lo_write(0, buffer)
+
+      expect(connection).to have_received(:lo_write).with(0, equal(buffer))
+    end
+  end
 end

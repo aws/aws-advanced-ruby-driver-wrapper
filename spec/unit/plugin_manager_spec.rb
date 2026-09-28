@@ -244,6 +244,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
       expect(context_plugin.seen_sql).to eq('SELECT ssn FROM users')
     end
 
+    # The driver is sent the SQL in whatever encoding the application wrote it in, but a plugin that
+    # inspects it reads it with UTF-8 patterns and parsers.
+    it 'publishes SQL that is not UTF-8 as UTF-8' do
+      context_plugin = TestPlugins::TestPluginReadsContext.new([])
+      manager = build_manager_with_context_plugin(context_plugin)
+      sql = "SELECT 'grün'".encode('UTF-16LE')
+      received = nil
+
+      manager.execute('test_call_a', nil, ->(*args) { received = args }, sql, sql: sql)
+
+      expect(context_plugin.seen_sql).to eq("SELECT 'grün'")
+      expect(received.first).to equal(sql)
+    end
+
     it 'has no SQL when the caller did not say what it was' do
       context_plugin = TestPlugins::TestPluginReadsContext.new([])
       manager = build_manager_with_context_plugin(context_plugin)

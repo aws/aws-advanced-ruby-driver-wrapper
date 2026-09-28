@@ -68,6 +68,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
 
       expect(plugin.sql_for('result.to_a')).to eq(['SELECT ssn FROM users'])
     end
+
+    # mysql2 converts the SQL to the connection's encoding itself, so it is sent as the application
+    # wrote it, while plugins read it as UTF-8.
+    it 'publishes SQL that is not UTF-8 as UTF-8' do
+      sql = "SELECT 'grün'".encode('UTF-16BE')
+      allow(connection).to receive(:query).and_return(mysql_result)
+
+      client.query(sql)
+
+      expect(plugin.sql_for('connection.query')).to eq(["SELECT 'grün'"])
+      expect(connection).to have_received(:query).with(equal(sql), anything)
+    end
   end
 
   describe '#prepare' do
@@ -87,6 +99,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
       client.prepare('INSERT INTO users (name, ssn) VALUES (?, ?)').execute('Jo', '123-45-6789')
 
       expect(plugin.sql_for('statement.execute')).to eq(['INSERT INTO users (name, ssn) VALUES (?, ?)'])
+    end
+
+    # A statement is executed any number of times, so the SQL it hands on is converted once, when it is
+    # prepared, rather than on every execution.
+    it 'converts SQL that is not UTF-8 once, however many times the statement is executed' do
+      sql = 'INSERT INTO users (name) VALUES (?)'.encode('UTF-16LE')
+      mysql_stmt = instance_double(Mysql2::Statement)
+      allow(connection).to receive(:prepare).and_return(mysql_stmt)
+      allow(mysql_stmt).to receive(:execute).and_return(mysql_result)
+      allow(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to receive(:inspectable).and_call_original
+
+      statement = client.prepare(sql)
+      3.times { statement.execute('Jo') }
+
+      expect(AwsAdvancedRubyDriverWrapper::Utils::SqlEncoding).to have_received(:inspectable).with(sql).once
+      expect(plugin.sql_for('statement.execute')).to eq(['INSERT INTO users (name) VALUES (?)'] * 3)
+      expect(connection).to have_received(:prepare).with(equal(sql))
     end
   end
 
