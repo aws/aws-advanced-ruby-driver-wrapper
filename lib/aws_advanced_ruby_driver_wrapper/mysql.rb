@@ -337,8 +337,6 @@ module AwsAdvancedRubyDriverWrapper
       result_query_options[:symbolize_keys] ? names.map(&:to_sym) : names
     end
 
-    # Delegate non-network methods directly
-
     def field_types
       @result.field_types
     end

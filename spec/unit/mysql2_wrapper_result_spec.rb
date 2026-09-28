@@ -228,7 +228,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
     # result - which is where mysql2 applies options such as symbolize_keys.
     let(:statement) { double('Mysql2::Statement', fields: %w[ssn]) }
 
-    it 'reads the result rather than the statement once rows came back' do
+    it 'reads the result rather than the statement once rows come back' do
       result = double('Mysql2::Result', fields: %i[ssn], count: 1)
 
       wrapper_result = described_class.new(result, container, connection, nil, statement)
