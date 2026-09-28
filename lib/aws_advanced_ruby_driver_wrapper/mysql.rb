@@ -412,7 +412,10 @@ module AwsAdvancedRubyDriverWrapper
       @statement && !result_query_options[:stream] && @result.count.zero? # rubocop:disable Style/CollectionQuerying
     end
 
-    # mysql2 keeps the options a result was produced with in this ivar and exposes no reader for it.
+    # Part of the workaround in #fields for a mysql2 bug that can segfault when an empty
+    # prepared-statement result is asked for its fields. Telling that case apart, and symbolizing the
+    # fallback names, needs the options the result was produced with; mysql2 keeps them in this ivar
+    # and exposes no reader for it.
     def result_query_options
       @result.instance_variable_get(:@query_options) || {}
     end
