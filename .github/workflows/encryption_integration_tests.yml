@@ -24,8 +24,7 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        # TEMP - revert before opening the PR. The fix is MySQL-only, so the pg leg is dropped.
-        environment: [ 'mysql' ]
+        environment: [ 'mysql', 'pg' ]
 
     steps:
       - name: 'Clone repository'
@@ -86,9 +85,6 @@ jobs:
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           KMS_KEY_ID: ${{ steps.kms.outputs.key_id }}
-          # TEMP - revert before opening the PR. Runs only the spec file that segfaulted; it holds
-          # the zero-row `find_by` on an encrypted column that reads a freed result.
-          FILTER: spec/integration/container/kms_encryption_roundtrip_spec.rb
 
       - name: 'Archive encryption results'
         if: always()
