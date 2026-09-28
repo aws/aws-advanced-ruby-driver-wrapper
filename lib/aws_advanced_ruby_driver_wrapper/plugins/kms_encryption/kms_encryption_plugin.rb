@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../../logging'
 require_relative '../../ruby_method'
 require_relative '../../utils/parser/encryption_annotation_parser'
@@ -512,7 +513,8 @@ module AwsAdvancedRubyDriverWrapper
       # A result names its columns in the connection's encoding, while the configuration names them in
       # UTF-8, so on a connection that is not UTF-8 a column whose name is not ASCII is named
       # differently by each. The columns are keyed by the names the result uses as well, once for the
-      # whole result, so that each row is looked up by the name it actually carries.
+      # whole result, so that each row is looked up by the name it actually carries. The columns are
+      # only copied when a name differs, so a result on a UTF-8 connection gets them as they are.
       #
       # @param columns [Hash{String => ColumnEncryptionConfig}] encrypted columns by UTF-8 name
       # @param field_names [Array<String>, nil] the result's columns in order
@@ -520,13 +522,15 @@ module AwsAdvancedRubyDriverWrapper
       def keyed_by_field_names(columns, field_names)
         return columns if field_names.nil?
 
-        field_names.each_with_object(columns.dup) do |name, keyed|
+        keyed = nil
+        field_names.each do |name|
           name = name.to_s
-          next if keyed.key?(name)
+          next if columns.key?(name)
 
           config = columns[Utils::SqlEncoding.inspectable(name)]
-          keyed[name] = config if config
+          (keyed ||= columns.dup)[name] = config if config
         end
+        keyed || columns
       end
 
       # @return [ColumnEncryptionConfig, nil] the encrypted column a result or the application names,

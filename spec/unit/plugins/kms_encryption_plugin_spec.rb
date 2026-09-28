@@ -462,6 +462,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
 
     # On a connection that is not UTF-8, a result names its columns in the connection's encoding while
     # the configuration names them in UTF-8.
+    # Matching a result's names is done once per result, and a result on a UTF-8 connection names its
+    # columns the way the configuration does, so it gets the columns without their being copied.
+    describe 'matching the columns to the names a result uses' do
+      let(:columns) { { 'ssn' => ssn_config } }
+
+      it 'returns the columns as they are when the result names them the same way' do
+        expect(plugin.send(:keyed_by_field_names, columns, %w[name ssn])).to equal(columns)
+      end
+
+      it 'adds a column the result names in another encoding, leaving the columns alone' do
+        grosse = { 'größe' => ssn_config }
+        keyed = plugin.send(:keyed_by_field_names, grosse, ['größe'.encode('ISO-8859-1')])
+
+        expect(keyed).to include('größe'.encode('ISO-8859-1') => ssn_config, 'größe' => ssn_config)
+        expect(grosse.keys).to eq(['größe'])
+      end
+    end
+
     context 'when the result names a column in another encoding' do
       let(:grosse_config) { column_config('users', 'größe') }
       let(:configs) { { 'users.größe' => grosse_config } }
