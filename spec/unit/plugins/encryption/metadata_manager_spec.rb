@@ -138,6 +138,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
       expect(manager.load_metadata.keys).to eq(['users.ssn', 'users.email', 'orders.card_number'])
     end
 
+    # The rows come back in the connection's encoding, and the names they are looked up by are UTF-8.
+    it 'keys a configuration named in another encoding by its UTF-8 name' do
+      allow(sql_runner).to receive(:query).and_return([row('users'.encode('ISO-8859-1'), 'größe'.encode('ISO-8859-1'))])
+
+      config = manager.load_metadata['users.größe']
+
+      expect(config.table_name).to eq('users')
+      expect(config.column_name).to eq('größe')
+      expect(config.column_name.encoding).to eq(Encoding::UTF_8)
+    end
+
     it 'is empty when no column is configured for kms_encryption' do
       allow(sql_runner).to receive(:query).and_return([])
       expect(manager.load_metadata).to eq({})
