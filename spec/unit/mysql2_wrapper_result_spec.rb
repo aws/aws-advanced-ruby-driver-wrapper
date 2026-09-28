@@ -228,21 +228,46 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
     # result - which is where mysql2 applies options such as symbolize_keys.
     let(:statement) { double('Mysql2::Statement', fields: %w[ssn]) }
 
-    it 'reads the result rather than the statement' do
-      result = double('Mysql2::Result', fields: %i[ssn])
+    it 'reads the result rather than the statement once rows came back' do
+      result = double('Mysql2::Result', fields: %i[ssn], count: 1)
 
       wrapper_result = described_class.new(result, container, connection, nil, statement)
 
       expect(wrapper_result.fields).to eq(%i[ssn])
     end
 
-    it 'surfaces an error from a freed result instead of masking it with the statement' do
-      result = double('Mysql2::Result')
+    it 'surfaces an error from a freed streaming result instead of masking it with the statement' do
+      result = double('Mysql2::Result', count: 0)
+      result.instance_variable_set(:@query_options, { stream: true })
       allow(result).to receive(:fields).and_raise(Mysql2::Error, 'Result set has already been freed')
 
       wrapper_result = described_class.new(result, container, connection, nil, statement)
 
       expect { wrapper_result.fields }.to raise_error(Mysql2::Error, /already been freed/)
+    end
+
+    it 'reads the result for a query result with no rows, which carries no statement' do
+      result = double('Mysql2::Result', fields: %w[ssn], count: 0)
+
+      expect(described_class.new(result, container, connection).fields).to eq(%w[ssn])
+    end
+
+    # Mysql2::Statement#execute reads a buffered result to the end before returning it, and a read
+    # that finds no rows frees the metadata Mysql2::Result#fields would read. The doubles have no
+    # :fields stub, so reading the result here would raise instead of returning the statement's names.
+    context 'with a buffered prepared-statement result that has no rows' do
+      let(:result) { double('Mysql2::Result', count: 0) }
+      subject(:wrapper_result) { described_class.new(result, container, connection, nil, statement) }
+
+      it "reads the statement's column names instead of the freed result" do
+        expect(wrapper_result.fields).to eq(%w[ssn])
+      end
+
+      it 'symbolizes them when the result was asked for symbolize_keys' do
+        result.instance_variable_set(:@query_options, { symbolize_keys: true })
+
+        expect(wrapper_result.fields).to eq(%i[ssn])
+      end
     end
   end
 

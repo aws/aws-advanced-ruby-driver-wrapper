@@ -323,10 +323,21 @@ module AwsAdvancedRubyDriverWrapper
       pm.execute(RubyMethod::RESULT_FREE, current_conn, -> { @result.free }, bounded_conn: @connection, sql: @sql)
     end
 
-    # Delegate non-network methods directly
+    # Mysql2::Statement#execute reads a buffered result to the end before returning it, and when that
+    # read finds no rows mysql2 frees the result's metadata without having cached any column names.
+    # Mysql2::Result#fields then reads the freed metadata - an empty list at best, a segfault at worst
+    # (ActiveRecord calls it on every result, so any finder that matches nothing can crash). The
+    # names for that one case come from the statement's own metadata, symbolized when the result was
+    # asked for symbolize_keys just as Mysql2::Result#fields would. Every other result is read
+    # directly, so a freed streaming result still raises as the driver does.
     def fields
-      @result.fields
+      return @result.fields unless empty_buffered_statement_result?
+
+      names = @statement.fields
+      result_query_options[:symbolize_keys] ? names.map(&:to_sym) : names
     end
+
+    # Delegate non-network methods directly
 
     def field_types
       @result.field_types
@@ -392,6 +403,18 @@ module AwsAdvancedRubyDriverWrapper
       return @statement.fields if @statement && @result.count.zero? # rubocop:disable Style/CollectionQuerying
 
       @result.fields
+    end
+
+    # A streaming result is not read until the caller iterates it, so only a buffered one has had its
+    # metadata freed by the time it is returned. count reads the driver's own row count without
+    # touching the rows.
+    def empty_buffered_statement_result?
+      @statement && !result_query_options[:stream] && @result.count.zero? # rubocop:disable Style/CollectionQuerying
+    end
+
+    # mysql2 keeps the options a result was produced with in this ivar and exposes no reader for it.
+    def result_query_options
+      @result.instance_variable_get(:@query_options) || {}
     end
 
     def current_conn
