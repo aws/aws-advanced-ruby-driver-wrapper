@@ -278,6 +278,33 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(encryption_utility).not_to have_received(:ensure_initialized)
     end
 
+    # A name read with a character its encoding had no UTF-8 form for cannot be matched against the
+    # configuration, so it is left to the server-side enforcement rather than taken as not encrypted.
+    context 'when a column name could not be read' do
+      let(:unreadable) { "INSERT INTO users (name, gr\uFFFDe) VALUES ($1, $2)" }
+
+      before { allow(plugin.send(:logger)).to receive(:warn) }
+
+      it 'leaves the value to the database and says why' do
+        call('connection.exec_params', args: [unreadable, %w[Jo 123-45-6789]], sql: unreadable)
+
+        expect(bound_args[1]).to eq(%w[Jo 123-45-6789])
+        expect(plugin.send(:logger)).to have_received(:warn).with(/cannot read the name users\.gr\uFFFDe/)
+      end
+
+      it 'warns once for a name, however many statements touch it' do
+        3.times { call('connection.exec_params', args: [unreadable, %w[Jo 123-45-6789]], sql: unreadable) }
+
+        expect(plugin.send(:logger)).to have_received(:warn).with(/cannot read the name users\.gr\uFFFDe/).once
+      end
+
+      it 'does not look the name up' do
+        call('connection.exec_params', args: [unreadable, %w[Jo 123-45-6789]], sql: unreadable)
+
+        expect(metadata_manager).not_to have_received(:column_config).with('users', "gr\uFFFDe")
+      end
+    end
+
     # A column configured for encryption but with no usable key material cannot be encrypted, so the
     # value is left for the database's enforcement to reject rather than the statement being refused.
     it 'passes a value through when its column configuration has no key material' do
@@ -431,6 +458,53 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       rows = [['Jo', bytea(ciphertext('123-45-6789'))], ['Sam', bytea(ciphertext('987-65-4321'))]]
       expect(call('result.to_a', sql: select, field_names: %w[name ssn], returns: rows))
         .to eq([%w[Jo 123-45-6789], %w[Sam 987-65-4321]])
+    end
+
+    # On a connection that is not UTF-8, a result names its columns in the connection's encoding while
+    # the configuration names them in UTF-8.
+    # Matching a result's names is done once per result, and a result on a UTF-8 connection names its
+    # columns the way the configuration does, so it gets the columns without their being copied.
+    describe 'matching the columns to the names a result uses' do
+      let(:columns) { { 'ssn' => ssn_config } }
+
+      it 'returns the columns as they are when the result names them the same way' do
+        expect(plugin.send(:keyed_by_field_names, columns, %w[name ssn])).to equal(columns)
+      end
+
+      it 'adds a column the result names in another encoding, leaving the columns alone' do
+        grosse = { 'größe' => ssn_config }
+        keyed = plugin.send(:keyed_by_field_names, grosse, ['größe'.encode('ISO-8859-1')])
+
+        expect(keyed).to include('größe'.encode('ISO-8859-1') => ssn_config, 'größe' => ssn_config)
+        expect(grosse.keys).to eq(['größe'])
+      end
+    end
+
+    context 'when the result names a column in another encoding' do
+      let(:grosse_config) { column_config('users', 'größe') }
+      let(:configs) { { 'users.größe' => grosse_config } }
+      let(:select) { 'SELECT name, größe FROM users' }
+      let(:latin1_name) { 'größe'.encode('ISO-8859-1') }
+      let(:encrypted) { bytea(ciphertext('123-45-6789', grosse_config)) }
+
+      it 'decrypts a row read as a hash' do
+        row = { 'name' => 'Jo', latin1_name => encrypted }
+
+        expect(call('result.[]', args: [0], sql: select, field_names: ['name', latin1_name], returns: row))
+          .to eq({ 'name' => 'Jo', latin1_name => '123-45-6789' })
+      end
+
+      it 'decrypts a row read as an array of values' do
+        row = ['Jo', encrypted]
+
+        expect(call('result.[]', args: [0], sql: select, field_names: ['name', latin1_name], returns: row))
+          .to eq(%w[Jo 123-45-6789])
+      end
+
+      it 'decrypts the values of the column read by name' do
+        expect(call('result.field_values', args: [latin1_name], sql: select, returns: [encrypted]))
+          .to eq(%w[123-45-6789])
+      end
     end
 
     it 'decrypts the arrays values returns' do

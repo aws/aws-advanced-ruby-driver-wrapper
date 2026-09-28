@@ -14,11 +14,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../../logging'
 require_relative '../../ruby_method'
 require_relative '../../utils/parser/encryption_annotation_parser'
 require_relative '../../utils/parser/query_type'
 require_relative '../../utils/parser/sql_parser'
+require_relative '../../utils/sql_encoding'
 require_relative 'column_cipher'
 require_relative 'errors'
 require_relative 'kms_encryption_utility'
@@ -187,6 +189,10 @@ module AwsAdvancedRubyDriverWrapper
         (?:INSERT|UPDATE|REPLACE|UPSERT|MERGE)\b
       }imx
 
+      # What a character is replaced with in the copy of the SQL the plugin reads when the SQL's
+      # encoding has no UTF-8 form for it (see {Utils::SqlEncoding.inspectable}).
+      UNREADABLE_CHARACTER = "\uFFFD"
+
       SUBSCRIBED_METHODS = (
         Set[RubyMethod::CONNECTION_CLOSE.name, COLUMN_BY_NAME_METHOD, COLUMN_BY_INDEX_METHOD, VALUE_BY_INDEX_METHOD] +
           PARAMETER_METHODS.keys + WRITE_CHECK_METHODS + ROW_METHODS
@@ -205,6 +211,9 @@ module AwsAdvancedRubyDriverWrapper
         # PostgreSQL) fails the connection as it is set up rather than its first statement.
         @sql_parser = Utils::Parser::SqlParser.new(service_container.dialect_service.driver_dialect)
         @subscribed_methods = SUBSCRIBED_METHODS
+        # The names already warned about by {#unreadable_name?}, which is asked on every lookup and so
+        # would otherwise repeat the same warning for every row and statement that touches the name.
+        @unreadable_names = ::Concurrent::Set.new
       end
 
       # The call's block is taken from the call context rather than from a block parameter, since
@@ -334,9 +343,11 @@ module AwsAdvancedRubyDriverWrapper
         return pipeline_callable.call if columns.empty?
 
         cipher = new_cipher
+        field_names = context&.field_names
+        columns = keyed_by_field_names(columns, field_names)
         # A row read as an array of values is matched to its columns by position; a row read as a
         # hash is matched by name and never needs this. It is worked out once for the whole result.
-        positions = encrypted_positions(columns, context&.field_names)
+        positions = encrypted_positions(columns, field_names)
         caller_block = context&.block
 
         begin
@@ -367,7 +378,7 @@ module AwsAdvancedRubyDriverWrapper
 
       # field_values hands back one named column's values, so the column is looked up by name.
       def read_named_column(pipeline_callable, field_name, sql)
-        config = field_name.nil? ? nil : column_configs(sql)[field_name.to_s]
+        config = field_name.nil? ? nil : config_named(column_configs(sql), field_name)
         decrypt_column(pipeline_callable, config)
       end
 
@@ -496,7 +507,37 @@ module AwsAdvancedRubyDriverWrapper
         return nil unless index.is_a?(Integer) && field_names
 
         name = field_names[index]
-        name.nil? ? nil : columns[name.to_s]
+        name.nil? ? nil : config_named(columns, name)
+      end
+
+      # A result names its columns in the connection's encoding, while the configuration names them in
+      # UTF-8, so on a connection that is not UTF-8 a column whose name is not ASCII is named
+      # differently by each. The columns are keyed by the names the result uses as well, once for the
+      # whole result, so that each row is looked up by the name it actually carries. The columns are
+      # only copied when a name differs, so a result on a UTF-8 connection gets them as they are.
+      #
+      # @param columns [Hash{String => ColumnEncryptionConfig}] encrypted columns by UTF-8 name
+      # @param field_names [Array<String>, nil] the result's columns in order
+      # @return [Hash{String => ColumnEncryptionConfig}]
+      def keyed_by_field_names(columns, field_names)
+        return columns if field_names.nil?
+
+        keyed = nil
+        field_names.each do |name|
+          name = name.to_s
+          next if columns.key?(name)
+
+          config = columns[Utils::SqlEncoding.inspectable(name)]
+          (keyed ||= columns.dup)[name] = config if config
+        end
+        keyed || columns
+      end
+
+      # @return [ColumnEncryptionConfig, nil] the encrypted column a result or the application names,
+      #   whatever the encoding of the name
+      def config_named(columns, name)
+        name = name.to_s
+        columns[name] || columns[Utils::SqlEncoding.inspectable(name)]
       end
 
       def pg_tuple?(row)
@@ -698,12 +739,36 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def column_config(table, column)
+        return nil if unreadable_name?("#{table}.#{column}")
+
         config = metadata_lookup("#{table}.#{column}") { |manager| manager.column_config(table, column) }
         usable?(config) ? config : nil
       end
 
       def encrypted_columns_of(table)
+        return [] if unreadable_name?(table)
+
         metadata_lookup(table) { |manager| manager.table_configs(table) } || []
+      end
+
+      # A name with a character the SQL's encoding had no UTF-8 form for cannot be matched against the
+      # configuration reliably: looking it up would miss, and the column would be treated as though it
+      # were not encrypted without anyone knowing. So it is not looked up. The column is left as the
+      # database holds it, which is where the required server-side enforcement stops a plaintext being
+      # stored, and a warning says why, once for each name, since it only happens when the connection's
+      # encoding is one Ruby cannot fully read.
+      #
+      # @param name [String] a table, or a +"table.column"+ reference
+      def unreadable_name?(name)
+        return false unless name.include?(UNREADABLE_CHARACTER)
+        return true unless @unreadable_names.add?(name)
+
+        logger.warn(
+          "The kms_encryption plugin cannot read the name #{name} in the connection's encoding, so it cannot " \
+          'tell whether it is encrypted; leaving it to the database. Use a UTF-8 connection, or ASCII names ' \
+          'for encrypted tables and columns.'
+        )
+        true
       end
 
       # A lookup that fails is never allowed to take the application's statement down with it: the
