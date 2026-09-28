@@ -287,7 +287,14 @@ tasks.register<Test>("test-mysql-encryption") {
         systemProperty("test-encryption-only", "true")
         systemProperty("exclude-pg-driver", "true")
         systemProperty("exclude-pg-engine", "true")
-        systemProperty("exclude-instances-1", "false")
+        // TEMP - revert before opening the PR. Pin this task to the single environment that
+        // segfaulted (Ruby 4.0, 2 instances) instead of all four, so one cluster is created.
+        // Set explicitly rather than left to the defaults, which differ between a local
+        // TestEnvironmentConfiguration.java and the committed one CI checks out.
+        systemProperty("exclude-ruby-3-3", "true")
+        systemProperty("exclude-ruby-4-0", "false")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-2", "false")
         systemProperty("exclude-instances-3", "true")
         systemProperty("exclude-instances-5", "true")
     }
