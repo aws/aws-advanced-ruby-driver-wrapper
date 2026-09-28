@@ -16,6 +16,7 @@
 
 require_relative '../../logging'
 require_relative '../../utils/conversion_utils'
+require_relative '../../utils/sql_encoding'
 require_relative 'column_encryption_config'
 require_relative 'connection_source'
 require_relative 'encryption_algorithm'
@@ -238,6 +239,10 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         # Builds a {ColumnEncryptionConfig}, and the {KeyMetadata} it points at, from one joined row.
+        #
+        # The row names its table and column in the connection's encoding, while the names they are
+        # looked up by are read from the application's SQL as UTF-8. They are kept as UTF-8 so the two
+        # compare equal whatever the connection's encoding is.
         def to_column_config(row)
           key_metadata = KeyMetadata.new(
             id: row['key_id']&.to_i,
@@ -252,8 +257,8 @@ module AwsAdvancedRubyDriverWrapper
           )
 
           ColumnEncryptionConfig.new(
-            table_name: row['table_name'],
-            column_name: row['column_name'],
+            table_name: Utils::SqlEncoding.inspectable(row['table_name']),
+            column_name: Utils::SqlEncoding.inspectable(row['column_name']),
             algorithm: row['encryption_algorithm'] || EncryptionAlgorithm::DEFAULT,
             key_id: row['key_id']&.to_i,
             key_metadata: key_metadata,

@@ -94,6 +94,35 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionServ
       expect(round_trip('héllo')).to eq('héllo')
     end
 
+    it 'restores a string that is not UTF-8 as the same text in UTF-8' do
+      expect(round_trip('grün'.encode('UTF-16LE'))).to eq('grün')
+      expect(round_trip('grün'.encode('ISO-8859-1'))).to eq('grün')
+    end
+
+    # The stored form of a string does not depend on the encoding it was written in, so a value
+    # written from one encoding reads back the same as one written from any other.
+    it 'encrypts a string that is not UTF-8 as its UTF-8 bytes' do
+      expect(described_class.send(:serialize_value, 'grün'.encode('UTF-16BE'))).to eq('grün'.b)
+    end
+
+    it 'leaves a string that is not UTF-8 alone' do
+      value = 'grün'.encode('UTF-16LE')
+      encrypt_value(value, data_key, hmac_key)
+      expect(value).to eq('grün'.encode('UTF-16LE'))
+    end
+
+    # The conversion error's message quotes the character it stopped at, which is plaintext, so it is
+    # neither quoted in the error nor attached as its cause, where a logger printing the whole error
+    # would show it.
+    it 'refuses a string that has no UTF-8 form without quoting it' do
+      value = "secret \xFF".dup.force_encoding(Encoding::Shift_JIS)
+
+      expect { encrypt_value(value, data_key, hmac_key) }.to raise_error(encryption_error) { |error|
+        expect(error.cause).to be_nil
+        expect(error.full_message(highlight: false)).not_to include('secret', 'FF')
+      }
+    end
+
     it 'restores an empty string' do
       expect(round_trip('')).to eq('')
     end
