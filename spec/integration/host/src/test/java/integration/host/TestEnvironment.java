@@ -86,6 +86,42 @@ public class TestEnvironment implements AutoCloseable {
   protected static final int PROXY_CONTROL_PORT = 8474;
   protected static final int PROXY_PORT = 8666;
 
+  // Endpoint-type prefixes used by obfuscateEndpoint, longest first so a cluster-custom-/cluster-ro-
+  // endpoint keeps its marker rather than collapsing to "cluster-***". ".global-" covers the Aurora
+  // GDB writer endpoint.
+  private static final String[] ENDPOINT_ROLE_PREFIXES =
+      {".cluster-custom-", ".cluster-ro-", ".cluster-", ".global-"};
+
+  // Masks the account-identifying portion of an RDS endpoint (resource id, region, and DNS suffix),
+  // keeping only the leading label(s) that identify the endpoint's role. Examples:
+  //   "name.cluster-abc123.us-east-2.rds.amazonaws.com"     -> "name.cluster-***"
+  //   "gdb-abc.global-xyz123.global.rds.amazonaws.com"      -> "gdb-abc.global-***"
+  //   "instance-1.abc123.us-east-2.rds.amazonaws.com"       -> "instance-1.***"
+  // A null/blank or non-RDS host is returned unchanged. A trailing ".proxied" marker is preserved.
+  private static String obfuscateEndpoint(String host) {
+    if (host == null || host.isEmpty()) {
+      return host;
+    }
+    String suffix = "";
+    String core = host;
+    if (core.endsWith(PROXIED_DOMAIN_NAME_SUFFIX)) {
+      suffix = PROXIED_DOMAIN_NAME_SUFFIX;
+      core = core.substring(0, core.length() - suffix.length());
+    }
+    if (!core.contains(".rds.amazonaws.com")) {
+      return host;
+    }
+    for (String prefix : ENDPOINT_ROLE_PREFIXES) {
+      int idx = core.indexOf(prefix);
+      if (idx >= 0) {
+        return core.substring(0, idx) + prefix + "***" + suffix;
+      }
+    }
+    int firstDot = core.indexOf(".");
+    String label = firstDot >= 0 ? core.substring(0, firstDot) : core;
+    return label + ".***" + suffix;
+  }
+
   // Valkey cache
   private static final String VALKEY_CONTAINER_NAME_PREFIX = "valkey-container-";
   private static final String VALKEY_SERVER_ADDRESS_PREFIX = "valkey-server-address-";
@@ -286,11 +322,11 @@ public class TestEnvironment implements AutoCloseable {
         if (deployment == DatabaseEngineDeployment.AURORA
             || deployment == DatabaseEngineDeployment.AURORA_GLOBAL
             || deployment == DatabaseEngineDeployment.RDS_MULTI_AZ_CLUSTER) {
-          LOGGER.finer(() -> String.format("Use pre-created DB cluster: %s.cluster-%s",
-              resultTestEnvironment.rdsDbName, resultTestEnvironment.rdsDbDomain));
+          LOGGER.finer(() -> "Use pre-created DB cluster: " + obfuscateEndpoint(String.format("%s.cluster-%s",
+              resultTestEnvironment.rdsDbName, resultTestEnvironment.rdsDbDomain)));
         } else {
-          LOGGER.finer(() -> String.format("Use pre-created DB : %s.%s",
-              resultTestEnvironment.rdsDbName, resultTestEnvironment.rdsDbDomain));
+          LOGGER.finer(() -> "Use pre-created DB : " + obfuscateEndpoint(String.format("%s.%s",
+              resultTestEnvironment.rdsDbName, resultTestEnvironment.rdsDbDomain)));
         }
 
         return resultTestEnvironment;
@@ -698,8 +734,8 @@ public class TestEnvironment implements AutoCloseable {
         populateSecondaryDatabaseInfo(env, secondaryClusterId, secondaryRegion, credProvider, port);
       }
 
-      LOGGER.finer("Global cluster endpoint: " + globalEndpoint);
-      LOGGER.finer("Primary cluster endpoint: " + primaryEndpoint);
+      LOGGER.finer("Global cluster endpoint: " + obfuscateEndpoint(globalEndpoint));
+      LOGGER.finer("Primary cluster endpoint: " + obfuscateEndpoint(primaryEndpoint));
 
     } else {
       // Create new global database
@@ -741,7 +777,7 @@ public class TestEnvironment implements AutoCloseable {
       String globalEndpoint = gc.endpoint();
       env.info.setGlobalClusterEndpoint(globalEndpoint);
 
-      LOGGER.finer("Global cluster endpoint: " + globalEndpoint);
+      LOGGER.finer("Global cluster endpoint: " + obfuscateEndpoint(globalEndpoint));
 
       // Populate the secondary-region database info block.
       populateSecondaryDatabaseInfo(env, secondaryClusterId, secondaryRegion, credProvider, port);
@@ -1995,18 +2031,18 @@ public class TestEnvironment implements AutoCloseable {
 
   private void deleteDbCluster(boolean waitForCompletion) {
     if (!this.reuseDb) {
-      LOGGER.finest("Deleting cluster " + this.rdsDbName + ".cluster-" + this.rdsDbDomain);
+      LOGGER.finest("Deleting cluster " + obfuscateEndpoint(this.rdsDbName + ".cluster-" + this.rdsDbDomain));
       auroraUtil.deleteCluster(
           this.rdsDbName, this.info.getRequest().getDatabaseEngineDeployment(), waitForCompletion);
-      LOGGER.finest("Deleted cluster " + this.rdsDbName + ".cluster-" + this.rdsDbDomain);
+      LOGGER.finest("Deleted cluster " + obfuscateEndpoint(this.rdsDbName + ".cluster-" + this.rdsDbDomain));
     }
   }
 
   private void deleteMultiAzInstance() {
     if (!this.reuseDb) {
-      LOGGER.finest("Deleting MultiAz Instance " + this.rdsDbName + "." + this.rdsDbDomain);
+      LOGGER.finest("Deleting MultiAz Instance " + obfuscateEndpoint(this.rdsDbName + "." + this.rdsDbDomain));
       auroraUtil.deleteMultiAzInstance(this.rdsDbName, false);
-      LOGGER.finest("Deleted MultiAz Instance " + this.rdsDbName + "." + this.rdsDbDomain);
+      LOGGER.finest("Deleted MultiAz Instance " + obfuscateEndpoint(this.rdsDbName + "." + this.rdsDbDomain));
     }
   }
 

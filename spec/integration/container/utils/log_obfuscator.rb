@@ -25,8 +25,8 @@ module Integration
     RDS_ENDPOINT = /[A-Za-z0-9._-]+\.rds\.amazonaws\.com/
 
     # Endpoint-type prefixes, longest first so a cluster-custom-/cluster-ro- endpoint keeps its marker
-    # rather than collapsing to "cluster-***".
-    CLUSTER_PREFIXES = ['.cluster-custom-', '.cluster-ro-', '.cluster-'].freeze
+    # rather than collapsing to "cluster-***". ".global-" covers the Aurora GDB writer endpoint.
+    CLUSTER_PREFIXES = ['.cluster-custom-', '.cluster-ro-', '.cluster-', '.global-'].freeze
 
     REDACTED = '***'
 
@@ -46,6 +46,7 @@ module Integration
     #   "name.cluster-abc123.us-east-2.rds.amazonaws.com"        -> "name.cluster-***"
     #   "name.cluster-ro-abc123.us-east-2.rds.amazonaws.com"     -> "name.cluster-ro-***"
     #   "name.cluster-custom-abc123.us-east-2.rds.amazonaws.com" -> "name.cluster-custom-***"
+    #   "gdb-abc.global-xyz123.global.rds.amazonaws.com"         -> "gdb-abc.global-***"
     #   "instance-1.abc123.us-east-2.rds.amazonaws.com"          -> "instance-1.***"
     #
     # @param host [String]
