@@ -527,6 +527,45 @@ module Integration
       RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: 1) do
         !instance_still_writer?(initial_writer_id, cluster_id)
       end
+
+      wait_for_new_writer_to_stabilize(cluster_id, initial_writer_id)
+    end
+
+    # Number of consecutive polls that must agree on the same new writer id before it is considered stable.
+    WRITER_STABILITY_CONSECUTIVE_CHECKS = 3
+    # Delay between stability polls, in seconds.
+    WRITER_STABILITY_POLL_SECS = 2
+
+    # Polls the cluster's current writer until a new, non-nil writer id is observed.
+    def wait_for_new_writer_to_stabilize(cluster_id, initial_writer_id)
+      stable_writer_id = nil
+      consecutive = 0
+
+      RetryHelper.retry_until(timeout_secs: WRITER_CHANGE_TIMEOUT_SECS, delay_secs: WRITER_STABILITY_POLL_SECS) do
+        current = current_writer_id_or_nil(cluster_id)
+
+        if current.nil? || current == initial_writer_id
+          # Not a new writer yet, reset.
+          stable_writer_id = nil
+          consecutive = 0
+          next false
+        end
+
+        if current == stable_writer_id
+          consecutive += 1
+        else
+          stable_writer_id = current
+          consecutive = 1
+        end
+
+        consecutive >= WRITER_STABILITY_CONSECUTIVE_CHECKS
+      end
+    end
+
+    def current_writer_id_or_nil(cluster_id)
+      cluster_writer_instance_id(cluster_id)
+    rescue StandardError
+      nil
     end
 
     def aurora_deployment?

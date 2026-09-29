@@ -36,6 +36,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLConnection;
 import java.net.UnknownHostException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -664,15 +665,28 @@ public class AuroraTestUtility {
    * @throws UnknownHostException when checkip.amazonaws.com isn't available
    */
   public String getPublicIPAddress() throws UnknownHostException {
-    String ip;
-    try {
-      URL ipChecker = new URL("https://checkip.amazonaws.com");
-      BufferedReader reader = new BufferedReader(new InputStreamReader(ipChecker.openStream()));
-      ip = reader.readLine();
-    } catch (Exception e) {
-      throw new UnknownHostException("Unable to get IP");
+    UnknownHostException lastError = null;
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        URL ipChecker = new URL("https://checkip.amazonaws.com");
+        URLConnection conn = ipChecker.openConnection();
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(5000);
+        try (BufferedReader reader =
+            new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
+          String ip = reader.readLine();
+          if (ip != null && !ip.trim().isEmpty()) {
+            return ip.trim();
+          }
+        }
+        lastError = new UnknownHostException("Unable to determine public IP (empty response)");
+      } catch (Exception e) {
+        lastError = new UnknownHostException(
+            "Unable to determine public IP (attempt " + attempt + " failed: "
+                + e.getClass().getSimpleName() + ")");
+      }
     }
-    return ip;
+    throw lastError;
   }
 
   /**
@@ -2575,6 +2589,7 @@ public class AuroraTestUtility {
               .dbClusterIdentifier(identifier)
               .globalClusterIdentifier(globalClusterId)
               .engine(engine)
+              .engineVersion(engineVersion)
               .enableIAMDatabaseAuthentication(true)
               .kmsKeyId("alias/aws/rds")
               .build());

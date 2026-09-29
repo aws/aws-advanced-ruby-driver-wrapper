@@ -768,7 +768,7 @@ public class TestEnvironment implements AutoCloseable {
         AuroraTestUtility secondaryUtil = new AuroraTestUtility(secondaryRegion, env.rdsEndpoint);
         String runnerIP = secondaryUtil.getPublicIPAddress();
         secondaryUtil.ec2AuthorizeIP(runnerIP);
-        LOGGER.finer("Authorized runner IP " + runnerIP + " in secondary region " + secondaryRegion);
+        LOGGER.finer("Authorized runner IP in secondary region " + secondaryRegion);
       } catch (Exception ex) {
         LOGGER.warning("Failed to authorize IP in secondary region: " + ex.getMessage());
       }
@@ -1207,13 +1207,13 @@ public class TestEnvironment implements AutoCloseable {
   private static void authorizeIP(TestEnvironment env) {
     try {
       env.runnerIP = env.auroraUtil.getPublicIPAddress();
-      LOGGER.finest("Test runner IP: " + env.runnerIP);
+      LOGGER.finest("Test runner IP resolved.");
     } catch (UnknownHostException e) {
       throw new RuntimeException(e);
     }
     env.auroraUtil.ec2AuthorizeIP(env.runnerIP);
-    LOGGER.finest(String.format("Test runner IP %s authorized. Usage count: %d",
-        env.runnerIP, ipAddressUsageRefCount.get()));
+    LOGGER.finest(String.format("Test runner IP authorized. Usage count: %d",
+        ipAddressUsageRefCount.get()));
   }
 
   private static void deAuthorizeIP(TestEnvironment env) {
@@ -1228,8 +1228,8 @@ public class TestEnvironment implements AutoCloseable {
 
       if (!env.reuseDb) {
         env.auroraUtil.ec2DeauthorizesIP(env.runnerIP);
-        LOGGER.finest(String.format("Test runner IP %s de-authorized. Usage count: %d",
-            env.runnerIP, ipAddressUsageRefCount.get()));
+        LOGGER.finest(String.format("Test runner IP de-authorized. Usage count: %d",
+            ipAddressUsageRefCount.get()));
       } else {
         LOGGER.finest("The IP address usage count hit 0, but the REUSE_RDS_DB was set to true, so IP "
             + "de-authorization was skipped.");
