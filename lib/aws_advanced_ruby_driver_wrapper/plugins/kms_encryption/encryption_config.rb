@@ -74,10 +74,6 @@ module AwsAdvancedRubyDriverWrapper
           end
         end
 
-        # +allowed_master_key_arns+ may be nil, an array, or a comma-separated string; it is stored as a
-        # frozen array of the non-blank entries. It defaults to empty, which places no restriction on
-        # the master keys used - acceptable for the administrative utility, but refused by the plugin
-        # itself (see {KmsEncryptionUtility}).
         def initialize(kms_region:, kms_endpoint:, metadata_schema:, metadata_cache_enabled:,
                        metadata_cache_expiration_sec:, metadata_cache_refresh_interval_sec:,
                        key_management_max_retries:, key_management_retry_backoff_base_sec:,
@@ -108,6 +104,9 @@ module AwsAdvancedRubyDriverWrapper
           metadata_cache_enabled && metadata_cache_refresh_interval_sec.positive?
         end
 
+        # An empty allow-list (the default) places no restriction on the master keys used - acceptable
+        # for the administrative utility, but refused by the plugin itself (see {KmsEncryptionUtility}).
+        #
         # @return [Boolean] true when only the listed master keys may be used
         def restricts_master_keys?
           !allowed_master_key_arns.empty?
@@ -135,6 +134,8 @@ module AwsAdvancedRubyDriverWrapper
 
         private
 
+        # Accepts nil, an array, or a comma-separated string, and returns a frozen array of the unique,
+        # non-blank entries.
         def normalize_arns(value)
           entries = value.is_a?(String) ? value.split(',') : Array(value)
           entries.map { |arn| arn.to_s.strip }.reject(&:empty?).uniq.freeze

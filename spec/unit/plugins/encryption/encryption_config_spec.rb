@@ -59,9 +59,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
     it 'reads every setting from the properties' do
       config = described_class.from_props(
         props(
-          encryption_kms_region: 'eu-west-1',
+          encryption_kms_region: 'us-east-1',
           encryption_kms_endpoint: 'https://kms.local:4566',
-          encryption_allowed_master_key_arns: 'arn:aws:kms:eu-west-1:1:key/a',
+          encryption_allowed_master_key_arns: 'arn:aws:kms:us-east-1:1:key/a',
           encryption_metadata_schema: 'vault',
           encryption_metadata_cache_enabled: false,
           encryption_metadata_cache_expiration_sec: 60,
@@ -76,9 +76,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
         )
       )
 
-      expect(config.kms_region).to eq('eu-west-1')
+      expect(config.kms_region).to eq('us-east-1')
       expect(config.kms_endpoint).to eq('https://kms.local:4566')
-      expect(config.allowed_master_key_arns).to eq(['arn:aws:kms:eu-west-1:1:key/a'])
+      expect(config.allowed_master_key_arns).to eq(['arn:aws:kms:us-east-1:1:key/a'])
       expect(config.metadata_schema).to eq(schema_name_class.of('vault'))
       expect(config.metadata_cache_enabled).to be(false)
       expect(config.metadata_cache_expiration_sec).to eq(60)
@@ -94,21 +94,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
 
     it 'falls back to AWS_REGION' do
       allow(ENV).to receive(:fetch).and_call_original
-      allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return('ap-south-1')
-      expect(described_class.from_props(props).kms_region).to eq('ap-south-1')
+      allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return('us-east-1')
+      expect(described_class.from_props(props).kms_region).to eq('us-east-1')
     end
 
     it 'falls back to AWS_DEFAULT_REGION' do
       allow(ENV).to receive(:fetch).and_call_original
       allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return(nil)
-      allow(ENV).to receive(:fetch).with('AWS_DEFAULT_REGION', nil).and_return('ap-south-1')
-      expect(described_class.from_props(props).kms_region).to eq('ap-south-1')
+      allow(ENV).to receive(:fetch).with('AWS_DEFAULT_REGION', nil).and_return('us-east-1')
+      expect(described_class.from_props(props).kms_region).to eq('us-east-1')
     end
 
     it 'prefers an explicitly configured region over the environment' do
       allow(ENV).to receive(:fetch).and_call_original
       allow(ENV).to receive(:fetch).with('AWS_REGION', nil).and_return('ap-south-1')
-      expect(described_class.from_props(props(encryption_kms_region: 'eu-west-1')).kms_region).to eq('eu-west-1')
+      expect(described_class.from_props(props(encryption_kms_region: 'us-east-1')).kms_region).to eq('us-east-1')
     end
 
     # No region is assumed: the configuration is rejected rather than
