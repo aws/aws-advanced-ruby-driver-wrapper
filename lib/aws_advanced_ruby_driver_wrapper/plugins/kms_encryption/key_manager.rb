@@ -18,6 +18,7 @@ require 'base64'
 require 'digest'
 require 'securerandom'
 require_relative '../../logging'
+require_relative '../../property_definition'
 require_relative '../../utils/conversion_utils'
 require_relative 'connection_source'
 require_relative 'errors'
@@ -81,11 +82,17 @@ module AwsAdvancedRubyDriverWrapper
 
         # Decrypts a stored data key, using the in-memory cache when possible.
         #
+        # The master key ARN comes from +key_storage+, so it is checked against the configured
+        # allow-list before anything else: a row repointed at another master key is refused rather
+        # than decrypted. KMS is then told which key to use, so a data key wrapped under a different
+        # key fails there too.
+        #
         # @param encrypted_data_key [String] the base64 encoded, KMS encrypted data key
-        # @param master_key_arn [String, nil] the ARN of the master key, for audit records
+        # @param master_key_arn [String, nil] the ARN of the master key the data key was wrapped with
         # @return [String] the plaintext data key; the caller should wipe it once used
-        # @raise [Errors::KeyManagementError] if KMS rejects the request
+        # @raise [Errors::KeyManagementError] if the master key is not allowed, or KMS rejects the request
         def decrypt_data_key(encrypted_data_key, master_key_arn = nil)
+          authorize_master_key!(master_key_arn)
           if encrypted_data_key.nil? || encrypted_data_key.to_s.strip.empty?
             raise Errors::KeyManagementError
               .invalid_key_metadata('The stored key metadata has no encrypted data key')
@@ -116,8 +123,9 @@ module AwsAdvancedRubyDriverWrapper
         #
         # @param master_key_arn [String] the ARN of the master key to wrap the data key with
         # @return [GeneratedDataKey]
-        # @raise [Errors::KeyManagementError] if KMS rejects the request
+        # @raise [Errors::KeyManagementError] if the master key is not allowed, or KMS rejects the request
         def generate_data_key(master_key_arn)
+          authorize_master_key!(master_key_arn)
           result = with_retry('GENERATE_DATA_KEY') do
             response = @kms_client.generate_data_key(key_id: master_key_arn, key_spec: KMS_KEY_SPEC)
             GeneratedDataKey.new(
@@ -268,6 +276,17 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         private
+
+        def authorize_master_key!(master_key_arn)
+          return if @config.master_key_allowed?(master_key_arn)
+
+          raise Errors::KeyManagementError
+            .unauthorized_master_key(
+              "The master key is not listed in #{PropertyDefinition::ENCRYPTION_ALLOWED_MASTER_KEY_ARNS.name}; " \
+              'refusing to use it'
+            )
+            .with_master_key_arn(master_key_arn)
+        end
 
         def insert_key_sql
           "INSERT INTO #{@schema}.key_storage " \
