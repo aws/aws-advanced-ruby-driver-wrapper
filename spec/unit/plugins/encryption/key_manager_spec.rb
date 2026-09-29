@@ -214,10 +214,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
       expect(kms_client).not_to have_received(:generate_data_key)
     end
 
-    context 'when no allow-list is configured' do
+    # Only the administrative utility builds a KeyManager without an allow-list: the plugin refuses
+    # to start without one, so this is never the case for application traffic.
+    context 'when no allow-list is configured (as in the administrative utility)' do
       let(:config) { build_encryption_config }
 
-      it 'uses whichever master key it is given' do
+      it 'uses the master key the caller names' do
         expect(manager.decrypt_data_key(encrypted_data_key, other_arn)).to eq(plaintext_key)
         manager.generate_data_key(other_arn)
 
