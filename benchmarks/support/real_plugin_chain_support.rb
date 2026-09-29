@@ -129,7 +129,8 @@ module AwsAdvancedRubyDriverWrapper
         {
           wrapper_plugins: plugin_codes,
           secret_id: 'benchmark-secret',
-          secret_region: 'us-east-1'
+          secret_region: 'us-east-1',
+          encryption_allowed_master_key_arns: 'arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab'
         }
       end
 

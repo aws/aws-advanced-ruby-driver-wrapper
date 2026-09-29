@@ -418,6 +418,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
         expect { call('result.to_a', sql: select, returns: [row]) }
           .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionError, /authentication tag does not match this data key/)
       end
+
+      # A master key outside encryption_allowed_master_key_arns means key_storage has been pointed
+      # somewhere it should not be, so the value is refused rather than handed back unverified.
+      it 'still raises when the column names a master key that is not allowed' do
+        row = { 'ssn' => bytea(ciphertext('123-45-6789')) }
+        allow(key_manager).to receive(:decrypt_data_key).and_raise(
+          AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError.unauthorized_master_key('not allowed')
+        )
+
+        expect { call('result.to_a', sql: select, returns: [row]) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError) { |error| expect(error.code).to eq('KEY07') }
+      end
     end
 
     # One cipher serves the whole call, so a statement returning many rows costs a single Decrypt.

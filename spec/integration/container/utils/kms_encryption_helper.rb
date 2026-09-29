@@ -117,7 +117,8 @@ module Integration
       {
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'kms_encryption',
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_KMS_REGION.name => kms_region,
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.name => metadata_schema
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.name => metadata_schema,
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::ENCRYPTION_ALLOWED_MASTER_KEY_ARNS.name => kms_key_id
       }
     end
 
