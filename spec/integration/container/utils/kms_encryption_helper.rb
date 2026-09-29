@@ -225,8 +225,7 @@ module Integration
     # @param table [String]
     # @param encrypted_columns [Array<String>] columns the plugin will encrypt
     # @param plain_columns [Array<String>] additional plaintext VARCHAR columns
-    # @param pg_encrypted_type [String] the PostgreSQL type for encrypted columns ('bytea' or
-    #   'encrypted_data' once {#install_pg_encrypted_type} has run)
+    # @param pg_encrypted_type [String] the PostgreSQL type for encrypted columns
     # @return [void]
     def create_app_table(conn, table, encrypted_columns:, plain_columns: ['name'], pg_encrypted_type: 'bytea')
       run(conn, "DROP TABLE IF EXISTS #{table}")
