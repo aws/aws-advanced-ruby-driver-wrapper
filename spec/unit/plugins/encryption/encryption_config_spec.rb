@@ -53,6 +53,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
       expect(config.data_key_cache_max_size).to eq(1000)
       expect(config.data_key_cache_expiration_sec).to eq(300)
       expect(config.return_unverified_data).to be(false)
+      expect(config.allowed_master_key_arns).to eq([])
     end
 
     it 'reads every setting from the properties' do
@@ -60,6 +61,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
         props(
           encryption_kms_region: 'eu-west-1',
           encryption_kms_endpoint: 'https://kms.local:4566',
+          encryption_allowed_master_key_arns: 'arn:aws:kms:eu-west-1:1:key/a',
           encryption_metadata_schema: 'vault',
           encryption_metadata_cache_enabled: false,
           encryption_metadata_cache_expiration_sec: 60,
@@ -76,6 +78,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
 
       expect(config.kms_region).to eq('eu-west-1')
       expect(config.kms_endpoint).to eq('https://kms.local:4566')
+      expect(config.allowed_master_key_arns).to eq(['arn:aws:kms:eu-west-1:1:key/a'])
       expect(config.metadata_schema).to eq(schema_name_class.of('vault'))
       expect(config.metadata_cache_enabled).to be(false)
       expect(config.metadata_cache_expiration_sec).to eq(60)
@@ -146,6 +149,45 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::EncryptionConf
     it 'validates a copy made with #with' do
       expect { build_config.with(kms_region: '  ') }
         .to raise_error(ArgumentError, /encryption_kms_region cannot be empty/)
+    end
+  end
+
+  describe 'the master key allow-list' do
+    let(:first) { 'arn:aws:kms:us-east-1:1:key/a' }
+    let(:second) { 'arn:aws:kms:us-east-1:1:key/b' }
+
+    it 'accepts a comma-separated string, ignoring whitespace, blank entries and repeats' do
+      config = described_class.from_props(
+        props(encryption_kms_region: 'us-east-1', encryption_allowed_master_key_arns: " #{first} ,, #{second},#{first} ")
+      )
+      expect(config.allowed_master_key_arns).to eq([first, second])
+    end
+
+    it 'accepts an array' do
+      config = described_class.from_props(
+        props(encryption_kms_region: 'us-east-1', encryption_allowed_master_key_arns: [first, " #{second} "])
+      )
+      expect(config.allowed_master_key_arns).to eq([first, second])
+    end
+
+    it 'is frozen' do
+      expect(build_config(allowed_master_key_arns: [first]).allowed_master_key_arns).to be_frozen
+    end
+
+    it 'allows only the listed keys once any are listed' do
+      config = build_config(allowed_master_key_arns: [first])
+
+      expect(config.restricts_master_keys?).to be(true)
+      expect(config.master_key_allowed?(first)).to be(true)
+      expect(config.master_key_allowed?(second)).to be(false)
+      expect(config.master_key_allowed?(nil)).to be(false)
+    end
+
+    it 'allows any key when none are listed' do
+      config = build_config
+
+      expect(config.restricts_master_keys?).to be(false)
+      expect(config.master_key_allowed?(second)).to be(true)
     end
   end
 

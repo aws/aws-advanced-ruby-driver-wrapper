@@ -259,7 +259,37 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
                                              key_metadata: key_metadata)
     end
 
+    # Keeping the current master key is only allowed when there is an allow-list to check it against.
+    let(:config) { build_encryption_config(allowed_master_key_arns: [master_key_arn]) }
+
     before { allow(metadata_manager).to receive(:column_config).and_return(column_config) }
+
+    context 'when no allow-list is configured' do
+      let(:config) { build_encryption_config }
+
+      # The current master key would come from key_storage, which may have been repointed.
+      it 'refuses to keep the master key recorded in key_storage' do
+        expect { utility.rotate_data_key('users', 'ssn') }
+          .to raise_error(ArgumentError, /Pass the master key ARN to rotate onto, or configure encryption_allowed_master_key_arns/)
+        expect(metadata_manager).not_to have_received(:column_config)
+        expect(key_manager).not_to have_received(:generate_data_key)
+      end
+
+      it 'rotates onto a master key the caller names' do
+        expect(utility.rotate_data_key('users', 'ssn', master_key_arn)).to eq(7)
+        expect(key_manager).to have_received(:generate_data_key).with(master_key_arn)
+      end
+    end
+
+    # KeyManager#generate_data_key checks the stored key against the allow-list; its refusal reaches
+    # the caller as it is, and nothing is stored.
+    it 'passes on the refusal of a stored master key that is not allowed' do
+      allow(key_manager).to receive(:generate_data_key).and_raise(key_error.unauthorized_master_key('not allowed'))
+
+      expect { utility.rotate_data_key('users', 'ssn') }
+        .to raise_error(key_error) { |error| expect(error.code).to eq(key_error::UNAUTHORIZED_MASTER_KEY) }
+      expect(key_manager).not_to have_received(:store_key_metadata)
+    end
 
     # Only new writes use the new key. Values already written stay readable because the row they
     # are in still points at the key they were written with until it is re-encrypted.

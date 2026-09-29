@@ -103,6 +103,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError do
       expect(described_class.key_storage_failed('x').code).to eq('KEY04')
       expect(described_class.kms_connection_failed('x').code).to eq('KEY05')
       expect(described_class.invalid_key_metadata('x').code).to eq('KEY06')
+      expect(described_class.unauthorized_master_key('x').code).to eq('KEY07')
     end
 
     it 'defaults to the retrieval code' do

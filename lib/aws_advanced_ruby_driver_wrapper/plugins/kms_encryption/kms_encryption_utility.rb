@@ -59,13 +59,14 @@ module AwsAdvancedRubyDriverWrapper
         # @param service_container [Services::ServiceContainer]
         # @param props [Concurrent::Map, Hash] the wrapper properties
         # @param kms_client [Aws::KMS::Client, nil] a client to use instead of building one
-        # @raise [ArgumentError] if the kms_encryption properties are invalid
+        # @raise [ArgumentError] if the kms_encryption properties are invalid, or no master keys are allowed
         def initialize(service_container, props, kms_client: nil)
           raise ArgumentError, 'service_container is required' if service_container.nil?
 
           @service_container = service_container
           @props = props
           @config = EncryptionConfig.from_props(props)
+          require_master_key_allow_list!
           @kms_client = kms_client
           @lock = Mutex.new
           @initialized = false
@@ -194,6 +195,14 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         private
+
+        def require_master_key_allow_list!
+          return if @config.restricts_master_keys?
+
+          raise ArgumentError,
+                "#{PropertyDefinition::ENCRYPTION_ALLOWED_MASTER_KEY_ARNS.name} is required: list the KMS master key " \
+                'ARNs the kms_encryption plugin may use'
+        end
 
         # Runs under @lock.
         def build_database_components

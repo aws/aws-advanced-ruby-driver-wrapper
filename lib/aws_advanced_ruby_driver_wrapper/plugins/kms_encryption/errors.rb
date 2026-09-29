@@ -145,6 +145,7 @@ module AwsAdvancedRubyDriverWrapper
       KEY_STORAGE_FAILED = 'KEY04'
       KMS_CONNECTION_FAILED = 'KEY05'
       INVALID_KEY_METADATA = 'KEY06'
+      UNAUTHORIZED_MASTER_KEY = 'KEY07'
 
       def default_code
         KEY_RETRIEVAL_FAILED
@@ -173,6 +174,10 @@ module AwsAdvancedRubyDriverWrapper
 
         def invalid_key_metadata(message, context = {})
           new(message, code: INVALID_KEY_METADATA, context: context)
+        end
+
+        def unauthorized_master_key(message, context = {})
+          new(message, code: UNAUTHORIZED_MASTER_KEY, context: context)
         end
       end
 

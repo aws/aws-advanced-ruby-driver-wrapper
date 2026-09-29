@@ -150,6 +150,83 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
     end
   end
 
+  # The master key ARN is read from key_storage, which is only as trustworthy as whoever can write
+  # it, so every KMS call is checked against the configured allow-list first.
+  describe 'the master key allow-list' do
+    let(:allowed_arn) { 'arn:aws:kms:us-east-1:123456789012:key/allowed' }
+    let(:other_arn) { 'arn:aws:kms:us-east-1:999999999999:key/attacker' }
+    let(:config) { build_encryption_config(allowed_master_key_arns: [allowed_arn]) }
+
+    before do
+      allow(kms_client).to receive(:decrypt).and_return(double('DecryptResponse', plaintext: plaintext_key))
+      allow(kms_client).to receive(:generate_data_key)
+        .and_return(double('GenerateDataKeyResponse', plaintext: plaintext_key, ciphertext_blob: ciphertext_blob))
+    end
+
+    it 'decrypts a data key wrapped with a listed master key, naming that key to KMS' do
+      expect(manager.decrypt_data_key(encrypted_data_key, allowed_arn)).to eq(plaintext_key)
+      expect(kms_client).to have_received(:decrypt).with(ciphertext_blob: ciphertext_blob, key_id: allowed_arn)
+    end
+
+    it 'refuses to decrypt a data key that names an unlisted master key, without calling KMS' do
+      expect { manager.decrypt_data_key(encrypted_data_key, other_arn) }
+        .to raise_error(key_error, /not listed in encryption_allowed_master_key_arns/) do |error|
+          expect(error.code).to eq(key_error::UNAUTHORIZED_MASTER_KEY)
+          expect(error.context[:master_key_arn]).to eq('arn:aws:kms:***:***:key/***')
+        end
+      expect(kms_client).not_to have_received(:decrypt)
+    end
+
+    # Without a key id KMS would pick the key from the ciphertext itself, so a row with no master key
+    # must not slip past the allow-list.
+    it 'refuses to decrypt a data key that names no master key' do
+      [nil, ''].each do |missing|
+        expect { manager.decrypt_data_key(encrypted_data_key, missing) }
+          .to raise_error(key_error) { |error| expect(error.code).to eq(key_error::UNAUTHORIZED_MASTER_KEY) }
+      end
+      expect(kms_client).not_to have_received(:decrypt)
+    end
+
+    # A repointed row can reuse a data key that is already cached; it is refused all the same.
+    it 'refuses an unlisted master key even when the data key is already cached' do
+      manager.decrypt_data_key(encrypted_data_key, allowed_arn)
+
+      expect { manager.decrypt_data_key(encrypted_data_key, other_arn) }
+        .to raise_error(key_error) { |error| expect(error.code).to eq(key_error::UNAUTHORIZED_MASTER_KEY) }
+    end
+
+    it 'records the refusal in the audit trail' do
+      allow(audit_logger).to receive(:log_data_key_decryption)
+
+      expect { manager.decrypt_data_key(encrypted_data_key, other_arn) }.to raise_error(key_error)
+      expect(audit_logger).to have_received(:log_data_key_decryption)
+        .with(hash_including(master_key_arn: other_arn, success: false))
+    end
+
+    it 'generates a data key under a listed master key' do
+      manager.generate_data_key(allowed_arn)
+      expect(kms_client).to have_received(:generate_data_key).with(key_id: allowed_arn, key_spec: 'AES_256')
+    end
+
+    it 'refuses to generate a data key under an unlisted master key, without calling KMS' do
+      expect { manager.generate_data_key(other_arn) }
+        .to raise_error(key_error) { |error| expect(error.code).to eq(key_error::UNAUTHORIZED_MASTER_KEY) }
+      expect(kms_client).not_to have_received(:generate_data_key)
+    end
+
+    context 'when no allow-list is configured' do
+      let(:config) { build_encryption_config }
+
+      it 'uses whichever master key it is given' do
+        expect(manager.decrypt_data_key(encrypted_data_key, other_arn)).to eq(plaintext_key)
+        manager.generate_data_key(other_arn)
+
+        expect(kms_client).to have_received(:decrypt).with(ciphertext_blob: ciphertext_blob, key_id: other_arn)
+        expect(kms_client).to have_received(:generate_data_key).with(key_id: other_arn, key_spec: 'AES_256')
+      end
+    end
+  end
+
   describe '#create_master_key' do
     it 'creates a symmetric encrypt and decrypt key and returns its ARN' do
       arn = 'arn:aws:kms:us-east-1:1:key/abcd'
