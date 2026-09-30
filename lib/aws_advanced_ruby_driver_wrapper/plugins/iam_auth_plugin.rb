@@ -16,6 +16,7 @@
 
 require 'concurrent'
 require_relative '../errors'
+require_relative '../utils/aws_credentials_utils'
 require_relative '../utils/iam_auth_utils'
 require_relative '../utils/rds_utils'
 require_relative '../utils/rds_url_type'
@@ -90,7 +91,8 @@ module AwsAdvancedRubyDriverWrapper
           @service_container.dialect_service.db_dialect.default_port
         )
 
-        cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
+        credentials_identity = Utils::AwsCredentialsUtils.identity(@credentials_provider)
+        cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user, credentials_identity)
         entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
         expiration = PropertyDefinition::IAM_EXPIRATION_SEC.get_float(wrapper_props_override)
         PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)

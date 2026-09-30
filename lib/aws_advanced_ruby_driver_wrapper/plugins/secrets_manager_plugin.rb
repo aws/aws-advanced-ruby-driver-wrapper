@@ -18,6 +18,7 @@ require 'concurrent'
 require_relative '../errors'
 require_relative '../logging'
 require_relative '../property_definition'
+require_relative '../utils/aws_credentials_utils'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -99,7 +100,7 @@ module AwsAdvancedRubyDriverWrapper
         @username_key = PropertyDefinition::SECRET_USERNAME_KEY.get_string(props)
         @password_key = PropertyDefinition::SECRET_PASSWORD_KEY.get_string(props)
         @expiration_sec = resolve_expiration(props)
-        @cache_key = "#{@secret_id}:#{@region}"
+        @endpoint = PropertyDefinition::SECRET_ENDPOINT.get(props)
         @rotation_retry_timeout_sec = PropertyDefinition::SECRET_ROTATION_RETRY_TIMEOUT_SEC.get_float(props)
         @rotation_retry_base_delay_sec = PropertyDefinition::SECRET_ROTATION_RETRY_BASE_DELAY_SEC.get_float(props)
 
@@ -199,17 +200,18 @@ module AwsAdvancedRubyDriverWrapper
 
       # Returns true if credentials were freshly fetched from the service (suppresses login-error retry).
       def fetch_secret_and_report_if_fresh?(force:)
-        entry = @service_container.storage_service.get(SECRETS_MANAGER_CACHE_NAME, @cache_key)
+        cache_key = secret_cache_key
+        entry = @service_container.storage_service.get(SECRETS_MANAGER_CACHE_NAME, cache_key)
 
         if entry.nil? || force
-          @secret = fetch_synchronously
+          @secret = fetch_synchronously(cache_key)
           return !@secret.nil?
         end
 
         if entry.expired?
           logger.debug('SecretsManagerPlugin: serving stale credentials, refreshing in background')
           @secret = entry
-          trigger_async_refresh
+          trigger_async_refresh(cache_key)
           return false
         end
 
@@ -217,35 +219,43 @@ module AwsAdvancedRubyDriverWrapper
         false
       end
 
-      def fetch_synchronously
-        future = trigger_async_refresh
+      # The secret's value depends on which secret is read, from which region and endpoint, and with
+      # which AWS credentials, so all of them are part of the key. Connections that differ in any of
+      # them neither share a cached secret nor wait on each other's fetch. The key is computed per
+      # fetch, so it follows credentials that refresh to a new access key.
+      def secret_cache_key
+        "#{@secret_id}:#{@region}:#{@endpoint}:#{Utils::AwsCredentialsUtils.identity(@credentials_provider)}"
+      end
+
+      def fetch_synchronously(cache_key)
+        future = trigger_async_refresh(cache_key)
         future.value!(SYNC_FETCH_TIMEOUT_SEC)
       rescue Concurrent::CancelledOperationError, Timeout::Error
         raise Errors::SecretsManagerAuthError,
               "Timed out fetching secret after #{SYNC_FETCH_TIMEOUT_SEC}s"
       end
 
-      def trigger_async_refresh
+      def trigger_async_refresh(cache_key)
         pending = self.class.pending_refreshes
 
-        existing = pending[@cache_key]
+        existing = pending[cache_key]
         return existing if existing && !existing.resolved?
 
-        future_candidate = Concurrent::Promises.delay_on(:io) { fetch_and_store_secret }
-        stored = pending.put_if_absent(@cache_key, future_candidate)
+        future_candidate = Concurrent::Promises.delay_on(:io) { fetch_and_store_secret(cache_key) }
+        stored = pending.put_if_absent(cache_key, future_candidate)
         return stored if stored
 
         future_candidate.touch
 
         future_candidate.on_resolution! do |_fulfilled, _value, reason|
-          pending.delete_pair(@cache_key, future_candidate)
+          pending.delete_pair(cache_key, future_candidate)
           logger.debug("SecretsManagerPlugin: async refresh failed: #{reason}") if reason
         end
 
         future_candidate
       end
 
-      def fetch_and_store_secret
+      def fetch_and_store_secret(cache_key)
         response = secrets_client.get_secret_value(secret_id: @secret_id)
         parsed = parse_secret_string(response.secret_string)
 
@@ -259,7 +269,7 @@ module AwsAdvancedRubyDriverWrapper
           password: parsed[@password_key],
           expires_at: Process.clock_gettime(Process::CLOCK_MONOTONIC) + @expiration_sec
         )
-        @service_container.storage_service.set(SECRETS_MANAGER_CACHE_NAME, @cache_key, entry)
+        @service_container.storage_service.set(SECRETS_MANAGER_CACHE_NAME, cache_key, entry)
         entry
       end
 
@@ -289,8 +299,7 @@ module AwsAdvancedRubyDriverWrapper
 
       def build_secrets_client
         opts = { region: @region, credentials: @credentials_provider }
-        endpoint = PropertyDefinition::SECRET_ENDPOINT.get(@wrapper_props)
-        opts[:endpoint] = endpoint if endpoint
+        opts[:endpoint] = @endpoint if @endpoint
         Aws::SecretsManager::Client.new(**opts)
       end
 

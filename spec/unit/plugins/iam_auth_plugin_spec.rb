@@ -20,6 +20,7 @@ require 'aws_advanced_ruby_driver_wrapper/plugins/iam_auth_plugin'
 require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 require 'aws_advanced_ruby_driver_wrapper/utils/rds_url_type'
 require 'aws_advanced_ruby_driver_wrapper/utils/rds_utils'
+require 'aws_advanced_ruby_driver_wrapper/utils/aws_credentials_utils'
 require 'aws_advanced_ruby_driver_wrapper/utils/iam_auth_utils'
 require 'aws_advanced_ruby_driver_wrapper/errors'
 
@@ -33,9 +34,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
   MYSQL_HOST = 'mysql.testdb.us-east-2.rds.amazonaws.com'
   GDB_HOST   = 'mydb.global-xyz123.global.rds.amazonaws.com'
 
-  PG_CACHE_KEY    = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser".freeze
-  MYSQL_CACHE_KEY = "us-east-2:#{MYSQL_HOST}:#{DEFAULT_MYSQL_PORT}:mysqlUser".freeze
-  GDB_CACHE_KEY   = "us-east-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser".freeze
+  # The identity of the mock credentials (access key id 'AKID') every example connects with.
+  CREDENTIALS_IDENTITY = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.identity(Aws::Credentials.new('AKID', 'SECRET'))
+
+  PG_CACHE_KEY    = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}".freeze
+  MYSQL_CACHE_KEY = "us-east-2:#{MYSQL_HOST}:#{DEFAULT_MYSQL_PORT}:mysqlUser:#{CREDENTIALS_IDENTITY}".freeze
+  GDB_CACHE_KEY   = "us-east-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}".freeze
 
   IAM_TOKEN_CACHE_NAME = AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin::IAM_TOKEN_CACHE_NAME
 
@@ -160,7 +164,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with invalid iam_port and host port set' do
     it 'falls back to the host port' do
-      port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
+      port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_1234_cache_key)
                                                   .and_return(valid_token_entry)
 
@@ -173,7 +177,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with invalid iam_port and no host port' do
     it 'falls back to the dialect default port' do
-      cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
+      cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, cache_key)
                                                   .and_return(valid_token_entry)
 
@@ -186,7 +190,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with host port explicitly specified' do
     it 'uses the host port in the cache key' do
-      port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser"
+      port_1234_cache_key = "us-east-2:#{PG_HOST}:1234:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_1234_cache_key)
                                                   .and_return(valid_token_entry)
 
@@ -198,7 +202,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with iam_port set to 9999' do
     it 'uses iam_port in the cache key, overriding the host port' do
-      port_9999_cache_key = "us-east-2:#{PG_HOST}:9999:postgresqlUser"
+      port_9999_cache_key = "us-east-2:#{PG_HOST}:9999:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, port_9999_cache_key)
                                                   .and_return(valid_token_entry)
 
@@ -213,7 +217,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
   describe '#connect with iam_region explicitly set' do
     it 'uses the specified region in the cache key' do
       us_west_host = 'pg.testdb.us-west-1.rds.amazonaws.com'
-      us_west_cache_key = "us-west-1:#{us_west_host}:#{DEFAULT_PG_PORT}:postgresqlUser"
+      us_west_cache_key = "us-west-1:#{us_west_host}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, us_west_cache_key)
                                                   .and_return(valid_token_entry)
 
@@ -264,7 +268,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
   describe '#connect with iam_host override' do
     it 'generates a token using the overridden host, not the connection host' do
-      override_cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
+      override_cache_key = "us-east-2:#{PG_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, override_cache_key).and_return(nil)
 
       props = base_pg_props
@@ -358,13 +362,55 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
   end
 
   describe 'cache key format' do
-    it 'builds the key as region:host:port:user' do
+    it 'builds the key as region:host:port:user:credentials identity' do
       captured_key = nil
       allow(mock_storage_service).to receive(:set) { |_name, key, _value| captured_key = key }
 
       connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
 
       expect(captured_key).to eq(PG_CACHE_KEY)
+    end
+
+    # Tokens are signed with the connection's AWS credentials, so connections that use different
+    # credentials against the same host and user keep separate cache entries.
+    def captured_cache_key(credentials_provider)
+      captured_key = nil
+      allow(mock_storage_service).to receive(:set) { |_name, key, _value| captured_key = key }
+      props = Concurrent::Map.new
+      props[:aws_credentials_provider] = credentials_provider
+      connect_and_capture_token(plugin: build_plugin(props), host_info: pg_host_info, props: base_pg_props)
+      captured_key
+    end
+
+    it 'gives connections with different AWS credentials different keys' do
+      first = captured_cache_key(Aws::Credentials.new('AKID1', 'SECRET1'))
+      second = captured_cache_key(Aws::Credentials.new('AKID2', 'SECRET2'))
+
+      expect(first).not_to eq(second)
+    end
+
+    it 'gives connections with the same AWS credentials the same key' do
+      first = captured_cache_key(Aws::Credentials.new('AKID1', 'SECRET1'))
+      second = captured_cache_key(Aws::Credentials.new('AKID1', 'SECRET1'))
+
+      expect(first).to eq(second)
+    end
+
+    it 'follows a provider whose credentials refresh to a new access key' do
+      provider = double('RefreshingProvider')
+      allow(provider).to receive(:credentials).and_return(Aws::Credentials.new('AKID1', 'SECRET1'),
+                                                          Aws::Credentials.new('AKID2', 'SECRET2'))
+      plugin = build_plugin(Concurrent::Map.new.tap { |props| props[:aws_credentials_provider] = provider })
+      keys = []
+      allow(mock_storage_service).to receive(:set) { |_name, key, _value| keys << key }
+
+      2.times { connect_and_capture_token(plugin: plugin, host_info: pg_host_info, props: base_pg_props) }
+
+      expect(keys.uniq.size).to eq(2)
+    end
+
+    it 'never puts the access key id itself in the key' do
+      expect(captured_cache_key(Aws::Credentials.new('AKIDVISIBLE', 'SECRET'))).not_to include('AKIDVISIBLE')
     end
   end
 
@@ -419,7 +465,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
       allow(IAM_AUTH_UTILS).to receive(:region_from_global_cluster).and_call_original
       allow(IAM_AUTH_UTILS).to receive(:region_for).and_call_original
 
-      gdb_explicit_cache_key = "eu-west-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser"
+      gdb_explicit_cache_key = "eu-west-1:#{GDB_HOST}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, gdb_explicit_cache_key)
                                                   .and_return(valid_token_entry)
 
@@ -457,7 +503,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
     it 'uses wrapper_props iam_host for token generation when provided' do
       override_host = 'override.testdb.us-east-2.rds.amazonaws.com'
-      override_cache_key = "us-east-2:#{override_host}:#{DEFAULT_PG_PORT}:postgresqlUser"
+      override_cache_key = "us-east-2:#{override_host}:#{DEFAULT_PG_PORT}:postgresqlUser:#{CREDENTIALS_IDENTITY}"
       allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, override_cache_key)
                                                   .and_return(nil)
 

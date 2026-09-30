@@ -137,7 +137,10 @@ RSpec.describe 'AwsIamAuthentication', :integration,
     rds_utils = AwsAdvancedRubyDriverWrapper::Utils::RdsUtils
 
     region = rds_utils.rds_region(writer.host)
-    cache_key = iam_utils.cache_key(region, writer.host, writer.port, env.iam_user_name)
+    credentials_identity = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.identity(
+      Aws::CredentialProviderChain.new.resolve
+    )
+    cache_key = iam_utils.cache_key(region, writer.host, writer.port, env.iam_user_name, credentials_identity)
 
     # Replace with an entry containing an invalid token (will cause login error → retry)
     bad_entry = iam_utils::TokenEntry.new(
