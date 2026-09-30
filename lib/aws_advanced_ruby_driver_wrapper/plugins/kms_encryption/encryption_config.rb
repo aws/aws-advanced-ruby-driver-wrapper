@@ -24,6 +24,7 @@ module AwsAdvancedRubyDriverWrapper
       EncryptionConfig = Data.define(
         :kms_region,
         :kms_endpoint,
+        :allowed_master_key_arns,
         :metadata_schema,
         :metadata_cache_enabled,
         :metadata_cache_expiration_sec,
@@ -49,6 +50,7 @@ module AwsAdvancedRubyDriverWrapper
             new(
               kms_region: PropertyDefinition::ENCRYPTION_KMS_REGION.get_string(props) || region_from_env,
               kms_endpoint: PropertyDefinition::ENCRYPTION_KMS_ENDPOINT.get_string(props),
+              allowed_master_key_arns: PropertyDefinition::ENCRYPTION_ALLOWED_MASTER_KEY_ARNS.get(props),
               metadata_schema: SchemaName.of(PropertyDefinition::ENCRYPTION_METADATA_SCHEMA.get_string(props)),
               metadata_cache_enabled: PropertyDefinition::ENCRYPTION_METADATA_CACHE_ENABLED.get_bool(props),
               metadata_cache_expiration_sec: PropertyDefinition::ENCRYPTION_METADATA_CACHE_EXPIRATION_SEC.get_float(props),
@@ -76,10 +78,12 @@ module AwsAdvancedRubyDriverWrapper
                        metadata_cache_expiration_sec:, metadata_cache_refresh_interval_sec:,
                        key_management_max_retries:, key_management_retry_backoff_base_sec:,
                        audit_logging_enabled:, data_key_cache_enabled:,
-                       data_key_cache_max_size:, data_key_cache_expiration_sec:, return_unverified_data:)
+                       data_key_cache_max_size:, data_key_cache_expiration_sec:, return_unverified_data:,
+                       allowed_master_key_arns: [])
           super(
             kms_region: kms_region,
             kms_endpoint: kms_endpoint,
+            allowed_master_key_arns: normalize_arns(allowed_master_key_arns),
             metadata_schema: SchemaName.of(metadata_schema),
             metadata_cache_enabled: metadata_cache_enabled,
             metadata_cache_expiration_sec: metadata_cache_expiration_sec,
@@ -100,6 +104,20 @@ module AwsAdvancedRubyDriverWrapper
           metadata_cache_enabled && metadata_cache_refresh_interval_sec.positive?
         end
 
+        # An empty allow-list (the default) places no restriction on the master keys used - acceptable
+        # for the administrative utility, but refused by the plugin itself (see {KmsEncryptionUtility}).
+        #
+        # @return [Boolean] true when only the listed master keys may be used
+        def restricts_master_keys?
+          !allowed_master_key_arns.empty?
+        end
+
+        # @param master_key_arn [String, nil] a master key ARN, as recorded in +key_storage+
+        # @return [Boolean] true when no restriction is configured, or the key is on the allow-list
+        def master_key_allowed?(master_key_arn)
+          !restricts_master_keys? || allowed_master_key_arns.include?(master_key_arn)
+        end
+
         # @return [self]
         # @raise [ArgumentError] if a value is out of range
         def validate!
@@ -112,6 +130,15 @@ module AwsAdvancedRubyDriverWrapper
           PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_MAX_SIZE.validate!(data_key_cache_max_size)
           PropertyDefinition::ENCRYPTION_DATA_KEY_CACHE_EXPIRATION_SEC.validate!(data_key_cache_expiration_sec)
           self
+        end
+
+        private
+
+        # Accepts nil, an array, or a comma-separated string, and returns a frozen array of the unique,
+        # non-blank entries.
+        def normalize_arns(value)
+          entries = value.is_a?(String) ? value.split(',') : Array(value)
+          entries.map { |arn| arn.to_s.strip }.reject(&:empty?).uniq.freeze
         end
       end
     end

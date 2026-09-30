@@ -17,6 +17,7 @@
 require_relative '../../driver_dialects/mysql_driver_dialect'
 require_relative '../../driver_dialects/pg_driver_dialect'
 require_relative '../../logging'
+require_relative '../../property_definition'
 require_relative 'connection_source'
 require_relative 'data_key_cache'
 require_relative 'encryption_algorithm'
@@ -47,6 +48,14 @@ module AwsAdvancedRubyDriverWrapper
       #
       # Every operation uses the connection you pass, and that connection is never closed here - its
       # lifecycle stays yours.
+      #
+      # Unlike the plugin, the utility does not require +encryption_allowed_master_key_arns+, so a new
+      # master key can be created and put to use in the same script. When the allow-list is configured
+      # it is enforced here too, so data keys can only be generated or decrypted under listed master
+      # keys. Without it, {#rotate_data_key} must be told which master key to rotate onto, since
+      # keeping the current one would mean trusting the ARN recorded in +key_storage+. Either way,
+      # add every master key a column uses to the application's allow-list, or the plugin will
+      # refuse to read or write that column.
       #
       # Rotating a data key only changes the key that new writes use. Values already written with
       # the previous key stay readable, because each stored value records the id of the key it was
@@ -189,14 +198,28 @@ module AwsAdvancedRubyDriverWrapper
         # Rotates the data key of an already encrypted column. New writes use the new key; values
         # written with the previous key remain readable.
         #
+        # Keeping the current master key means reusing the ARN recorded in +key_storage+, so it is
+        # only allowed when +encryption_allowed_master_key_arns+ is configured to check that ARN
+        # against. Without the allow-list, a row repointed at another key would have the new data key
+        # generated under whatever key it names.
+        #
         # @param table_name [String]
         # @param column_name [String]
-        # @param new_master_key_arn [String, nil] a different master key, or nil to keep the current one
+        # @param new_master_key_arn [String, nil] the master key to wrap the new data key with, or nil
+        #   to keep the current one (requires the allow-list)
         # @return [Integer] the +key_storage.id+ of the new data key
-        # @raise [Errors::KeyManagementError] if the column is not encrypted or the rotation fails
+        # @raise [ArgumentError] if no master key is given and no allow-list is configured
+        # @raise [Errors::KeyManagementError] if the column is not encrypted, the master key is not
+        #   allowed, or the rotation fails
         def rotate_data_key(table_name, column_name, new_master_key_arn = nil)
           raise ArgumentError, 'table_name is required' if table_name.nil?
           raise ArgumentError, 'column_name is required' if column_name.nil?
+
+          if new_master_key_arn.nil? && !@config.restricts_master_keys?
+            raise ArgumentError,
+                  'Pass the master key ARN to rotate onto, or configure ' \
+                  "#{PropertyDefinition::ENCRYPTION_ALLOWED_MASTER_KEY_ARNS.name} so the current one can be checked"
+          end
 
           logger.info("Rotating the data key for #{table_name}.#{column_name}")
 

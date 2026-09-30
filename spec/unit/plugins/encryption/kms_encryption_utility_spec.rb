@@ -44,6 +44,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
     props = Concurrent::Map.new
     props[:encryption_kms_region] = 'us-west-2'
     props[:encryption_metadata_schema] = 'encrypt'
+    props[:encryption_allowed_master_key_arns] = 'arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab'
     props[:encryption_metadata_cache_enabled] = false
     props[:encryption_metadata_cache_refresh_interval_sec] = 0
     props[:encryption_data_key_cache_enabled] = false
@@ -71,6 +72,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
       invalid_props[:encryption_data_key_cache_max_size] = -1
 
       expect { described_class.new(service_container, invalid_props) }.to raise_error(ArgumentError)
+    end
+
+    # The master key a data key is decrypted with is read from key_storage, so the plugin must not
+    # start without being told which master keys it may trust.
+    it 'refuses to start without an allow-list of master keys' do
+      unrestricted_props = Concurrent::Map.new
+      props.each_pair { |key, value| unrestricted_props[key] = value unless key == :encryption_allowed_master_key_arns }
+
+      expect { described_class.new(service_container, unrestricted_props, kms_client: kms_client) }
+        .to raise_error(ArgumentError, /encryption_allowed_master_key_arns is required/)
+    end
+
+    it 'refuses to start when the allow-list has no usable entries' do
+      blank_props = Concurrent::Map.new
+      props.each_pair { |key, value| blank_props[key] = value }
+      blank_props[:encryption_allowed_master_key_arns] = ' , '
+
+      expect { described_class.new(service_container, blank_props, kms_client: kms_client) }
+        .to raise_error(ArgumentError, /encryption_allowed_master_key_arns is required/)
+    end
+
+    it 'carries the allow-list into the configuration' do
+      expect(utility.config.allowed_master_key_arns).to eq(['arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab'])
     end
 
     it 'builds the audit logger and the data key cache from the configuration' do
@@ -111,6 +135,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
         enabled_props = Concurrent::Map.new
         enabled_props[:encryption_kms_region] = 'us-west-2'
         enabled_props[:encryption_metadata_schema] = 'encrypt'
+        enabled_props[:encryption_allowed_master_key_arns] = 'arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab'
         enabled_props[:encryption_data_key_cache_enabled] = false
         described_class.new(service_container, enabled_props, kms_client: kms_client)
 
