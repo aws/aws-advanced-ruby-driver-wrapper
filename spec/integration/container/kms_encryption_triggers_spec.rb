@@ -29,11 +29,10 @@ require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_management_
 # Server-side enforcement. The plugin cannot guarantee an encrypted column never holds a plaintext -
 # only a database trigger can, by verifying each value's HMAC tag as it goes in (the HMAC key is
 # stored in key_storage, so the server can check integrity without any data key). This installs the
-# trigger SQL from host/src/test/resources/sql,
-# on both engines: a value in the plugin's real encrypted format is accepted, a
-# plaintext is rejected, and a random binary value that is not a valid payload is rejected. After a
-# data key rotation, rows written with the previous key can still be updated, while a changed value
-# must carry the current key's HMAC tag.
+# trigger SQL from host/src/test/resources/sql on both engines: a value in the plugin's real
+# encrypted format is accepted, a plaintext is rejected, and a random binary value that is not a
+# valid payload is rejected. After a data key rotation, rows written with the previous key can still
+# be updated, while a changed value must carry the current key's HMAC tag.
 #
 # The MySQL functions require the cluster parameter log_bin_trust_function_creators = 1 to be
 # created on Aurora/RDS MySQL.
