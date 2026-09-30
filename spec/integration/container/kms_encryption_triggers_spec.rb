@@ -126,8 +126,8 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
       expect(user_count(admin_conn)).to eq(0)
     end
 
-    include_examples 'a trigger across a data key rotation', PG::Error
-    include_examples 'a trigger across transactions on one connection'
+    it_behaves_like 'a trigger across a data key rotation', PG::Error
+    it_behaves_like 'a trigger across transactions on one connection'
   end
 
   context 'on MySQL' do
@@ -158,8 +158,8 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
       expect(user_count(admin_conn)).to eq(0)
     end
 
-    include_examples 'a trigger across a data key rotation', Mysql2::Error
-    include_examples 'a trigger across transactions on one connection'
+    it_behaves_like 'a trigger across a data key rotation', Mysql2::Error
+    it_behaves_like 'a trigger across transactions on one connection'
   end
 
   # -- trigger installation --
