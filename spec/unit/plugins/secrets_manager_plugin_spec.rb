@@ -315,6 +315,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       keys
     end
 
+    it 'formats as secret_id:region:endpoint:credentials identity' do
+      expect(described_class.cache_key('my-secret', 'us-west-2', 'http://localhost:4566', 'abc123'))
+        .to eq('my-secret:us-west-2:http://localhost:4566:abc123')
+      expect(described_class.cache_key('my-secret', 'us-west-2', nil, 'abc123')).to eq('my-secret:us-west-2::abc123')
+    end
+
     it 'gives connections with different AWS credentials different keys' do
       first = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKID1', 'SECRET1')))
       second = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKID2', 'SECRET2')))

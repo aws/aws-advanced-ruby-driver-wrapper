@@ -73,7 +73,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     # Verify the cache is populated after first connection
     sc = conn1.instance_variable_get(:@service_container)
     storage = sc.storage_service
-    cache_key = "#{@secret_id}:#{region}"
+    cache_key = cached_secret_key
     cached_entry = storage.get(:secrets_manager, cache_key)
     expect(cached_entry).not_to be_nil
     expect(cached_entry.expired?).to be false
@@ -122,7 +122,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     # Expire the cache entry to simulate staleness
     sc = conn1.instance_variable_get(:@service_container)
     storage = sc.storage_service
-    cache_key = "#{@secret_id}:#{region}"
+    cache_key = cached_secret_key
     current_entry = storage.get(:secrets_manager, cache_key)
 
     expired_entry = AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin::SecretEntry.new(
@@ -174,7 +174,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     # All connections should share the same cached entry (same expires_at proves single fetch)
     entries = conns.map do |c|
       sc = c.instance_variable_get(:@service_container)
-      sc.storage_service.get(:secrets_manager, "#{@secret_id}:#{region}")
+      sc.storage_service.get(:secrets_manager, cached_secret_key)
     end
     expires_at_values = entries.compact.map(&:expires_at).uniq
     expect(expires_at_values.size).to eq(1)
@@ -209,7 +209,7 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
     # Corrupt cached credentials to simulate a rotated-but-stale secret
     sc = conn1.instance_variable_get(:@service_container)
     storage = sc.storage_service
-    cache_key = "#{@secret_id}:#{region}"
+    cache_key = cached_secret_key
 
     bad_entry = AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin::SecretEntry.new(
       username: 'invalid_user_does_not_exist',
@@ -297,6 +297,15 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
   end
 
   private
+
+  # The plugin's cache key for the test secret, as read by a connection that uses the default AWS
+  # credentials and no custom Secrets Manager endpoint.
+  def cached_secret_key
+    AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin.cache_key(
+      @secret_id, region, nil,
+      AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.identity(Aws::CredentialProviderChain.new.resolve)
+    )
+  end
 
   def create_sm_wrapper_connection(secret_id:, region: env.aurora_region, password: nil, extra_props: {})
     config = Integration::DriverHelper.native_config(

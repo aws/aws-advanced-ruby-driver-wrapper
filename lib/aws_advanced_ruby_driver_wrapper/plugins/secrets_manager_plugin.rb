@@ -78,6 +78,16 @@ module AwsAdvancedRubyDriverWrapper
         def clear_cache(storage_service)
           storage_service.clear(SECRETS_MANAGER_CACHE_NAME)
         end
+
+        # The secret's value depends on which secret is read, from which region and endpoint, and
+        # with which AWS credentials, so all of them are part of the key. Connections that differ in
+        # any of them neither share a cached secret nor wait on each other's fetch.
+        #
+        # @param endpoint [String, nil] the custom Secrets Manager endpoint, if any
+        # @param credentials_identity [String] from {Utils::AwsCredentialsUtils.identity}
+        def cache_key(secret_id, region, endpoint, credentials_identity)
+          "#{secret_id}:#{region}:#{endpoint}:#{credentials_identity}"
+        end
       end
 
       attr_reader :subscribed_methods
@@ -219,12 +229,9 @@ module AwsAdvancedRubyDriverWrapper
         false
       end
 
-      # The secret's value depends on which secret is read, from which region and endpoint, and with
-      # which AWS credentials, so all of them are part of the key. Connections that differ in any of
-      # them neither share a cached secret nor wait on each other's fetch. The key is computed per
-      # fetch, so it follows credentials that refresh to a new access key.
+      # Computed per fetch, so the key follows credentials that refresh to a new access key.
       def secret_cache_key
-        "#{@secret_id}:#{@region}:#{@endpoint}:#{Utils::AwsCredentialsUtils.identity(@credentials_provider)}"
+        self.class.cache_key(@secret_id, @region, @endpoint, Utils::AwsCredentialsUtils.identity(@credentials_provider))
       end
 
       def fetch_synchronously(cache_key)
