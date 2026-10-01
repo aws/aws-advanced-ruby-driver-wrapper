@@ -104,6 +104,27 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     expect(discovered).to be(true), 'Topology was not discovered before the substitution assertion'
   end
 
+  # @return [Boolean] true once the endpoint serves a reader, false if it never does within the timeout.
+  def reader_endpoint_serving_reader?(config, timeout_secs: 30, delay_secs: 0.5)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout_secs
+    loop do
+      conn = nil
+      begin
+        conn = Integration::DriverHelper.native_connect(drv, **config)
+        return true if Integration::RdsTestUtility.query_host_role(conn, env.engine) == :reader
+      rescue StandardError
+        # Endpoint momentarily unreachable, fall through and retry until the deadline.
+      ensure
+        Integration::DriverHelper.close(drv, conn) if conn
+      end
+
+      break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep(delay_secs)
+    end
+    false
+  end
+
   before do
     skip 'No allowed drivers for this environment' if drv.nil?
   end
@@ -167,6 +188,11 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     end
 
     it 'leaves the reader cluster endpoint untouched when substitution is disabled' do
+      unless reader_endpoint_serving_reader?(reader_cluster_config)
+        skip 'Reader cluster endpoint is not serving a reader (transient Aurora reader-endpoint cutover); ' \
+             'skipping because the cluster is not in a testable state for reader-role verification'
+      end
+
       disabled_props = initial_connection_props.merge(
         props::INITIAL_CONNECTION_SUBSTITUTE_HOST.name => 'none'
       )
@@ -313,6 +339,11 @@ RSpec.describe 'InitialConnectionStrategy', :integration,
     it 'falls back to the cluster endpoint when every substitution candidate is unreachable' do
       enable_on_num_instances(min_instances: 2)
       warm_proxied_topology
+
+      unless reader_endpoint_serving_reader?(proxied_reader_cluster_config)
+        skip 'Proxied reader cluster endpoint is not serving a reader (transient Aurora reader-endpoint ' \
+             'cutover); skipping because the fallback connection has no reader to verify against'
+      end
 
       # Only the instance endpoints go down. The plugin works through the substitution candidates, marks
       # each one unavailable as its connection fails, and once none are left connects via the endpoint it

@@ -48,9 +48,9 @@ jobs:
 
           if [ -z "$KEY_ID" ]; then
             KEY_ID=$(aws kms create-key \
-              --description "aws-advanced-ruby-driver-wrapper encryption test key (cached)" \
+              --description "aws_advanced_ruby_driver_wrapper encryption test key (cached)" \
               --key-usage ENCRYPT_DECRYPT --key-spec SYMMETRIC_DEFAULT \
-              --tags TagKey=Project,TagValue=aws-advanced-ruby-driver-wrapper TagKey=Purpose,TagValue=testing \
+              --tags TagKey=Project,TagValue=aws_advanced_ruby_driver_wrapper TagKey=Purpose,TagValue=testing \
               --query 'KeyMetadata.KeyId' --output text)
             aws kms create-alias --alias-name "$ALIAS" --target-key-id "$KEY_ID"
             aws kms enable-key-rotation --key-id "$KEY_ID"

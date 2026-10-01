@@ -17,7 +17,7 @@
 require_relative 'lib/aws_advanced_ruby_driver_wrapper/version'
 
 Gem::Specification.new do |spec|
-  spec.name = 'aws-advanced-ruby-driver-wrapper'
+  spec.name = 'aws_advanced_ruby_driver_wrapper'
   spec.version = AwsAdvancedRubyDriverWrapper::VERSION
   spec.authors = ['Amazon Web Services']
 
@@ -42,7 +42,7 @@ Gem::Specification.new do |spec|
       NOTICE
       README.md
       CHANGELOG.md
-      aws-advanced-ruby-driver-wrapper.gemspec
+      aws_advanced_ruby_driver_wrapper.gemspec
     ]
 
     Dir.glob('lib/**/*', File::FNM_DOTMATCH).reject { |f| File.directory?(f) } +

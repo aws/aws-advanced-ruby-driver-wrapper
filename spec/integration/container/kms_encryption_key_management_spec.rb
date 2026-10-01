@@ -82,7 +82,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
 
     arn = begin
       # No alias: the key is short-lived, and an alias would only outlive it as clutter.
-      @utility.create_master_key('aws-advanced-ruby-driver-wrapper integration test key', create_alias: false)
+      @utility.create_master_key('aws_advanced_ruby_driver_wrapper integration test key', create_alias: false)
     rescue key_error => e
       skip "master key creation is not permitted in this environment: #{e.message}"
     end
