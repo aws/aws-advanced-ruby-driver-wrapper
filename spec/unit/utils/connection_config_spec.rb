@@ -53,6 +53,59 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfig do
     end
   end
 
+  describe '#inspect' do
+    let(:redacted) { AwsAdvancedRubyDriverWrapper::REDACTED }
+
+    it 'redacts secrets in every property map' do
+      config = described_class.new(
+        wrapper_props: { secret_id: 'my-secret' },
+        driver_props: { user: 'admin', password: 'hunter2' },
+        prefixed_wrapper_config: { monitoring_password: 'm' },
+        prefixed_driver_config: { password: 'd' }
+      )
+
+      expect(config.inspect).not_to include('hunter2', 'my-secret', '"m"', '"d"')
+      expect(config.inspect).to include('admin')
+    end
+
+    # The IAM token is passed under a property whose name is configurable, so a name with none of
+    # the usual secret markers must still be redacted.
+    it 'redacts the configured IAM token property' do
+      config = described_class.new(
+        wrapper_props: { iam_access_token_property_name: :pwd },
+        driver_props: { user: 'admin', pwd: 'iam-token-value' }
+      )
+
+      expect(config.inspect).not_to include('iam-token-value')
+      expect(config.inspect).to include("pwd: #{redacted.inspect}").or include(":pwd=>#{redacted.inspect}")
+    end
+
+    it 'redacts the configured IAM token property when it is configured as a string' do
+      config = described_class.new(
+        wrapper_props: { iam_access_token_property_name: 'pwd' },
+        driver_props: { pwd: 'iam-token-value' }
+      )
+
+      expect(config.inspect).not_to include('iam-token-value')
+    end
+
+    it 'applies the same redaction to #to_s and pretty printing' do
+      config = described_class.new(
+        wrapper_props: { iam_access_token_property_name: :pwd },
+        driver_props: { pwd: 'iam-token-value' }
+      )
+
+      expect(config.to_s).not_to include('iam-token-value')
+      expect(PP.pp(config, +'')).not_to include('iam-token-value')
+    end
+
+    it 'does not fail when the wrapper properties are missing' do
+      config = described_class.new(wrapper_props: nil, driver_props: { password: 'p' })
+
+      expect(config.inspect).not_to include('"p"')
+    end
+  end
+
   describe 'mutability' do
     it 'allows plugins to modify driver_config' do
       config = described_class.new(driver_props: { host: 'original' })

@@ -54,8 +54,10 @@ module AwsAdvancedRubyDriverWrapper
     #   logger.debug("connecting with #{AwsAdvancedRubyDriverWrapper.mask_properties(props)}")
     #
     # @param props [#each_pair, #to_h, nil] the properties to mask
+    # @param extra_secret_keys [Array<String, Symbol>] further property names to redact exactly, for
+    #   properties whose name is configurable (such as the IAM token property)
     # @return [Hash] a new hash with sensitive values redacted
-    def mask_properties(props)
+    def mask_properties(props, extra_secret_keys = [])
       return {} if props.nil?
 
       pairs =
@@ -67,15 +69,17 @@ module AwsAdvancedRubyDriverWrapper
           return {}
         end
 
+      extra = extra_secret_keys.compact.map { |name| name.to_s.downcase }
       pairs.each_with_object({}) do |(key, value), masked|
-        masked[key] = secret_key?(key) ? REDACTED : value
+        masked[key] = secret_key?(key, extra) ? REDACTED : value
       end
     end
 
+    # @param extra_secret_keys [Array<String>] further lower-case property names to treat as secret
     # @return [Boolean] whether the given property key is considered sensitive
-    def secret_key?(key)
+    def secret_key?(key, extra_secret_keys = [])
       normalized = key.to_s.downcase
-      SECRET_PROPERTY_KEYS.any? { |marker| normalized.include?(marker) }
+      extra_secret_keys.include?(normalized) || SECRET_PROPERTY_KEYS.any? { |marker| normalized.include?(marker) }
     end
 
     private
@@ -99,8 +103,8 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     # @see AwsAdvancedRubyDriverWrapper.mask_properties
-    def mask_properties(props)
-      AwsAdvancedRubyDriverWrapper.mask_properties(props)
+    def mask_properties(props, extra_secret_keys = [])
+      AwsAdvancedRubyDriverWrapper.mask_properties(props, extra_secret_keys)
     end
   end
 end
