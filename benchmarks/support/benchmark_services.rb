@@ -125,7 +125,7 @@ module AwsAdvancedRubyDriverWrapper
           false
         end
 
-        def update_transaction_state(_method_name, _args, _autocommit_before); end
+        def update_transaction_state(_method_name, _args, _autocommit_before, _dialect = nil, _connection = nil, succeeded: true); end
       end
 
       # @param wrapper_props [Hash] connection properties, including the +wrapper_plugins+ code list
