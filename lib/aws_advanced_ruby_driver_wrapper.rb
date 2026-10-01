@@ -18,6 +18,10 @@ require_relative 'aws_advanced_ruby_driver_wrapper/version'
 require_relative 'aws_advanced_ruby_driver_wrapper/custom_configuration'
 require_relative 'aws_advanced_ruby_driver_wrapper/property_definition'
 require_relative 'aws_advanced_ruby_driver_wrapper/logging'
+# Error classes are loaded up front so they can be named before any connection is opened, for
+# example in a Rails `rescue_from` or ActiveJob `retry_on`, which are evaluated at class load.
+require_relative 'aws_advanced_ruby_driver_wrapper/errors'
+require_relative 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/errors'
 require_relative 'aws_advanced_ruby_driver_wrapper/utils/rds_utils'
 require_relative 'aws_advanced_ruby_driver_wrapper/utils/connection_config'
 require_relative 'aws_advanced_ruby_driver_wrapper/utils/connection_config_parser'
@@ -34,6 +38,20 @@ module AwsAdvancedRubyDriverWrapper
   # required when a connection is actually opened.
   autoload :WrapperPgConnection, 'aws_advanced_ruby_driver_wrapper/postgresql'
   autoload :WrapperMysql2Client, 'aws_advanced_ruby_driver_wrapper/mysql'
+
+  # Other public entry points are autoloaded for the same reason, so they work from code that runs
+  # before any connection is opened, such as a Rails initializer or a setup script.
+  module Services
+    autoload :HostService, 'aws_advanced_ruby_driver_wrapper/services/host_service'
+    autoload :PluginManager, 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
+  end
+
+  module Plugins
+    module Encryption
+      autoload :EncryptionConfig, 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/encryption_config'
+      autoload :KeyManagementUtility, 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_management_utility'
+    end
+  end
 
   class << self
     attr_reader :config
