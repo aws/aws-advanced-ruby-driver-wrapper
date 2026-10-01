@@ -1,21 +1,6 @@
--- MySQL functions and trigger procedure for HMAC-verified encrypted data.
--- Rejects any write to an encrypted column that was not produced by the kms_encryption plugin.
---
--- Stored payload format:
---   [ HMAC-SHA256 : 32 ][ key id : 4 ][ type marker : 1 ][ GCM IV : 12 ][ ciphertext ][ GCM tag : 16 ]
--- The HMAC covers everything after the first 32 bytes, and the HMAC key is stored (unencrypted) in
--- key_storage, so the server can verify a value's integrity tag without ever holding the data key.
---
--- Replace SCHEMA_NAME below with the schema that holds encryption_metadata and key_storage
--- (the encryption_metadata_schema property, "encrypt" by default). Requires MySQL 5.7+ / MariaDB
--- 10.2+ for SHA2().
-
 DELIMITER $$
 
 -- HMAC-SHA256 built from SHA2(), which MySQL has no native HMAC for.
---   HMAC(K, m) = SHA256((K' XOR opad) || SHA256((K' XOR ipad) || m))
--- All string handling is binary (X''/UNHEX/HEX) so the digest matches a standard HMAC-SHA256 for
--- keys and messages that contain high bytes.
 DROP FUNCTION IF EXISTS hmac_sha256$$
 CREATE FUNCTION hmac_sha256(
     message VARBINARY(65535),
@@ -70,9 +55,8 @@ BEGIN
     RETURN SUBSTRING(data, 1, 32) = hmac_sha256(SUBSTRING(data, 33), hmac_key);
 END$$
 
--- Called from a BEFORE INSERT / BEFORE UPDATE trigger to reject a value that is not a valid
--- kms_encryption payload. Reads the column's HMAC key from key_storage; it uses no dynamic SQL, so
--- it is safe to invoke from a trigger.
+-- Called from a BEFORE INSERT trigger (and by the BEFORE UPDATE procedure) to reject a value that is
+-- not a valid kms_encryption payload. Replace SCHEMA_NAME with encryption_metadata_schema.
 DROP PROCEDURE IF EXISTS validate_encrypted_data_hmac_before_insert$$
 CREATE PROCEDURE validate_encrypted_data_hmac_before_insert(
     IN p_table_name VARCHAR(64),
@@ -102,22 +86,19 @@ BEGIN
     END IF;
 END$$
 
-DELIMITER ;
+-- Called from a BEFORE UPDATE trigger. An UPDATE that leaves the value as it was is not
+-- re-checked; see "Updates after a key rotation".
+DROP PROCEDURE IF EXISTS validate_encrypted_data_hmac_before_update$$
+CREATE PROCEDURE validate_encrypted_data_hmac_before_update(
+    IN p_table_name VARCHAR(64),
+    IN p_column_name VARCHAR(64),
+    IN new_value VARBINARY(65535),
+    IN old_value VARBINARY(65535)
+)
+BEGIN
+    IF NOT (new_value <=> old_value) THEN
+        CALL validate_encrypted_data_hmac_before_insert(p_table_name, p_column_name, new_value);
+    END IF;
+END$$
 
--- Add one pair of triggers per encrypted column, for example on users.ssn:
---
--- DELIMITER $$
--- CREATE TRIGGER users_ssn_hmac_check
--- BEFORE INSERT ON users
--- FOR EACH ROW
--- BEGIN
---     CALL validate_encrypted_data_hmac_before_insert('users', 'ssn', NEW.ssn);
--- END$$
---
--- CREATE TRIGGER users_ssn_hmac_check_update
--- BEFORE UPDATE ON users
--- FOR EACH ROW
--- BEGIN
---     CALL validate_encrypted_data_hmac_before_insert('users', 'ssn', NEW.ssn);
--- END$$
--- DELIMITER ;
+DELIMITER ;

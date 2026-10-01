@@ -16,6 +16,7 @@
 
 require 'concurrent'
 require_relative '../errors'
+require_relative '../utils/aws_credentials_utils'
 require_relative '../utils/iam_auth_utils'
 require_relative '../utils/rds_utils'
 require_relative '../utils/rds_url_type'
@@ -90,8 +91,9 @@ module AwsAdvancedRubyDriverWrapper
           @service_container.dialect_service.db_dialect.default_port
         )
 
-        cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user)
-        entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
+        credentials = Utils::AwsCredentialsUtils.snapshot(@credentials_provider)
+        cache_key  = token_cache_key(region, host, port, user, credentials)
+        entry      = cache_key && @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
         expiration = PropertyDefinition::IAM_EXPIRATION_SEC.get_float(wrapper_props_override)
         PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)
 
@@ -99,7 +101,7 @@ module AwsAdvancedRubyDriverWrapper
           driver_props[token_prop] = entry.token
           is_cached_token = true
         else
-          driver_props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
+          driver_props[token_prop] = fetch_and_cache_token(region, host, port, user, credentials, cache_key, expiration)
           is_cached_token = false
         end
 
@@ -108,21 +110,32 @@ module AwsAdvancedRubyDriverWrapper
         rescue StandardError => e
           raise unless is_cached_token && @service_container.dialect_service.login_error?(e)
 
-          driver_props[token_prop] = fetch_and_cache_token(region, host, port, user, cache_key, expiration)
+          driver_props[token_prop] = fetch_and_cache_token(region, host, port, user, credentials, cache_key, expiration)
           pipeline_callable.call
         end
       end
 
-      def fetch_and_cache_token(region, host, port, user, cache_key, expiration)
-        token = token_generator.auth_token(region:, endpoint: "#{host}:#{port}", user_name: user)
-        @service_container.storage_service.set(
-          IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
-        )
-        token
+      # The cache key for a token signed with the given credentials snapshot, or nil when there are
+      # no credentials. Without credentials there is nothing to tell one connection's token from
+      # another's, so such a connection neither reads nor writes the shared cache.
+      def token_cache_key(region, host, port, user, credentials)
+        return nil if credentials.nil?
+
+        Utils::IamAuthUtils.cache_key(region, host, port, user, Utils::AwsCredentialsUtils.identity(credentials))
       end
 
-      def token_generator
-        @token_generator ||= Aws::RDS::AuthTokenGenerator.new(credentials: @credentials_provider)
+      # Generates a token signed with the same credentials snapshot its cache key was built from
+      # and, when there is a cache key, caches it. Without a snapshot the provider is passed as is,
+      # and signing fails for lack of credentials.
+      def fetch_and_cache_token(region, host, port, user, credentials, cache_key, expiration)
+        token = Aws::RDS::AuthTokenGenerator.new(credentials: credentials || @credentials_provider)
+                                            .auth_token(region:, endpoint: "#{host}:#{port}", user_name: user)
+        if cache_key
+          @service_container.storage_service.set(
+            IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
+          )
+        end
+        token
       end
 
       def rds_client

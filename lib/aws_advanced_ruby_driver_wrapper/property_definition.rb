@@ -317,6 +317,13 @@ module AwsAdvancedRubyDriverWrapper
     ENCRYPTION_KMS_ENDPOINT = WrapperProperty.new(
       :encryption_kms_endpoint, 'Custom endpoint URL for KMS', default_value: nil, type: String
     )
+    ENCRYPTION_ALLOWED_MASTER_KEY_ARNS = WrapperProperty.new(
+      :encryption_allowed_master_key_arns,
+      'The KMS master keys the kms_encryption plugin may use, as a comma-separated string or an array. ' \
+      'Required by the plugin. Each entry must match a key_storage.master_key_arn value exactly; a stored ' \
+      'data key that names any other master key (or none) is refused before KMS is called.',
+      default_value: nil
+    )
     ENCRYPTION_METADATA_SCHEMA = WrapperProperty.new(
       :encryption_metadata_schema,
       'Schema holding the encryption_metadata and key_storage tables',

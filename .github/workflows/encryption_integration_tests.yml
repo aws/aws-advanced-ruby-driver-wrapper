@@ -10,19 +10,61 @@ permissions:
   id-token: write
   contents: read
 
-# These workflows create real RDS clusters and a real KMS key. Only run one KMS-encryption job at a
-# time so the two engine matrix legs share (and do not race to create) the cached key.
+# These workflows create real RDS clusters and a real KMS key. Only one run of this workflow at a
+# time; within a run, the key is found or created once, before the engine legs start in parallel.
 concurrency:
   group: encryption-integration-tests
   cancel-in-progress: false
 
 jobs:
+  kms-key:
+    name: Find or create the test KMS key
+    runs-on: ubuntu-latest
+    outputs:
+      key_id: ${{ steps.kms.outputs.key_id }}
+
+    steps:
+      - name: 'Configure AWS Credentials'
+        id: creds
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_encryption_kms_key
+          role-duration-seconds: 900
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Find or create the test KMS key'
+        id: kms
+        run: |
+          ALIAS="alias/ruby-encryption-key"
+          KEY_ID=$(aws kms list-aliases \
+            --query "Aliases[?AliasName=='${ALIAS}'].TargetKeyId" --output text 2>/dev/null || echo "")
+
+          if [ -n "$KEY_ID" ]; then
+            STATE=$(aws kms describe-key --key-id "$KEY_ID" \
+              --query 'KeyMetadata.KeyState' --output text 2>/dev/null || echo "")
+            if [ "$STATE" != "Enabled" ]; then KEY_ID=""; fi
+          fi
+
+          if [ -z "$KEY_ID" ]; then
+            KEY_ID=$(aws kms create-key \
+              --description "aws_advanced_ruby_driver_wrapper encryption test key (cached)" \
+              --key-usage ENCRYPT_DECRYPT --key-spec SYMMETRIC_DEFAULT \
+              --tags TagKey=Project,TagValue=aws_advanced_ruby_driver_wrapper TagKey=Purpose,TagValue=testing \
+              --query 'KeyMetadata.KeyId' --output text)
+            aws kms create-alias --alias-name "$ALIAS" --target-key-id "$KEY_ID"
+            aws kms enable-key-rotation --key-id "$KEY_ID"
+          fi
+
+          echo "key_id=$KEY_ID" >> "$GITHUB_OUTPUT"
+          echo "Using KMS key: $KEY_ID"
+
   encryption-integration-tests:
     name: Run KMS Encryption Integration Tests
+    needs: kms-key
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         environment: [ 'mysql', 'pg' ]
 
@@ -54,37 +96,11 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Find or create the test KMS key'
-        id: kms
-        run: |
-          ALIAS="alias/ruby-encryption-key"
-          KEY_ID=$(aws kms list-aliases \
-            --query "Aliases[?AliasName=='${ALIAS}'].TargetKeyId" --output text 2>/dev/null || echo "")
-
-          if [ -n "$KEY_ID" ]; then
-            STATE=$(aws kms describe-key --key-id "$KEY_ID" \
-              --query 'KeyMetadata.KeyState' --output text 2>/dev/null || echo "")
-            if [ "$STATE" != "Enabled" ]; then KEY_ID=""; fi
-          fi
-
-          if [ -z "$KEY_ID" ]; then
-            KEY_ID=$(aws kms create-key \
-              --description "aws-advanced-ruby-driver-wrapper encryption test key (cached)" \
-              --key-usage ENCRYPT_DECRYPT --key-spec SYMMETRIC_DEFAULT \
-              --tags TagKey=Project,TagValue=aws-advanced-ruby-driver-wrapper TagKey=Purpose,TagValue=testing \
-              --query 'KeyMetadata.KeyId' --output text)
-            aws kms create-alias --alias-name "$ALIAS" --target-key-id "$KEY_ID"
-            aws kms enable-key-rotation --key-id "$KEY_ID"
-          fi
-
-          echo "key_id=$KEY_ID" >> "$GITHUB_OUTPUT"
-          echo "Using KMS key: $KEY_ID"
-
       - name: 'Run KMS Encryption Integration Tests'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-encryption --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          KMS_KEY_ID: ${{ steps.kms.outputs.key_id }}
+          KMS_KEY_ID: ${{ needs.kms-key.outputs.key_id }}
 
       - name: 'Archive encryption results'
         if: always()

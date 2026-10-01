@@ -135,6 +135,14 @@ module AwsAdvancedRubyDriverWrapper
       def apply_monitoring_defaults(driver_props)
         # No-op by default; driver-specific dialects override.
       end
+
+      # Returns +true+/+false+ if the driver can report transaction state directly,
+      # or +nil+ if it cannot (SQL inference is used as fallback).
+      # @param connection [Object]
+      # @return [Boolean, nil]
+      def reported_in_transaction(_connection)
+        nil
+      end
     end
   end
 end

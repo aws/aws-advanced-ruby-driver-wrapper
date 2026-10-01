@@ -104,8 +104,8 @@ module AwsAdvancedRubyDriverWrapper
         dialect_default_port
       end
 
-      def cache_key(region, host, port, user)
-        "#{region}:#{host}:#{port}:#{user}"
+      def cache_key(region, host, port, user, credentials_identity)
+        "#{region}:#{host}:#{port}:#{user}:#{credentials_identity}"
       end
     end
   end

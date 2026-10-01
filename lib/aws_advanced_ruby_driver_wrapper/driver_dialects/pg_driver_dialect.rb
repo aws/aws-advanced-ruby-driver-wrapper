@@ -177,6 +177,18 @@ module AwsAdvancedRubyDriverWrapper
       def apply_monitoring_defaults(driver_props)
         driver_props[:connect_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
       end
+
+      # PG reads transaction state directly from the connection.
+      # Returns nil for PQTRANS_UNKNOWN (broken) and PQTRANS_ACTIVE (command in flight)
+      # so SessionStateService falls back to SQL inference.
+      def reported_in_transaction(connection)
+        case connection.transaction_status
+        when ::PG::PQTRANS_INTRANS, ::PG::PQTRANS_INERROR then true
+        when ::PG::PQTRANS_IDLE then false
+        end
+      rescue ::PG::ConnectionBad
+        false
+      end
     end
   end
 end

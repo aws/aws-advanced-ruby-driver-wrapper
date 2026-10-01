@@ -51,7 +51,7 @@ The wrapper design allows developers to continue using their preferred Ruby driv
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'aws-advanced-ruby-driver-wrapper'
+gem 'aws_advanced_ruby_driver_wrapper'
 ```
 
 For MySQL users, also install the underlying driver:
