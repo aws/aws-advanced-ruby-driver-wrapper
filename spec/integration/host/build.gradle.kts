@@ -240,7 +240,8 @@ tasks.register<Test>("test-mysql-aurora") {
 // (test-encryption-only=true) so they never run alongside the normal aurora suite, mirroring the
 // JDBC wrapper's test-kms-encryption task. They require a KMS master key id in the KMS_KEY_ID
 // environment variable and AWS credentials; specs skip themselves when KMS_KEY_ID is unset.
-// A single-instance cluster is enough: the specs only use the writer.
+// A single-instance cluster is enough: the specs only use the writer. They run on Ruby 3.3 only;
+// the main integration suite and the unit suite cover the other supported Ruby versions.
 tasks.register<Test>("test-encryption") {
     group = "verification"
     filter.includeTestsMatching("integration.host.TestRunner.runTests")
@@ -251,7 +252,9 @@ tasks.register<Test>("test-encryption") {
         systemProperty("exclude-bg", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("test-encryption-only", "true")
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-instances-1", "false")
+        systemProperty("exclude-instances-2", "true")
         systemProperty("exclude-instances-3", "true")
         systemProperty("exclude-instances-5", "true")
     }
@@ -267,9 +270,11 @@ tasks.register<Test>("test-pg-encryption") {
         systemProperty("exclude-bg", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("test-encryption-only", "true")
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-mysql-driver", "true")
         systemProperty("exclude-mysql-engine", "true")
         systemProperty("exclude-instances-1", "false")
+        systemProperty("exclude-instances-2", "true")
         systemProperty("exclude-instances-3", "true")
         systemProperty("exclude-instances-5", "true")
     }
@@ -285,9 +290,11 @@ tasks.register<Test>("test-mysql-encryption") {
         systemProperty("exclude-bg", "true")
         systemProperty("exclude-performance", "true")
         systemProperty("test-encryption-only", "true")
+        systemProperty("exclude-ruby-4-0", "true")
         systemProperty("exclude-pg-driver", "true")
         systemProperty("exclude-pg-engine", "true")
         systemProperty("exclude-instances-1", "false")
+        systemProperty("exclude-instances-2", "true")
         systemProperty("exclude-instances-3", "true")
         systemProperty("exclude-instances-5", "true")
     }
