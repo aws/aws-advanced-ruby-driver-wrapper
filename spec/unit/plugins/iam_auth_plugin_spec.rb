@@ -413,6 +413,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
       expect(captured_cache_key(Aws::Credentials.new('AKIDVISIBLE', 'SECRET'))).not_to include('AKIDVISIBLE')
     end
 
+    # The provider is read once per connect, and that one snapshot both builds the key and signs
+    # the token, so a refresh in between cannot put a token signed with one key under another's.
+    it 'signs the token with the same credentials the key was built from' do
+      provider = double('RefreshingProvider')
+      allow(provider).to receive(:credentials).and_return(Aws::Credentials.new('AKID1', 'SECRET1'),
+                                                          Aws::Credentials.new('AKID2', 'SECRET2'))
+      signing_key_ids = []
+      allow(Aws::RDS::AuthTokenGenerator).to receive(:new) do |credentials:|
+        signing_key_ids << credentials.access_key_id
+        mock_token_generator
+      end
+
+      key = captured_cache_key(provider)
+
+      identity = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.identity(Aws::Credentials.new('AKID1', 'x'))
+      expect(signing_key_ids).to eq(['AKID1'])
+      expect(key).to end_with(":#{identity}")
+    end
+
     # With no credentials there is nothing to tell one connection's token from another's.
     it 'neither reads nor writes the cache when the provider resolves to no credentials' do
       props = Concurrent::Map.new

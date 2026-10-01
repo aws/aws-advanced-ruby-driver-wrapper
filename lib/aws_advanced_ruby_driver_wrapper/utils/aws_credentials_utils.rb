@@ -25,6 +25,23 @@ module AwsAdvancedRubyDriverWrapper
       NO_CREDENTIALS = 'none'
       IDENTITY_LENGTH = 16
 
+      # The credentials a provider resolves to right now, copied into a fixed Aws::Credentials, or
+      # nil when it resolves to none. Callers that cache what they obtain use one snapshot both to
+      # build the cache key ({identity}) and to make the request, so the key always describes the
+      # credentials the cached value was obtained with, even if the provider refreshes in between.
+      # Requires the AWS SDK to be loaded.
+      #
+      # @param credentials_provider [#credentials, Aws::Credentials, nil]
+      # @return [Aws::Credentials, nil]
+      def snapshot(credentials_provider)
+        credentials = credentials_provider.respond_to?(:credentials) ? credentials_provider.credentials : credentials_provider
+        access_key_id = credentials.respond_to?(:access_key_id) ? credentials.access_key_id : nil
+        return nil if access_key_id.nil? || access_key_id.empty?
+
+        session_token = credentials.respond_to?(:session_token) ? credentials.session_token : nil
+        Aws::Credentials.new(access_key_id, credentials.secret_access_key, session_token)
+      end
+
       # A short, stable identifier for the AWS credentials a provider currently resolves to, for
       # use in cache keys: two providers that resolve to the same access key share it, and a
       # provider that refreshes to a new access key (a new assumed-role session, for example) gets

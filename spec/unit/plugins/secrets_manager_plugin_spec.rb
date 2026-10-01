@@ -405,6 +405,27 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       expect(mock_storage_service).not_to have_received(:set)
     end
 
+    # The provider is read once per fetch, and that one snapshot both builds the key and signs the
+    # request, so a refresh in between cannot put a secret read with one key under another's.
+    it 'fetches with the same credentials the key was built from' do
+      provider = double('RefreshingProvider')
+      allow(provider).to receive(:credentials).and_return(Aws::Credentials.new('AKID1', 'SECRET1'),
+                                                          Aws::Credentials.new('AKID2', 'SECRET2'))
+      client_key_ids = []
+      allow(Aws::SecretsManager::Client).to receive(:new) do |**opts|
+        client_key_ids << opts[:credentials].access_key_id
+        mock_sm_client
+      end
+      stored_keys = []
+      allow(mock_storage_service).to receive(:set) { |_name, key, _value| stored_keys << key }
+
+      plugin_with(credentials: provider).connect(host_info, Concurrent::Map.new, true, -> {})
+
+      identity = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.identity(Aws::Credentials.new('AKID1', 'x'))
+      expect(client_key_ids).to eq(['AKID1'])
+      expect(stored_keys).to eq(["my-secret:us-west-2::#{identity}"])
+    end
+
     it 'does not share an in-flight fetch between connections with different AWS credentials' do
       call_count = Concurrent::AtomicFixnum.new(0)
       allow(mock_sm_client).to receive(:get_secret_value) do
@@ -602,7 +623,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       stale = described_class::SecretEntry.new(
         username: 'stale_user', password: 'stale_pass', expires_at: now - 1
       )
-      real_storage.set(described_class::SECRETS_MANAGER_CACHE_NAME, plugin.send(:secret_cache_key), stale)
+      credentials = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.snapshot(mock_credentials)
+      real_storage.set(described_class::SECRETS_MANAGER_CACHE_NAME, plugin.send(:secret_cache_key, credentials), stale)
 
       props = Concurrent::Map.new
       plugin.connect(host_info, props, true, -> {})
