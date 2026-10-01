@@ -91,9 +91,8 @@ module AwsAdvancedRubyDriverWrapper
           @service_container.dialect_service.db_dialect.default_port
         )
 
-        credentials_identity = Utils::AwsCredentialsUtils.identity(@credentials_provider)
-        cache_key  = Utils::IamAuthUtils.cache_key(region, host, port, user, credentials_identity)
-        entry      = @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
+        cache_key  = token_cache_key(region, host, port, user)
+        entry      = cache_key && @service_container.storage_service.get(IAM_TOKEN_CACHE_NAME, cache_key)
         expiration = PropertyDefinition::IAM_EXPIRATION_SEC.get_float(wrapper_props_override)
         PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)
 
@@ -115,11 +114,24 @@ module AwsAdvancedRubyDriverWrapper
         end
       end
 
+      # The cache key for this connection's token, or nil when the provider resolves to no
+      # credentials. Without credentials there is nothing to tell one connection's token from
+      # another's, so such a connection neither reads nor writes the shared cache.
+      def token_cache_key(region, host, port, user)
+        credentials_identity = Utils::AwsCredentialsUtils.identity(@credentials_provider)
+        return nil if credentials_identity == Utils::AwsCredentialsUtils::NO_CREDENTIALS
+
+        Utils::IamAuthUtils.cache_key(region, host, port, user, credentials_identity)
+      end
+
+      # Generates a token and, when there is a cache key, caches it.
       def fetch_and_cache_token(region, host, port, user, cache_key, expiration)
         token = token_generator.auth_token(region:, endpoint: "#{host}:#{port}", user_name: user)
-        @service_container.storage_service.set(
-          IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
-        )
+        if cache_key
+          @service_container.storage_service.set(
+            IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
+          )
+        end
         token
       end
 

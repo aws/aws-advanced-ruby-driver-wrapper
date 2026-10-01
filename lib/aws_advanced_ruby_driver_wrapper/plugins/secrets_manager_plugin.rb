@@ -211,7 +211,7 @@ module AwsAdvancedRubyDriverWrapper
       # Returns true if credentials were freshly fetched from the service (suppresses login-error retry).
       def fetch_secret_and_report_if_fresh?(force:)
         cache_key = secret_cache_key
-        entry = @service_container.storage_service.get(SECRETS_MANAGER_CACHE_NAME, cache_key)
+        entry = cache_key && @service_container.storage_service.get(SECRETS_MANAGER_CACHE_NAME, cache_key)
 
         if entry.nil? || force
           @secret = fetch_synchronously(cache_key)
@@ -229,13 +229,24 @@ module AwsAdvancedRubyDriverWrapper
         false
       end
 
-      # Computed per fetch, so the key follows credentials that refresh to a new access key.
+      # Computed per fetch, so the key follows credentials that refresh to a new access key. Nil when
+      # the provider resolves to no credentials: without them there is nothing to tell one
+      # connection's secret from another's, so such a connection neither reads nor writes the shared
+      # cache, and does not join another connection's in-flight fetch.
       def secret_cache_key
-        self.class.cache_key(@secret_id, @region, @endpoint, Utils::AwsCredentialsUtils.identity(@credentials_provider))
+        credentials_identity = Utils::AwsCredentialsUtils.identity(@credentials_provider)
+        return nil if credentials_identity == Utils::AwsCredentialsUtils::NO_CREDENTIALS
+
+        self.class.cache_key(@secret_id, @region, @endpoint, credentials_identity)
       end
 
       def fetch_synchronously(cache_key)
-        future = trigger_async_refresh(cache_key)
+        future =
+          if cache_key
+            trigger_async_refresh(cache_key)
+          else
+            Concurrent::Promises.future_on(:io) { fetch_and_store_secret(nil) }
+          end
         future.value!(SYNC_FETCH_TIMEOUT_SEC)
       rescue Concurrent::CancelledOperationError, Timeout::Error
         raise Errors::SecretsManagerAuthError,
@@ -262,6 +273,7 @@ module AwsAdvancedRubyDriverWrapper
         future_candidate
       end
 
+      # Fetches the secret and, when there is a cache key, caches it.
       def fetch_and_store_secret(cache_key)
         response = secrets_client.get_secret_value(secret_id: @secret_id)
         parsed = parse_secret_string(response.secret_string)
@@ -276,7 +288,7 @@ module AwsAdvancedRubyDriverWrapper
           password: parsed[@password_key],
           expires_at: Process.clock_gettime(Process::CLOCK_MONOTONIC) + @expiration_sec
         )
-        @service_container.storage_service.set(SECRETS_MANAGER_CACHE_NAME, cache_key, entry)
+        @service_container.storage_service.set(SECRETS_MANAGER_CACHE_NAME, cache_key, entry) if cache_key
         entry
       end
 

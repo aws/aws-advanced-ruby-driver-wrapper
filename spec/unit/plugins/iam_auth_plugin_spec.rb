@@ -412,6 +412,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
     it 'never puts the access key id itself in the key' do
       expect(captured_cache_key(Aws::Credentials.new('AKIDVISIBLE', 'SECRET'))).not_to include('AKIDVISIBLE')
     end
+
+    # With no credentials there is nothing to tell one connection's token from another's.
+    it 'neither reads nor writes the cache when the provider resolves to no credentials' do
+      props = Concurrent::Map.new
+      props[:aws_credentials_provider] = double('EmptyProvider', credentials: nil)
+
+      token = connect_and_capture_token(plugin: build_plugin(props), host_info: pg_host_info, props: base_pg_props)
+
+      expect(token).to eq(GENERATED_TOKEN)
+      expect(mock_storage_service).not_to have_received(:get)
+      expect(mock_storage_service).not_to have_received(:set)
+    end
   end
 
   describe '#connect with Global Database endpoint' do

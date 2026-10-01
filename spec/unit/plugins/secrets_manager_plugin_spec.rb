@@ -382,6 +382,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       expect(stored_keys).to eq(read_keys.uniq)
     end
 
+    # With no credentials there is nothing to tell one connection's secret from another's.
+    it 'neither reads nor writes the cache when the provider resolves to no credentials' do
+      props = Concurrent::Map.new
+      plugin_with(credentials: double('EmptyProvider', credentials: nil)).connect(host_info, props, true, -> {})
+
+      expect(props[:user]).to eq('dbuser')
+      expect(mock_storage_service).not_to have_received(:get)
+      expect(mock_storage_service).not_to have_received(:set)
+      expect(described_class.pending_refreshes).to be_empty
+    end
+
+    # The SDK resolves credentials again when it sends the request, so a fetch can succeed even
+    # though the provider had none when the key was built. That secret must not be cached.
+    it 'does not cache a secret fetched after the provider had no credentials when the key was built' do
+      provider = double('LateProvider')
+      allow(provider).to receive(:credentials).and_return(nil, Aws::Credentials.new('AKID1', 'SECRET1'))
+
+      plugin_with(credentials: provider).connect(host_info, Concurrent::Map.new, true, -> {})
+
+      expect(mock_sm_client).to have_received(:get_secret_value)
+      expect(mock_storage_service).not_to have_received(:set)
+    end
+
     it 'does not share an in-flight fetch between connections with different AWS credentials' do
       call_count = Concurrent::AtomicFixnum.new(0)
       allow(mock_sm_client).to receive(:get_secret_value) do
