@@ -89,12 +89,19 @@ module AwsAdvancedRubyDriverWrapper
       def execute(target_method_name, target_callable, *args, **, &)
         session = @service_container.session_state_service
         autocommit_before = session&.autocommit?
+        succeeded = false
 
-        result = target_callable.call(*args, **, &)
-
-        session&.update_transaction_state(target_method_name, args, autocommit_before)
-
-        result
+        begin
+          result = target_callable.call(*args, **, &)
+          succeeded = true
+          result
+        ensure
+          if session && (conn = @service_container.connection_service.current_connection)
+            dialect = @service_container.dialect_service.driver_dialect
+            session.update_transaction_state(target_method_name, args, autocommit_before,
+                                             dialect, conn, succeeded: succeeded)
+          end
+        end
       end
     end
   end

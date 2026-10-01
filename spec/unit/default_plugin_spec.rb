@@ -201,6 +201,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin do
                autocommit?: true,
                update_transaction_state: nil)
       end
+
+      before do
+        allow(connection_service).to receive(:current_connection).and_return(mock_connection)
+        allow(driver_dialect).to receive(:reported_in_transaction).and_return(nil)
+      end
+
+      it 'calls update_transaction_state on success' do
+        plugin.execute('connection.exec', -> { 'ok' })
+        expect(session_state_service).to have_received(:update_transaction_state)
+      end
     end
 
     context 'without session state service' do
@@ -209,6 +219,59 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::DefaultPlugin do
       it 'does not raise when session_state_service is nil' do
         result = plugin.execute('connection.exec', ->(*_) { 'ok' }, 'BEGIN')
         expect(result).to eq('ok')
+      end
+
+      it 'propagates exceptions when session_state_service is nil' do
+        expect do
+          plugin.execute('connection.copy_data', -> { raise 'boom' })
+        end.to raise_error(RuntimeError, 'boom')
+      end
+    end
+
+    context 'when the callable raises' do
+      let(:mock_conn) { double('Connection') }
+      let(:session_state_service) do
+        double('SessionStateService',
+               autocommit?: true,
+               update_transaction_state: nil)
+      end
+
+      before do
+        allow(connection_service).to receive(:current_connection).and_return(mock_conn)
+        allow(driver_dialect).to receive(:reported_in_transaction).and_return(nil)
+      end
+
+      it 're-raises the exception' do
+        expect do
+          plugin.execute('connection.copy_data', -> { raise 'copy failed' })
+        end.to raise_error(RuntimeError, 'copy failed')
+      end
+
+      it 'calls update_transaction_state once even when the callable raises' do
+        begin
+          plugin.execute('connection.copy_data', -> { raise RuntimeError })
+        rescue StandardError
+          nil
+        end
+        expect(session_state_service).to have_received(:update_transaction_state).once
+      end
+
+      it 'calls update_transaction_state with the real method_name on the error path' do
+        begin
+          plugin.execute('connection.copy_data', -> { raise RuntimeError })
+        rescue StandardError
+          nil
+        end
+        expect(session_state_service).to have_received(:update_transaction_state)
+          .with('connection.copy_data', [], true, driver_dialect, mock_conn, succeeded: false)
+      end
+
+      it 'skips state sync when current_connection is nil' do
+        allow(connection_service).to receive(:current_connection).and_return(nil)
+        expect do
+          plugin.execute('connection.copy_data', -> { raise 'boom' })
+        end.to raise_error(RuntimeError, 'boom')
+        expect(session_state_service).not_to have_received(:update_transaction_state)
       end
     end
   end

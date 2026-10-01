@@ -238,6 +238,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
   end
 
+  describe '#reported_in_transaction' do
+    it 'returns nil — MySQL has no live transaction status; SQL inference is used' do
+      expect(dialect.reported_in_transaction(connection)).to be_nil
+    end
+  end
+
   describe '#network_bound_methods' do
     it 'returns a frozen Set' do
       expect(dialect.network_bound_methods).to be_a(Set)
