@@ -48,12 +48,14 @@ module AwsAdvancedRubyDriverWrapper
                     wrapper_props,
                     is_initial_connection,
                     service_container,
-                    is_internal: false)
+                    is_internal: false,
+                    bg_plugin: nil)
             plugin_manager = service_container.plugin_manager
             dialect_service = service_container.dialect_service
 
             unless Utils::RdsUtils.ip?(@substitute_host.host)
-              return open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal)
+              return open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal,
+                                     bg_plugin)
             end
 
             # mysql2 uses :host for both socket connection and TLS CN verification.
@@ -63,7 +65,8 @@ module AwsAdvancedRubyDriverWrapper
             # hostname for TLS regardless of the socket address.
             if driver_props[:sslca] && !plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
               hostname_host = @substitute_host.deep_dup(host: @host)
-              return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal)
+              return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal,
+                                     bg_plugin)
             end
 
             if plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
@@ -86,7 +89,8 @@ module AwsAdvancedRubyDriverWrapper
                     rerouted_host,
                     driver_props,
                     rerouted_wrapper_props,
-                    is_initial_connection
+                    is_initial_connection,
+                    plugin_to_skip: bg_plugin
                   )
                   begin
                     @iam_successful_connect_notify&.call(iam_host.host)
@@ -101,7 +105,7 @@ module AwsAdvancedRubyDriverWrapper
               return nil
             end
 
-            open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal)
+            open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal, bg_plugin)
           rescue StandardError => e
             raise unless dialect_service.login_error?(e)
 
@@ -114,11 +118,15 @@ module AwsAdvancedRubyDriverWrapper
           # must use internal_connect so they do NOT mutate the shared current connection — otherwise
           # one monitor thread's connect would close another monitor thread's live connection via
           # update_current_connection, causing a use-after-free segfault in the mysql2 C extension.
-          def open_connection(plugin_manager, host, driver_props, wrapper_props, is_initial_connection, is_internal)
+          #
+          # bg_plugin is skipped in the nested pipeline so this substitute connection does not re-enter
+          # BG routing. Without it, during the switchover window the opened connection matches the same
+          # routing again and recurses until the stack overflows (SystemStackError).
+          def open_connection(plugin_manager, host, driver_props, wrapper_props, is_initial_connection, is_internal, bg_plugin = nil)
             if is_internal
-              plugin_manager.internal_connect(host, driver_props, wrapper_props, is_initial_connection)
+              plugin_manager.internal_connect(host, driver_props, wrapper_props, is_initial_connection, plugin_to_skip: bg_plugin)
             else
-              plugin_manager.connect(host, driver_props, is_initial_connection)
+              plugin_manager.connect(host, driver_props, is_initial_connection, plugin_to_skip: bg_plugin)
             end
           end
         end

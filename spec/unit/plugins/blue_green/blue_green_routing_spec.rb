@@ -178,7 +178,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
       subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [], nil) }
 
       it 'connects to the IP host directly' do
-        expect(plugin_manager).to receive(:connect).with(ip_host, props, true).and_return(connection)
+        expect(plugin_manager).to receive(:connect).with(ip_host, props, true, plugin_to_skip: nil).and_return(connection)
         subject.apply(host_info, props, props, true, service_container)
       end
     end
@@ -198,7 +198,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
       subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [iam_host1, iam_host2], nil) }
 
       it 'tries IAM hosts in order and returns the first successful connection' do
-        allow(plugin_manager).to receive(:internal_connect).with(anything, anything, anything, anything).and_return(connection)
+        allow(plugin_manager).to receive(:internal_connect)
+          .with(anything, anything, anything, anything, plugin_to_skip: anything).and_return(connection)
         result = subject.apply(host_info, driver_props, props, true, service_container)
         expect(result).to eq(connection)
       end
@@ -226,6 +227,34 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
         allow(plugin_manager).to receive(:internal_connect).and_return(connection)
         r.apply(host_info, driver_props, props, true, service_container)
         expect(notified).to eq([iam_host1.host])
+      end
+    end
+    context 'when substitute host is a hostname (the MySQL switchover path)' do
+      let(:sub_host) do
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(
+          host: 'green-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 3306
+        )
+      end
+
+      before do
+        allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
+      end
+
+      subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, sub_host, [], nil) }
+
+      it 'passes plugin_to_skip on the user-facing connect so it does not recurse into BG routing' do
+        bg_plugin = double('bg_plugin')
+        expect(plugin_manager).to receive(:connect)
+          .with(sub_host, props, true, plugin_to_skip: bg_plugin).and_return(connection)
+        result = subject.apply(host_info, props, props, true, service_container, is_internal: false, bg_plugin: bg_plugin)
+        expect(result).to eq(connection)
+      end
+
+      it 'passes plugin_to_skip on an internal monitoring connect' do
+        bg_plugin = double('bg_plugin')
+        expect(plugin_manager).to receive(:internal_connect)
+          .with(sub_host, props, props, true, plugin_to_skip: bg_plugin).and_return(connection)
+        subject.apply(host_info, props, props, true, service_container, is_internal: true, bg_plugin: bg_plugin)
       end
     end
   end
