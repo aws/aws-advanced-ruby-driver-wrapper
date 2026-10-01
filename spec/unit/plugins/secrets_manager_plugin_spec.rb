@@ -82,15 +82,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       )
     end
 
-    # Drives through #connect and asserts the resolved region via the cache key
-    # ("<secret_id>:<region>"), which is the observable signal that ARN parsing worked.
+    # Drives through #connect and asserts the resolved region via the cache key, which starts
+    # "<secret_id>:<region>:" - the observable signal that ARN parsing worked.
     def expect_region_parsed_from_arn(arn, expected_region)
       props = Concurrent::Map.new
       props[:secret_id] = arn
       plugin = build_plugin(props)
       plugin.connect(host_info, Concurrent::Map.new, true, -> {})
       expect(mock_storage_service).to have_received(:get).with(
-        described_class::SECRETS_MANAGER_CACHE_NAME, "#{arn}:#{expected_region}"
+        described_class::SECRETS_MANAGER_CACHE_NAME, a_string_starting_with("#{arn}:#{expected_region}:")
       )
     end
 
@@ -293,6 +293,158 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
     end
   end
 
+  # The cached secret and the in-flight fetch are keyed by everything the fetched value depends on:
+  # the secret, its region and endpoint, and the AWS credentials it is read with.
+  describe 'cache key' do
+    def plugin_with(credentials: mock_credentials, endpoint: nil)
+      props = Concurrent::Map.new
+      props[:secret_id] = 'my-secret'
+      props[:secret_region] = 'us-west-2'
+      props[:aws_credentials_provider] = credentials
+      props[:secret_endpoint] = endpoint if endpoint
+      build_plugin(props)
+    end
+
+    def keys_read_by(plugin)
+      keys = []
+      allow(mock_storage_service).to receive(:get) do |_name, key|
+        keys << key
+        nil
+      end
+      plugin.connect(host_info, Concurrent::Map.new, true, -> {})
+      keys
+    end
+
+    it 'formats as secret_id:region:endpoint:credentials identity' do
+      expect(described_class.cache_key('my-secret', 'us-west-2', 'http://localhost:4566', 'abc123'))
+        .to eq('my-secret:us-west-2:http://localhost:4566:abc123')
+      expect(described_class.cache_key('my-secret', 'us-west-2', nil, 'abc123')).to eq('my-secret:us-west-2::abc123')
+    end
+
+    it 'gives connections with different AWS credentials different keys' do
+      first = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKID1', 'SECRET1')))
+      second = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKID2', 'SECRET2')))
+
+      expect(first.uniq).not_to eq(second.uniq)
+    end
+
+    it 'gives connections with the same AWS credentials the same key' do
+      first = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKID1', 'SECRET1')))
+      second = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKID1', 'SECRET1')))
+
+      expect(first.uniq).to eq(second.uniq)
+    end
+
+    it 'gives connections to different endpoints different keys' do
+      first = keys_read_by(plugin_with(endpoint: 'https://secretsmanager.us-west-2.amazonaws.com'))
+      second = keys_read_by(plugin_with(endpoint: 'http://localhost:4566'))
+
+      expect(first.uniq).not_to eq(second.uniq)
+    end
+
+    # The secret does not depend on which database host a connection goes to, so connections to the
+    # writer, a reader, or an instance endpoint all share one cached secret.
+    it 'gives connections to different database hosts the same key' do
+      plugin = plugin_with(endpoint: 'http://localhost:4566')
+      keys = []
+      allow(mock_storage_service).to receive(:get) do |_name, key|
+        keys << key
+        nil
+      end
+      hosts = %w[mydb.cluster-xyz.us-west-2.rds.amazonaws.com mydb.cluster-ro-xyz.us-west-2.rds.amazonaws.com
+                 mydb-instance-1.xyz.us-west-2.rds.amazonaws.com]
+
+      hosts.each do |host|
+        host_info = AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: host, port: '5432')
+        plugin.connect(host_info, Concurrent::Map.new, true, -> {})
+      end
+
+      expect(keys.uniq.size).to eq(1)
+    end
+
+    it 'never puts the access key id itself in the key' do
+      keys = keys_read_by(plugin_with(credentials: Aws::Credentials.new('AKIDVISIBLE', 'SECRET')))
+
+      expect(keys).to all(satisfy { |key| !key.include?('AKIDVISIBLE') })
+    end
+
+    it 'stores the fetched secret under the key it was read with' do
+      read_keys = []
+      stored_keys = []
+      allow(mock_storage_service).to receive(:get) do |_name, key|
+        read_keys << key
+        nil
+      end
+      allow(mock_storage_service).to receive(:set) { |_name, key, _value| stored_keys << key }
+
+      plugin_with.connect(host_info, Concurrent::Map.new, true, -> {})
+
+      expect(stored_keys).to eq(read_keys.uniq)
+    end
+
+    # With no credentials there is nothing to tell one connection's secret from another's.
+    it 'neither reads nor writes the cache when the provider resolves to no credentials' do
+      props = Concurrent::Map.new
+      plugin_with(credentials: double('EmptyProvider', credentials: nil)).connect(host_info, props, true, -> {})
+
+      expect(props[:user]).to eq('dbuser')
+      expect(mock_storage_service).not_to have_received(:get)
+      expect(mock_storage_service).not_to have_received(:set)
+      expect(described_class.pending_refreshes).to be_empty
+    end
+
+    # The SDK resolves credentials again when it sends the request, so a fetch can succeed even
+    # though the provider had none when the key was built. That secret must not be cached.
+    it 'does not cache a secret fetched after the provider had no credentials when the key was built' do
+      provider = double('LateProvider')
+      allow(provider).to receive(:credentials).and_return(nil, Aws::Credentials.new('AKID1', 'SECRET1'))
+
+      plugin_with(credentials: provider).connect(host_info, Concurrent::Map.new, true, -> {})
+
+      expect(mock_sm_client).to have_received(:get_secret_value)
+      expect(mock_storage_service).not_to have_received(:set)
+    end
+
+    # The provider is read once per fetch, and that one snapshot both builds the key and signs the
+    # request, so a refresh in between cannot put a secret read with one key under another's.
+    it 'fetches with the same credentials the key was built from' do
+      provider = double('RefreshingProvider')
+      allow(provider).to receive(:credentials).and_return(Aws::Credentials.new('AKID1', 'SECRET1'),
+                                                          Aws::Credentials.new('AKID2', 'SECRET2'))
+      client_key_ids = []
+      allow(Aws::SecretsManager::Client).to receive(:new) do |**opts|
+        client_key_ids << opts[:credentials].access_key_id
+        mock_sm_client
+      end
+      stored_keys = []
+      allow(mock_storage_service).to receive(:set) { |_name, key, _value| stored_keys << key }
+
+      plugin_with(credentials: provider).connect(host_info, Concurrent::Map.new, true, -> {})
+
+      identity = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.identity(Aws::Credentials.new('AKID1', 'x'))
+      expect(client_key_ids).to eq(['AKID1'])
+      expect(stored_keys).to eq(["my-secret:us-west-2::#{identity}"])
+    end
+
+    it 'does not share an in-flight fetch between connections with different AWS credentials' do
+      call_count = Concurrent::AtomicFixnum.new(0)
+      allow(mock_sm_client).to receive(:get_secret_value) do
+        call_count.increment
+        sleep(0.05)
+        secret_response
+      end
+
+      plugins = [plugin_with(credentials: Aws::Credentials.new('AKID1', 'SECRET1')),
+                 plugin_with(credentials: Aws::Credentials.new('AKID2', 'SECRET2'))]
+      threads = plugins.map do |plugin|
+        Thread.new { plugin.connect(host_info, Concurrent::Map.new, true, -> {}) }
+      end
+      threads.each(&:join)
+
+      expect(call_count.value).to eq(2)
+    end
+  end
+
   describe 'thundering herd protection' do
     it 'deduplicates concurrent fetches for the same key' do
       call_count = Concurrent::AtomicFixnum.new(0)
@@ -471,7 +623,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
       stale = described_class::SecretEntry.new(
         username: 'stale_user', password: 'stale_pass', expires_at: now - 1
       )
-      real_storage.set(described_class::SECRETS_MANAGER_CACHE_NAME, 'my-secret:us-west-2', stale)
+      credentials = AwsAdvancedRubyDriverWrapper::Utils::AwsCredentialsUtils.snapshot(mock_credentials)
+      real_storage.set(described_class::SECRETS_MANAGER_CACHE_NAME, plugin.send(:secret_cache_key, credentials), stale)
 
       props = Concurrent::Map.new
       plugin.connect(host_info, props, true, -> {})

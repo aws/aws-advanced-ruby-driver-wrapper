@@ -322,9 +322,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::IamAuthUtils do
   end
 
   describe '.cache_key' do
-    it 'formats as region:host:port:user' do
-      expect(utils.cache_key('us-east-1', 'myhost.rds.amazonaws.com', 5432, 'admin'))
-        .to eq 'us-east-1:myhost.rds.amazonaws.com:5432:admin'
+    it 'formats as region:host:port:user:credentials identity' do
+      expect(utils.cache_key('us-east-1', 'myhost.rds.amazonaws.com', 5432, 'admin', 'abc123'))
+        .to eq 'us-east-1:myhost.rds.amazonaws.com:5432:admin:abc123'
     end
   end
 end
