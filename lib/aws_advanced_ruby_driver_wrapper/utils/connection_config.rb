@@ -56,12 +56,15 @@ module AwsAdvancedRubyDriverWrapper
       # credentials) so they are never exposed if a config is logged, interpolated,
       # or rendered in a backtrace. The property maps are the only fields that carry
       # secrets; the rest are host/driver metadata that is safe to show.
+      #
+      # Most secrets are recognized by name. The IAM token is passed under a property
+      # whose name is configurable, so whatever name is configured is redacted too.
       def inspect
         "#<#{self.class.name} " \
-          "wrapper_props=#{AwsAdvancedRubyDriverWrapper.mask_properties(wrapper_props)}, " \
-          "driver_props=#{AwsAdvancedRubyDriverWrapper.mask_properties(driver_props)}, " \
-          "prefixed_wrapper_config=#{AwsAdvancedRubyDriverWrapper.mask_properties(prefixed_wrapper_config)}, " \
-          "prefixed_driver_config=#{AwsAdvancedRubyDriverWrapper.mask_properties(prefixed_driver_config)}, " \
+          "wrapper_props=#{masked(wrapper_props)}, " \
+          "driver_props=#{masked(driver_props)}, " \
+          "prefixed_wrapper_config=#{masked(prefixed_wrapper_config)}, " \
+          "prefixed_driver_config=#{masked(prefixed_driver_config)}, " \
           "initial_host_info=#{initial_host_info.inspect}, driver_name=#{driver_name.inspect}, " \
           "original_host=#{original_host.inspect}, original_port=#{original_port.inspect}, " \
           "multi_host_url=#{@multi_host_url.inspect}>"
@@ -72,6 +75,16 @@ module AwsAdvancedRubyDriverWrapper
       # representation so `pp config` cannot leak credentials.
       def pretty_print(pp)
         pp.text(inspect)
+      end
+
+      private
+
+      def masked(props)
+        AwsAdvancedRubyDriverWrapper.mask_properties(props, [iam_token_property_name])
+      end
+
+      def iam_token_property_name
+        wrapper_props && PropertyDefinition::IAM_ACCESS_TOKEN_PROPERTY_NAME.get(wrapper_props)
       end
     end
   end
