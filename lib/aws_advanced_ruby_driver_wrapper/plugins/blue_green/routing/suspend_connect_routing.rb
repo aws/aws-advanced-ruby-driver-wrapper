@@ -31,7 +31,7 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           # Blocks until switchover is no longer IN_PROGRESS
-          def apply(_host_info, _, wrapper_props, _is_initial_connection, service_container, is_internal: false)
+          def apply(_host_info, _, wrapper_props, _is_initial_connection, service_container, is_internal: false, bg_plugin: nil)
             storage_service = service_container.storage_service
             hold_start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 

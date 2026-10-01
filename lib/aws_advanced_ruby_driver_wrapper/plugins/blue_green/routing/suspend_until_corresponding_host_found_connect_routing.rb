@@ -34,7 +34,7 @@ module AwsAdvancedRubyDriverWrapper
 
           # Blocks until a corresponding green host is found for host_info.host, the switchover
           # completes, or the timeout elapses.
-          def apply(host_info, _, wrapper_props, _is_initial_connection, service_container, is_internal: false)
+          def apply(host_info, _, wrapper_props, _is_initial_connection, service_container, is_internal: false, bg_plugin: nil)
             storage_service = service_container.storage_service
 
             bg_status = storage_service.get(BlueGreenPlugin::BLUE_GREEN_NAME, @bgd_id)

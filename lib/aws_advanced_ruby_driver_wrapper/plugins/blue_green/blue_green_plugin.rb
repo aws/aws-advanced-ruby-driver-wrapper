@@ -149,8 +149,10 @@ module AwsAdvancedRubyDriverWrapper
             conn = nil
 
             while routing && conn.nil?
+              # Pass self so a routing that opens a substitute connection can skip this plugin in the
+              # nested pipeline, preventing the connect path from re-entering BG routing (infinite recursion).
               conn = routing.apply(host_info, driver_props, @wrapper_props, is_initial_connection, @service_container,
-                                   is_internal: is_internal)
+                                   is_internal: is_internal, bg_plugin: self)
 
               next unless conn.nil?
 
