@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    aws_advanced_ruby_driver_wrapper (0.0.1)
+    aws_advanced_ruby_driver_wrapper (1.0.0)
       concurrent-ruby (~> 1.3, >= 1.3.7)
 
 GEM
@@ -209,7 +209,7 @@ CHECKSUMS
   aws-sdk-rds (1.323.0) sha256=29441c93b75ebf0ff065a19510f4d1fdc1feddb44c13b288280545d7fa9c3efd
   aws-sdk-secretsmanager (1.136.0) sha256=fa0b8cbd23e0160d368c50236c5ff480b6b74dd6bc3208c5dff0ca319c689a70
   aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
-  aws_advanced_ruby_driver_wrapper (0.0.1)
+  aws_advanced_ruby_driver_wrapper (1.0.0)
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
   benchmark-ips (2.15.1) sha256=07a1a9f3c6105ecaf68c174fc3fbcddd71a0e9ada6236ae03093a0dcfd812d59
   bigdecimal (4.1.3) sha256=61ebe1e5e559bdc3cc6f2c0ee7f427321fc838f59611c294356eb04d6e21cf66
