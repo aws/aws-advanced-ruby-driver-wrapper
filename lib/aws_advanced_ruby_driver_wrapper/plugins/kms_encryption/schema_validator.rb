@@ -107,7 +107,7 @@ module AwsAdvancedRubyDriverWrapper
         def table_exists?(connection, table)
           rows = @sql.query(
             connection,
-            'SELECT 1 AS present FROM information_schema.tables WHERE table_schema = ? AND table_name = ?',
+            "SELECT 1 AS present FROM information_schema.tables WHERE table_schema #{eq} ? AND table_name #{eq} ?",
             [@schema.to_s, table]
           )
           !rows.empty?
@@ -117,7 +117,7 @@ module AwsAdvancedRubyDriverWrapper
           rows = @sql.query(
             connection,
             'SELECT column_name AS name FROM information_schema.columns ' \
-            'WHERE table_schema = ? AND table_name = ?',
+            "WHERE table_schema #{eq} ? AND table_name #{eq} ?",
             [@schema.to_s, table]
           )
           existing = rows.to_set { |row| value(row, 'name').to_s.downcase }
@@ -158,15 +158,16 @@ module AwsAdvancedRubyDriverWrapper
         #
         # @return [Array<Set<String>>]
         def constrained_columns(connection, table, constraint_types)
-          placeholders = Array.new(constraint_types.size, '?').join(', ')
+          # Spelled out as ORs rather than IN, since IN compares with an unqualified operator.
+          type_matches = Array.new(constraint_types.size, "tc.constraint_type #{eq} ?").join(' OR ')
           rows = @sql.query(
             connection,
             'SELECT tc.constraint_name AS constraint_name, kcu.column_name AS column_name ' \
             'FROM information_schema.table_constraints tc ' \
             'JOIN information_schema.key_column_usage kcu ' \
-            'ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema ' \
-            "AND tc.table_name = kcu.table_name WHERE tc.constraint_type IN (#{placeholders}) " \
-            'AND tc.table_schema = ? AND tc.table_name = ?',
+            "ON tc.constraint_name #{eq} kcu.constraint_name AND tc.table_schema #{eq} kcu.table_schema " \
+            "AND tc.table_name #{eq} kcu.table_name WHERE (#{type_matches}) " \
+            "AND tc.table_schema #{eq} ? AND tc.table_name #{eq} ?",
             constraint_types + [@schema.to_s, table]
           )
 
@@ -199,6 +200,10 @@ module AwsAdvancedRubyDriverWrapper
 
         def qualify(table)
           "#{@schema}.#{table}"
+        end
+
+        def eq
+          @sql.equals_operator
         end
       end
     end

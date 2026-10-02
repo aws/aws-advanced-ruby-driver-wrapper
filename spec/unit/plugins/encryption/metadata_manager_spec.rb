@@ -23,7 +23,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
   let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
   let(:metadata_error) { AwsAdvancedRubyDriverWrapper::Errors::MetadataError }
   let(:connection) { double('Connection') }
-  let(:sql_runner) { instance_double(encryption::SqlRunner) }
+  let(:sql_runner) { instance_double(encryption::SqlRunner, equals_operator: 'OPERATOR(pg_catalog.=)') }
   # Background refresh off by default, so that an example only sees the queries it makes itself.
   let(:config) { build_encryption_config(metadata_cache_refresh_interval_sec: 0) }
   let(:rows) { [row('users', 'ssn'), row('users', 'email'), row('orders', 'card_number')] }
@@ -302,7 +302,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
 
       expect(manager.column_config('users', 'ssn').column_identifier).to eq('users.ssn')
       expect(sql_runner).to have_received(:query)
-        .with(connection, /WHERE em\.table_name = \? AND em\.column_name = \?/, %w[users ssn])
+        .with(connection, /WHERE em\.table_name OPERATOR\(pg_catalog\.=\) \? AND em\.column_name OPERATOR\(pg_catalog\.=\) \?/,
+              %w[users ssn])
     end
 
     it 'is nil when the database has no configuration for the column' do
@@ -314,7 +315,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::MetadataManage
       allow(sql_runner).to receive(:query).and_return([row('users', 'ssn'), row('users', 'email')])
 
       expect(manager.table_configs('users').map(&:column_name)).to eq(%w[ssn email])
-      expect(sql_runner).to have_received(:query).with(connection, /WHERE em\.table_name = \?/, ['users'])
+      expect(sql_runner).to have_received(:query).with(connection, /WHERE em\.table_name OPERATOR\(pg_catalog\.=\) \?/, ['users'])
     end
 
     it 'reports a failed lookup, naming the column it was about' do

@@ -414,16 +414,20 @@ module AwsAdvancedRubyDriverWrapper
 
         def update_encryption_metadata_key_sql
           "UPDATE #{@config.metadata_schema}.encryption_metadata SET key_id = ?, updated_at = ? " \
-            'WHERE table_name = ? AND column_name = ?'
+            "WHERE table_name #{eq} ? AND column_name #{eq} ?"
         end
 
         def select_columns_with_key_sql
-          "SELECT table_name, column_name FROM #{@config.metadata_schema}.encryption_metadata WHERE key_id = ?"
+          "SELECT table_name, column_name FROM #{@config.metadata_schema}.encryption_metadata WHERE key_id #{eq} ?"
         end
 
         def delete_encryption_metadata_sql
           "DELETE FROM #{@config.metadata_schema}.encryption_metadata " \
-            'WHERE table_name = ? AND column_name = ?'
+            "WHERE table_name #{eq} ? AND column_name #{eq} ?"
+        end
+
+        def eq
+          @sql.equals_operator
         end
       end
     end

@@ -133,14 +133,21 @@ module AwsAdvancedRubyDriverWrapper
         "ON CONFLICT (#{conflict_columns.join(', ')}) DO UPDATE SET #{assignments}"
       end
 
+      # pg resolves an unqualified operator through the search_path, where a user-defined operator
+      # with a closer type match would be chosen over the built-in one, so pin it to pg_catalog.
+      def equals_operator
+        'OPERATOR(pg_catalog.=)'
+      end
+
       def foreign_key_query
+        eq = equals_operator
         'SELECT kcu.column_name AS from_column, ccu.table_name AS to_table, ccu.column_name AS to_column ' \
           'FROM information_schema.table_constraints tc ' \
           'JOIN information_schema.key_column_usage kcu ' \
-          'ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema ' \
+          "ON tc.constraint_name #{eq} kcu.constraint_name AND tc.table_schema #{eq} kcu.table_schema " \
           'JOIN information_schema.constraint_column_usage ccu ' \
-          'ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema ' \
-          "WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = $1 AND tc.table_name = $2"
+          "ON tc.constraint_name #{eq} ccu.constraint_name AND tc.table_schema #{eq} ccu.table_schema " \
+          "WHERE tc.constraint_type #{eq} 'FOREIGN KEY' AND tc.table_schema #{eq} $1 AND tc.table_name #{eq} $2"
       end
 
       def closed?(connection)

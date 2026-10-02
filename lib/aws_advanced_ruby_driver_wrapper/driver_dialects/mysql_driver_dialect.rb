@@ -102,6 +102,11 @@ module AwsAdvancedRubyDriverWrapper
         "ON DUPLICATE KEY UPDATE #{assignments}"
       end
 
+      # MySQL has no user-defined operators, so the plain operator always means the built-in one.
+      def equals_operator
+        '='
+      end
+
       def foreign_key_query
         'SELECT column_name AS from_column, referenced_table_name AS to_table, ' \
           'referenced_column_name AS to_column FROM information_schema.key_column_usage ' \

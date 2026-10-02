@@ -30,7 +30,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
   let(:kms_client) { instance_double(Aws::KMS::Client) }
   let(:key_manager) { instance_double(encryption::KeyManager) }
   let(:metadata_manager) { instance_double(encryption::MetadataManager) }
-  let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true) }
+  let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true, equals_operator: 'OPERATOR(pg_catalog.=)') }
   let(:connection) { double('Connection') }
   let(:config) { build_encryption_config }
   let(:plaintext_key) { +('a' * 32) }
@@ -403,7 +403,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
 
       expect(utility.columns_using_key(3)).to eq(['users.ssn', 'orders.card_number'])
       expect(sql_runner).to have_received(:query)
-        .with(connection, /FROM encrypt\.encryption_metadata WHERE key_id = \?/, [3])
+        .with(connection, /FROM encrypt\.encryption_metadata WHERE key_id OPERATOR\(pg_catalog\.=\) \?/, [3])
     end
 
     it 'is empty for a key no column uses' do

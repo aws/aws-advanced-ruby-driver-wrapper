@@ -272,16 +272,16 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def column_config_sql
-          "#{joined_columns_sql} WHERE em.table_name = ? AND em.column_name = ?"
+          "#{joined_columns_sql} WHERE em.table_name #{eq} ? AND em.column_name #{eq} ?"
         end
 
         def table_configs_sql
-          "#{joined_columns_sql} WHERE em.table_name = ?"
+          "#{joined_columns_sql} WHERE em.table_name #{eq} ?"
         end
 
         def check_column_encrypted_sql
           "SELECT 1 FROM #{@config.metadata_schema}.encryption_metadata " \
-            'WHERE table_name = ? AND column_name = ?'
+            "WHERE table_name #{eq} ? AND column_name #{eq} ?"
         end
 
         # +ks.key_id+ is aliased because +em.key_id+ already occupies that name in the row: the
@@ -299,7 +299,11 @@ module AwsAdvancedRubyDriverWrapper
             'ks.key_id AS key_uuid, ks.name, ks.master_key_arn, ks.encrypted_data_key, ks.hmac_key, ks.key_spec, ' \
             'ks.created_at AS key_created_at, ks.last_used_at ' \
             "FROM #{schema}.encryption_metadata em " \
-            "LEFT JOIN #{schema}.key_storage ks ON em.key_id = ks.id"
+            "LEFT JOIN #{schema}.key_storage ks ON em.key_id #{eq} ks.id"
+        end
+
+        def eq
+          @sql.equals_operator
         end
 
         def start_refresh_thread

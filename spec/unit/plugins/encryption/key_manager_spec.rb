@@ -26,7 +26,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
   let(:key_error) { AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError }
   let(:kms_client) { instance_double(Aws::KMS::Client) }
   let(:connection) { double('Connection') }
-  let(:sql_runner) { instance_double(encryption::SqlRunner) }
+  let(:sql_runner) { instance_double(encryption::SqlRunner, equals_operator: 'OPERATOR(pg_catalog.=)') }
   let(:audit_logger) { encryption::AuditLogger.new(false) }
   let(:data_key_cache) { encryption::DataKeyCache.new(max_size: 10, ttl_sec: 60) }
   # A 1 ms backoff base keeps the retry examples from actually waiting.
@@ -443,7 +443,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
 
         metadata = manager.key_metadata_by_id(7)
 
-        expect(sql_runner).to have_received(:query).with(connection, /FROM encrypt\.key_storage WHERE id = \?/, [7])
+        expect(sql_runner).to have_received(:query).with(connection, /FROM encrypt\.key_storage WHERE id OPERATOR\(pg_catalog\.=\) \?/, [7])
         expect(metadata.id).to eq(7)
         expect(metadata.key_id).to eq('key-uuid')
         expect(metadata.key_name).to eq('users.ssn')
@@ -477,7 +477,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManager do
         manager.touch_key('key-uuid')
 
         expect(sql_runner).to have_received(:execute)
-          .with(connection, /UPDATE encrypt\.key_storage SET last_used_at = \?/, [instance_of(Time), 'key-uuid'])
+          .with(connection, /UPDATE encrypt\.key_storage SET last_used_at = \? WHERE key_id OPERATOR\(pg_catalog\.=\) \?/,
+                [instance_of(Time), 'key-uuid'])
       end
 
       # The stamp is bookkeeping: losing it must not fail the query the application asked for.

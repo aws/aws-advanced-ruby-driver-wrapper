@@ -238,6 +238,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
   end
 
+  describe '#equals_operator' do
+    it 'uses the plain operator' do
+      expect(dialect.equals_operator).to eq('=')
+    end
+  end
+
   describe '#reported_in_transaction' do
     it 'returns nil — MySQL has no live transaction status; SQL inference is used' do
       expect(dialect.reported_in_transaction(connection)).to be_nil
