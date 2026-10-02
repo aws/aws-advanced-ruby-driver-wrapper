@@ -26,7 +26,9 @@ module AwsAdvancedRubyDriverWrapper
         # Same as above, plus "credential=...", and stops at commas and closing braces so that
         # it works on rendered hashes.
         CREDENTIAL_ASSIGNMENT_PATTERN = /(password|secret|key|token|credential)=[^\s,}]+/i
-        KMS_ARN_PATTERN = %r{arn:aws:kms:[^:]+:[^:]+:key/[a-f0-9-]+}i
+        # The region and account exclude '*' so that an ARN masked by {.arn} is not matched again,
+        # which would garble its partly masked key id. An unmasked ARN never contains a '*'.
+        KMS_ARN_PATTERN = %r{arn:aws:kms:[^:*]+:[^:*]+:key/[a-f0-9-]+}i
         URL_PASSWORD_PATTERN = /[?&]password=[^&]*/i
         URL_PWD_PATTERN = /[?&]pwd=[^&]*/i
         # The password run excludes '/' and whitespace as well as '@', so it cannot scan past the
