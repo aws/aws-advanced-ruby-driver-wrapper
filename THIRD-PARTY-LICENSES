@@ -71,7 +71,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 -----------
 
-The following Ruby gem may be used with this product (ActiveRecord adapters):
+The following Ruby gem may be used with this product (ActiveRecord adapter
+registration):
 
  - activesupport@8.1.4
 
