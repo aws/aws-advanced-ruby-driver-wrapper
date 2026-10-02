@@ -40,6 +40,7 @@ Gem::Specification.new do |spec|
     root_files = %w[
       LICENSE
       NOTICE
+      THIRD-PARTY-LICENSES
       README.md
       CHANGELOG.md
       aws_advanced_ruby_driver_wrapper.gemspec
