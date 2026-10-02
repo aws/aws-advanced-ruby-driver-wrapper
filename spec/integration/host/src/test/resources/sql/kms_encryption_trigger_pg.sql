@@ -1,7 +1,14 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- pgcrypto provides hmac(). If it is already installed in a schema other than public,
+-- replace public in public.hmac below with that schema.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 
 -- Replace 'encrypt' below if encryption_metadata_schema is set to something else.
-CREATE OR REPLACE FUNCTION enforce_encrypted_column() RETURNS trigger AS $$
+-- A trigger runs with the search_path of the session that fires it. Pinning it to pg_catalog
+-- stops a session from putting its own functions or operators, such as hmac() or <>, ahead of
+-- the built-in ones to get a plaintext value past this check.
+CREATE OR REPLACE FUNCTION enforce_encrypted_column() RETURNS trigger
+SET search_path = pg_catalog, pg_temp
+AS $$
 DECLARE
   col_name  text := TG_ARGV[0];
   col_value bytea;
@@ -41,7 +48,7 @@ BEGIN
   END IF;
 
   IF length(col_value) < 65
-     OR substring(col_value from 1 for 32) <> hmac(substring(col_value from 33), hmac_key, 'sha256') THEN
+     OR substring(col_value from 1 for 32) <> public.hmac(substring(col_value from 33), hmac_key, 'sha256'::text) THEN
     RAISE EXCEPTION 'Column %.% does not carry a valid HMAC tag (plaintext or tampered value)', TG_TABLE_NAME, col_name;
   END IF;
 
