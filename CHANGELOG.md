@@ -2,3 +2,22 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
+
+## [1.0.0] - 2026-10-02
+
+The Amazon Web Services (AWS) Advanced Ruby Driver Wrapper allows an application to take advantage of the features of clustered Aurora databases.
+
+### Added
+- Support for MySQL and PostgreSQL, usable in two ways:
+  - Direct connections through the wrapped community driver via the `WrapperPgConnection` (on top of [`pg`](https://rubygems.org/gems/pg)) and `WrapperMysql2Client` (on top of [`mysql2`](https://rubygems.org/gems/mysql2)), requiring only a change of the connection class.
+  - Drop-in [ActiveRecord](https://guides.rubyonrails.org/active_record_basics.html) adapters `aws_postgresql` and `aws_mysql2` that replace the community `postgresql` and `mysql2` adapters.
+- [Failover Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/enhanced-failover).
+- [Global Database Failover Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/gdb-failover).
+- [AWS IAM Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/iam-authentication).
+- [AWS Secrets Manager Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/aws-secrets-manager).
+- [Custom Endpoint Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/custom-endpoint).
+- [Blue/Green Deployment Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/blue-green).
+- [Initial Connection Strategy Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/initial-connection-strategy).
+- [KMS Encryption Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption).
+
+[1.0.0]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/1.0.0
