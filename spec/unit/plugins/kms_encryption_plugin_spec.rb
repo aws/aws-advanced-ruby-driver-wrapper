@@ -229,6 +229,36 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect(key_manager).not_to have_received(:decrypt_data_key)
     end
 
+    # pg also takes a parameter as a hash carrying its value and format. ActiveRecord binds every
+    # binary column that way, and an encrypted column is always binary, so only the value is encrypted.
+    context 'when a parameter is given as a hash with its format' do
+      it 'encrypts the value of a binary parameter, as ActiveRecord binds it' do
+        call('connection.exec_params', args: [insert, ['Jo', { value: '123-45-6789'.b, format: 1 }]], sql: insert)
+
+        expect_encrypted(bound_args[1].last, '123-45-6789')
+      end
+
+      it 'encrypts the value of a text parameter' do
+        call('connection.exec_params', args: [insert, ['Jo', { value: '123-45-6789', format: 0 }]], sql: insert)
+
+        expect_encrypted(bound_args[1].last, '123-45-6789')
+      end
+
+      it 'encrypts the value of a parameter bound to a statement prepared by name' do
+        call('connection.exec_prepared', args: ['insert_user', ['Jo', { value: '123-45-6789'.b, format: 1 }]], sql: insert)
+
+        expect_encrypted(bound_args[1].last, '123-45-6789')
+      end
+
+      it 'leaves a parameter whose value is nil null' do
+        null = { value: nil, format: 1 }
+        call('connection.exec_params', args: [insert, ['Jo', null]], sql: insert)
+
+        expect(bound_args[1]).to eq(['Jo', null])
+        expect(key_manager).not_to have_received(:decrypt_data_key)
+      end
+    end
+
     it 'encrypts a value compared against an encrypted column' do
       sql = 'SELECT name FROM users WHERE ssn = $1'
       call('connection.exec_params', args: [sql, ['123-45-6789']], sql: sql)
