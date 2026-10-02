@@ -22,7 +22,7 @@ require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaValidator do
   let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
-  let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true) }
+  let(:sql_runner) { instance_double(encryption::SqlRunner, pg?: true, equals_operator: 'OPERATOR(pg_catalog.=)') }
   let(:connection) { double('Connection') }
   # What a correctly created schema looks like: both tables exist with all their columns, the
   # metadata table is unique on (table_name, column_name) and points at key_storage.id.
@@ -120,6 +120,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaValidato
     it 'asks PostgreSQL for the referenced table the way PostgreSQL exposes it' do
       validator.validate(connection)
       expect(sql_runner).to have_received(:query).with(connection, /constraint_column_usage ccu/, any_args)
+    end
+
+    # IN compares with an unqualified operator too, so it must not appear either.
+    it 'compares only with the driver equality operator' do
+      validator.validate(connection)
+      expect(sql_runner).to have_received(:query).at_least(:once)
+      expect(sql_runner).not_to have_received(:query).with(connection, / = | IN \(/, any_args)
+    end
+
+    it 'matches every requested constraint type' do
+      validator.validate(connection)
+      expect(sql_runner).to have_received(:query).with(
+        connection,
+        /\(tc\.constraint_type OPERATOR\(pg_catalog\.=\) \? OR tc\.constraint_type OPERATOR\(pg_catalog\.=\) \?\)/,
+        ['PRIMARY KEY', 'UNIQUE', 'encrypt', 'encryption_metadata']
+      )
     end
   end
 

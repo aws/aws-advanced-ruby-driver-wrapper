@@ -36,6 +36,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SqlRunner do
     end
   end
 
+  describe '#equals_operator' do
+    it "is the driver dialect's equality operator" do
+      expect(pg_runner.equals_operator).to eq('OPERATOR(pg_catalog.=)')
+      expect(mysql_runner.equals_operator).to eq('=')
+    end
+  end
+
   describe '#translate' do
     it 'numbers the placeholders for pg' do
       expect(pg_runner.translate('INSERT INTO t (a, b, c) VALUES (?, ?, ?)'))

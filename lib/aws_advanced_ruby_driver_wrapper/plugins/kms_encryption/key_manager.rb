@@ -296,11 +296,15 @@ module AwsAdvancedRubyDriverWrapper
 
         def select_key_sql
           'SELECT id, key_id, name, master_key_arn, encrypted_data_key, hmac_key, key_spec, created_at, last_used_at ' \
-            "FROM #{@schema}.key_storage WHERE id = ?"
+            "FROM #{@schema}.key_storage WHERE id #{eq} ?"
         end
 
         def update_last_used_sql
-          "UPDATE #{@schema}.key_storage SET last_used_at = ? WHERE key_id = ?"
+          "UPDATE #{@schema}.key_storage SET last_used_at = ? WHERE key_id #{eq} ?"
+        end
+
+        def eq
+          @sql.equals_operator
         end
 
         # Runs a KMS call, retrying throttling and transient service errors with exponential

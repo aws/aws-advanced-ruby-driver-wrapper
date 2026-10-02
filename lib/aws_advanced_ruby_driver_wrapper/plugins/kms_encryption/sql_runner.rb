@@ -110,6 +110,14 @@ module AwsAdvancedRubyDriverWrapper
           @driver_dialect.upsert_clause(conflict_columns, update_columns)
         end
 
+        # The driver-specific equality operator. Every comparison in the plugin's own SQL uses it,
+        # so that on pg a user-defined operator earlier in the search_path cannot take its place.
+        #
+        # @return [String]
+        def equals_operator
+          @driver_dialect.equals_operator
+        end
+
         # The driver-specific query for a table's foreign keys, using +?+ placeholders for the
         # schema and table names.
         #

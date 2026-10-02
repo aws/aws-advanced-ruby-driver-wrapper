@@ -90,6 +90,12 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # The equality operator for the wrapper's own SQL, in the driver's own grammar.
+      # @return [String]
+      def equals_operator
+        raise NotImplementedError
+      end
+
       # A query returning a table's foreign keys as rows with +from_column+, +to_table+, and
       # +to_column+, using +?+ placeholders for the schema and table names.
       # @return [String]

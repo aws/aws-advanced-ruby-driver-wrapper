@@ -191,7 +191,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     it 'reads foreign keys from information_schema with pg-numbered schema and table placeholders' do
       sql = dialect.foreign_key_query
       expect(sql).to include('FOREIGN KEY')
-      expect(sql).to include('tc.table_schema = $1 AND tc.table_name = $2')
+      expect(sql).to include('tc.table_schema OPERATOR(pg_catalog.=) $1 AND tc.table_name OPERATOR(pg_catalog.=) $2')
+    end
+
+    it 'compares only with the pg_catalog equality operator' do
+      expect(dialect.foreign_key_query).not_to include(' = ')
+    end
+  end
+
+  describe '#equals_operator' do
+    it 'pins equality to pg_catalog so that the search_path cannot supply another operator' do
+      expect(dialect.equals_operator).to eq('OPERATOR(pg_catalog.=)')
     end
   end
 
