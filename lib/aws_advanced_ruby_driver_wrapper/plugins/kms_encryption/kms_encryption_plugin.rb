@@ -306,8 +306,9 @@ module AwsAdvancedRubyDriverWrapper
         encrypted = nil
 
         begin
-          parameters.each_with_index do |value, index|
+          parameters.each_with_index do |parameter, index|
             config = columns[index + 1]
+            value = parameter_value(parameter)
             next if config.nil? || value.nil?
 
             encrypted ||= parameters.dup
@@ -318,6 +319,13 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         encrypted
+      end
+
+      # pg also takes a parameter as a hash that carries its value along with its format and type, and
+      # ActiveRecord binds every binary column that way. Only the value is encrypted: the ciphertext
+      # is bound as binary whatever format the hash named, and a hash with no value stays null.
+      def parameter_value(parameter)
+        parameter.is_a?(Hash) && sql_runner.pg? ? parameter[:value] : parameter
       end
 
       def encrypt_value(value, config, cipher)

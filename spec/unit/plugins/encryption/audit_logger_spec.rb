@@ -66,6 +66,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::AuditLogger do
       expect(level).to eq(:warn)
       expect(line).to include('success=false', 'error=the data key was rejected')
     end
+
+    # The error's context already carries the masked ARN, which has to read the same in the error as
+    # it does in the record's own master_key_arn field.
+    it 'shows the master key the same way in the error as in its own field' do
+      arn = 'arn:aws:kms:us-east-2:123456789012:key/9ea6bef5-4420-44de-90a2-44fd72d30e03'
+      error = AwsAdvancedRubyDriverWrapper::Errors::KeyManagementError
+              .unauthorized_master_key('The master key is not listed').with_master_key_arn(arn)
+      audit.log_data_key_decryption(master_key_arn: arn, success: false, error_message: error.message)
+
+      expect(line).to include('master_key_arn=arn:aws:kms:***:***:key/9ea6***0e03 ',
+                              '[Context: master_key_arn=arn:aws:kms:***:***:key/9ea6***0e03]')
+    end
   end
 
   describe 'when audit logging is disabled' do

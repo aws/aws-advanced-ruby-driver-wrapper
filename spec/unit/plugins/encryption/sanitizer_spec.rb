@@ -97,6 +97,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::Sanitizer do
         .to eq('Decrypt failed for arn:aws:kms:***:***:key/*** with secret=***')
     end
 
+    # An error's context is masked as it is added, so its message reaches here with the ARN already
+    # masked. Masking it again would garble it into a different form than it has everywhere else.
+    it 'leaves an ARN that is already masked as it is' do
+      masked = sanitizer.arn('arn:aws:kms:us-east-2:123456789012:key/9ea6bef5-4420-44de-90a2-44fd72d30e03')
+      message = "The master key is not listed [Context: master_key_arn=#{masked}]"
+
+      expect(sanitizer.error_message(message)).to eq(message)
+    end
+
     it 'truncates to the error message limit' do
       expect(sanitizer.error_message('e' * 400).length).to eq(described_class::MAX_ERROR_MESSAGE_LENGTH)
     end
@@ -122,6 +131,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::Sanitizer do
     it 'masks the account and region of a KMS ARN' do
       expect(sanitizer.config_details('master_key_arn=arn:aws:kms:us-east-1:123456789012:key/abcd-1234'))
         .to eq('master_key_arn=arn:aws:kms:***:***:key/***')
+    end
+
+    it 'leaves an ARN that is already masked as it is' do
+      details = "master_key_arn=#{sanitizer.arn('arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd')}"
+      expect(sanitizer.config_details(details)).to eq(details)
     end
 
     it 'returns nil for nil' do
