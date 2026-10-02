@@ -40,6 +40,18 @@ jobs:
       - name: Run RuboCop
         run: bundle exec rubocop
 
+  pg-sql-qualification:
+    name: PostgreSQL SQL qualification check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.3'
+      - name: Check internal PostgreSQL SQL is schema-qualified
+        run: ruby .github/scripts/check_pg_sql_qualified.rb
+
   test:
     runs-on: ubuntu-latest
     strategy:
