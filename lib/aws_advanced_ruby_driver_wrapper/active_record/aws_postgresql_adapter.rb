@@ -90,6 +90,14 @@ module ActiveRecord
         super
       end
 
+      # Used by db:drop, db:reset, db:test:prepare and db:purge. ActiveRecord disconnects its own
+      # connections first, but the topology monitor shared by this cluster's connections keeps its own
+      # connections to the database, and PostgreSQL refuses to drop a database other sessions are using.
+      def drop_database(name)
+        raw_connection.stop_topology_monitor
+        super
+      end
+
       def translate_exception(exception, message:, sql:, binds:)
         return super unless exception.is_a?(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
 
