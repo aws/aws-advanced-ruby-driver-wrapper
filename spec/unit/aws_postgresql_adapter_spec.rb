@@ -69,6 +69,45 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
     end
   end
 
+  describe '.new_client' do
+    let(:config) { { host: 'my-cluster.cluster-xyz.us-east-1.rds.amazonaws.com', dbname: 'mydb', user: 'myuser' } }
+
+    def connect_failing_with(message, client_config = config)
+      allow(AwsAdvancedRubyDriverWrapper::WrapperPgConnection).to receive(:new).and_raise(PG::ConnectionBad, message)
+      described_class.new_client(client_config)
+    end
+
+    it 'translates a missing database into NoDatabaseError' do
+      expect { connect_failing_with('FATAL:  database "mydb" does not exist') }.to raise_error(ActiveRecord::NoDatabaseError)
+    end
+
+    it 'translates a failure on the postgres maintenance database into ConnectionNotEstablished' do
+      expect { connect_failing_with('FATAL:  database "postgres" does not exist', config.merge(dbname: 'postgres')) }
+        .to raise_error(ActiveRecord::ConnectionNotEstablished)
+    end
+
+    it 'translates a rejected user into DatabaseConnectionError' do
+      expect { connect_failing_with('FATAL:  password authentication failed for user "myuser"') }
+        .to raise_error(ActiveRecord::DatabaseConnectionError)
+    end
+
+    it 'translates an unreachable host into DatabaseConnectionError' do
+      expect { connect_failing_with("could not translate host name \"#{config[:host]}\" to address") }
+        .to raise_error(ActiveRecord::DatabaseConnectionError)
+    end
+
+    it 'translates any other pg error into ConnectionNotEstablished' do
+      expect { connect_failing_with('server closed the connection unexpectedly') }.to raise_error(ActiveRecord::ConnectionNotEstablished)
+    end
+
+    it 'does not translate wrapper errors' do
+      error = AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError.new('no writer')
+      allow(AwsAdvancedRubyDriverWrapper::WrapperPgConnection).to receive(:new).and_raise(error)
+
+      expect { described_class.new_client(config) }.to raise_error(error)
+    end
+  end
+
   describe '#translate_exception' do
     let(:adapter) { described_class.allocate }
     let(:sql) { 'SELECT 1' }
