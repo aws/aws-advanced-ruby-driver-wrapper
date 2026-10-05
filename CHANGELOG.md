@@ -3,7 +3,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
 
-## [Unreleased]
+## [1.0.1] - 2026-10-07
 
 ### :bug: Fixed
 - Fixed the `aws_postgresql` ActiveRecord adapter passing ActiveRecord-only `database.yml` keys, such as the Rails 8.1 pool settings (`max_connections`, `min_connections`, `keepalive`, `max_age`) and multi-database settings (`replica`, `migrations_paths`, `database_tasks`), to `pg`, which rejected them with `PG::Error: invalid connection option` ([PR #191](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/191)).
@@ -29,4 +29,5 @@ The Amazon Web Services (AWS) Advanced Ruby Driver Wrapper allows an application
 - [Initial Connection Strategy Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/initial-connection-strategy).
 - [KMS Encryption Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption).
 
+[1.0.1]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/1.0.1
 [1.0.0]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/1.0.0
