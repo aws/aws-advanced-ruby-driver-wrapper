@@ -2,6 +2,7 @@
 
 | Release Date       | Release                                                                              |
 |--------------------|--------------------------------------------------------------------------------------|
+| October 5, 2026    | [1.0.0](https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/1.0.0)  |
 
 
 `aws_advanced_ruby_driver_wrapper` [follows semver](https://semver.org/#semantic-versioning-200) which means we
@@ -55,3 +56,4 @@ from the updated source after the PRs are merged.
 
 | Major Version | Latest Minor Version | Status      | Initial Release | Maintenance Window Start | Maintenance Window End |
 |---------------|----------------------|-------------|-----------------|--------------------------|------------------------|
+| 1             | 1.0.0                | Current     | October 5, 2026 | N/A                      | N/A                    |
