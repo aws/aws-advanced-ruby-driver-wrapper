@@ -82,6 +82,9 @@ module ActiveRecord
         return super unless exception.is_a?(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
 
         if exception.needs_reconfiguration
+          # The wrapper has reconnected this connection object to a new physical connection, where the
+          # statements prepared on the old one do not exist. Forget them so they are prepared again.
+          clear_cache!(new_connection: true)
           configure_connection
           exception
         elsif exception.is_a?(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError)

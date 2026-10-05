@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### :bug: Fixed
 - Fixed the `aws_postgresql` ActiveRecord adapter passing ActiveRecord-only `database.yml` keys, such as the Rails 8.1 pool settings (`max_connections`, `min_connections`, `keepalive`, `max_age`) and multi-database settings (`replica`, `migrations_paths`, `database_tasks`), to `pg`, which rejected them with `PG::Error: invalid connection option` ([PR #191](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/191)).
+- Fixed the `aws_postgresql` and `aws_mysql2` ActiveRecord adapters keeping ActiveRecord's prepared statement cache after a successful failover, so every query prepared before the failover failed on that connection with `Method invoked against old connection` until the process restarted ([PR #TBD](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/TBD), [documentation](https://aws.github.io/aws-advanced-wrapper-docs/ruby/enhanced-failover)).
 
 ## [1.0.0] - 2026-10-05
 

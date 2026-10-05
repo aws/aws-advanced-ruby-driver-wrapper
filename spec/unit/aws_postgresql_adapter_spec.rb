@@ -112,6 +112,24 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
       end
     end
 
+    # The wrapper reconnects the same connection object to a new physical connection, so statements
+    # ActiveRecord prepared on the old one no longer exist and must be forgotten before reuse.
+    reconfiguring_errors = [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
+                            AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError]
+    reconfiguring_errors.each do |error_class|
+      context "when exception is a #{error_class.name.split('::').last} and statements were prepared" do
+        it 'forgets the prepared statements before reconfiguring the connection' do
+          calls = []
+          allow(adapter).to receive(:clear_cache!) { |**kwargs| calls << [:clear_cache!, kwargs] }
+          allow(adapter).to receive(:configure_connection) { calls << [:configure_connection] }
+
+          adapter.translate_exception(error_class.new, message: message, sql: sql, binds: binds)
+
+          expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
+        end
+      end
+    end
+
     context 'when exception is a FailoverFailedError' do
       it 'returns a connection error and sets connection_broken' do
         exception = AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError.new('')
