@@ -55,8 +55,20 @@ module ActiveRecord
       def adapter_name = ADAPTER_NAME
 
       # Note that this config includes wrapper properties.
+      #
+      # Translates connection errors the same way the parent adapter does, so ActiveRecord can tell a
+      # missing database (which db:prepare creates) or rejected credentials from other failures.
       def self.new_client(config)
         AwsAdvancedRubyDriverWrapper::WrapperPgConnection.new(**config)
+      rescue ::PG::Error => e
+        dbname, user, host = config.values_at(:dbname, :user, :host)
+        # The postgres maintenance database always exists, so a failure there is not a missing database.
+        raise ActiveRecord::ConnectionNotEstablished, e.message if dbname == 'postgres'
+        raise ActiveRecord::NoDatabaseError.db_error(dbname) if dbname && e.message.include?(dbname)
+        raise ActiveRecord::DatabaseConnectionError.username_error(user) if user && e.message.include?(user)
+        raise ActiveRecord::DatabaseConnectionError.hostname_error(host) if host && e.message.include?(host)
+
+        raise ActiveRecord::ConnectionNotEstablished, e.message
       end
 
       def connect

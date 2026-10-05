@@ -17,20 +17,33 @@
 require 'active_record/connection_adapters/mysql2_adapter'
 require_relative '../mysql'
 require_relative '../errors'
-require_relative '../utils/ar_constants'
 
 module ActiveRecord
   module ConnectionAdapters
     class AwsMysql2Adapter < Mysql2Adapter
       ADAPTER_NAME = 'AwsMySQL2'
 
-      # ActiveRecord-only keys that should not be passed to the wrapper or native driver.
-      AR_ONLY_KEYS = AwsAdvancedRubyDriverWrapper::Utils::AR_COMMON_KEYS
-
       def adapter_name = ADAPTER_NAME
 
+      # Passes the whole config on, as the parent adapter does: the wrapper takes its own properties out,
+      # and mysql2 reads the client options it knows (including the FOUND_ROWS flag the parent adds) and
+      # ignores the ActiveRecord-only keys.
+      #
+      # Translates connection errors the same way the parent adapter does, so ActiveRecord can tell a
+      # missing database (which db:prepare creates) or rejected credentials from other failures.
       def self.new_client(config)
-        AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(**config.except(*AR_ONLY_KEYS))
+        AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(**config)
+      rescue ::Mysql2::Error => e
+        case e.error_number
+        when ER_BAD_DB_ERROR
+          raise ActiveRecord::NoDatabaseError.db_error(config[:database])
+        when ER_DBACCESS_DENIED_ERROR, ER_ACCESS_DENIED_ERROR
+          raise ActiveRecord::DatabaseConnectionError.username_error(config[:username])
+        when ER_CONN_HOST_ERROR, ER_UNKNOWN_HOST_ERROR
+          raise ActiveRecord::DatabaseConnectionError.hostname_error(config[:host])
+        else
+          raise ActiveRecord::ConnectionNotEstablished, e.message
+        end
       end
 
       def connect
