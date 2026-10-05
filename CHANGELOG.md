@@ -7,8 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### :bug: Fixed
 - Fixed the `aws_postgresql` ActiveRecord adapter passing ActiveRecord-only `database.yml` keys, such as the Rails 8.1 pool settings (`max_connections`, `min_connections`, `keepalive`, `max_age`) and multi-database settings (`replica`, `migrations_paths`, `database_tasks`), to `pg`, which rejected them with `PG::Error: invalid connection option` ([PR #191](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/191)).
-- Fixed the `aws_mysql2` ActiveRecord adapter dropping the `flags`, `encoding`, `socket`, and `reconnect` client options, which removed ActiveRecord's `FOUND_ROWS` flag so that statements such as `update_all` reported changed rows instead of matched rows ([PR #192](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/192)).
-- Fixed the `aws_postgresql` and `aws_mysql2` ActiveRecord adapters not translating connection errors the way the standard adapters do, so a missing database was not reported as `ActiveRecord::NoDatabaseError` and `db:prepare` (and `bin/setup`) failed instead of creating it ([PR #192](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/192)).
+- Fixed the `aws_mysql2` ActiveRecord adapter dropping the `flags`, `encoding`, `socket`, and `reconnect` client options, which removed ActiveRecord's `FOUND_ROWS` flag so that statements such as `update_all` reported changed rows instead of matched rows ([PR #193](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/193)).
+- Fixed the `aws_postgresql` and `aws_mysql2` ActiveRecord adapters not translating connection errors the way the standard adapters do, so a missing database was not reported as `ActiveRecord::NoDatabaseError` and `db:prepare` (and `bin/setup`) failed instead of creating it ([PR #193](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/193)).
 
 ## [1.0.0] - 2026-10-05
 
