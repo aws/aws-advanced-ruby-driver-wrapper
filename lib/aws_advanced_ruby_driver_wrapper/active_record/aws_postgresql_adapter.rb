@@ -17,15 +17,11 @@
 require 'active_record/connection_adapters/postgresql_adapter'
 require_relative '../postgresql'
 require_relative '../errors'
-require_relative '../utils/ar_constants'
 
 module ActiveRecord
   module ConnectionAdapters
     class AwsPostgreSQLAdapter < PostgreSQLAdapter
       ADAPTER_NAME = 'AwsPostgreSQL'
-
-      # ActiveRecord-only keys that should not be passed to the wrapper or native driver.
-      AR_ONLY_KEYS = (AwsAdvancedRubyDriverWrapper::Utils::AR_COMMON_KEYS + %i[advisory_locks schema_search_path]).freeze
 
       # ActiveRecord uses :username and :database, but the PG gem expects :user and :dbname.
       # The parent adapter translates these in @connection_parameters, but also strips
@@ -33,16 +29,27 @@ module ActiveRecord
       # to preserve wrapper properties, we need to redo this translation ourselves.
       AR_TO_PG_KEY_MAP = { username: :user, database: :dbname }.freeze
 
+      # The connection options PG accepts, the same set the parent adapter forwards.
+      PG_CONNECTION_KEYS = (PG::Connection.conndefaults_hash.keys + [:requiressl]).to_set.freeze
+
       def initialize(...)
         # Capture the full config before the parent's initialize strips it
         # down to only PG-recognized keys in @connection_parameters.
         super
         @connection_broken = false
-        # Store non-AR parameters in @wrapper_config.
-        wrapper_config = @config.compact.except(*AR_ONLY_KEYS)
+        wrapper_config = @config.compact
         # Remap ActiveRecord key names to PG gem key names.
         AR_TO_PG_KEY_MAP.each { |ar_key, pg_key| wrapper_config[pg_key] = wrapper_config.delete(ar_key) if wrapper_config.key?(ar_key) }
-        @wrapper_config = wrapper_config
+        # Keep only what PG or the wrapper understands. Every other key is an ActiveRecord setting,
+        # and PG rejects any connection option it does not recognize.
+        @wrapper_config = wrapper_config.select { |key, _| self.class.forwarded_key?(key) }
+      end
+
+      # @return [Boolean] whether the config key is passed on to the wrapper connection
+      def self.forwarded_key?(key)
+        PG_CONNECTION_KEYS.include?(key) ||
+          AwsAdvancedRubyDriverWrapper::PropertyDefinition.wrapper_property?(key) ||
+          AwsAdvancedRubyDriverWrapper::PropertyDefinition::KNOWN_PREFIXES.any? { |prefix| key.to_s.start_with?(prefix) }
       end
 
       def adapter_name = ADAPTER_NAME

@@ -19,6 +19,56 @@ require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
 require 'aws_advanced_ruby_driver_wrapper/errors'
 
 RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
+  describe '#connect' do
+    let(:base_config) do
+      { adapter: 'aws_postgresql', host: 'my-cluster.cluster-xyz.us-east-1.rds.amazonaws.com', port: 5432,
+        database: 'mydb', username: 'myuser', password: 'secret' }
+    end
+
+    # Opens a connection with the given database.yml config and returns the config handed to the client.
+    def client_config_for(config)
+      client_config = nil
+      allow(described_class).to receive(:new_client) do |passed|
+        client_config = passed
+        raise ActiveRecord::ConnectionNotEstablished, 'stop before connecting'
+      end
+      expect { described_class.new(config).connect! }.to raise_error(ActiveRecord::ConnectionNotEstablished)
+      client_config
+    end
+
+    it 'does not pass Active Record-only keys to the client' do
+      ar_only = {
+        pool: 5, max_connections: 5, min_connections: 1, keepalive: 60, max_age: 900, checkout_timeout: 5,
+        idle_timeout: 60, reaping_frequency: 60, connection_retries: 1, retry_deadline: 5, replica: true,
+        database_tasks: false, migrations_paths: 'db/cache_migrate', schema_dump: false,
+        schema_cache_path: 'db/schema_cache.yml', use_metadata_table: false, statement_limit: 100,
+        min_messages: 'warning', insert_returning: true, prepared_statements: true, variables: { timezone: 'UTC' },
+        encoding: 'unicode', schema_search_path: 'public', advisory_locks: true, query_cache: 100, timeout: 5000
+      }
+
+      expect(client_config_for(base_config.merge(ar_only)).keys).not_to include(*ar_only.keys)
+    end
+
+    it 'passes pg connection options, mapping the Active Record user and database keys' do
+      config = client_config_for(base_config.merge(sslmode: 'verify-full', connect_timeout: 10, application_name: 'app'))
+
+      expect(config).to include(host: base_config[:host], port: 5432, dbname: 'mydb', user: 'myuser', password: 'secret',
+                                sslmode: 'verify-full', connect_timeout: 10, application_name: 'app')
+      expect(config.keys).not_to include(:username, :database, :adapter)
+    end
+
+    it 'passes wrapper properties and monitoring-prefixed keys' do
+      credentials_provider = Object.new
+      wrapper_props = {
+        wrapper_plugins: 'failover,initial_connection', failover_timeout_sec: 60.0, cluster_id: 'my-cluster',
+        aws_credentials_provider: credentials_provider, topology_monitoring_connect_timeout: 5,
+        bg_monitoring_connect_timeout: 5
+      }
+
+      expect(client_config_for(base_config.merge(wrapper_props))).to include(wrapper_props)
+    end
+  end
+
   describe '#translate_exception' do
     let(:adapter) { described_class.allocate }
     let(:sql) { 'SELECT 1' }
