@@ -14,7 +14,7 @@ concurrency:
 jobs:
   aurora-mysql-performance-tests:
     name: 'Run Aurora MySQL performance tests'
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: 'Clone repository'
