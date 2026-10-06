@@ -351,6 +351,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
       [conn1, conn2, conn3].each { |conn| expect(driver_dialect).to have_received(:abandon_connection).with(conn) }
       expect(driver_dialect).not_to have_received(:close_connection)
       expect(monitor.state).to eq(:stopped)
+      expect(monitor.instance_variable_get(:@monitoring_connection).get).to be_nil
+      expect(monitor.instance_variable_get(:@instance_monitors_writer_conn).get).to be_nil
+      expect(monitor.instance_variable_get(:@instance_monitor_connections)).to be_empty
     end
   end
 

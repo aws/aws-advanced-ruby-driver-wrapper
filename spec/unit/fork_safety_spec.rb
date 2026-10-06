@@ -18,10 +18,12 @@ require 'rspec'
 require 'aws_advanced_ruby_driver_wrapper'
 require 'aws_advanced_ruby_driver_wrapper/monitoring/monitor'
 require 'aws_advanced_ruby_driver_wrapper/services/service_utility'
+require 'aws_advanced_ruby_driver_wrapper/plugins/secrets_manager_plugin'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper, 'after fork' do
   let(:core) { AwsAdvancedRubyDriverWrapper::Services::CoreServices }
   let(:providers) { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin::PROVIDERS }
+  let(:pending_secret_fetches) { AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin.pending_refreshes }
   let(:test_monitor_class) do
     Class.new(AwsAdvancedRubyDriverWrapper::Monitoring::Monitor) do
       attr_reader :closed, :abandoned
@@ -42,11 +44,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper, 'after fork' do
 
   after do
     providers.clear
+    pending_secret_fetches.clear
     core.reset!
   end
 
-  # Runs the block in a forked child and returns its (marshalled) result to the parent.
-  def in_forked_child
+  # Runs the block in a forked child and returns its (marshalled) result to the parent. A child that
+  # hangs is killed after timeout_sec so the suite fails instead of stalling.
+  def in_forked_child(timeout_sec: 10)
     reader, writer = IO.pipe
     pid = fork do
       reader.close
@@ -61,9 +65,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper, 'after fork' do
       exit!(0)
     end
     writer.close
+    unless reader.wait_readable(timeout_sec)
+      Process.kill(:KILL, pid)
+      Process.wait(pid)
+      raise "forked child did not finish within #{timeout_sec}s"
+    end
     result = reader.read
     Process.wait(pid)
+    raise 'forked child exited without returning a result' if result.empty?
+
     Marshal.load(result) # rubocop:disable Security/MarshalLoad
+  ensure
+    reader&.close
   end
 
   def start_test_monitor
@@ -162,6 +175,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper, 'after fork' do
 
     expect(result).to eq(block_ran: true, providers_left: [], good_provider_events: [:release_after_fork],
                          good_monitor_abandoned: true, monitors_left: 0, threads_alive: [true, true, true])
+  end
+
+  it 'forgets Secrets Manager fetches that were in flight at fork time' do
+    in_flight = Concurrent::Promises.resolvable_future
+    pending_secret_fetches['secret-key'] = in_flight
+
+    result = in_forked_child { pending_secret_fetches.keys }
+
+    expect(result).to eq([])
+    expect(pending_secret_fetches['secret-key']).to equal(in_flight)
+  end
+
+  it 'does not start extra background threads when the reset runs again in the same process' do
+    result = in_forked_child do
+      before = Thread.list.count(&:alive?)
+      described_class.after_fork
+      Thread.list.count(&:alive?) - before
+    end
+
+    expect(result).to eq(0)
   end
 
   it "logs instead of failing the application's fork when resetting the wrapper raises" do

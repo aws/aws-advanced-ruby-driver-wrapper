@@ -144,8 +144,11 @@ module AwsAdvancedRubyDriverWrapper
           @cleanup_thread&.join(5)
         end
 
-        # Restarts the cleanup thread in a forked child, where it no longer runs.
+        # Restarts the cleanup thread in a forked child, where it no longer runs. A thread that is
+        # still alive is kept, so calling this again does not start a second one.
         def restart_after_fork
+          return if @cleanup_thread&.alive?
+
           @running.make_true
           @cleanup_thread = start_cleanup_thread(@cleanup_interval)
         end
