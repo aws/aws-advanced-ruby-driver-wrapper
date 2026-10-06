@@ -22,8 +22,6 @@ require_relative 'aws_connection_handler'
 module ActiveRecord
   module ConnectionAdapters
     class AwsPostgreSQLAdapter < PostgreSQLAdapter
-      ADAPTER_NAME = 'AwsPostgreSQL'
-
       # ActiveRecord uses :username and :database, but the PG gem expects :user and :dbname.
       # The parent adapter translates these in @connection_parameters, but also strips
       # non-PG keys (including wrapper properties) via slice!. Since we rebuild from @config
@@ -53,7 +51,8 @@ module ActiveRecord
           AwsAdvancedRubyDriverWrapper::PropertyDefinition::KNOWN_PREFIXES.any? { |prefix| key.to_s.start_with?(prefix) }
       end
 
-      def adapter_name = ADAPTER_NAME
+      # Report the underlying adapter name ("PostgreSQL"), not this wrapper's own name.
+      def adapter_name = self.class.superclass::ADAPTER_NAME
 
       # Note that this config includes wrapper properties.
       #
