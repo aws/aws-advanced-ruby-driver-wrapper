@@ -135,7 +135,10 @@ module AwsAdvancedRubyDriverWrapper
         @monitoring_connection.abandon
         @instance_monitors_writer_conn.abandon
         driver_dialect = @service_container.dialect_service.driver_dialect
-        @instance_monitor_connections.each_value { |conn| driver_dialect.abandon_connection(conn) }
+        @instance_monitor_connections.each_pair do |host, conn|
+          driver_dialect.abandon_connection(conn)
+          @instance_monitor_connections.delete(host)
+        end
       end
 
       private

@@ -81,8 +81,11 @@ module AwsAdvancedRubyDriverWrapper
           @thread&.join(@message_interval_sec)
         end
 
-        # Restarts the publishing thread in a forked child, where it no longer runs.
+        # Restarts the publishing thread in a forked child, where it no longer runs. A thread that is
+        # still alive is kept, so calling this again does not start a second one.
         def restart_after_fork
+          return if @thread&.alive?
+
           @running.make_true
           @thread = start_publishing_thread
         end

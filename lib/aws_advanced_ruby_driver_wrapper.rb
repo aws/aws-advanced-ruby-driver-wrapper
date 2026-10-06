@@ -75,10 +75,12 @@ module AwsAdvancedRubyDriverWrapper
 
   # Runs in a forked child (see ForkHook). Only the forking thread survives a fork, so every background
   # thread is gone and the inherited monitors look alive but never refresh. The monitors and Blue/Green
-  # providers are forgotten without closing their connections, which the parent still uses, and the
-  # shared services restart their threads. Cached data such as topology stays valid and is kept.
+  # providers are forgotten without closing their connections, which the parent still uses, Secrets
+  # Manager fetches that were in flight are forgotten, and the shared services restart their threads.
+  # Cached data such as topology stays valid and is kept.
   def self.after_fork
     Plugins::BlueGreen::BlueGreenPlugin.release_providers_after_fork
+    Plugins::SecretsManagerPlugin.release_pending_refreshes_after_fork if defined?(Plugins::SecretsManagerPlugin)
     return unless defined?(Services::CoreServices)
 
     Services::CoreServices.monitor_service.restart_after_fork

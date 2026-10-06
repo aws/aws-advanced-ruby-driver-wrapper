@@ -126,7 +126,7 @@ module AwsAdvancedRubyDriverWrapper
       # Resets this service in a forked child. Monitor threads do not survive a fork, so the inherited
       # monitors are detached (keeping the parent's connections open) and forgotten, letting
       # run_if_absent start live ones. A monitor that fails to detach is still forgotten. The cleanup
-      # thread is restarted.
+      # thread is restarted unless it is still alive, so calling this again does not start a second one.
       def restart_after_fork
         @lock.synchronize { @caches.values }.each do |container|
           container.cache.entries.each_key do |key|
@@ -135,6 +135,8 @@ module AwsAdvancedRubyDriverWrapper
             logger.warn("Failed to release monitor #{key} after fork: #{e.message}")
           end
         end
+        return if @cleanup_thread&.alive?
+
         @running.make_true
         @cleanup_thread = start_cleanup_thread
       end
