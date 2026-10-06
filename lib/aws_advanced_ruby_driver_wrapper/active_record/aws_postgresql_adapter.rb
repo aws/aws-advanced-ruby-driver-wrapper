@@ -54,6 +54,12 @@ module ActiveRecord
       # Report the underlying adapter name ("PostgreSQL"), not this wrapper's own name.
       def adapter_name = self.class.superclass::ADAPTER_NAME
 
+      # Resolve native database types from the wrapped PostgreSQLAdapter rather than
+      # maintaining a separate memoized copy on this subclass.
+      def self.native_database_types
+        superclass.native_database_types
+      end
+
       # Note that this config includes wrapper properties.
       #
       # Translates connection errors the same way the parent adapter does, so ActiveRecord can tell a
