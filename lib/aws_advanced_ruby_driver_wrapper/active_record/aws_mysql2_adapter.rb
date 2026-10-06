@@ -17,14 +17,12 @@
 require 'active_record/connection_adapters/mysql2_adapter'
 require_relative '../mysql'
 require_relative '../errors'
+require_relative 'type_adapter_alias'
 require_relative 'aws_connection_handler'
 
 module ActiveRecord
   module ConnectionAdapters
     class AwsMysql2Adapter < Mysql2Adapter
-      # Report the underlying adapter name ("Mysql2"), not this wrapper's own name.
-      def adapter_name = self.class.superclass::ADAPTER_NAME
-
       # Passes the whole config on, as the parent adapter does: the wrapper takes its own properties out,
       # and mysql2 reads the client options it knows (including the FOUND_ROWS flag the parent adds) and
       # ignores the ActiveRecord-only keys.

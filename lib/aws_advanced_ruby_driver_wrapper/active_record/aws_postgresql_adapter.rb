@@ -17,6 +17,7 @@
 require 'active_record/connection_adapters/postgresql_adapter'
 require_relative '../postgresql'
 require_relative '../errors'
+require_relative 'type_adapter_alias'
 require_relative 'aws_connection_handler'
 
 module ActiveRecord
@@ -51,13 +52,14 @@ module ActiveRecord
           AwsAdvancedRubyDriverWrapper::PropertyDefinition::KNOWN_PREFIXES.any? { |prefix| key.to_s.start_with?(prefix) }
       end
 
-      # Report the underlying adapter name ("PostgreSQL"), not this wrapper's own name.
-      def adapter_name = self.class.superclass::ADAPTER_NAME
-
-      # Resolve native database types from the wrapped PostgreSQLAdapter rather than
-      # maintaining a separate memoized copy on this subclass.
+      # Resolve native database types from the wrapped PostgreSQLAdapter, overriding only :datetime.
+      # PostgreSQLAdapter builds its type hash from two things: the shared NATIVE_DATABASE_TYPES
+      # constant and the per-class datetime_type class_attribute. Delegating to the parent keeps a
+      # single source of truth, but the parent reads *its own* datetime_type, so this adapter's
+      # datetime_type (e.g. :timestamptz) must be re-applied here or it is silently ignored and
+      # t.datetime columns are created as plain timestamp.
       def self.native_database_types
-        superclass.native_database_types
+        superclass.native_database_types.merge(datetime: NATIVE_DATABASE_TYPES[datetime_type])
       end
 
       # Note that this config includes wrapper properties.
@@ -122,48 +124,9 @@ module ActiveRecord
           exception
         end
       end
-
-      # ActiveRecord's adapter-specific type registry (ActiveRecord::Type) keys every registration by
-      # the *config adapter name*. The vanilla PostgreSQL adapter registers its OID types (:interval,
-      # :point, :uuid, the array/range modifiers, etc.) under adapter: :postgresql, and a lookup uses
-      # model.connection_db_config.adapter.to_sym as the key. Because this adapter's config name is
-      # :aws_postgresql, none of those registrations match and `attribute :x, :interval` (or array/range
-      # columns) raises "Unknown type".
-      #
-      # Mirror every :postgresql registration under :aws_postgresql so the wrapped adapter resolves the
-      # exact same types. Done reflectively (rather than duplicating the hardcoded list) so it stays
-      # correct across Rails versions as the PostgreSQL adapter adds or removes types.
-      def self.mirror_postgresql_types!(target_adapter: :aws_postgresql, source_adapter: :postgresql)
-        registry = ActiveRecord::Type.registry
-        registrations = registry.instance_variable_get(:@registrations)
-        return unless registrations
-
-        return if registrations.any? { |reg| reg.send(:adapter) == target_adapter }
-
-        mirrored = registrations.each_with_object([]) do |reg, acc|
-          # name/adapter/override/block (and DecorationRegistration's options/klass) are protected
-          # readers; read them within this contained reflection.
-          next unless reg.send(:adapter) == source_adapter
-
-          acc << mirror_registration(reg, target_adapter)
-        end
-        registrations.concat(mirrored)
-      end
-
-      def self.mirror_registration(reg, target_adapter)
-        klass = reg.class
-        if reg.is_a?(ActiveRecord::Type::DecorationRegistration)
-          # add_modifier form: options + decorator class.
-          klass.new(reg.send(:options), reg.send(:klass), adapter: target_adapter)
-        else
-          klass.new(reg.send(:name), reg.send(:block), adapter: target_adapter, override: reg.send(:override))
-        end
-      end
     end
   end
 end
-
-ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter.mirror_postgresql_types!
 
 ActiveRecord::ConnectionAdapters.register(
   'aws_postgresql',
