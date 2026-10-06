@@ -49,7 +49,8 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
   # AR connection config pointing at the cluster/instance endpoints through the proxy, with the
   # failover plugin enabled. Wrapper property keys pass through the adapter into the wrapper unchanged.
   # An optional :variables hash is applied by AR's configure_connection via SET SESSION statements.
-  def failover_adapter_config(host:, port:, variables: nil)
+  # :prepared_statements overrides the adapter default (on for PostgreSQL, off for MySQL).
+  def failover_adapter_config(host:, port:, variables: nil, prepared_statements: nil)
     adapter = case drv
               when Integration::TestDriver::PG    then 'aws_postgresql'
               when Integration::TestDriver::MYSQL then 'aws_mysql2'
@@ -70,6 +71,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
         "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}"
     }
     config[:variables] = variables if variables
+    config[:prepared_statements] = prepared_statements unless prepared_statements.nil?
     config
   end
 
@@ -91,10 +93,10 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
     end
   end
 
-  def establish_failover_connection(host:, port:, variables: nil)
+  def establish_failover_connection(host:, port:, variables: nil, prepared_statements: nil)
     ActiveRecord::Base.connection_handler.clear_all_connections!
     ActiveRecord::Base.establish_connection(
-      failover_adapter_config(host: host, port: port, variables: variables)
+      failover_adapter_config(host: host, port: port, variables: variables, prepared_statements: prepared_statements)
     )
   end
 
@@ -187,6 +189,34 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
       # default. Since the failover plugin does not restore arbitrary session variables itself, this is
       # end-to-end proof that the adapter's configure_connection re-applied session state after failover.
       expect(adapter.select_value(probe[:read_sql])).to eq(probe[:expected])
+    end
+
+    it 'runs queries ActiveRecord prepared before failover again on the new writer',
+       features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
+      enable_on_num_instances(min_instances: 2)
+
+      establish_failover_connection(
+        host: proxy_info.cluster_endpoint, port: proxy_info.cluster_endpoint_port, prepared_statements: true
+      )
+      conn = ActiveRecord::Base.connection
+      conn.execute('DROP TABLE IF EXISTS ar_test_failover_prepared')
+      conn.execute('CREATE TABLE ar_test_failover_prepared (id int not null primary key, val varchar(255) not null)')
+      conn.execute("INSERT INTO ar_test_failover_prepared VALUES (1, 'value1')")
+      model = Class.new(ActiveRecord::Base) { self.table_name = 'ar_test_failover_prepared' }
+      expect(conn.prepared_statements?).to be true
+
+      # A query with binds, which ActiveRecord prepares once and then reuses by statement name.
+      expect(model.find(1).val).to eq('value1')
+
+      rds_util.crash_instance(current_writer)
+      expect { model.find(1) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError)
+
+      # The statement prepared before failover existed only on the old physical connection. The same
+      # query must be prepared again on the new writer rather than failing on every later attempt.
+      3.times { expect(model.find(1).val).to eq('value1') }
+      expect(Integration::RetryHelper.verify_writer(rds_util, current_instance_id)).to be true
+    ensure
+      ActiveRecord::Base.connection.execute('DROP TABLE IF EXISTS ar_test_failover_prepared')
     end
 
     it 'raises TransactionStateUnknownError and loses the open transaction when failover happens mid-transaction',
