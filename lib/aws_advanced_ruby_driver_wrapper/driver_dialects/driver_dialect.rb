@@ -115,6 +115,11 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # Releases a connection inherited from the parent process after a fork, without telling the
+      # server: the parent still owns the session. Garbage collection or process exit in the child
+      # must not end it.
+      def abandon_connection(connection); end
+
       def sql_state(_exception)
         nil
       end

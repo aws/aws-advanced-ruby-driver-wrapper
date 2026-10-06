@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+require 'concurrent'
 require_relative '../../logging'
 
 module AwsAdvancedRubyDriverWrapper
@@ -23,10 +24,11 @@ module AwsAdvancedRubyDriverWrapper
       # Batches deduplicate events via Set semantics (eql?/hash).
       #
       # Public API:
-      #   subscribe(subscriber, event_classes) — register for event types
-      #   unsubscribe(subscriber, event_classes) — deregister
-      #   publish(event) — deliver immediate or queue batched
-      #   release_resources — stop background thread
+      #   subscribe(subscriber, event_classes) - register for event types
+      #   unsubscribe(subscriber, event_classes) - deregister
+      #   publish(event) - deliver immediate or queue batched
+      #   release_resources - stop background thread
+      #   restart_after_fork - restart background thread in a forked child
       class BatchingEventPublisher
         include Logging
 
@@ -37,7 +39,7 @@ module AwsAdvancedRubyDriverWrapper
           @subscribers = {}
           @event_queue = Set.new
           @lock = Mutex.new
-          @running = true
+          @running = Concurrent::AtomicBoolean.new(true)
           @thread = start_publishing_thread
         end
 
@@ -70,7 +72,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def release_resources
-          @lock.synchronize { @running = false }
+          @running.make_false
           begin
             @thread&.wakeup
           rescue ThreadError
@@ -79,11 +81,20 @@ module AwsAdvancedRubyDriverWrapper
           @thread&.join(@message_interval_sec)
         end
 
+        # Restarts the publishing thread in a forked child, where it no longer runs. A thread that is
+        # still alive is kept, so calling this again does not start a second one.
+        def restart_after_fork
+          return if @thread&.alive?
+
+          @running.make_true
+          @thread = start_publishing_thread
+        end
+
         private
 
         def start_publishing_thread
           thread = Thread.new do
-            while @lock.synchronize { @running }
+            while @running.true?
               sleep(@message_interval_sec)
               send_messages
             end

@@ -79,6 +79,12 @@ module AwsAdvancedRubyDriverWrapper
           storage_service.clear(SECRETS_MANAGER_CACHE_NAME)
         end
 
+        # Forgets fetches inherited by a forked child. A fetch running at fork time lost its thread,
+        # so its future never resolves and would otherwise be returned to every later fetch for its key.
+        def release_pending_refreshes_after_fork
+          @pending_refreshes.clear
+        end
+
         # The secret's value depends on which secret is read, from which region and endpoint, and
         # with which AWS credentials, so all of them are part of the key. Connections that differ in
         # any of them neither share a cached secret nor wait on each other's fetch.
@@ -244,7 +250,9 @@ module AwsAdvancedRubyDriverWrapper
           else
             Concurrent::Promises.future_on(:io) { fetch_and_store_secret(nil, credentials) }
           end
-        future.value!(SYNC_FETCH_TIMEOUT_SEC)
+        # value! returns nil instead of raising when the timeout elapses; a completed fetch always
+        # returns an entry or raises.
+        future.value!(SYNC_FETCH_TIMEOUT_SEC) || raise(Timeout::Error)
       rescue Concurrent::CancelledOperationError, Timeout::Error
         raise Errors::SecretsManagerAuthError,
               "Timed out fetching secret after #{SYNC_FETCH_TIMEOUT_SEC}s"

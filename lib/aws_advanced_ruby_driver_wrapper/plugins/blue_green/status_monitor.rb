@@ -338,6 +338,10 @@ module AwsAdvancedRubyDriverWrapper
           @event.reset
         end
 
+        def abandon_connections
+          @connection.abandon
+        end
+
         private
 
         def attempt_open_connection

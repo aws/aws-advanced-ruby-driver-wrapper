@@ -73,6 +73,38 @@ module AwsAdvancedRubyDriverWrapper
     Services::HostService.clear_id_cache
   end
 
+  # Runs in a forked child (see ForkHook). Only the forking thread survives a fork, so every background
+  # thread is gone and the inherited monitors look alive but never refresh. The monitors and Blue/Green
+  # providers are forgotten without closing their connections, which the parent still uses, Secrets
+  # Manager fetches that were in flight are forgotten, and the shared services restart their threads.
+  # Cached data such as topology stays valid and is kept.
+  def self.after_fork
+    Plugins::BlueGreen::BlueGreenPlugin.release_providers_after_fork
+    Plugins::SecretsManagerPlugin.release_pending_refreshes_after_fork if defined?(Plugins::SecretsManagerPlugin)
+    return unless defined?(Services::CoreServices)
+
+    Services::CoreServices.monitor_service.restart_after_fork
+    Services::CoreServices.event_publisher.restart_after_fork
+    Services::CoreServices.storage_service.restart_after_fork
+  end
+
+  # Process._fork is the single entry point for Kernel#fork, Process.fork and IO.popen('-'), so
+  # hooking it covers every way an application server or job runner forks a worker. An error in the
+  # child is logged rather than raised: raising here would fail the application's own fork call.
+  module ForkHook
+    def _fork
+      pid = super
+      if pid.zero?
+        begin
+          AwsAdvancedRubyDriverWrapper.after_fork
+        rescue StandardError => e
+          AwsAdvancedRubyDriverWrapper.logger.error("Failed to reset the wrapper's background services after fork: #{e.message}")
+        end
+      end
+      pid
+    end
+  end
+
   def self.release_resources(grace_period_sec: 5)
     require_relative 'aws_advanced_ruby_driver_wrapper/services/service_utility'
     Services::CoreServices.monitor_service.shutdown(grace_period: grace_period_sec)
@@ -87,6 +119,8 @@ end
 %w[TERM INT].each { |signal| trap(signal) { exit(0) } }
 
 at_exit { AwsAdvancedRubyDriverWrapper.shutdown }
+
+Process.singleton_class.prepend(AwsAdvancedRubyDriverWrapper::ForkHook)
 
 # Register adapters with ActiveRecord via a lazy-load hook so the require order between this file and
 # ActiveRecord does not matter. The block runs the first time ActiveRecord::Base is referenced, whether

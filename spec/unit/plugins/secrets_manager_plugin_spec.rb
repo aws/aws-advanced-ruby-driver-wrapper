@@ -445,6 +445,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
     end
   end
 
+  describe 'fetch timeout' do
+    it 'raises an auth error instead of returning no secret when the fetch does not finish in time' do
+      stub_const("#{described_class}::SYNC_FETCH_TIMEOUT_SEC", 0.05)
+      allow(mock_sm_client).to receive(:get_secret_value) do
+        sleep(0.5)
+        secret_response
+      end
+
+      expect { build_plugin.connect(host_info, Concurrent::Map.new, true, -> {}) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::SecretsManagerAuthError, /Timed out fetching secret/)
+    end
+  end
+
+  describe '.release_pending_refreshes_after_fork' do
+    it 'forgets in-flight fetches so a later fetch for the same key starts a new one' do
+      stuck = Concurrent::Promises.resolvable_future
+      described_class.pending_refreshes['some-key'] = stuck
+
+      described_class.release_pending_refreshes_after_fork
+
+      expect(described_class.pending_refreshes).to be_empty
+    end
+  end
+
   describe 'thundering herd protection' do
     it 'deduplicates concurrent fetches for the same key' do
       call_count = Concurrent::AtomicFixnum.new(0)

@@ -73,6 +73,20 @@ module AwsAdvancedRubyDriverWrapper
 
       def close; end
 
+      # Detaches this monitor in a forked child. Its thread did not survive the fork and its
+      # connections still belong to the parent, so the thread reference is dropped and the
+      # connections are abandoned rather than closed: closing them would end the parent's sessions.
+      def release_after_fork
+        @stop_flag.make_true
+        @thread = nil
+        @state.set(MonitorState::STOPPED)
+        abandon_connections
+      end
+
+      # Releases connections inherited from the parent process without closing them on the server.
+      # Subclasses that hold connections override this.
+      def abandon_connections; end
+
       private
 
       def run
