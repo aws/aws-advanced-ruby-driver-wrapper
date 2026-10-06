@@ -130,6 +130,16 @@ module AwsAdvancedRubyDriverWrapper
           PROVIDERS.each_key { |k| PROVIDERS.delete(k)&.stop }
         end
 
+        # Forgets the providers inherited by a forked child so the child starts its own on first use.
+        # A provider that fails to release is still forgotten, and the rest are released.
+        def self.release_providers_after_fork
+          PROVIDERS.each_key do |key|
+            PROVIDERS.delete(key)&.release_after_fork
+          rescue StandardError => e
+            AwsAdvancedRubyDriverWrapper.logger.warn("Failed to release Blue/Green status provider #{key} after fork: #{e.message}")
+          end
+        end
+
         private
 
         def route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: false)

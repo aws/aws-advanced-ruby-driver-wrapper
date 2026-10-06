@@ -93,6 +93,11 @@ module AwsAdvancedRubyDriverWrapper
           @monitors.each_value { |m| m&.stop }
         end
 
+        # Detaches the monitors inherited by a forked child without closing the parent's connections.
+        def release_after_fork
+          @monitors.each_value { |m| m&.release_after_fork }
+        end
+
         def log_switchover_final_summary
           return unless switchover_finalized?
 

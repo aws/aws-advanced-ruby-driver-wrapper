@@ -123,4 +123,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::MonitorConnection do
       expect { monitor_connection.close }.not_to raise_error
     end
   end
+
+  describe '#abandon' do
+    it 'abandons the connection through the driver dialect without closing it' do
+      allow(mock_driver_dialect).to receive(:abandon_connection)
+      monitor_connection.set(conn1)
+      monitor_connection.abandon
+      expect(mock_driver_dialect).to have_received(:abandon_connection).with(conn1)
+      expect(mock_driver_dialect).not_to have_received(:close_connection)
+    end
+
+    it 'drops the reference so a later close does not reach the abandoned connection' do
+      allow(mock_driver_dialect).to receive(:abandon_connection)
+      allow(mock_driver_dialect).to receive(:close_connection)
+      monitor_connection.set(conn1)
+      monitor_connection.abandon
+      monitor_connection.close
+
+      expect(monitor_connection.get).to be_nil
+      expect(mock_driver_dialect).not_to have_received(:close_connection)
+    end
+  end
 end
