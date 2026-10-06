@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'concurrent'
 require_relative '../monitoring/monitor_state'
 require_relative '../logging'
 require_relative '../utils/storage/sliding_expiration_cache'
@@ -36,7 +37,7 @@ module AwsAdvancedRubyDriverWrapper
       def initialize(event_publisher:)
         @caches = {}
         @lock = Mutex.new
-        @running = true
+        @running = Concurrent::AtomicBoolean.new(true)
         @cleanup_thread = start_cleanup_thread
         event_publisher.subscribe(
           self,
@@ -112,7 +113,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def shutdown(grace_period:)
-        @running = false
+        @running.make_false
         begin
           @cleanup_thread&.wakeup
         rescue ThreadError
@@ -124,12 +125,17 @@ module AwsAdvancedRubyDriverWrapper
 
       # Resets this service in a forked child. Monitor threads do not survive a fork, so the inherited
       # monitors are detached (keeping the parent's connections open) and forgotten, letting
-      # run_if_absent start live ones. The cleanup thread is restarted.
+      # run_if_absent start live ones. A monitor that fails to detach is still forgotten. The cleanup
+      # thread is restarted.
       def restart_after_fork
         @lock.synchronize { @caches.values }.each do |container|
-          container.cache.entries.each_key { |key| container.cache.remove(key)&.release_after_fork }
+          container.cache.entries.each_key do |key|
+            container.cache.remove(key)&.release_after_fork
+          rescue StandardError => e
+            logger.warn("Failed to release monitor #{key} after fork: #{e.message}")
+          end
         end
-        @running = true
+        @running.make_true
         @cleanup_thread = start_cleanup_thread
       end
 
@@ -153,7 +159,7 @@ module AwsAdvancedRubyDriverWrapper
 
       def start_cleanup_thread
         thread = Thread.new do
-          while @running
+          while @running.true?
             sleep(CLEANUP_INTERVAL_SEC)
             run_cleanup
           end
