@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+require 'concurrent'
 require_relative '../../logging'
 
 module AwsAdvancedRubyDriverWrapper
@@ -38,7 +39,7 @@ module AwsAdvancedRubyDriverWrapper
           @subscribers = {}
           @event_queue = Set.new
           @lock = Mutex.new
-          @running = true
+          @running = Concurrent::AtomicBoolean.new(true)
           @thread = start_publishing_thread
         end
 
@@ -71,7 +72,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def release_resources
-          @lock.synchronize { @running = false }
+          @running.make_false
           begin
             @thread&.wakeup
           rescue ThreadError
@@ -82,7 +83,7 @@ module AwsAdvancedRubyDriverWrapper
 
         # Restarts the publishing thread in a forked child, where it no longer runs.
         def restart_after_fork
-          @lock.synchronize { @running = true }
+          @running.make_true
           @thread = start_publishing_thread
         end
 
@@ -90,7 +91,7 @@ module AwsAdvancedRubyDriverWrapper
 
         def start_publishing_thread
           thread = Thread.new do
-            while @lock.synchronize { @running }
+            while @running.true?
               sleep(@message_interval_sec)
               send_messages
             end
