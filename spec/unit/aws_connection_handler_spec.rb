@@ -26,20 +26,22 @@ RSpec.describe 'ActiveRecord::ConnectionAdapters::AwsConnectionHandler' do
   let(:monitor_service) { AwsAdvancedRubyDriverWrapper::Services::CoreServices.monitor_service }
   let(:storage) { AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service }
   let(:topology) { AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider::TOPOLOGY_CACHE_NAME }
+  let(:blue_green) { AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin }
   let(:pool) { double('pool') }
   let(:calls) { [] }
 
   before do
     allow(pool).to receive(:disconnect!) { calls << :disconnect_pool }
     allow(monitor_service).to receive(:stop_and_remove_all) { calls << :stop_monitors }
+    allow(blue_green).to receive(:clean_up_providers) { calls << :stop_blue_green_providers }
   end
 
-  it 'stops the wrapper monitors after clearing all connections' do
+  it 'stops the wrapper monitors and Blue/Green status providers after clearing all connections' do
     allow(handler).to receive(:each_connection_pool).with(nil).and_return([pool])
 
     handler.clear_all_connections!
 
-    expect(calls).to eq(%i[disconnect_pool stop_monitors])
+    expect(calls).to eq(%i[disconnect_pool stop_monitors stop_blue_green_providers])
   end
 
   it 'clears the cached topology so the next connection starts a new monitor' do
@@ -52,8 +54,18 @@ RSpec.describe 'ActiveRecord::ConnectionAdapters::AwsConnectionHandler' do
     expect(storage.get(topology, 'my-cluster', register_access: false)).to be_nil
   end
 
-  it 'does not fail when no wrapper connection has registered the topology cache' do
-    allow(storage).to receive(:registered?).with(topology).and_return(false)
+  it 'clears the cached Blue/Green status so the next connection starts a new provider' do
+    storage.register(blue_green::BLUE_GREEN_NAME, ttl: 3600)
+    storage.set(blue_green::BLUE_GREEN_NAME, '1', :status)
+    allow(handler).to receive(:each_connection_pool).with(nil).and_return([pool])
+
+    handler.clear_all_connections!
+
+    expect(storage.get(blue_green::BLUE_GREEN_NAME, '1', register_access: false)).to be_nil
+  end
+
+  it 'does not fail when no wrapper connection has registered the caches' do
+    allow(storage).to receive(:registered?).and_return(false)
     allow(storage).to receive(:clear)
     allow(handler).to receive(:each_connection_pool).with(nil).and_return([pool])
 
@@ -66,7 +78,7 @@ RSpec.describe 'ActiveRecord::ConnectionAdapters::AwsConnectionHandler' do
 
     handler.clear_all_connections!(:all)
 
-    expect(calls).to eq(%i[disconnect_pool stop_monitors])
+    expect(calls).to eq(%i[disconnect_pool stop_monitors stop_blue_green_providers])
   end
 
   it 'does not stop the monitors when only idle connections are flushed' do

@@ -111,7 +111,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
   describe '#drop_database' do
     # DROP DATABASE fails while any other session is connected to the database, and the topology monitor
     # keeps connections to the database it was created for after ActiveRecord has disconnected.
-    it 'stops the topology monitor before dropping the database' do
+    it 'stops the topology monitor and Blue/Green status providers before dropping the database' do
       adapter = described_class.allocate
       wrapper_connection = instance_double(AwsAdvancedRubyDriverWrapper::WrapperPgConnection)
       calls = []
@@ -119,10 +119,11 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
       allow(wrapper_connection).to receive(:stop_topology_monitor) { calls << :stop_topology_monitor }
       allow(adapter).to receive(:quote_table_name) { |name| %("#{name}") }
       allow(adapter).to receive(:execute) { |sql| calls << sql }
+      allow(AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin).to receive(:clean_up_providers) { calls << :stop_blue_green_providers }
 
       adapter.drop_database('mydb')
 
-      expect(calls).to eq([:stop_topology_monitor, 'DROP DATABASE IF EXISTS "mydb"'])
+      expect(calls).to eq([:stop_topology_monitor, :stop_blue_green_providers, 'DROP DATABASE IF EXISTS "mydb"'])
     end
   end
 

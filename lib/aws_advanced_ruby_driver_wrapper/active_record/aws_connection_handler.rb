@@ -17,11 +17,12 @@
 require 'active_record'
 require_relative '../services/service_utility'
 require_relative '../host/rds_host_list_provider'
+require_relative '../plugins/blue_green/blue_green_plugin'
 
 module ActiveRecord
   module ConnectionAdapters
-    # Stops the wrapper's background monitors when ActiveRecord closes every connection pool, and forgets the
-    # cached topology so that the next connection starts a new monitor straight away.
+    # Stops the wrapper's background monitors and Blue/Green status providers when ActiveRecord closes every
+    # connection pool, and forgets the state they cached, so that the next connection starts new ones straight away.
     #
     # The monitors keep their own connections to the database, outside ActiveRecord's pools. Closing
     # everything is what ActiveRecord does before another process takes over the database, for example
@@ -33,9 +34,11 @@ module ActiveRecord
         super
         core = AwsAdvancedRubyDriverWrapper::Services::CoreServices
         core.monitor_service.stop_and_remove_all
-        # Without this, connections would keep reading the cached topology with no monitor refreshing it.
-        topology = AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider::TOPOLOGY_CACHE_NAME
-        core.storage_service.clear(topology) if core.storage_service.registered?(topology)
+        AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin.clean_up_providers
+        # Without this, connections would keep reading cached state that nothing refreshes any more.
+        cached = [AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider::TOPOLOGY_CACHE_NAME,
+                  AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin::BLUE_GREEN_NAME]
+        cached.each { |name| core.storage_service.clear(name) if core.storage_service.registered?(name) }
       end
     end
 
