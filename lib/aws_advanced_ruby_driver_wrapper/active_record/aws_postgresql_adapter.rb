@@ -117,9 +117,46 @@ module ActiveRecord
           exception
         end
       end
+
+      # ActiveRecord's adapter-specific type registry (ActiveRecord::Type) keys every registration by
+      # the *config adapter name*. The vanilla PostgreSQL adapter registers its OID types (:interval,
+      # :point, :uuid, the array/range modifiers, etc.) under adapter: :postgresql, and a lookup uses
+      # model.connection_db_config.adapter.to_sym as the key. Because this adapter's config name is
+      # :aws_postgresql, none of those registrations match and `attribute :x, :interval` (or array/range
+      # columns) raises "Unknown type".
+      #
+      # Mirror every :postgresql registration under :aws_postgresql so the wrapped adapter resolves the
+      # exact same types. Done reflectively (rather than duplicating the hardcoded list) so it stays
+      # correct across Rails versions as the PostgreSQL adapter adds or removes types.
+      def self.mirror_postgresql_types!(target_adapter: :aws_postgresql, source_adapter: :postgresql)
+        registry = ActiveRecord::Type.registry
+        registrations = registry.instance_variable_get(:@registrations)
+        return unless registrations
+
+        mirrored = registrations.each_with_object([]) do |reg, acc|
+          # name/adapter/override/block (and DecorationRegistration's options/klass) are protected
+          # readers; read them within this contained reflection.
+          next unless reg.send(:adapter) == source_adapter
+
+          acc << mirror_registration(reg, target_adapter)
+        end
+        mirrored.each { |reg| registrations << reg unless registrations.include?(reg) }
+      end
+
+      def self.mirror_registration(reg, target_adapter)
+        klass = reg.class
+        if klass.name.end_with?('DecorationRegistration')
+          # add_modifier form: options + decorator class.
+          klass.new(reg.send(:options), reg.send(:klass), adapter: target_adapter)
+        else
+          klass.new(reg.send(:name), reg.send(:block), adapter: target_adapter, override: reg.send(:override))
+        end
+      end
     end
   end
 end
+
+ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter.mirror_postgresql_types!
 
 ActiveRecord::ConnectionAdapters.register(
   'aws_postgresql',
