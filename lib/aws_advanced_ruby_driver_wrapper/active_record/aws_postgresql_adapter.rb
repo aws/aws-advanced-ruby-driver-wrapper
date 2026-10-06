@@ -138,6 +138,8 @@ module ActiveRecord
         registrations = registry.instance_variable_get(:@registrations)
         return unless registrations
 
+        return if registrations.any? { |reg| reg.send(:adapter) == target_adapter }
+
         mirrored = registrations.each_with_object([]) do |reg, acc|
           # name/adapter/override/block (and DecorationRegistration's options/klass) are protected
           # readers; read them within this contained reflection.
@@ -145,12 +147,12 @@ module ActiveRecord
 
           acc << mirror_registration(reg, target_adapter)
         end
-        mirrored.each { |reg| registrations << reg unless registrations.include?(reg) }
+        registrations.concat(mirrored)
       end
 
       def self.mirror_registration(reg, target_adapter)
         klass = reg.class
-        if klass.name.end_with?('DecorationRegistration')
+        if reg.is_a?(ActiveRecord::Type::DecorationRegistration)
           # add_modifier form: options + decorator class.
           klass.new(reg.send(:options), reg.send(:klass), adapter: target_adapter)
         else
