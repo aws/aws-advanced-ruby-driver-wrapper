@@ -13,7 +13,7 @@ permissions:
 jobs:
   default-integration-tests:
     name: Run Integration Tests (Ruby 3.3, RDS default)
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,7 +64,7 @@ jobs:
 
   latest-integration-tests:
     name: Run Integration Tests (Ruby 4.0, RDS latest)
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     strategy:
       fail-fast: false
       matrix:
@@ -115,7 +115,7 @@ jobs:
 
   multi-az-integration-tests:
     name: Run Multi-AZ Cluster Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
     strategy:
       fail-fast: false

@@ -13,7 +13,7 @@ permissions:
 jobs:
   bg-integration-tests:
     name: BG Integration Tests (${{ matrix.testTask }})
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
     strategy:
       fail-fast: false

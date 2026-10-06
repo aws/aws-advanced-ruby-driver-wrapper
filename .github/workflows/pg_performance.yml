@@ -10,7 +10,7 @@ permissions:
 jobs:
   aurora-pg-performance-tests:
     name: 'Run Aurora PostgreSQL performance tests'
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: 'Clone repository'

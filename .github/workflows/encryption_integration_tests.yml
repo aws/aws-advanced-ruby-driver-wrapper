@@ -19,7 +19,7 @@ concurrency:
 jobs:
   kms-key:
     name: Find or create the test KMS key
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     outputs:
       key_id: ${{ steps.kms.outputs.key_id }}
 
@@ -62,7 +62,7 @@ jobs:
   encryption-integration-tests:
     name: Run KMS Encryption Integration Tests
     needs: kms-key
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     strategy:
       fail-fast: false
       matrix:

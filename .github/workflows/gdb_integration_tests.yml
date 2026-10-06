@@ -13,7 +13,7 @@ permissions:
 jobs:
   gdb-integration-tests:
     name: GDB Integration Tests (${{ matrix.environment }})
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
