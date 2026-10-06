@@ -52,6 +52,11 @@ module AwsAdvancedRubyDriverWrapper
       def close
         set(nil)
       end
+
+      # Releases a connection inherited across a fork without closing it on the server.
+      def abandon
+        @driver_dialect.abandon_connection(get)
+      end
     end
   end
 end

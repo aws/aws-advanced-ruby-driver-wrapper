@@ -336,6 +336,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
     end
   end
 
+  describe '#release_after_fork' do
+    it 'abandons every connection without closing any' do
+      allow(driver_dialect).to receive(:abandon_connection)
+      conn1 = instance_double('Connection')
+      conn2 = instance_double('Connection')
+      conn3 = instance_double('Connection')
+      monitor.instance_variable_get(:@monitoring_connection).set(conn1, close_old: false)
+      monitor.instance_variable_get(:@instance_monitors_writer_conn).set(conn2, close_old: false)
+      monitor.instance_variable_get(:@instance_monitor_connections)['reader-1'] = conn3
+
+      monitor.release_after_fork
+
+      [conn1, conn2, conn3].each { |conn| expect(driver_dialect).to have_received(:abandon_connection).with(conn) }
+      expect(driver_dialect).not_to have_received(:close_connection)
+      expect(monitor.state).to eq(:stopped)
+    end
+  end
+
   describe 'stable reader topologies' do
     it 'accepts topology when all readers agree for the required duration' do
       # Simulate reader topologies being stored

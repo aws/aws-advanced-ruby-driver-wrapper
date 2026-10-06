@@ -27,6 +27,7 @@ module AwsAdvancedRubyDriverWrapper
       #   unsubscribe(subscriber, event_classes) — deregister
       #   publish(event) — deliver immediate or queue batched
       #   release_resources — stop background thread
+      #   restart_after_fork - restart background thread in a forked child
       class BatchingEventPublisher
         include Logging
 
@@ -77,6 +78,12 @@ module AwsAdvancedRubyDriverWrapper
             nil
           end
           @thread&.join(@message_interval_sec)
+        end
+
+        # Restarts the publishing thread in a forked child, where it no longer runs.
+        def restart_after_fork
+          @lock.synchronize { @running = true }
+          @thread = start_publishing_thread
         end
 
         private

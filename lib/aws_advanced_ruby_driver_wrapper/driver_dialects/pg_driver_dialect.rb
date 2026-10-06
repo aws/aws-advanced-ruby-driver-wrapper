@@ -162,6 +162,16 @@ module AwsAdvancedRubyDriverWrapper
         logger.error("Failed to close PostgreSQL connection: #{e.message}")
       end
 
+      # Points the socket at /dev/null, so the Terminate message libpq sends when the connection
+      # is finished or collected never reaches the server.
+      def abandon_connection(connection)
+        return if connection.nil? || connection.finished?
+
+        connection.socket_io.reopen(IO::NULL)
+      rescue StandardError => e
+        logger.debug("Failed to abandon PostgreSQL connection: #{e.message}")
+      end
+
       def sql_state(exception)
         return nil unless exception.is_a?(::PG::Error) && exception.result
 

@@ -122,6 +122,17 @@ module AwsAdvancedRubyDriverWrapper
         stop_and_remove_all
       end
 
+      # Resets this service in a forked child. Monitor threads do not survive a fork, so the inherited
+      # monitors are detached (keeping the parent's connections open) and forgotten, letting
+      # run_if_absent start live ones. The cleanup thread is restarted.
+      def restart_after_fork
+        @lock.synchronize { @caches.values }.each do |container|
+          container.cache.entries.each_key { |key| container.cache.remove(key)&.release_after_fork }
+        end
+        @running = true
+        @cleanup_thread = start_cleanup_thread
+      end
+
       # Processes events from the event publisher.
       # @param event [Event] the event to process.
       def process_event(event)

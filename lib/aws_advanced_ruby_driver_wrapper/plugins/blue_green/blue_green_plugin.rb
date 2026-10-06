@@ -130,6 +130,11 @@ module AwsAdvancedRubyDriverWrapper
           PROVIDERS.each_key { |k| PROVIDERS.delete(k)&.stop }
         end
 
+        # Forgets the providers inherited by a forked child so the child starts its own on first use.
+        def self.release_providers_after_fork
+          PROVIDERS.each_key { |k| PROVIDERS.delete(k)&.release_after_fork }
+        end
+
         private
 
         def route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: false)

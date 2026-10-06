@@ -35,6 +35,7 @@ module AwsAdvancedRubyDriverWrapper
           @event_publisher = event_publisher
           @lock = Mutex.new
           @running = true
+          @cleanup_interval = cleanup_interval
           @cleanup_thread = start_cleanup_thread(cleanup_interval)
         end
 
@@ -140,6 +141,12 @@ module AwsAdvancedRubyDriverWrapper
             nil
           end
           @cleanup_thread&.join(5)
+        end
+
+        # Restarts the cleanup thread in a forked child, where it no longer runs.
+        def restart_after_fork
+          @running = true
+          @cleanup_thread = start_cleanup_thread(@cleanup_interval)
         end
 
         private

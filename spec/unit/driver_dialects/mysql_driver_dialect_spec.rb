@@ -128,6 +128,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
   end
 
+  describe '#abandon_connection' do
+    it 'turns off automatic_close instead of closing the connection' do
+      allow(connection).to receive(:closed?).and_return(false)
+      expect(connection).to receive(:automatic_close=).with(false)
+      expect(connection).not_to receive(:close)
+      dialect.abandon_connection(connection)
+    end
+  end
+
   describe '#sql_state' do
     it 'extracts sql_state from exception' do
       exception = double(sql_state: '42S02')
