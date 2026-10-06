@@ -17,6 +17,7 @@
 require 'active_record/connection_adapters/postgresql_adapter'
 require_relative '../postgresql'
 require_relative '../errors'
+require_relative 'aws_connection_handler'
 
 module ActiveRecord
   module ConnectionAdapters
@@ -87,6 +88,16 @@ module ActiveRecord
       def active?
         return false if @connection_broken
 
+        super
+      end
+
+      # Used by db:drop, db:reset, db:test:prepare and db:purge. ActiveRecord disconnects its own
+      # connections first, but the topology monitor shared by this cluster's connections, and the Blue/Green
+      # status providers, keep their own connections to the database, and PostgreSQL refuses to drop a
+      # database other sessions are using.
+      def drop_database(name)
+        raw_connection.stop_topology_monitor
+        AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin.clean_up_providers
         super
       end
 

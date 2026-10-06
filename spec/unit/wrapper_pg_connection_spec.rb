@@ -525,6 +525,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
     end
   end
 
+  describe '#stop_topology_monitor' do
+    it 'stops the topology monitor of the host list provider without calling the plugins' do
+      provider = double('host_list_provider', stop_monitor: nil)
+      host_service = double('host_service', host_list_provider: provider)
+      wrapper = build_wrapper(double('service_container', host_service: host_service))
+
+      wrapper.stop_topology_monitor
+
+      expect(provider).to have_received(:stop_monitor)
+    end
+  end
+
   describe '#reset' do
     let(:session_state_service) { AwsAdvancedRubyDriverWrapper::Services::SessionStateService.new }
 

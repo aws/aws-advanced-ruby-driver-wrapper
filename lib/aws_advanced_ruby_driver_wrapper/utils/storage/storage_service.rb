@@ -107,6 +107,12 @@ module AwsAdvancedRubyDriverWrapper
           fetch_cache!(name).remove(key)
         end
 
+        # @param name [Symbol] cache name.
+        # @return [Boolean] whether a cache is registered under the name
+        def registered?(name)
+          @lock.synchronize { @caches.key?(name) }
+        end
+
         # Clears all items for a given name.
         # @param name [Symbol] registered cache name.
         def clear(name)

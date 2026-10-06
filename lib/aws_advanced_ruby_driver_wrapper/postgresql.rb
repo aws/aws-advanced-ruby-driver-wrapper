@@ -224,6 +224,14 @@ module AwsAdvancedRubyDriverWrapper
 
     alias finish close
 
+    # Stops the background topology monitor of this connection's cluster, which closes the connections it
+    # holds to the database it was started for. The next connection that needs topology starts a new one.
+    # PostgreSQL refuses to drop a database that other sessions are connected to, so this has to happen
+    # before dropping the database the monitor was started for.
+    def stop_topology_monitor
+      @service_container.host_service.host_list_provider&.stop_monitor
+    end
+
     # Resets the connection through the pipeline and returns this wrapper, so the reset connection stays
     # usable through it. The driver's own reset tears down and re-establishes the underlying socket, which
     # clears any server-side session state, so the tracked session state is reset to match.

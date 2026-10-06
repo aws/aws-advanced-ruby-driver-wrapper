@@ -100,6 +100,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService do
     end
   end
 
+  describe '#registered?' do
+    it 'is true only for a registered cache' do
+      service.register(:data, ttl: 60)
+      expect(service.registered?(:data)).to be true
+      expect(service.registered?(:other)).to be false
+    end
+  end
+
   describe '#clear' do
     it 'removes all items for a name' do
       service.register(:data, ttl: 60)

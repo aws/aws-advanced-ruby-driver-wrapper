@@ -26,6 +26,7 @@ require_relative 'utils/connection_utils'
 require_relative 'utils/database_engine'
 require_relative 'utils/rds_test_utility'
 require_relative 'utils/retry_helper'
+require_relative 'utils/topology_helper'
 require 'aws_advanced_ruby_driver_wrapper'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
@@ -100,23 +101,12 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
     )
   end
 
-  def warm_failover_topology
-    config = Integration::DriverHelper.native_config(
-      drv,
-      host: proxy_info.cluster_endpoint,
-      port: proxy_info.cluster_endpoint_port,
-      user: proxy_info.username,
-      password: proxy_info.password,
-      dbname: proxy_info.default_dbname
-    )
-    props = {
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
-        "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}"
-    }
-    discovered = Integration::TopologyHelper.warm_topology_cache(
-      drv: drv, config: config, props: props, min_instances: proxy_info.instances.size
-    )
+  # Blocks until the topology monitor started by the ActiveRecord connection has cached every instance.
+  # This must run after the connection is established: establish_failover_connection calls
+  # clear_all_connections!, which stops the monitors and clears the topology cache, so warming the cache
+  # beforehand would be undone.
+  def wait_for_failover_topology
+    discovered = Integration::TopologyHelper.wait_for_topology(min_instances: proxy_info.instances.size)
     expect(discovered).to be(true), 'Topology was not discovered before failover'
   end
 
@@ -314,10 +304,6 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
       enable_on_num_instances(min_instances: 2, max_instances: 2)
 
-      # Warm the topology cache first: this test connects to a bare reader instance, so without a cached
-      # writer host, writer failover would have only the dead reader to probe once connectivity is cut.
-      warm_failover_topology
-
       probe = session_probe
       reader_instance = proxy_info.instances[1]
       establish_failover_connection(
@@ -329,6 +315,10 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
       expect(adapter.select_value('SELECT 1').to_i).to eq(1)
       # Session variables are applied via SET SESSION, so they set fine on a reader connection too.
       expect(adapter.select_value(probe[:read_sql])).to eq(probe[:expected])
+
+      # This test connects to a bare reader instance, so without a cached writer host, writer failover
+      # would have only the dead reader to probe once connectivity is cut.
+      wait_for_failover_topology
 
       Integration::ProxyHelper.disable_connectivity(reader_instance.instance_id)
 
