@@ -17,6 +17,7 @@
 require 'active_record/connection_adapters/postgresql_adapter'
 require_relative '../postgresql'
 require_relative '../errors'
+require_relative 'aws_connection_handler'
 
 module ActiveRecord
   module ConnectionAdapters

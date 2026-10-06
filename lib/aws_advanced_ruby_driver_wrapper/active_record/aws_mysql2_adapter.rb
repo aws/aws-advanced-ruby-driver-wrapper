@@ -17,6 +17,7 @@
 require 'active_record/connection_adapters/mysql2_adapter'
 require_relative '../mysql'
 require_relative '../errors'
+require_relative 'aws_connection_handler'
 
 module ActiveRecord
   module ConnectionAdapters
