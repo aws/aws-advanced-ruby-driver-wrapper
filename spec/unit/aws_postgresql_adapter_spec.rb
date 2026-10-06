@@ -224,41 +224,31 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
   end
 
   describe 'PostgreSQL type registry resolution' do
-    # The wrapped adapter resolves types through the :aws_postgresql -> :postgresql alias applied by
-    # ActiveRecord::Type.adapter_name_from (type_adapter_alias.rb). Every real type lookup
-    # (ActiveRecord::Attributes) goes through adapter_name_from, so these assert that (a) the wrapper's
-    # config name is aliased to the parent's, and (b) PostgreSQL OID types and the array/range
-    # modifiers resolve under the resulting key. They guard against a Rails internals change silently
-    # making `attribute :x, :interval` or array/range columns raise "Unknown type".
-    let(:resolved_adapter) do
-      db_config = Struct.new(:adapter).new('aws_postgresql')
-      model = Struct.new(:connection_db_config).new(db_config)
-      ActiveRecord::Type.adapter_name_from(model)
-    end
-
-    it 'aliases the aws_postgresql config name to :postgresql' do
-      expect(resolved_adapter).to eq(:postgresql)
-    end
-
-    it 'resolves a PostgreSQL OID type (:interval)' do
-      expect(ActiveRecord::Type.lookup(:interval, adapter: resolved_adapter))
+    # The wrapped adapter resolves types through the :aws_postgresql -> :postgresql alias applied in
+    # the registry's register/lookup (type_adapter_alias.rb). A direct lookup under the wrapper's own
+    # adapter name must resolve, since that is what the registry sees. These guard against a Rails
+    # internals change silently making `attribute :x, :interval` or array/range columns raise
+    # "Unknown type".
+    it 'resolves a PostgreSQL OID type (:interval) under aws_postgresql' do
+      expect(ActiveRecord::Type.lookup(:interval, adapter: :aws_postgresql))
         .to be_a(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Interval)
     end
 
-    it 'resolves the array modifier' do
-      expect(ActiveRecord::Type.lookup(:integer, adapter: resolved_adapter, array: true))
+    it 'resolves the array modifier under aws_postgresql' do
+      expect(ActiveRecord::Type.lookup(:integer, adapter: :aws_postgresql, array: true))
         .to be_a(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Array)
     end
 
-    it 'resolves the range modifier' do
-      expect(ActiveRecord::Type.lookup(:integer, adapter: resolved_adapter, range: true))
+    it 'resolves the range modifier under aws_postgresql' do
+      expect(ActiveRecord::Type.lookup(:integer, adapter: :aws_postgresql, range: true))
         .to be_a(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Range)
     end
 
-    it 'normalizes a type registered for :aws_postgresql to the parent key' do
-      # The registry alias rewrites an explicit :aws_postgresql registration to :postgresql so it
-      # resolves under the key real lookups use. Guards the register/add_modifier half of the alias.
+    it 'resolves a type registered for :aws_postgresql under either adapter name' do
+      # The registry alias rewrites an explicit :aws_postgresql registration to :postgresql, so it
+      # resolves whether looked up under the wrapper name or the parent name. Guards the register half.
       ActiveRecord::Type.register(:aws_oid_types_spec_custom, adapter: :aws_postgresql) { |*_| :resolved }
+      expect(ActiveRecord::Type.lookup(:aws_oid_types_spec_custom, adapter: :aws_postgresql)).to eq(:resolved)
       expect(ActiveRecord::Type.lookup(:aws_oid_types_spec_custom, adapter: :postgresql)).to eq(:resolved)
     end
   end

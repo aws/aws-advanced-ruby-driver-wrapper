@@ -173,21 +173,11 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsMysql2Adapter do
   end
 
   describe 'MySQL type registry resolution' do
-    # The wrapped adapter resolves types through the :aws_mysql2 -> :mysql2 alias applied by
-    # ActiveRecord::Type.adapter_name_from (type_adapter_alias.rb). Mysql2Adapter registers
-    # :unsigned_integer under adapter: :mysql2; this guards against that resolution silently breaking.
-    let(:resolved_adapter) do
-      db_config = Struct.new(:adapter).new('aws_mysql2')
-      model = Struct.new(:connection_db_config).new(db_config)
-      ActiveRecord::Type.adapter_name_from(model)
-    end
-
-    it 'aliases the aws_mysql2 config name to :mysql2' do
-      expect(resolved_adapter).to eq(:mysql2)
-    end
-
-    it 'resolves a Mysql2 type (:unsigned_integer)' do
-      expect(ActiveRecord::Type.lookup(:unsigned_integer, adapter: resolved_adapter))
+    # The wrapped adapter resolves types through the :aws_mysql2 -> :mysql2 alias applied in the
+    # registry's register/lookup (type_adapter_alias.rb). Mysql2Adapter registers :unsigned_integer
+    # under adapter: :mysql2; this guards against that resolution silently breaking for the wrapper.
+    it 'resolves a Mysql2 type (:unsigned_integer) under aws_mysql2' do
+      expect(ActiveRecord::Type.lookup(:unsigned_integer, adapter: :aws_mysql2))
         .to be_a(ActiveRecord::Type::UnsignedInteger)
     end
   end
