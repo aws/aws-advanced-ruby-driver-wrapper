@@ -23,10 +23,10 @@ module AwsAdvancedRubyDriverWrapper
       # Batches deduplicate events via Set semantics (eql?/hash).
       #
       # Public API:
-      #   subscribe(subscriber, event_classes) — register for event types
-      #   unsubscribe(subscriber, event_classes) — deregister
-      #   publish(event) — deliver immediate or queue batched
-      #   release_resources — stop background thread
+      #   subscribe(subscriber, event_classes) - register for event types
+      #   unsubscribe(subscriber, event_classes) - deregister
+      #   publish(event) - deliver immediate or queue batched
+      #   release_resources - stop background thread
       #   restart_after_fork - restart background thread in a forked child
       class BatchingEventPublisher
         include Logging

@@ -87,11 +87,18 @@ module AwsAdvancedRubyDriverWrapper
   end
 
   # Process._fork is the single entry point for Kernel#fork, Process.fork and IO.popen('-'), so
-  # hooking it covers every way an application server or job runner forks a worker.
+  # hooking it covers every way an application server or job runner forks a worker. An error in the
+  # child is logged rather than raised: raising here would fail the application's own fork call.
   module ForkHook
     def _fork
       pid = super
-      AwsAdvancedRubyDriverWrapper.after_fork if pid.zero?
+      if pid.zero?
+        begin
+          AwsAdvancedRubyDriverWrapper.after_fork
+        rescue StandardError => e
+          AwsAdvancedRubyDriverWrapper.logger.error("Failed to reset the wrapper's background services after fork: #{e.message}")
+        end
+      end
       pid
     end
   end

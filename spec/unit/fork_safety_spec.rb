@@ -136,4 +136,38 @@ RSpec.describe AwsAdvancedRubyDriverWrapper, 'after fork' do
     expect(result).to eq(remaining: [], events: [:release_after_fork])
     expect(providers['bgd-1']).to equal(provider)
   end
+
+  it 'keeps releasing and restarting in the child when releasing one inherited object raises' do
+    failing = Struct.new(:name) do
+      def release_after_fork = raise("release failed for #{name}")
+      def stop; end
+    end
+    provider_class = Struct.new(:events) { def release_after_fork = events << :release_after_fork }
+    good_provider = provider_class.new([])
+    providers['bgd-bad'] = failing.new('provider')
+    providers['bgd-good'] = good_provider
+    core.monitor_service.register_type(:fork_test_monitor, expiration_timeout_sec: 60)
+    core.monitor_service.run_if_absent(:fork_test_monitor, 'bad', nil) { |_| failing.new('monitor').tap { |m| def m.start; end } }
+    good_monitor = start_test_monitor
+    allow(described_class.logger).to receive(:warn)
+
+    # A failure here would otherwise escape from Process._fork, so the child's own fork block would never run.
+    result = in_forked_child do
+      threads = [core.monitor_service.instance_variable_get(:@cleanup_thread), core.event_publisher.instance_variable_get(:@thread),
+                 core.storage_service.instance_variable_get(:@cleanup_thread)]
+      monitors_left = %w[bad k1].filter_map { |key| core.monitor_service.get(:fork_test_monitor, key) }
+      { block_ran: true, providers_left: providers.keys, good_provider_events: good_provider.events,
+        good_monitor_abandoned: good_monitor.abandoned, monitors_left: monitors_left.size, threads_alive: threads.map(&:alive?) }
+    end
+
+    expect(result).to eq(block_ran: true, providers_left: [], good_provider_events: [:release_after_fork],
+                         good_monitor_abandoned: true, monitors_left: 0, threads_alive: [true, true, true])
+  end
+
+  it "logs instead of failing the application's fork when resetting the wrapper raises" do
+    allow(described_class).to receive(:after_fork).and_raise(ThreadError, "can't create Thread")
+    allow(described_class.logger).to receive(:error)
+
+    expect(in_forked_child { :block_ran }).to eq(:block_ran)
+  end
 end
