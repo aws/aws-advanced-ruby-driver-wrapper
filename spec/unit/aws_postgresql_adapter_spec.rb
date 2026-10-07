@@ -214,4 +214,63 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
       end
     end
   end
+
+  describe '#adapter_name' do
+    it 'reports the underlying PostgreSQL adapter name' do
+      # Migration compatibility shims and other Rails internals gate PostgreSQL behavior on
+      # `adapter_name == "PostgreSQL"`, so the wrapper must answer as PostgreSQL.
+      expect(described_class.allocate.adapter_name).to eq('PostgreSQL')
+    end
+  end
+
+  describe 'PostgreSQL type registry resolution' do
+    # The wrapped adapter resolves types through the :aws_postgresql -> :postgresql alias applied in
+    # the registry's register/lookup (type_adapter_alias.rb). A direct lookup under the wrapper's own
+    # adapter name must resolve, since that is what the registry sees. These guard against a Rails
+    # internals change silently making `attribute :x, :interval` or array/range columns raise
+    # "Unknown type".
+    it 'resolves a PostgreSQL OID type (:interval) under aws_postgresql' do
+      expect(ActiveRecord::Type.lookup(:interval, adapter: :aws_postgresql))
+        .to be_a(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Interval)
+    end
+
+    it 'resolves the array modifier under aws_postgresql' do
+      expect(ActiveRecord::Type.lookup(:integer, adapter: :aws_postgresql, array: true))
+        .to be_a(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Array)
+    end
+
+    it 'resolves the range modifier under aws_postgresql' do
+      expect(ActiveRecord::Type.lookup(:integer, adapter: :aws_postgresql, range: true))
+        .to be_a(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Range)
+    end
+
+    it 'resolves a type registered for :aws_postgresql under either adapter name' do
+      # The registry alias rewrites an explicit :aws_postgresql registration to :postgresql, so it
+      # resolves whether looked up under the wrapper name or the parent name. Guards the register half.
+      ActiveRecord::Type.register(:aws_oid_types_spec_custom, adapter: :aws_postgresql) { |*_| :resolved }
+      expect(ActiveRecord::Type.lookup(:aws_oid_types_spec_custom, adapter: :aws_postgresql)).to eq(:resolved)
+      expect(ActiveRecord::Type.lookup(:aws_oid_types_spec_custom, adapter: :postgresql)).to eq(:resolved)
+    end
+  end
+
+  describe '.native_database_types' do
+    # The wrapper delegates to PostgreSQLAdapter but re-applies its OWN datetime_type, which the
+    # parent would otherwise ignore (it reads its own). Guards the timestamptz legacy-migration path.
+    around do |example|
+      previous = described_class.datetime_type
+      example.run
+    ensure
+      described_class.datetime_type = previous
+    end
+
+    it 'honors this adapter\'s datetime_type for the :datetime mapping' do
+      described_class.datetime_type = :timestamptz
+      expect(described_class.native_database_types[:datetime]).to eq(name: 'timestamptz')
+    end
+
+    it 'maps :datetime to timestamp by default' do
+      described_class.datetime_type = :timestamp
+      expect(described_class.native_database_types[:datetime]).to eq(name: 'timestamp')
+    end
+  end
 end

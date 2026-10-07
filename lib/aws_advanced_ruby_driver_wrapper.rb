@@ -135,6 +135,8 @@ end
 
 if defined?(ActiveSupport) && ActiveSupport.respond_to?(:on_load)
   ActiveSupport.on_load(:active_record) do
+    require_relative 'aws_advanced_ruby_driver_wrapper/active_record/type_adapter_alias'
+
     ActiveRecord::ConnectionAdapters.register(
       'aws_postgresql',
       'ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter',
@@ -148,3 +150,5 @@ if defined?(ActiveSupport) && ActiveSupport.respond_to?(:on_load)
     )
   end
 end
+
+require_relative 'aws_advanced_ruby_driver_wrapper/active_record/type_adapter_alias' if defined?(ActiveRecord)

@@ -17,14 +17,13 @@
 require 'active_record/connection_adapters/postgresql_adapter'
 require_relative '../postgresql'
 require_relative '../errors'
+require_relative 'type_adapter_alias'
 require_relative 'aws_connection_handler'
 require_relative 'aws_action_cable_postgresql_support'
 
 module ActiveRecord
   module ConnectionAdapters
     class AwsPostgreSQLAdapter < PostgreSQLAdapter
-      ADAPTER_NAME = 'AwsPostgreSQL'
-
       # ActiveRecord uses :username and :database, but the PG gem expects :user and :dbname.
       # The parent adapter translates these in @connection_parameters, but also strips
       # non-PG keys (including wrapper properties) via slice!. Since we rebuild from @config
@@ -54,7 +53,15 @@ module ActiveRecord
           AwsAdvancedRubyDriverWrapper::PropertyDefinition::KNOWN_PREFIXES.any? { |prefix| key.to_s.start_with?(prefix) }
       end
 
-      def adapter_name = ADAPTER_NAME
+      # Resolve native database types from the wrapped PostgreSQLAdapter, overriding only :datetime.
+      # PostgreSQLAdapter builds its type hash from two things: the shared NATIVE_DATABASE_TYPES
+      # constant and the per-class datetime_type class_attribute. Delegating to the parent keeps a
+      # single source of truth, but the parent reads *its own* datetime_type, so this adapter's
+      # datetime_type (e.g. :timestamptz) must be re-applied here or it is silently ignored and
+      # t.datetime columns are created as plain timestamp.
+      def self.native_database_types
+        superclass.native_database_types.merge(datetime: NATIVE_DATABASE_TYPES[datetime_type])
+      end
 
       # Note that this config includes wrapper properties.
       #
