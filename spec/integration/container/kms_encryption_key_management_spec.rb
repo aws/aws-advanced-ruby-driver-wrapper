@@ -165,7 +165,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   def schema_validator_dialect
     case drv
     when Integration::TestDriver::PG    then AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new
-    when Integration::TestDriver::MYSQL then AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new
+    when Integration::TestDriver::MYSQL then AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new
     end
   end
 

@@ -75,7 +75,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
 
     it 'sets the driver dialect for mysql2' do
       service = build_service(:mysql2)
-      expect(service.driver_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect)
+      expect(service.driver_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect)
     end
 
     it 'raises an error for unknown driver' do

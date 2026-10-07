@@ -18,7 +18,7 @@ require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/schema_validator'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql_runner'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaValidator do
   let(:encryption) { AwsAdvancedRubyDriverWrapper::Plugins::Encryption }
@@ -41,7 +41,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SchemaValidato
   # The foreign-key query now comes from the driver dialect; build the real ones so the stub stays
   # in step with what the dialects actually produce.
   let(:pg_foreign_key_sql) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new.foreign_key_query }
-  let(:mysql_foreign_key_sql) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new.foreign_key_query }
+  let(:mysql_foreign_key_sql) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new.foreign_key_query }
   subject(:validator) { described_class.new('encrypt', sql_runner) }
 
   # information_schema is queried for four different things, so the runner answers by SQL shape.

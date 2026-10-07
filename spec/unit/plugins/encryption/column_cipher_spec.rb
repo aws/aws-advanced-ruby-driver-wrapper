@@ -25,7 +25,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ColumnCipher d
   let(:encryption_error) { AwsAdvancedRubyDriverWrapper::Errors::EncryptionError }
   let(:key_manager) { instance_double(encryption::KeyManager) }
   # A real runner over the mysql2 dialect, so that read_binary behaves as it does in production.
-  let(:sql_runner) { encryption::SqlRunner.new(AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new) }
+  let(:sql_runner) { encryption::SqlRunner.new(AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new) }
   let(:data_key) { +('a' * 32) }
   let(:hmac_key) { 'h' * 32 }
   let(:key_metadata) do
