@@ -46,6 +46,12 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
+      - name: 'Log in to Docker Hub'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: 'Run Integration Tests (Ruby 3.3, RDS default)'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-${{ matrix.environment }} --info
         env:
@@ -96,6 +102,12 @@ jobs:
           role-session-name: ruby_integration_tests
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Log in to Docker Hub'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: 'Run Integration Tests (Ruby 4.0, RDS latest)'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-4.0-${{ matrix.environment }} --info
@@ -148,6 +160,12 @@ jobs:
           role-session-name: ruby_multi_az_integration_tests
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Log in to Docker Hub'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: 'Run Multi-AZ Integration Tests'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-multi-az --info
