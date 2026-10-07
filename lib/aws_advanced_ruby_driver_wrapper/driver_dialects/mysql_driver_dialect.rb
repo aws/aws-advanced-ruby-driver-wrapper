@@ -45,6 +45,10 @@ module AwsAdvancedRubyDriverWrapper
         'mysql2'
       end
 
+      def database_engine
+        :mysql
+      end
+
       def connect(host_info, config)
         ::Mysql2::Client.new(**prepare_connect_config(host_info, config))
       end

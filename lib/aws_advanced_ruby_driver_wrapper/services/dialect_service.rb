@@ -205,12 +205,10 @@ module AwsAdvancedRubyDriverWrapper
 
         rds_type = Utils::RdsUtils.identify_rds_type(host)
 
-        @dialect_code = if @driver_dialect == DriverDialects::DriverDialectManager::MYSQL_DIALECT
-                          resolve_mysql_dialect(rds_type)
-                        elsif @driver_dialect == DriverDialects::DriverDialectManager::PG_DIALECT
-                          resolve_pg_dialect(rds_type)
-                        else
-                          DialectCodes::UNKNOWN
+        @dialect_code = case @driver_dialect.database_engine
+                        when :mysql then resolve_mysql_dialect(rds_type)
+                        when :postgresql then resolve_pg_dialect(rds_type)
+                        else DialectCodes::UNKNOWN
                         end
 
         @db_dialect = dialect_for_code(@dialect_code)
