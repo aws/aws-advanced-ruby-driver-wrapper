@@ -14,13 +14,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/mysql'
 require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 
 require 'concurrent'
 
-RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect do
+RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }

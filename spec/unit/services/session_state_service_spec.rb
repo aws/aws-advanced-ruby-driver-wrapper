@@ -42,7 +42,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::SessionStateService do
 
   describe '#update_transaction_state' do
     let(:connection) { double('connection') }
-    let(:dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+    let(:dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
 
     it 'marks in_transaction on BEGIN' do
       service.update_transaction_state('connection.exec', ['BEGIN'], true, dialect, connection)
