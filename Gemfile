@@ -37,7 +37,7 @@ end
 
 group :test do
   gem 'aws-sdk-kms'
-  gem 'aws-sdk-rds', '~> 1.323.0'
+  gem 'aws-sdk-rds', '~> 1.324.0'
   gem 'aws-sdk-secretsmanager'
   gem 'debug'
   gem 'dotenv'
