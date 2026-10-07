@@ -32,6 +32,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
   end
 
+  describe '#database_engine' do
+    it 'is MySQL' do
+      expect(dialect.database_engine).to eq(:mysql)
+    end
+  end
+
   describe '#connect' do
     it 'calls Mysql2::Client.new with prepared config' do
       stub_const('Mysql2::Client', Class.new { def initialize(**_opts); end })
