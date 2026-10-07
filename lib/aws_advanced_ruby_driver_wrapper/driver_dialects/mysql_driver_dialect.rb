@@ -131,6 +131,16 @@ module AwsAdvancedRubyDriverWrapper
         logger.error("Failed to close MySQL connection: #{e.message}")
       end
 
+      # With automatic_close off, mysql2 invalidates the socket instead of sending COM_QUIT when
+      # the client is collected, leaving the parent's session open.
+      def abandon_connection(connection)
+        return if connection.nil? || connection.closed?
+
+        connection.automatic_close = false
+      rescue StandardError => e
+        logger.debug("Failed to abandon MySQL connection: #{e.message}")
+      end
+
       def sql_state(exception)
         return nil unless exception.respond_to?(:sql_state)
 

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+require 'concurrent'
 require_relative 'expiration_cache'
 require_relative '../../logging'
 require_relative '../events/data_access_event'
@@ -34,7 +35,8 @@ module AwsAdvancedRubyDriverWrapper
           @caches = {}
           @event_publisher = event_publisher
           @lock = Mutex.new
-          @running = true
+          @running = Concurrent::AtomicBoolean.new(true)
+          @cleanup_interval = cleanup_interval
           @cleanup_thread = start_cleanup_thread(cleanup_interval)
         end
 
@@ -133,13 +135,22 @@ module AwsAdvancedRubyDriverWrapper
 
         # Stops the cleanup thread.
         def shutdown
-          @running = false
+          @running.make_false
           begin
             @cleanup_thread&.wakeup
           rescue ThreadError
             nil
           end
           @cleanup_thread&.join(5)
+        end
+
+        # Restarts the cleanup thread in a forked child, where it no longer runs. A thread that is
+        # still alive is kept, so calling this again does not start a second one.
+        def restart_after_fork
+          return if @cleanup_thread&.alive?
+
+          @running.make_true
+          @cleanup_thread = start_cleanup_thread(@cleanup_interval)
         end
 
         private
@@ -153,7 +164,7 @@ module AwsAdvancedRubyDriverWrapper
 
         def start_cleanup_thread(interval)
           thread = Thread.new do
-            while @running
+            while @running.true?
               sleep(interval)
               remove_expired_items
             end

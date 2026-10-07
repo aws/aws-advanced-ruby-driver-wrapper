@@ -68,6 +68,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#abandon_connection' do
+    it 'points the socket at the null device instead of closing the connection' do
+      socket_io = instance_double(IO)
+      allow(connection).to receive_messages(finished?: false, socket_io: socket_io)
+      expect(socket_io).to receive(:reopen).with(IO::NULL)
+      expect(connection).not_to receive(:close)
+      dialect.abandon_connection(connection)
+    end
+
+    it 'skips finished connections' do
+      allow(connection).to receive(:finished?).and_return(true)
+      expect(connection).not_to receive(:socket_io)
+      dialect.abandon_connection(connection)
+    end
+  end
+
   describe '#sql_state' do
     it 'extracts SQLSTATE from PG::Error' do
       pg_result = double(error_field: '23505')
