@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative 'mysql_driver_dialect'
+require_relative 'mysql2_driver_dialect'
 require_relative 'pg_driver_dialect'
 require_relative '../errors'
 require_relative '../errors/mysql_error_handler'
@@ -23,13 +23,13 @@ require_relative '../errors/pg_error_handler'
 module AwsAdvancedRubyDriverWrapper
   module DriverDialects
     module DriverDialectManager
-      MYSQL_DIALECT = MysqlDriverDialect.new.freeze
+      MYSQL2_DIALECT = Mysql2DriverDialect.new.freeze
       PG_DIALECT = PgDriverDialect.new.freeze
 
       REGISTRY = {
         mysql2: {
-          driver_dialect: MYSQL_DIALECT,
-          error_handler: Errors::MysqlErrorHandler.new(MYSQL_DIALECT)
+          driver_dialect: MYSQL2_DIALECT,
+          error_handler: Errors::MysqlErrorHandler.new(MYSQL2_DIALECT)
         },
         postgresql: {
           driver_dialect: PG_DIALECT,

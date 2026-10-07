@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative '../../driver_dialects/mysql_driver_dialect'
+require_relative '../../driver_dialects/mysql2_driver_dialect'
 require_relative '../../driver_dialects/pg_driver_dialect'
 require_relative '../../logging'
 require_relative '../../property_definition'
@@ -324,7 +324,7 @@ module AwsAdvancedRubyDriverWrapper
         def dialect_for_connection(connection)
           name = connection.class.name.to_s
           return DriverDialects::PgDriverDialect.new if name.start_with?('PG::') || name.end_with?('WrapperPgConnection')
-          return DriverDialects::MysqlDriverDialect.new if name.start_with?('Mysql2::') || name.end_with?('WrapperMysql2Client')
+          return DriverDialects::Mysql2DriverDialect.new if name.start_with?('Mysql2::') || name.end_with?('WrapperMysql2Client')
 
           raise ArgumentError,
                 "Cannot infer the driver dialect from #{name.empty? ? connection.class : name}; " \
@@ -334,7 +334,7 @@ module AwsAdvancedRubyDriverWrapper
         def dialect_for_driver(driver)
           case driver.to_sym
           when :postgresql, :pg then DriverDialects::PgDriverDialect.new
-          when :mysql2, :mysql then DriverDialects::MysqlDriverDialect.new
+          when :mysql2, :mysql then DriverDialects::Mysql2DriverDialect.new
           else raise ArgumentError, "Unknown driver #{driver.inspect}; use :postgresql or :mysql2"
           end
         end
