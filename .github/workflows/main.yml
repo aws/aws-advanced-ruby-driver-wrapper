@@ -18,7 +18,8 @@ permissions:
 
 jobs:
   markdown-link-check:
-    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    # Intentionally left on a GitHub-hosted runner while the rest of this workflow runs on CodeBuild.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: 'Log in to Docker Hub'

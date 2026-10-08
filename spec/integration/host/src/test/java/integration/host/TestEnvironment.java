@@ -35,6 +35,7 @@ import integration.host.TestEnvironmentConfiguration;
 import integration.host.TestEnvironmentProvider.EnvPreCreateInfo;
 import integration.util.AuroraTestUtility;
 import integration.util.ContainerHelper;
+import integration.util.ContainerImages;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
@@ -1602,7 +1603,7 @@ public class TestEnvironment implements AutoCloseable {
 
     env.testContainer = containerHelper.createTestContainer(
         "aws/rds-test-container",
-        getContainerBaseImageName(env.info.getRequest()));
+        ContainerImages.rubyBase(env.info.getRequest().getTargetRubyVersion()));
 
     TestEnvironmentConfiguration config = new TestEnvironmentConfiguration();
 
@@ -1693,17 +1694,6 @@ public class TestEnvironment implements AutoCloseable {
 
     LOGGER.finest("Starting OTLP telemetry container");
     env.telemetryOtlpContainer.start();
-  }
-
-  private static String getContainerBaseImageName(TestEnvironmentRequest request) {
-    switch (request.getTargetRubyVersion()) {
-      case RUBY_3_3:
-        return "ruby:3.3";
-      case RUBY_4_0:
-        return "ruby:4.0";
-      default:
-        throw new NotImplementedException(request.getTargetRubyVersion().toString());
-    }
   }
 
   private static void waitForConnectivity(String host, int port) {
