@@ -45,15 +45,12 @@ jobs:
           role-session-name: ruby_bg_integration_tests
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Run BG Integration Tests
         run: ./gradlew --no-parallel --no-daemon :integration-testing:${{ matrix.testTask }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_CONTAINER_REGISTRY: ecr
 
       - name: Archive results
         if: always()

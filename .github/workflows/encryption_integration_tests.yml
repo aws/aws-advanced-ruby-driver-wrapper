@@ -96,17 +96,12 @@ jobs:
           role-duration-seconds: 21600
           aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: 'Log in to Docker Hub'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: 'Run KMS Encryption Integration Tests'
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-encryption --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           KMS_KEY_ID: ${{ needs.kms-key.outputs.key_id }}
+          TEST_CONTAINER_REGISTRY: ecr
 
       - name: 'Archive encryption results'
         if: always()

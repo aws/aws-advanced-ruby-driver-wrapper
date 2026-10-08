@@ -99,6 +99,12 @@ tasks.withType<Test> {
 
     systemProperty("java.util.logging.config.file", "${project.layout.buildDirectory.get()}/resources/test/logging-test.properties")
 
+    // Forwarded explicitly: the test JVM does not inherit the launcher's system properties, so
+    // -Dtest-container-registry would otherwise be dropped before ContainerImages reads it.
+    System.getProperty("test-container-registry")?.let {
+        systemProperty("test-container-registry", it)
+    }
+
     if (System.getProperty("os.name", "").lowercase().contains("windows")) {
         environment("DOCKER_HOST", System.getenv("DOCKER_HOST") ?: "tcp://localhost:2377")
         environment("TESTCONTAINERS_RYUK_DISABLED", "true")

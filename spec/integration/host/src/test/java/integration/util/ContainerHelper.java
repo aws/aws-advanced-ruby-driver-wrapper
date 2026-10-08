@@ -60,18 +60,8 @@ import integration.util.StringUtils;
 @SuppressWarnings("unchecked")
 public class ContainerHelper {
 
-  private static final String MYSQL_CONTAINER_IMAGE_NAME = "mysql:8.0.31";
-  private static final String POSTGRES_CONTAINER_IMAGE_NAME = "postgres:latest";
-  private static final String VALKEY_CONTAINER_IMAGE_NAME = "valkey/valkey:8.1";
-  // Note: this image version may need to be occasionally updated to keep it up-to-date and prevent toxiproxy issues.
-  private static final DockerImageName TOXIPROXY_IMAGE =
-      DockerImageName.parse("ghcr.io/shopify/toxiproxy:2.11.0");
-
   private static final int PROXY_CONTROL_PORT = 8474;
   private static final int PROXY_PORT = 8666;
-
-  private static final String XRAY_TELEMETRY_IMAGE_NAME = "amazon/aws-xray-daemon";
-  private static final String OTLP_TELEMETRY_IMAGE_NAME = "amazon/aws-otel-collector";
 
   private static final String RETRIEVE_TOPOLOGY_SQL_POSTGRES =
       "SELECT SERVER_ID, SESSION_ID FROM pg_catalog.aurora_replica_status() "
@@ -207,7 +197,7 @@ public class ContainerHelper {
         new ImageFromDockerfile("xray-daemon", true)
             .withDockerfileFromBuilder(
                 builder -> builder
-                        .from(XRAY_TELEMETRY_IMAGE_NAME)
+                        .from(ContainerImages.xrayDaemon())
                         .entryPoint("/xray",
                           "-t", "0.0.0.0:2000",
                           "-b", "0.0.0.0:2000",
@@ -226,7 +216,7 @@ public class ContainerHelper {
       Network network,
       String networkAlias) {
 
-    return new FixedExposedPortContainer<>(DockerImageName.parse(OTLP_TELEMETRY_IMAGE_NAME))
+    return new FixedExposedPortContainer<>(ContainerImages.otelCollector())
         .withExposedPort(2000)
         .withExposedPort(1777)
         .withExposedPort(4317)
@@ -432,7 +422,7 @@ public class ContainerHelper {
   public MySQLContainer<?> createMysqlContainer(
       Network network, String networkAlias, String testDbName, String username, String password) {
 
-    return new MySQLContainer<>(MYSQL_CONTAINER_IMAGE_NAME)
+    return new MySQLContainer<>(ContainerImages.mysql())
         .withNetwork(network)
         .withNetworkAliases(networkAlias)
         .withDatabaseName(testDbName)
@@ -458,7 +448,7 @@ public class ContainerHelper {
   public PostgreSQLContainer<?> createPostgresContainer(
       Network network, String networkAlias, String testDbName, String username, String password) {
 
-    return new PostgreSQLContainer<>(POSTGRES_CONTAINER_IMAGE_NAME)
+    return new PostgreSQLContainer<>(ContainerImages.postgres())
         .withNetwork(network)
         .withNetworkAliases(networkAlias)
         .withDatabaseName(testDbName)
@@ -473,7 +463,7 @@ public class ContainerHelper {
       String hostname,
       int port) throws IOException {
     final ToxiproxyContainer container =
-        new ToxiproxyContainer(TOXIPROXY_IMAGE)
+        new ToxiproxyContainer(ContainerImages.toxiproxy())
             .withNetwork(network)
             .withNetworkAliases(networkAlias, networkUrl);
     container.start();
@@ -490,7 +480,7 @@ public class ContainerHelper {
       boolean authEnabled,
       boolean tlsEnabled) {
 
-    GenericContainer<?> container = new GenericContainer<>(VALKEY_CONTAINER_IMAGE_NAME)
+    GenericContainer<?> container = new GenericContainer<>(ContainerImages.valkey())
         .withNetwork(network)
         .withNetworkAliases(networkAlias);
 
@@ -562,7 +552,7 @@ public class ContainerHelper {
 
   public ToxiproxyContainer createProxyContainer(
       final Network network, TestInstanceInfo instance, String proxyDomainNameSuffix) {
-    return new ToxiproxyContainer(TOXIPROXY_IMAGE)
+    return new ToxiproxyContainer(ContainerImages.toxiproxy())
         .withNetwork(network)
         .withNetworkAliases(
             "proxy-instance-" + instance.getInstanceId(),
