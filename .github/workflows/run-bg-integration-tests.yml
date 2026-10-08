@@ -13,7 +13,7 @@ permissions:
 jobs:
   bg-integration-tests:
     name: BG Integration Tests (${{ matrix.testTask }})
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -50,6 +50,7 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:${{ matrix.testTask }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          TEST_CONTAINER_REGISTRY: ecr
 
       - name: Archive results
         if: always()

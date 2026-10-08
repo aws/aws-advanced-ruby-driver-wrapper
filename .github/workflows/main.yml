@@ -18,9 +18,15 @@ permissions:
 
 jobs:
   markdown-link-check:
+    # Intentionally left on a GitHub-hosted runner while the rest of this workflow runs on CodeBuild.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: 'Log in to Docker Hub'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - uses: tcort/github-action-markdown-link-check@e047c5b37f24ab722bbef1a27b6fab7f96bc4068 # v1
         with:
           use-quiet-mode: 'yes'
@@ -29,7 +35,7 @@ jobs:
           max-depth: 0
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Set up Ruby
@@ -41,7 +47,7 @@ jobs:
         run: bundle exec rubocop
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     strategy:
       fail-fast: false
       matrix:
@@ -75,7 +81,7 @@ jobs:
 
   secret-scan:
     name: Gitleaks secret scan
-    runs-on: ubuntu-latest
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout (full history)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -92,7 +98,12 @@ jobs:
             -o gitleaks.tar.gz
           echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz gitleaks
-          sudo install gitleaks /usr/local/bin/gitleaks
+          # CodeBuild runners run as root and may not ship sudo.
+          if [ "$(id -u)" -eq 0 ]; then
+            install gitleaks /usr/local/bin/gitleaks
+          else
+            sudo install gitleaks /usr/local/bin/gitleaks
+          fi
           rm -f gitleaks.tar.gz gitleaks
           gitleaks version
       - name: Run Gitleaks (full git history)
