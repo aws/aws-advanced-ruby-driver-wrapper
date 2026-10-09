@@ -65,6 +65,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
     endpoint
   end
 
+  describe 'RDS client' do
+    def build_monitor_with_default_client(**)
+      described_class.new(service_container, host_info, endpoint_id, region, 0.05, 2, 0.5, **)
+    end
+
+    it 'signs RDS calls with the configured AWS credentials provider' do
+      provider = instance_double(Aws::Credentials)
+      expect(Aws::RDS::Client).to receive(:new).with(region: region, credentials: provider).and_return(mock_rds_client)
+      build_monitor_with_default_client(credentials_provider: provider)
+    end
+
+    it 'uses the AWS SDK default credential provider chain when no provider is configured' do
+      expect(Aws::RDS::Client).to receive(:new).with(region: region).and_return(mock_rds_client)
+      build_monitor_with_default_client
+    end
+  end
+
   describe '#endpoint_info?' do
     it 'returns false when no info is cached' do
       allow(mock_storage_service).to receive(:get).and_return(nil)
