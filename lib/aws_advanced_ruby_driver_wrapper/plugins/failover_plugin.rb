@@ -20,6 +20,7 @@ require_relative '../host/host_info'
 require_relative '../host/host_role'
 require_relative '../host/host_availability'
 require_relative '../logging'
+require_relative '../services/host_service'
 require_relative '../utils/rds_utils'
 require_relative '../utils/rds_url_type'
 require_relative '../utils/retry_util'
@@ -40,6 +41,7 @@ module AwsAdvancedRubyDriverWrapper
         @retry_util = Utils::RetryUtil.new(service_container)
         @failover_timeout = PropertyDefinition::FAILOVER_TIMEOUT_SEC.get_float(props)
         @reader_selector_strategy = PropertyDefinition::FAILOVER_READER_HOST_SELECTOR_STRATEGY.get(props)
+        Services::HostService.validate_strategy!(@reader_selector_strategy)
         @failover_mode = nil
         @rds_url_type = nil
         @closed_explicitly = false
@@ -414,7 +416,8 @@ module AwsAdvancedRubyDriverWrapper
           Host::HostRole::READER,
           @reader_selector_strategy
         )
-      rescue StandardError
+      rescue StandardError => e
+        logger.warn("Failed to select a reader using the '#{@reader_selector_strategy}' host selection strategy: #{e.message}")
         nil
       end
 

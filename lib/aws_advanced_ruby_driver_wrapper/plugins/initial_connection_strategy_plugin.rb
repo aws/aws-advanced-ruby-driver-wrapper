@@ -20,6 +20,7 @@ require_relative '../host/host_role'
 require_relative '../host/host_availability'
 require_relative '../logging'
 require_relative '../property_definition'
+require_relative '../services/host_service'
 require_relative '../utils/accessible_regions'
 require_relative '../utils/rds_utils'
 require_relative '../utils/rds_url_type'
@@ -53,6 +54,7 @@ module AwsAdvancedRubyDriverWrapper
         @retry_interval_sec = PropertyDefinition::INITIAL_CONNECTION_RETRY_INTERVAL_SEC.get_float(props)
         @wait_for_topology_sec = PropertyDefinition::INITIAL_CONNECTION_WAIT_FOR_TOPOLOGY_SEC.get_float(props)
         @host_selector_strategy = PropertyDefinition::INITIAL_CONNECTION_HOST_SELECTOR_STRATEGY.get(props)
+        Services::HostService.validate_strategy!(@host_selector_strategy)
         @accessible_regions = Utils::AccessibleRegions.parse(props)
         @subscribed_methods = SUBSCRIBED_METHODS
 
@@ -323,7 +325,8 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         host_service.select_host(available_hosts, target_role, @host_selector_strategy)
-      rescue StandardError
+      rescue StandardError => e
+        logger.warn("Failed to select a host using the '#{@host_selector_strategy}' host selection strategy: #{e.message}")
         nil
       end
 

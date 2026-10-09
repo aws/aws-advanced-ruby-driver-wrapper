@@ -120,6 +120,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
     allow(AwsAdvancedRubyDriverWrapper::Utils::RetryUtil).to receive(:new).and_return(retry_util)
   end
 
+  describe 'initialization' do
+    it 'raises an error when failover_reader_host_selector_strategy names an unknown strategy' do
+      props[:failover_reader_host_selector_strategy] = 'randon'
+      expect { plugin }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy: 'randon'/)
+    end
+  end
+
   describe '#subscribed_methods' do
     it 'includes connect' do
       expect(plugin.subscribed_methods).to include('connect')
