@@ -16,15 +16,18 @@
 
 require_relative 'mysql2_driver_dialect'
 require_relative 'pg_driver_dialect'
+require_relative 'trilogy_driver_dialect'
 require_relative '../errors'
 require_relative '../errors/mysql_error_handler'
 require_relative '../errors/pg_error_handler'
+require_relative '../errors/trilogy_error_handler'
 
 module AwsAdvancedRubyDriverWrapper
   module DriverDialects
     module DriverDialectManager
       MYSQL2_DIALECT = Mysql2DriverDialect.new.freeze
       PG_DIALECT = PgDriverDialect.new.freeze
+      TRILOGY_DIALECT = TrilogyDriverDialect.new.freeze
 
       REGISTRY = {
         mysql2: {
@@ -34,6 +37,10 @@ module AwsAdvancedRubyDriverWrapper
         postgresql: {
           driver_dialect: PG_DIALECT,
           error_handler: Errors::PgErrorHandler.new(PG_DIALECT)
+        },
+        trilogy: {
+          driver_dialect: TRILOGY_DIALECT,
+          error_handler: Errors::TrilogyErrorHandler.new(TRILOGY_DIALECT)
         }
       }.freeze
 
