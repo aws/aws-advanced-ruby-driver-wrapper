@@ -154,6 +154,28 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
       end
     end
 
+    context 'trilogy driver' do
+      it 'returns AuroraMysqlDialect for Aurora writer cluster endpoint' do
+        service = build_service(:trilogy, host: 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com')
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect)
+      end
+
+      it 'returns RdsMysqlDialect for RDS instance endpoint' do
+        service = build_service(:trilogy, host: 'my-instance.xyz.us-east-2.rds.amazonaws.com')
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::RdsMysqlDialect)
+      end
+
+      it 'returns MysqlDialect for non-RDS endpoint' do
+        service = build_service(:trilogy, host: 'my-database.example.com')
+        expect(service.db_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DbDialects::MysqlDialect)
+      end
+
+      it 'runs the database dialect queries through the trilogy driver dialect' do
+        service = build_service(:trilogy, host: 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com')
+        expect(service.driver_dialect).to be_a(AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialect)
+      end
+    end
+
     context 'with cached endpoint dialect' do
       it 'returns cached dialect on subsequent calls for the same host' do
         host = 'cached-cluster.cluster-xyz.us-east-2.rds.amazonaws.com'
@@ -436,6 +458,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
         allow(error).to receive(:sql_state).and_return('28000')
         expect(service.network_error?(error)).to be false
       end
+    end
+  end
+
+  describe '#network_error? with the trilogy driver' do
+    subject(:service) { build_service(:trilogy) }
+
+    it 'returns true for a lost connection' do
+      expect(service.network_error?(Trilogy::EOFError.new('eof'))).to be true
+    end
+
+    it 'returns false for rejected credentials' do
+      expect(service.network_error?(Trilogy::ProtocolError.from_code('access denied', 1045))).to be false
     end
   end
 

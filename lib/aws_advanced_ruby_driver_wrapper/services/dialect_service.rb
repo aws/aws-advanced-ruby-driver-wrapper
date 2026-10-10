@@ -61,7 +61,7 @@ module AwsAdvancedRubyDriverWrapper
       }.freeze
 
       # @param connection_service [ConnectionService]
-      # @param driver_name [Symbol] :mysql2 or :postgresql
+      # @param driver_name [Symbol] :mysql2, :trilogy or :postgresql
       def initialize(connection_service, driver_name)
         @connection_service = connection_service
         @dialect_cache = {}
