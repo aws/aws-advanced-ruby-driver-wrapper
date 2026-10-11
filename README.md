@@ -4,7 +4,7 @@
 
 The **AWS Advanced Ruby Driver Wrapper** is complementary to an existing Ruby database driver and aims to extend the functionality of the driver to enable applications to take full advantage of the features of clustered databases such as Amazon Aurora. In other words, the AWS Advanced Ruby Driver Wrapper does not connect directly to any database, but enables support of AWS and Aurora functionalities on top of an underlying Ruby driver of the user's choice. This approach enables service-specific enhancements without requiring users to change their workflow with their existing Ruby drivers and tooling.
 
-The wrapper integrates with [ActiveRecord](https://guides.rubyonrails.org/active_record_basics.html) by providing drop-in `aws_mysql2` and `aws_postgresql` adapters that sit on top of the community [`mysql2`](https://rubygems.org/gems/mysql2) and [`pg`](https://rubygems.org/gems/pg) drivers.
+The wrapper integrates with [ActiveRecord](https://guides.rubyonrails.org/active_record_basics.html) by providing drop-in `aws_mysql2`, `aws_trilogy` and `aws_postgresql` adapters that sit on top of the community [`mysql2`](https://rubygems.org/gems/mysql2), [`trilogy`](https://rubygems.org/gems/trilogy) and [`pg`](https://rubygems.org/gems/pg) drivers.
 
 ## About the Wrapper
 
@@ -54,10 +54,12 @@ Add this line to your application's Gemfile:
 gem 'aws_advanced_ruby_driver_wrapper'
 ```
 
-For MySQL users, also install the underlying driver:
+For MySQL users, also install one of the underlying drivers:
 
 ```ruby
 gem 'mysql2'
+# or
+gem 'trilogy'
 ```
 
 For PostgreSQL users, also install the underlying driver:
@@ -74,13 +76,16 @@ bundle install
 
 ## Getting Started
 
-The wrapper registers two ActiveRecord adapters — `aws_mysql2` and `aws_postgresql` — that are drop-in replacements for the standard `mysql2` and `postgresql` adapters.
+The wrapper registers three ActiveRecord adapters — `aws_mysql2`, `aws_trilogy` and `aws_postgresql` — that are drop-in replacements for the standard `mysql2`, `trilogy` and `postgresql` adapters.
 
 Require the appropriate entry point for your database:
 
 ```ruby
-# For MySQL
+# For MySQL with mysql2
 require 'aws_advanced_ruby_driver_wrapper/mysql'
+
+# For MySQL with trilogy
+require 'aws_advanced_ruby_driver_wrapper/trilogy'
 
 # For PostgreSQL
 require 'aws_advanced_ruby_driver_wrapper/postgresql'
@@ -89,7 +94,7 @@ require 'aws_advanced_ruby_driver_wrapper/postgresql'
 Then set the adapter in your database configuration (for example, `config/database.yml` in a Rails application):
 
 ```yaml
-# MySQL
+# MySQL (use aws_trilogy with the trilogy driver)
 production:
   adapter: aws_mysql2
   host: my-cluster.cluster-xxxx.us-east-1.rds.amazonaws.com
@@ -193,6 +198,12 @@ Technical documentation regarding the functionality of the AWS Advanced Ruby Dri
 | Running the integration tests      | [Integration Tests](https://aws.github.io/aws-advanced-wrapper-docs/ruby/development-guide/integration-tests)                        |
 
 ### Known Limitations
+
+#### trilogy
+
+- The KMS Encryption Plugin is not supported with `trilogy`, which has no prepared statements, so a bind parameter could only reach the server in plaintext. The plugin refuses to start on a `trilogy` connection.
+- The Blue/Green Deployment Plugin has not been verified with `trilogy`.
+- To authenticate with an IAM token, set `enable_cleartext_plugin: true` (and `ssl_mode`), since `trilogy` only sends the token with `mysql_clear_password` when that option is set.
 
 #### Amazon RDS Blue/Green Deployments
 
