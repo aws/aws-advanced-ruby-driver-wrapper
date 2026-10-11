@@ -63,6 +63,10 @@ Gem::Specification.new do |spec|
       gem install mysql2
       require 'aws_advanced_ruby_driver_wrapper/mysql'
 
+    To use with MySQL through trilogy:
+      gem install trilogy
+      require 'aws_advanced_ruby_driver_wrapper/trilogy'
+
     To use with PostgreSQL:
       gem install pg
       require 'aws_advanced_ruby_driver_wrapper/postgresql'
