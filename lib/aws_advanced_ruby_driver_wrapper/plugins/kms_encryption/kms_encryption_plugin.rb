@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'concurrent'
+require_relative '../../driver_dialects/trilogy_driver_dialect'
 require_relative '../../logging'
 require_relative '../../ruby_method'
 require_relative '../../utils/parser/encryption_annotation_parser'
@@ -205,6 +206,12 @@ module AwsAdvancedRubyDriverWrapper
       # @param encryption_utility [Encryption::KmsEncryptionUtility, nil] a utility to use instead
       #   of building one
       def initialize(service_container, props = ::Concurrent::Map.new, encryption_utility: nil)
+        # Trilogy has no prepared statements, so a parameter could only reach the server written into the
+        # SQL, in plaintext, before it could be encrypted.
+        if service_container.dialect_service.driver_dialect.is_a?(DriverDialects::TrilogyDriverDialect)
+          raise Errors::EncryptionPluginError, 'The kms_encryption plugin does not support the trilogy driver'
+        end
+
         @service_container = service_container
         @encryption_utility = encryption_utility || Encryption::KmsEncryptionUtility.new(service_container, props)
         # Built up front so that a parser dependency the application has not installed (pg_query, on
