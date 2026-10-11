@@ -17,6 +17,7 @@
 require_relative '../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/trilogy_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_plugin'
 require 'aws_advanced_ruby_driver_wrapper/services/plugin_call_context'
 require 'aws_advanced_ruby_driver_wrapper/services/service_container'
@@ -145,6 +146,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
         allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).and_raise(LoadError)
 
         expect { plugin }.not_to raise_error
+      end
+    end
+
+    # Trilogy has no prepared statements, so a parameter could only reach the server written into
+    # the SQL - in plaintext, before the plugin could encrypt it.
+    context 'with trilogy' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialect.new }
+
+      it 'refuses to be set up' do
+        allow(encryption::KmsEncryptionUtility).to receive(:new)
+
+        expect { described_class.new(service_container, props) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError, /trilogy/)
+        expect(encryption::KmsEncryptionUtility).not_to have_received(:new)
       end
     end
   end
