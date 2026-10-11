@@ -39,6 +39,7 @@ require 'bundler/setup'
 require 'aws_advanced_ruby_driver_wrapper'
 require 'aws_advanced_ruby_driver_wrapper/postgresql'
 require 'aws_advanced_ruby_driver_wrapper/mysql'
+require 'aws_advanced_ruby_driver_wrapper/trilogy'
 require 'dotenv/load'
 require 'pg'
 require 'mysql2'
@@ -46,6 +47,7 @@ require 'trilogy'
 require 'active_record'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_trilogy_adapter'
 
 AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG
 $stderr.sync = true
