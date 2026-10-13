@@ -3,6 +3,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
 
+### :bug: Fixed
+- Fixed the custom endpoint plugin ignoring the `aws_credentials_provider` connection property. It always used the AWS SDK default credential provider chain to call RDS `DescribeDBClusterEndpoints`, so a connection that supplied its own credentials provider could not fetch the custom endpoint's members. The plugin now uses the configured provider, and falls back to the default chain only when none is set.
+
 ## [1.0.1] - 2026-10-07
 
 ### :bug: Fixed
