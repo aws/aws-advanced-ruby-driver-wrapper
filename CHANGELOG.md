@@ -3,6 +3,8 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
 
+## [Unreleased]
+
 ### :bug: Fixed
 - Fixed the failover and initial connection plugins silently ignoring an unknown host selection strategy. A misspelled `failover_reader_host_selector_strategy` or `initial_connection_host_selector_strategy` was treated as "no eligible host", so reader failover found no reader and the initial connection fell back to the original endpoint. The plugins now raise `Unsupported host selection strategy` when the connection is set up, and log a warning when a host selector raises an error while choosing a host. Custom host selectors registered with uppercase letters are also now found, because `register_host_selector` normalizes strategy names the same way they are looked up ([PR #206](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/206)).
 

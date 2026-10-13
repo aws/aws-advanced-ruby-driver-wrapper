@@ -106,6 +106,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::HostService do
       expect { described_class.validate_strategy!('randon') }
         .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy: 'randon'/)
     end
+
+    it 'lists the registered strategies and how to register a custom one' do
+      described_class.register_host_selector('least_lag', instance_double('CustomSelector'))
+
+      expect { described_class.validate_strategy!('randon') }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError,
+                        /Registered strategies: least_lag, random\..*HostService\.register_host_selector/)
+    end
   end
 
   describe '.register_host_selector' do
