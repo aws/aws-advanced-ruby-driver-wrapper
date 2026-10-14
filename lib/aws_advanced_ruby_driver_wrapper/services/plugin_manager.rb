@@ -23,6 +23,7 @@ require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
+require_relative '../plugins/federated_auth/federated_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/kms_encryption/kms_encryption_plugin'
 require_relative '../plugins/secrets_manager_plugin'
@@ -44,6 +45,7 @@ module AwsAdvancedRubyDriverWrapper
         'failover' => Plugins::FailoverPlugin,
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
+        'federated_auth' => Plugins::FederatedAuth::FederatedAuthPlugin,
         'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
         'kms_encryption' => Plugins::KmsEncryptionPlugin,
         'secrets_manager' => Plugins::SecretsManagerPlugin
@@ -59,6 +61,7 @@ module AwsAdvancedRubyDriverWrapper
         Plugins::FailoverPlugin => 400,
         Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
+        Plugins::FederatedAuth::FederatedAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900,
         Plugins::KmsEncryptionPlugin => 2050
       }
@@ -185,7 +188,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def ensure_single_auth_plugin(plugin_code_list)
-        auth_plugins_used = plugin_code_list & %w[iam secrets_manager].freeze
+        auth_plugins_used = plugin_code_list & %w[iam secrets_manager federated_auth].freeze
 
         return unless auth_plugins_used.length > 1
 
