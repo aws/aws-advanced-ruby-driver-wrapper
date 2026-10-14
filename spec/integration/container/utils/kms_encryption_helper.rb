@@ -74,7 +74,7 @@ module Integration
     def metadata_schema
       case drv
       when TestDriver::PG    then 'public'
-      when TestDriver::MYSQL then info.default_dbname
+      when TestDriver::MYSQL2 then info.default_dbname
       else raise "Unsupported driver: #{drv}"
       end
     end
@@ -142,7 +142,7 @@ module Integration
     def encryption_adapter_config
       adapter, ssl = case drv
                      when TestDriver::PG    then ['aws_postgresql', { sslmode: 'require' }]
-                     when TestDriver::MYSQL then ['aws_mysql2', { ssl_mode: :required }]
+                     when TestDriver::MYSQL2 then ['aws_mysql2', { ssl_mode: :required }]
                      else raise "Unsupported driver: #{drv}"
                      end
 
@@ -193,7 +193,7 @@ module Integration
             PRIMARY KEY (table_name, column_name),
             FOREIGN KEY (key_id) REFERENCES #{schema_ref('key_storage')}(id))
         SQL
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         run(conn, <<~SQL)
           CREATE TABLE #{schema_ref('key_storage')} (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -237,7 +237,7 @@ module Integration
         plain_columns.each { |c| columns << "#{c} VARCHAR(255)" }
         encrypted_columns.each { |c| columns << "#{c} #{pg_encrypted_type}" }
         run(conn, "CREATE TABLE #{table} (#{columns.join(', ')})")
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         columns = ['id INT AUTO_INCREMENT PRIMARY KEY']
         plain_columns.each { |c| columns << "#{c} VARCHAR(255)" }
         encrypted_columns.each { |c| columns << "#{c} #{MYSQL_ENCRYPTED_COLUMN_TYPE}" }
@@ -300,7 +300,7 @@ module Integration
       when TestDriver::PG
         result = conn.exec_params("SELECT #{column} FROM #{table} WHERE #{where_column} = $1", [where_value])
         result.ntuples.zero? ? nil : result.getvalue(0, 0)
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         result = conn.query("SELECT #{column} FROM #{table} WHERE #{where_column} = '#{conn.escape(where_value)}'")
         row = result.first
         row && row[column]
@@ -340,7 +340,7 @@ module Integration
           [key_uuid, name, kms_key_id, encrypted_data_key, { value: hmac_key, format: 1 }]
         )
         result.getvalue(0, 0).to_i
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         conn.query(
           "INSERT INTO #{schema_ref('key_storage')} " \
           '(key_id, name, master_key_arn, encrypted_data_key, hmac_key, key_spec) ' \
@@ -359,7 +359,7 @@ module Integration
           '(table_name, column_name, encryption_algorithm, key_id) VALUES ($1, $2, $3, $4)',
           [table, column, algorithm, key_id]
         )
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         conn.query(
           "INSERT INTO #{schema_ref('encryption_metadata')} " \
           '(table_name, column_name, encryption_algorithm, key_id) ' \

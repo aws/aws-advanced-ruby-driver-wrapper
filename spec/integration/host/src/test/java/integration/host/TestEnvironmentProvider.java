@@ -191,6 +191,7 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
                               null, // noHikari field not present; HIKARI feature excluded
                               config.noPerformance ? null : TestEnvironmentFeatures.PERFORMANCE,
                               config.noMysqlDriver ? TestEnvironmentFeatures.SKIP_MYSQL_DRIVER_TESTS : null,
+                              config.noTrilogyDriver ? TestEnvironmentFeatures.SKIP_TRILOGY_DRIVER_TESTS : null,
                               config.noPgDriver ? TestEnvironmentFeatures.SKIP_PG_DRIVER_TESTS : null,
                               config.testEncryptionOnly ? TestEnvironmentFeatures.RUN_ENCRYPTION_TESTS_ONLY : null,
                               config.noTracesTelemetry ? null : TestEnvironmentFeatures.TELEMETRY_TRACES_ENABLED,
@@ -237,7 +238,8 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
                       TestEnvironmentFeatures.NETWORK_OUTAGES_ENABLED,
                       TestEnvironmentFeatures.AWS_CREDENTIALS_ENABLED,
                       config.noPgDriver ? TestEnvironmentFeatures.SKIP_PG_DRIVER_TESTS : null,
-                      config.noMysqlDriver ? TestEnvironmentFeatures.SKIP_MYSQL_DRIVER_TESTS : null)));
+                      config.noMysqlDriver ? TestEnvironmentFeatures.SKIP_MYSQL_DRIVER_TESTS : null,
+                      config.noTrilogyDriver ? TestEnvironmentFeatures.SKIP_TRILOGY_DRIVER_TESTS : null)));
         }
       }
     }

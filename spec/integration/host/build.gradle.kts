@@ -786,3 +786,137 @@ tasks.register<Test>("test-gdb-mysql") {
         systemProperty("exclude-global-database", "false")
     }
 }
+
+// ---------------------------------------------------------------------------
+// Trilogy driver tasks.
+//
+// Trilogy is a second MySQL-protocol driver (alongside mysql2). It runs against
+// the same MySQL engine, so these tasks keep the MySQL engine enabled, exclude
+// the pg driver/engine, exclude the mysql2 driver (exclude-mysql-driver=true),
+// and opt trilogy in (exclude-trilogy-driver=false). Trilogy defaults to
+// excluded everywhere else so existing mysql2 tasks are unchanged.
+//
+// KMS encryption is unsupported on trilogy (no prepared statements), so there
+// is deliberately no test-trilogy-encryption task.
+// ---------------------------------------------------------------------------
+
+tasks.register<Test>("test-ruby-4.0-trilogy") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-ruby-3-3", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-traces-telemetry", "true")
+        systemProperty("exclude-metrics-telemetry", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-trilogy-driver", "false")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
+tasks.register<Test>("test-ruby-3.3-trilogy") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-ruby-4-0", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-traces-telemetry", "true")
+        systemProperty("exclude-metrics-telemetry", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-trilogy-driver", "false")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-5", "true")
+    }
+}
+
+tasks.register<Test>("test-trilogy-multi-az") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-trilogy-driver", "false")
+        systemProperty("exclude-bg", "true")
+    }
+}
+
+tasks.register<Test>("test-bgd-trilogy-instance") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-ruby-4-0", "true")
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-trilogy-driver", "false")
+        systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-failover", "true")
+        systemProperty("exclude-secrets-manager", "true")
+        systemProperty("exclude-instances-2", "true")
+        systemProperty("exclude-instances-3", "true")
+        systemProperty("exclude-instances-5", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("test-bg-only", "true")
+    }
+}
+
+tasks.register<Test>("test-bgd-trilogy-aurora") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-ruby-4-0", "true")
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-trilogy-driver", "false")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-failover", "true")
+        systemProperty("exclude-secrets-manager", "true")
+        systemProperty("exclude-instances-1", "true")
+        systemProperty("exclude-instances-3", "true")
+        systemProperty("exclude-instances-5", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("test-bg-only", "true")
+    }
+}
+
+tasks.register<Test>("test-gdb-trilogy") {
+    group = "verification"
+    filter.includeTestsMatching("integration.host.TestRunner.runTests")
+    doFirst {
+        systemProperty("exclude-docker", "true")
+        systemProperty("exclude-aurora", "true")
+        systemProperty("exclude-multi-az-cluster", "true")
+        systemProperty("exclude-multi-az-instance", "true")
+        systemProperty("exclude-bg", "true")
+        systemProperty("exclude-performance", "true")
+        systemProperty("exclude-pg-driver", "true")
+        systemProperty("exclude-pg-engine", "true")
+        systemProperty("exclude-mysql-driver", "true")
+        systemProperty("exclude-trilogy-driver", "false")
+        systemProperty("exclude-ruby-3-3", "true")
+        systemProperty("exclude-global-database", "false")
+    }
+}

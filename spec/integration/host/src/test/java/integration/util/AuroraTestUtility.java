@@ -860,18 +860,11 @@ public class AuroraTestUtility {
     }
 
     if (waitForCompletion) {
-      final RdsWaiter waiter = rdsClient.waiter();
-      WaiterResponse<DescribeDbClustersResponse> waiterResponse =
-          waiter.waitUntilDBClusterDeleted(
-              (requestBuilder) ->
-                  requestBuilder.filters(
-                      Filter.builder().name("db-cluster-id").values(identifier).build()),
-              (configurationBuilder) -> configurationBuilder.waitTimeout(Duration.ofMinutes(60)));
-
-      if (waiterResponse.matched().exception().isPresent()) {
-        throw new RuntimeException(
-            "Unable to delete AWS Aurora Cluster after waiting for 60 minutes");
-      }
+      // Poll for the cluster's disappearance rather than using the SDK's
+      // waitUntilDBClusterDeleted waiter, whose acceptors treat transient states such as
+      // "modifying" (which the surviving cluster briefly re-enters during blue/green
+      // switchover teardown) as a terminal failure.
+      waitUntilClusterDeleted(rdsClient, identifier, 60);
     }
   }
 
@@ -903,18 +896,7 @@ public class AuroraTestUtility {
     }
 
     if (waitForCompletion) {
-      final RdsWaiter waiter = rdsClient.waiter();
-      WaiterResponse<DescribeDbClustersResponse> waiterResponse =
-          waiter.waitUntilDBClusterDeleted(
-              (requestBuilder) ->
-                  requestBuilder.filters(
-                      Filter.builder().name("db-cluster-id").values(identifier).build()),
-              (configurationBuilder) -> configurationBuilder.waitTimeout(Duration.ofMinutes(60)));
-
-      if (waiterResponse.matched().exception().isPresent()) {
-        throw new RuntimeException(
-            "Unable to delete RDS MultiAz Cluster after waiting for 60 minutes");
-      }
+      waitUntilClusterDeleted(rdsClient, identifier, 60);
     }
   }
 

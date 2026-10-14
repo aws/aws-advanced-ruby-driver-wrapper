@@ -40,14 +40,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       password: 'anything',
       dbname: info.default_dbname
     )
-    case drv
-    when Integration::TestDriver::PG
-      config.merge(sslmode: 'require')
-    when Integration::TestDriver::MYSQL
-      config.merge(ssl_mode: :required)
-    else
-      config
-    end
+    config.merge(Integration::DriverHelper.iam_tls_props(drv))
   end
 
   before do
@@ -105,12 +98,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       password: 'anything',
       dbname: info.default_dbname
     )
-    case drv
-    when Integration::TestDriver::PG
-      ip_config = ip_config.merge(sslmode: 'require')
-    when Integration::TestDriver::MYSQL
-      ip_config = ip_config.merge(ssl_mode: :required, enable_cleartext_plugin: true)
-    end
+    ip_config = ip_config.merge(Integration::DriverHelper.iam_tls_props(drv))
 
     props_with_iam_host = iam_props.merge(
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_HOST.name => instance_host
@@ -214,14 +202,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      case drv
-      when Integration::TestDriver::PG
-        config.merge(sslmode: 'require')
-      when Integration::TestDriver::MYSQL
-        config.merge(ssl_mode: :required)
-      else
-        config
-      end
+      config.merge(Integration::DriverHelper.iam_tls_props(drv))
     end
 
     it 'connects via global cluster endpoint with IAM' do
@@ -255,12 +236,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      case drv
-      when Integration::TestDriver::PG
-        secondary_config = secondary_config.merge(sslmode: 'require')
-      when Integration::TestDriver::MYSQL
-        secondary_config = secondary_config.merge(ssl_mode: :required)
-      end
+      secondary_config = secondary_config.merge(Integration::DriverHelper.iam_tls_props(drv))
 
       secondary_props = iam_props.merge(
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_REGION.name => env.secondary_region
@@ -305,11 +281,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      case drv
-      when Integration::TestDriver::PG    then config.merge(sslmode: 'require')
-      when Integration::TestDriver::MYSQL then config.merge(ssl_mode: :required)
-      else config
-      end
+      config.merge(Integration::DriverHelper.iam_tls_props(drv))
     end
 
     let(:iam_initial_connection_props) do

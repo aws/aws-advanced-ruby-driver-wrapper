@@ -54,7 +54,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
       case drv
       when Integration::TestDriver::PG
         conn.exec_params("SELECT name FROM #{table} WHERE ssn = $1", ['111-11-1111']).to_a
-      when Integration::TestDriver::MYSQL
+      when Integration::TestDriver::MYSQL2
         conn.prepare("SELECT name FROM #{table} WHERE ssn = ?").execute('111-11-1111').to_a
       end
 
@@ -66,7 +66,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, /*@encrypt:#{table}.ssn*/ $2)",
                        %w[Annotated 123-45-6789])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, /*@encrypt:#{table}.ssn*/ ?)")
           .execute('Annotated', '123-45-6789')
     end
@@ -80,7 +80,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
       case drv
       when Integration::TestDriver::PG
         conn.exec("INSERT INTO #{table} (name, ssn) VALUES ('Literal', '999-99-9999')")
-      when Integration::TestDriver::MYSQL
+      when Integration::TestDriver::MYSQL2
         conn.query("INSERT INTO #{table} (name, ssn) VALUES ('Literal', '999-99-9999')")
       end
     end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::MetadataError)
@@ -98,7 +98,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
       case drv
       when Integration::TestDriver::PG
         conn.exec("INSERT INTO #{table} (name, ssn) SELECT 'Copied', ssn FROM #{table} WHERE name = 'Seed'")
-      when Integration::TestDriver::MYSQL
+      when Integration::TestDriver::MYSQL2
         conn.query("INSERT INTO #{table} (name, ssn) SELECT 'Copied', ssn FROM #{table} WHERE name = 'Seed'")
       end
     end.not_to raise_error
@@ -110,7 +110,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)", [name, ssn])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute(name, ssn)
     end
   end
@@ -119,7 +119,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
   end
@@ -128,7 +128,7 @@ RSpec.describe 'KmsEncryption documented behaviors', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT COUNT(*) AS c FROM #{table} WHERE name = $1", [name]).first['c'].to_i
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("SELECT COUNT(*) AS c FROM #{table} WHERE name = '#{conn.escape(name)}'").first['c'].to_i
     end
   end

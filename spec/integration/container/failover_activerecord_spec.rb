@@ -29,6 +29,7 @@ require_relative 'utils/retry_helper'
 require_relative 'utils/topology_helper'
 require 'aws_advanced_ruby_driver_wrapper'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_trilogy_adapter'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
 
 # ActiveRecord failover integration tests.
@@ -53,8 +54,9 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
   # :prepared_statements overrides the adapter default (on for PostgreSQL, off for MySQL).
   def failover_adapter_config(host:, port:, variables: nil, prepared_statements: nil)
     adapter = case drv
-              when Integration::TestDriver::PG    then 'aws_postgresql'
-              when Integration::TestDriver::MYSQL then 'aws_mysql2'
+              when Integration::TestDriver::PG      then 'aws_postgresql'
+              when Integration::TestDriver::MYSQL2   then 'aws_mysql2'
+              when Integration::TestDriver::TRILOGY then 'aws_trilogy'
               else raise "Unsupported driver: #{drv}"
               end
 
@@ -86,7 +88,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
     when Integration::TestDriver::PG
       { name: :application_name, value: 'ar_failover_probe',
         read_sql: "SELECT current_setting('application_name')", expected: 'ar_failover_probe' }
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2, Integration::TestDriver::TRILOGY
       { name: :group_concat_max_len, value: 12_345,
         read_sql: 'SELECT @@SESSION.group_concat_max_len', expected: 12_345 }
     else
@@ -183,6 +185,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
 
     it 'runs queries ActiveRecord prepared before failover again on the new writer',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
+      skip 'mysql2 driver only (trilogy has no prepared statements)' unless drv == Integration::TestDriver::MYSQL2
       enable_on_num_instances(min_instances: 2)
 
       establish_failover_connection(

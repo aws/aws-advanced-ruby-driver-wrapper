@@ -137,7 +137,7 @@ RSpec.describe 'KmsEncryption read shapes', :integration, :kms_encryption,
   end
 
   context 'on MySQL' do
-    before { skip 'MySQL only' unless drv == Integration::TestDriver::MYSQL }
+    before { skip 'MySQL only' unless drv == Integration::TestDriver::MYSQL2 }
 
     let(:conn) { encryption_connect }
     let(:select_sql) { "SELECT name, ssn FROM #{table} ORDER BY name" }
@@ -171,7 +171,7 @@ RSpec.describe 'KmsEncryption read shapes', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)", [name, ssn])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute(name, ssn)
     end
   end

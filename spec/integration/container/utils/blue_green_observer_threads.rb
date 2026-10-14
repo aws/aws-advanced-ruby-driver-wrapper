@@ -64,7 +64,7 @@ module Integration
 
     def query_server_identity(driver, conn)
       sql = case driver
-            when TestDriver::MYSQL then 'SELECT @@aurora_server_id'
+            when TestDriver::MYSQL2, TestDriver::TRILOGY then 'SELECT @@aurora_server_id'
             when TestDriver::PG then 'SELECT inet_server_addr()::text'
             else raise "Unsupported driver: #{driver}"
             end
@@ -120,7 +120,7 @@ module Integration
         conn = nil
         begin
           sleep_sql = case driver
-                      when TestDriver::MYSQL then 'SELECT SLEEP(5)'
+                      when TestDriver::MYSQL2, TestDriver::TRILOGY then 'SELECT SLEEP(5)'
                       when TestDriver::PG then 'SELECT pg_catalog.pg_sleep(5)'
                       end
 
@@ -148,11 +148,7 @@ module Integration
             rescue StandardError => e
               end_t = nano_time
               results.wrapper_pre_switchover_execute_times << TimeHolder.new(start_time: start_t, end_time: end_t, error: e.message)
-              closed = case driver
-                       when TestDriver::PG then conn.finished?
-                       when TestDriver::MYSQL then conn.closed?
-                       end
-              break if closed
+              break if connection_closed?(driver, conn)
             end
             sleep(1)
           end
@@ -163,9 +159,7 @@ module Integration
 
           until stop.true?
             begin
-              if conn.nil? || (driver == TestDriver::PG ? conn.finished? : conn.closed?)
-                conn = DriverHelper.wrapper_connect(driver, **config)
-              end
+              conn = DriverHelper.wrapper_connect(driver, **config) if connection_closed?(driver, conn)
               start_t = nano_time
               DriverHelper.execute(driver, conn, sleep_sql)
               end_t = nano_time
@@ -336,7 +330,8 @@ module Integration
           until stop.true? || nano_time > deadline
             break if global.switchover_done? || global.rollback?
 
-            conn = open_direct_connection_with_retry(driver, config) if conn.nil?
+            conn = safe_reconnect(driver, conn, config, host_id: "DirectTopology@#{host_id}", wrapper: false)
+            next if conn.nil?
 
             begin
               rows = DriverHelper.execute(driver, conn, query)
@@ -561,12 +556,27 @@ module Integration
       end
     end
 
-    # Reconnects a wrapper connection if the current one is nil or closed.
-    # Returns the existing connection if still alive, or a new connection otherwise.
-    def reconnect_if_needed(driver, conn, config)
-      return conn unless conn.nil? || (driver == TestDriver::PG ? conn.finished? : conn.closed?)
+    # True when +conn+ is nil or the driver reports it closed/finished.
+    def connection_closed?(driver, conn)
+      return true if conn.nil?
 
-      DriverHelper.wrapper_connect(driver, **config)
+      driver == TestDriver::PG ? conn.finished? : conn.closed?
+    end
+
+    # Ensures +conn+ is live, reconnecting if it is nil or closed. Returns the existing
+    # connection when still alive. A reconnect failure here is expected while blue/green
+    # endpoints come and go during switchover, so it is swallowed: the stale connection
+    # is closed and nil is returned, and the caller retries on its next loop iteration
+    # rather than the error killing the monitor thread and surfacing as an unhandled
+    # exception. Pass wrapper: false to reconnect through the raw driver.
+    def safe_reconnect(driver, conn, config, host_id:, wrapper: true)
+      return conn unless connection_closed?(driver, conn)
+
+      safe_close(driver, conn)
+      wrapper ? open_wrapper_with_retry(driver, config) : open_direct_connection_with_retry(driver, config)
+    rescue StandardError => e
+      LOGGER.debug { "[#{host_id}] reconnect failed: #{e.class}: #{e.message}" }
+      nil
     end
 
     # bg,failover executing thread: queries with bg,failover plugins, records failover events.
@@ -588,6 +598,14 @@ module Integration
           start_latch.wait(300)
 
           until stop.true?
+            if connection_closed?(driver, conn)
+              conn = safe_reconnect(driver, conn, config, host_id: "WrapperBGFailover@#{host_id}")
+              if conn.nil?
+                sleep(0.5)
+                next
+              end
+            end
+
             begin
               DriverHelper.execute(driver, conn, 'SELECT 1')
               if failover_occurred
@@ -603,9 +621,11 @@ module Integration
             rescue AwsAdvancedRubyDriverWrapper::Errors::BlueGreenTimeoutError => e
               results.bg_timeout_errors << { timestamp: nano_time, message: e.message }
             rescue StandardError => e
-              # Other errors during transition — log but don't record as specific failures
+              # Other errors during transition — log but don't record as specific failures.
+              # Drop the connection; the top-of-loop guard reconnects on the next iteration.
               LOGGER.debug { "[WrapperBGFailover@#{host_id}] #{e.class}: #{e.message}" }
-              conn = reconnect_if_needed(driver, conn, config)
+              safe_close(driver, conn)
+              conn = nil
             end
             sleep(0.5)
           end

@@ -176,9 +176,12 @@ module Integration
 
     def test_driver_allowed?(test_driver)
       case test_driver
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         compatible = engine == DatabaseEngine::MYSQL
         disabled = features.include?(TestEnvironmentFeatures::SKIP_MYSQL_DRIVER_TESTS)
+      when TestDriver::TRILOGY
+        compatible = engine == DatabaseEngine::MYSQL
+        disabled = features.include?(TestEnvironmentFeatures::SKIP_TRILOGY_DRIVER_TESTS)
       when TestDriver::PG
         compatible = engine == DatabaseEngine::PG
         disabled = features.include?(TestEnvironmentFeatures::SKIP_PG_DRIVER_TESTS)

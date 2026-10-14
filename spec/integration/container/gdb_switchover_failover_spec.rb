@@ -115,11 +115,10 @@ RSpec.describe 'GDB Switchover Failover', :integration,
       dbname: db_info.default_dbname
     )
     if require_ssl
-      config = case drv
-               when Integration::TestDriver::PG then config.merge(sslmode: 'require')
-               when Integration::TestDriver::MYSQL then config.merge(ssl_mode: :required)
-               else config
-               end
+      # TLS for the auth-over-the-wire scenarios (IAM and Secrets Manager). iam_tls_props gives each
+      # driver the right form - and for the MySQL-protocol drivers enables the cleartext plugin, which
+      # trilogy requires to send an IAM token and which is harmless for password (Secrets Manager) auth.
+      config = config.merge(Integration::DriverHelper.iam_tls_props(drv))
     end
     Integration::IntegrationHelper::LOGGER.info(
       "GDB connect: instance_id=#{instance.instance_id} host=#{instance.host}:#{instance.port} " \
