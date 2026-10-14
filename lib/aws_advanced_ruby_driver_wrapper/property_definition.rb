@@ -185,6 +185,7 @@ module AwsAdvancedRubyDriverWrapper
     DB_USER = WrapperProperty.new(:db_user, 'The database user used to access the database', default_value: nil, type: String)
     SSL_INSECURE = WrapperProperty.new(:ssl_insecure, "Whether the IdP server's TLS certificate chain should not be verified",
                                        default_value: false, type: :boolean)
+    APP_ID = WrapperProperty.new(:app_id, 'The ID of the AWS application configured on Okta', default_value: nil, type: String)
     HTTP_CLIENT_SOCKET_TIMEOUT_SEC = WrapperProperty.new(:http_client_socket_timeout_sec,
                                                          'Socket timeout in seconds for IdP HTTP requests',
                                                          default_value: 60.0, type: Float, validator: POSITIVE_FLOAT)
