@@ -73,7 +73,7 @@ public final class ContainerImages {
   }
 
   public static DockerImageName postgres() {
-    return dockerOfficial("postgres", "latest");
+    return dockerOfficial("postgres", "17.11");
   }
 
   public static DockerImageName valkey() {

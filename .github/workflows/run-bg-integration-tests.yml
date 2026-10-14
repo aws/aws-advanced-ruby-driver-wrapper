@@ -10,6 +10,11 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. These runners share an
+  # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -54,7 +59,6 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:${{ matrix.testTask }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_CONTAINER_REGISTRY: ecr
 
       - name: Archive results
         if: always()
