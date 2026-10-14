@@ -7,6 +7,11 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. These runners share an
+  # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
 jobs:
   aurora-mysql-performance-tests:
     name: 'Run Aurora MySQL performance tests'
@@ -43,7 +48,6 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-mysql-performance --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_CONTAINER_REGISTRY: ecr
 
       - name: 'Archive performance results'
         if: always()

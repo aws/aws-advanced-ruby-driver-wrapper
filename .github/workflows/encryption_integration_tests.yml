@@ -10,6 +10,11 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. These runners share an
+  # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
 # These workflows create real RDS clusters and a real KMS key. Only one run of this workflow at a
 # time; within a run, the key is found or created once, before the engine legs start in parallel.
 concurrency:
@@ -101,7 +106,6 @@ jobs:
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           KMS_KEY_ID: ${{ needs.kms-key.outputs.key_id }}
-          TEST_CONTAINER_REGISTRY: ecr
 
       - name: 'Archive encryption results'
         if: always()

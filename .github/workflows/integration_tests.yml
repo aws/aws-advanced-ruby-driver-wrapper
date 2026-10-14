@@ -10,6 +10,11 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. These runners share an
+  # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
 jobs:
   default-integration-tests:
     name: Run Integration Tests (Ruby 3.3, RDS default)
@@ -52,9 +57,6 @@ jobs:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           MYSQL_VERSION: default
           PG_VERSION: default
-          # Pull test container images from ECR Public rather than Docker Hub. These runners share an
-          # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
-          TEST_CONTAINER_REGISTRY: ecr
 
       - name: 'Archive results (Ruby 3.3, RDS default)'
         if: always()
@@ -106,7 +108,6 @@ jobs:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           MYSQL_VERSION: latest
           PG_VERSION: latest
-          TEST_CONTAINER_REGISTRY: ecr
 
       - name: 'Archive results (Ruby 4.0, RDS latest)'
         if: always()
@@ -157,7 +158,6 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-multi-az --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          TEST_CONTAINER_REGISTRY: ecr
 
       - name: 'Archive Multi-AZ results'
         if: always()
