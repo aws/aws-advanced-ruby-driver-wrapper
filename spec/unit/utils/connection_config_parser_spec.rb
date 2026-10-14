@@ -409,6 +409,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfigParser do
         expect { parser.parse(:postgresql, host: 'h', cluster_id: nil) }.not_to raise_error
       end
 
+      it 'accepts numbers for String-typed properties, as YAML produces for unquoted numeric values' do
+        expect { parser.parse(:postgresql, host: 'h', cluster_id: 1, bgd_id: 2.5) }.not_to raise_error
+      end
+
+      it 'accepts a string for a Symbol-typed property, as YAML produces' do
+        expect { parser.parse(:postgresql, host: 'h', iam_access_token_property_name: 'password') }.not_to raise_error
+      end
+
+      it 'raises TypeError for a non-string, non-numeric String-typed property' do
+        expect do
+          parser.parse(:postgresql, host: 'h', cluster_id: ['my-cluster'])
+        end.to raise_error(TypeError, /cluster_id/)
+      end
+
+      it 'raises TypeError for a non-string, non-symbol Symbol-typed property' do
+        expect do
+          parser.parse(:postgresql, host: 'h', iam_access_token_property_name: 1)
+        end.to raise_error(TypeError, /iam_access_token_property_name/)
+      end
+
       it 'ignores unknown wrapper keys' do
         expect { parser.parse(:postgresql, host: 'h', unknown_prop: 123) }.not_to raise_error
       end

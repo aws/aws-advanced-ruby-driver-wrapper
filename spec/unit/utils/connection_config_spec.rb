@@ -51,6 +51,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::ConnectionConfig do
       config = described_class.new
       expect(config.cluster_id).to eq('1')
     end
+
+    it 'returns a numeric cluster_id as a string so it matches the host list provider cache key' do
+      config = described_class.new(wrapper_props: { cluster_id: 1 })
+      expect(config.cluster_id).to eq('1')
+    end
   end
 
   describe '#inspect' do
