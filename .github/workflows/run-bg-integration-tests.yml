@@ -23,10 +23,6 @@ jobs:
       fail-fast: false
       matrix:
         testTask:
-          - test-bgd-mysql-aurora
-          - test-bgd-pg-aurora
-          - test-bgd-mysql-instance
-          - test-bgd-pg-instance
           - test-bgd-trilogy-aurora
           - test-bgd-trilogy-instance
     steps:

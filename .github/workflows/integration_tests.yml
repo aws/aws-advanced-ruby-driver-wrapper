@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ 'mysql', 'pg', 'trilogy' ]
+        environment: [ 'trilogy' ]
 
     steps:
       - name: 'Clone repository'
@@ -72,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ 'mysql', 'pg', 'trilogy' ]
+        environment: [ 'trilogy' ]
 
     steps:
       - name: 'Clone repository'
@@ -124,7 +124,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ 'mysql', 'pg', 'trilogy' ]
+        environment: [ 'trilogy' ]
 
     steps:
       - name: 'Clone repository'

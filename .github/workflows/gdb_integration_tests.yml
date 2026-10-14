@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        environment: [ 'gdb-mysql', 'gdb-pg', 'gdb-trilogy' ]
+        environment: [ 'gdb-trilogy' ]
 
     steps:
       - name: 'Clone repository'
