@@ -54,7 +54,7 @@ module AwsAdvancedRubyDriverWrapper
                                                                                             type: String)
     DIALECT = WrapperProperty.new(:wrapper_dialect, 'The database dialect identifier for the database in use.', type: String)
     AWS_CREDENTIALS_PROVIDER = WrapperProperty.new(:aws_credentials_provider,
-                                                   'AWS credentials provider for IAM token generation or Secrets Manager',
+                                                   'AWS credentials provider for the plugins that call AWS services',
                                                    default_value: nil)
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(

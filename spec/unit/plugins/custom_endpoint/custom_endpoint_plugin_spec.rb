@@ -102,6 +102,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
         expect(result).to eq(:connected)
       end
 
+      it 'passes the configured AWS credentials provider to the monitor' do
+        provider = double('CredentialsProvider')
+        plugin = build_plugin(wait_for_custom_endpoint_info: 'false', aws_credentials_provider: provider)
+        allow(mock_monitor_service).to receive(:run_if_absent) { |*, &block| block.call(service_container) }
+        expect(AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndpointMonitor)
+          .to receive(:new).with(any_args, hash_including(credentials_provider: provider)).and_return(mock_monitor)
+        plugin.connect(custom_host_info, {}, true, -> { :connected })
+      end
+
       it 'does not wait for endpoint info when wait_for_custom_endpoint_info is false' do
         plugin = build_plugin_with_monitor(wait_for_custom_endpoint_info: 'false')
         pipeline = -> { :connected }

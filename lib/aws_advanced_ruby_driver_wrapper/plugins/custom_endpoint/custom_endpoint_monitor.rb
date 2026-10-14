@@ -41,7 +41,14 @@ module AwsAdvancedRubyDriverWrapper
           refresh_rate_sec,
           refresh_rate_backoff_factor,
           max_refresh_rate_sec,
-          rds_client_func: ->(_, region) { Aws::RDS::Client.new(region: region) }
+          credentials_provider: nil,
+          rds_client_func: lambda { |_, client_region|
+            # Pass the configured credentials provider when one is set; otherwise omit :credentials
+            # so the SDK resolves from its default chain.
+            options = { region: client_region }
+            options[:credentials] = credentials_provider if credentials_provider
+            Aws::RDS::Client.new(**options)
+          }
         )
           super(termination_timeout_sec: TERMINATION_TIMEOUT_SEC)
 
