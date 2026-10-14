@@ -99,7 +99,7 @@ RSpec.describe 'Failover Performance', :integration,
     case @driver
     when Integration::TestDriver::PG
       { keepalives: 1, keepalives_idle: timeout_sec, keepalives_interval: 1, keepalives_count: 1 }
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       { read_timeout: timeout_sec }
     else {}
     end
@@ -226,7 +226,7 @@ RSpec.describe 'Failover Performance', :integration,
     when Integration::TestDriver::PG
       raw = conn.respond_to?(:raw_connection) ? conn.raw_connection : conn
       raw.cancel if raw.respond_to?(:cancel)
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       safe_close(conn)
     end
   rescue StandardError

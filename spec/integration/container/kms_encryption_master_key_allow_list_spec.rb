@@ -98,7 +98,7 @@ RSpec.describe 'KmsEncryption master key allow-list', :integration, :kms_encrypt
     case drv
     when Integration::TestDriver::PG
       admin_conn.exec_params("UPDATE #{schema_ref('key_storage')} SET master_key_arn = $1", [arn])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       admin_conn.query("UPDATE #{schema_ref('key_storage')} SET master_key_arn = '#{admin_conn.escape(arn)}'")
     end
   end
@@ -107,7 +107,7 @@ RSpec.describe 'KmsEncryption master key allow-list', :integration, :kms_encrypt
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)", [name, ssn])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute(name, ssn)
     end
   end
@@ -116,7 +116,7 @@ RSpec.describe 'KmsEncryption master key allow-list', :integration, :kms_encrypt
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
   end
@@ -125,7 +125,7 @@ RSpec.describe 'KmsEncryption master key allow-list', :integration, :kms_encrypt
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT COUNT(*) AS c FROM #{table} WHERE name = $1", [name]).first['c'].to_i
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("SELECT COUNT(*) AS c FROM #{table} WHERE name = '#{conn.escape(name)}'").first['c'].to_i
     end
   end

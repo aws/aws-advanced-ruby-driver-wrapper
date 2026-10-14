@@ -17,6 +17,7 @@
 module Integration
   module TestDriver
     PG = :pg
-    MYSQL = :mysql
+    MYSQL2 = :mysql2
+    TRILOGY = :trilogy
   end
 end

@@ -159,7 +159,7 @@ RSpec.describe 'KmsEncryption round-trip', :integration, :kms_encryption,
       when Integration::TestDriver::PG
         conn.exec_params("INSERT INTO #{multi_table} (name, ssn, email) VALUES ($1, $2, $3)",
                          [name, ssn_value, email_value])
-      when Integration::TestDriver::MYSQL
+      when Integration::TestDriver::MYSQL2
         conn.prepare("INSERT INTO #{multi_table} (name, ssn, email) VALUES (?, ?, ?)")
             .execute(name, ssn_value, email_value)
       end
@@ -169,7 +169,7 @@ RSpec.describe 'KmsEncryption round-trip', :integration, :kms_encryption,
       case drv
       when Integration::TestDriver::PG
         conn.exec_params("SELECT ssn, email FROM #{multi_table} WHERE name = $1", [name]).first
-      when Integration::TestDriver::MYSQL
+      when Integration::TestDriver::MYSQL2
         conn.prepare("SELECT ssn, email FROM #{multi_table} WHERE name = ?").execute(name).first
       end
     end
@@ -181,7 +181,7 @@ RSpec.describe 'KmsEncryption round-trip', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)", [name, ssn_value])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute(name, ssn_value)
     end
   end
@@ -190,7 +190,7 @@ RSpec.describe 'KmsEncryption round-trip', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
   end
