@@ -132,6 +132,10 @@ Technical documentation regarding the functionality of the AWS Advanced Ruby Dri
 
 Support for Blue/Green deployments using the wrapper requires specific metadata tables. Please refer to the plugin documentation for the supported database engine versions.
 
+## Configuring the Wrapper with AI Tools
+
+The wrapper ships with a self-contained configuration assistant skill, [`RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md`](./docs/RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md), that you can add to your AI tool's knowledge base, project rules, or system prompt (Kiro, Cursor, Claude Projects, ChatGPT, Amazon Bedrock, GitHub Copilot, etc.) to help build, review, or troubleshoot wrapper configurations.
+
 ## Getting Help and Opening Issues
 
 If you encounter a bug with the AWS Advanced Ruby Driver Wrapper, we would like to hear about it.
