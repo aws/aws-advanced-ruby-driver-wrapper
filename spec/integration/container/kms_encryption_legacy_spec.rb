@@ -95,7 +95,7 @@ RSpec.describe 'KmsEncryption legacy and mixed data', :integration, :kms_encrypt
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)",
                        [name, { value: bytes.b, format: 1 }])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("INSERT INTO #{table} (name, ssn) VALUES ('#{conn.escape(name)}', X'#{hex(bytes)}')")
     end
   end
@@ -104,7 +104,7 @@ RSpec.describe 'KmsEncryption legacy and mixed data', :integration, :kms_encrypt
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
   end

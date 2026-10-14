@@ -172,6 +172,37 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::AuroraTopologyUtils do
       end
     end
 
+    # The trilogy driver dialect returns a plain Array of row hashes from #execute (no #fields),
+    # unlike the mysql2/pg result objects. query_topology must handle both shapes.
+    context 'when the dialect returns a plain Array of row hashes (trilogy shape)' do
+      it 'builds hosts from the array rows' do
+        rows = [
+          { 'instance_id' => 'writer-instance', 'is_writer' => true, 'cpu_utilization' => 25.0,
+            'instance_lag' => 0.0, 'last_update_time' => now },
+          { 'instance_id' => 'reader-instance', 'is_writer' => false, 'cpu_utilization' => 10.0,
+            'instance_lag' => 1.0, 'last_update_time' => now }
+        ]
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return(rows)
+
+        hosts = subject.query_topology(conn, initial_host_info, instance_template)
+
+        expect(hosts).not_to be_nil
+        expect(hosts.map(&:id)).to contain_exactly('writer-instance', 'reader-instance')
+      end
+
+      it 'returns nil when the array is empty' do
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return([])
+
+        expect(subject.query_topology(conn, initial_host_info, instance_template)).to be_nil
+      end
+
+      it 'returns nil when the first row hash is empty' do
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return([{}])
+
+        expect(subject.query_topology(conn, initial_host_info, instance_template)).to be_nil
+      end
+    end
+
     context 'when there are multiple writers' do
       it 'selects the writer with the most recent last_update_time' do
         older_time = Time.now - 120

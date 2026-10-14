@@ -447,7 +447,7 @@ module Integration
 
     def self.driver_for_engine(engine)
       case engine
-      when DatabaseEngine::MYSQL then Integration::TestDriver::MYSQL
+      when DatabaseEngine::MYSQL then Integration::TestDriver::MYSQL2
       when DatabaseEngine::PG then Integration::TestDriver::PG
       else raise "Unsupported engine: #{engine}"
       end
@@ -455,7 +455,7 @@ module Integration
 
     def self.dialect_for_driver(driver)
       case driver
-      when Integration::TestDriver::MYSQL then :mysql2
+      when Integration::TestDriver::MYSQL2 then :mysql2
       when Integration::TestDriver::PG then :postgresql
       else raise "Unknown driver: #{driver}"
       end
@@ -829,7 +829,10 @@ module Integration
     def query_aurora_instance_id(conn, engine)
       sql = self.class.instance_id_query(engine)
       row = execute(conn, sql, self.class.driver_for_engine(engine)).first
-      row.is_a?(Hash) ? row.values.first : row
+      # A Hash row (mysql2/pg, and the trilogy dialect's each_hash output) yields its first value; an
+      # array-shaped row yields its first element. Returning +row+ itself for the array case would leak
+      # the whole [value] array to callers like verify_writer, which expect a scalar id.
+      row.is_a?(Hash) ? row.values.first : row&.first
     end
 
     def query_multi_az_instance_id(conn, engine)
@@ -842,7 +845,8 @@ module Integration
                      end
       driver = self.class.driver_for_engine(engine)
       row = execute(conn, endpoint_sql, driver).first
-      endpoint = row.is_a?(Hash) ? row.values.first : row
+      # See query_aurora_instance_id: the array-row case must yield the element, not the row.
+      endpoint = row.is_a?(Hash) ? row.values.first : row&.first
       endpoint.split('.').first
     end
 

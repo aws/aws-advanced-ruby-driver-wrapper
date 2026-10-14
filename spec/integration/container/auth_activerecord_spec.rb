@@ -25,6 +25,7 @@ require_relative 'utils/driver_helper'
 require_relative 'utils/connection_utils'
 require 'aws_advanced_ruby_driver_wrapper'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+require 'aws_advanced_ruby_driver_wrapper/active_record/aws_trilogy_adapter'
 require 'aws_advanced_ruby_driver_wrapper/active_record/aws_postgresql_adapter'
 
 # ActiveRecord smoke tests for the IAM and Secrets Manager plugins.
@@ -49,8 +50,9 @@ RSpec.describe 'Auth plugins (ActiveRecord)', :integration,
   # unchanged; :username and :database are the AR-shaped keys whose translation we are exercising.
   def ar_config(username:, password:, plugin_props:)
     adapter = case drv
-              when Integration::TestDriver::PG    then 'aws_postgresql'
-              when Integration::TestDriver::MYSQL then 'aws_mysql2'
+              when Integration::TestDriver::PG      then 'aws_postgresql'
+              when Integration::TestDriver::MYSQL2   then 'aws_mysql2'
+              when Integration::TestDriver::TRILOGY then 'aws_trilogy'
               else raise "Unsupported driver: #{drv}"
               end
 
@@ -66,8 +68,10 @@ RSpec.describe 'Auth plugins (ActiveRecord)', :integration,
 
     # Both plugins authenticate over the wire, so TLS is required.
     case drv
-    when Integration::TestDriver::PG    then config[:sslmode] = 'require'
-    when Integration::TestDriver::MYSQL then config[:ssl_mode] = :required
+    when Integration::TestDriver::PG then config[:sslmode] = 'require'
+    when Integration::TestDriver::MYSQL2, Integration::TestDriver::TRILOGY
+      config[:ssl_mode] = :required
+      config[:enable_cleartext_plugin] = true
     end
 
     config.merge(plugin_props)

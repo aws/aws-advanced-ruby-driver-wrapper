@@ -106,9 +106,14 @@ RSpec.describe 'Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'fails over on connection bound object invocation (mysql2 prepared statement)',
+    # mysql2-driver-specific: exercises a mysql2 prepared-statement handle (conn.prepare), which the
+    # trilogy driver does not support (trilogy has no prepared statements — see README limitations).
+    # enable_on_engines gates on the MySQL engine, which trilogy also uses, so the trilogy driver must
+    # be excluded explicitly here rather than by engine.
+    it 'fails over on connection bound object invocation (mysql2 driver prepared statement)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
        enable_on_engines: [Integration::DatabaseEngine::MYSQL] do
+      skip 'mysql2 driver only (trilogy has no prepared statements)' unless drv == Integration::TestDriver::MYSQL2
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
@@ -204,9 +209,13 @@ RSpec.describe 'Failover', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'preserves connection properties after failover (mysql read_timeout)',
+    # mysql2-driver-specific: asserts on conn.query_options, a mysql2 client accessor the trilogy
+    # driver does not provide. enable_on_engines gates on the MySQL engine, which trilogy also uses,
+    # so the trilogy driver must be excluded explicitly here rather than by engine.
+    it 'preserves connection properties after failover (mysql2 driver read_timeout)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
        enable_on_engines: [Integration::DatabaseEngine::MYSQL] do
+      skip 'mysql2 driver only (trilogy has no query_options)' unless drv == Integration::TestDriver::MYSQL2
       enable_on_num_instances(min_instances: 2)
 
       initial_writer_instance = proxy_info.instances.first
@@ -385,11 +394,7 @@ RSpec.describe 'Failover', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      case drv
-      when Integration::TestDriver::PG    then config.merge(sslmode: 'require')
-      when Integration::TestDriver::MYSQL then config.merge(ssl_mode: :required)
-      else config
-      end
+      config.merge(Integration::DriverHelper.iam_tls_props(drv))
     end
 
     before do

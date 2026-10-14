@@ -32,6 +32,8 @@ public class TestEnvironmentConfiguration {
       Boolean.parseBoolean(System.getProperty("exclude-mysql-engine", "false"));
   public boolean noMysqlDriver =
       Boolean.parseBoolean(System.getProperty("exclude-mysql-driver", "false"));
+  public boolean noTrilogyDriver =
+      Boolean.parseBoolean(System.getProperty("exclude-trilogy-driver", "true"));
   public boolean noPgEngine =
       Boolean.parseBoolean(System.getProperty("exclude-pg-engine", "false"));
   public boolean noPgDriver =

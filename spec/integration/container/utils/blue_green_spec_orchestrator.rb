@@ -357,19 +357,15 @@ module Integration
       config[:bg_switchover_timeout_sec] = 180.0
       config[:bg_connect_timeout_sec] = 60.0
       config[:connect_timeout] = 10
-      config[:read_timeout] = 10 if @driver == TestDriver::MYSQL
+      config[:read_timeout] = 10 if @driver == TestDriver::MYSQL2
 
       # IAM-specific props
       if combo.include?('iam')
         config[:iam_region] = @env.aurora_region
-        user_key = @driver == TestDriver::MYSQL ? :username : :user
+        user_key = @driver == TestDriver::PG ? :user : :username
         config[user_key] = @env.iam_user_name
         config.delete(:password)
-        # IAM auth requires SSL
-        case @driver
-        when TestDriver::PG then config[:sslmode] = 'require'
-        when TestDriver::MYSQL then config[:ssl_mode] = :required
-        end
+        config.merge!(DriverHelper.iam_tls_props(@driver))
       end
 
       # Failover-specific props

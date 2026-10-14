@@ -35,7 +35,7 @@ module AwsAdvancedRubyDriverWrapper
       def query_global_topology(conn, initial_host_info, instance_templates_by_region)
         results = @dialect.execute(conn, @dialect.topology_query)
 
-        if results.fields.empty?
+        if topology_result_empty?(results)
           # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
           logger.debug('The topology query returned a result with 0 columns. ' \
                        'This may occur if the topology query is executed when the server is failing over.')

@@ -123,9 +123,8 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
     it 'completes without unhandled exceptions' do
       enable_on_num_instances(min_instances: 3)
       expect(@global.unhandled_exceptions).to be_empty,
-                                              "Unhandled exceptions: #{@global.unhandled_exceptions.map do |e|
-                                                "#{e.class}: #{e.message}"
-                                              end.join('; ')}"
+                                              'Unhandled exceptions: ' \
+                                              "#{@global.unhandled_exceptions.map { |e| "#{e.class}: #{e.message}" }.join('; ')}"
     end
 
     it 'does not exceed the orchestrator hard timeout' do

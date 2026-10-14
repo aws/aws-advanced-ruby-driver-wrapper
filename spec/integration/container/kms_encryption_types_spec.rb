@@ -132,7 +132,7 @@ RSpec.describe 'KmsEncryption type coverage', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (label, secret) VALUES ($1, $2)", [label, value])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (label, secret) VALUES (?, ?)").execute(label, value)
     end
   end
@@ -141,7 +141,7 @@ RSpec.describe 'KmsEncryption type coverage', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT secret FROM #{table} WHERE label = $1", [label]).first['secret']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT secret FROM #{table} WHERE label = ?").execute(label).first['secret']
     end
   end

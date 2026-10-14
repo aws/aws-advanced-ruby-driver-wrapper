@@ -64,7 +64,7 @@ module Integration
 
     def query_server_identity(driver, conn)
       sql = case driver
-            when TestDriver::MYSQL then 'SELECT @@aurora_server_id'
+            when TestDriver::MYSQL2, TestDriver::TRILOGY then 'SELECT @@aurora_server_id'
             when TestDriver::PG then 'SELECT inet_server_addr()::text'
             else raise "Unsupported driver: #{driver}"
             end
@@ -120,7 +120,7 @@ module Integration
         conn = nil
         begin
           sleep_sql = case driver
-                      when TestDriver::MYSQL then 'SELECT SLEEP(5)'
+                      when TestDriver::MYSQL2, TestDriver::TRILOGY then 'SELECT SLEEP(5)'
                       when TestDriver::PG then 'SELECT pg_catalog.pg_sleep(5)'
                       end
 
@@ -150,7 +150,7 @@ module Integration
               results.wrapper_pre_switchover_execute_times << TimeHolder.new(start_time: start_t, end_time: end_t, error: e.message)
               closed = case driver
                        when TestDriver::PG then conn.finished?
-                       when TestDriver::MYSQL then conn.closed?
+                       when TestDriver::MYSQL2, TestDriver::TRILOGY then conn.closed?
                        end
               break if closed
             end

@@ -150,6 +150,7 @@ RSpec.describe 'GDB Failover', :integration,
     it 'fails over on connection bound object invocation (mysql2 prepared statement)',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED],
        enable_on_engines: [Integration::DatabaseEngine::MYSQL] do
+      skip 'mysql2 driver only (trilogy has no prepared statements)' unless drv == Integration::TestDriver::MYSQL2
       enable_on_num_instances(min_instances: 2)
 
       conn = gdb_connect(instance: writer_instance, props: gdb_props(in_home_mode: 'strict_writer'))

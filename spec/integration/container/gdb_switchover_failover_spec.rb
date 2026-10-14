@@ -117,7 +117,7 @@ RSpec.describe 'GDB Switchover Failover', :integration,
     if require_ssl
       config = case drv
                when Integration::TestDriver::PG then config.merge(sslmode: 'require')
-               when Integration::TestDriver::MYSQL then config.merge(ssl_mode: :required)
+               when Integration::TestDriver::MYSQL2 then config.merge(ssl_mode: :required)
                else config
                end
     end

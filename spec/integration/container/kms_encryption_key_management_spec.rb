@@ -157,7 +157,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   def scalar_count(sql)
     case drv
     when Integration::TestDriver::PG    then admin_conn.exec(sql).getvalue(0, 0).to_i
-    when Integration::TestDriver::MYSQL then admin_conn.query(sql).first.values.first.to_i
+    when Integration::TestDriver::MYSQL2 then admin_conn.query(sql).first.values.first.to_i
     end
   end
 
@@ -165,7 +165,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
   def schema_validator_dialect
     case drv
     when Integration::TestDriver::PG    then AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new
-    when Integration::TestDriver::MYSQL then AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new
+    when Integration::TestDriver::MYSQL2 then AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new
     end
   end
 
@@ -185,7 +185,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)", [name, ssn])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute(name, ssn)
     end
   end
@@ -194,7 +194,7 @@ RSpec.describe 'KmsEncryption key management', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
   end
