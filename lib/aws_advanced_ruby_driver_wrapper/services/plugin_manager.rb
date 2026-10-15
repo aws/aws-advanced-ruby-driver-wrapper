@@ -23,6 +23,7 @@ require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
+require_relative '../plugins/federated_auth/federated_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/kms_encryption/kms_encryption_plugin'
 require_relative '../plugins/secrets_manager_plugin'
@@ -44,6 +45,7 @@ module AwsAdvancedRubyDriverWrapper
         'failover' => Plugins::FailoverPlugin,
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
+        'federated_auth' => Plugins::FederatedAuth::FederatedAuthPlugin,
         'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
         'kms_encryption' => Plugins::KmsEncryptionPlugin,
         'secrets_manager' => Plugins::SecretsManagerPlugin
@@ -60,8 +62,15 @@ module AwsAdvancedRubyDriverWrapper
         Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900,
+        Plugins::FederatedAuth::FederatedAuthPlugin => 2000,
         Plugins::KmsEncryptionPlugin => 2050
       }
+
+      # Plugins that authenticate by minting an RDS IAM token into the shared IAM token cache.
+      IAM_TOKEN_PLUGIN_CLASSES = [
+        Plugins::IamAuthPlugin,
+        Plugins::FederatedAuth::FederatedAuthPlugin
+      ].freeze
 
       class << self
         def register_plugin(plugin_code, plugin_class, weight: WEIGHT_RELATIVE_TO_PRIOR_PLUGIN)
@@ -164,6 +173,12 @@ module AwsAdvancedRubyDriverWrapper
         @plugins.any?(plugin_class)
       end
 
+      # Whether any plugin that mints RDS IAM tokens into the shared cache is active.
+      # @see IAM_TOKEN_PLUGIN_CLASSES
+      def iam_token_plugin_in_use?
+        IAM_TOKEN_PLUGIN_CLASSES.any? { |plugin_class| plugin_in_use?(plugin_class) }
+      end
+
       private
 
       def load_plugins(service_container)
@@ -185,7 +200,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def ensure_single_auth_plugin(plugin_code_list)
-        auth_plugins_used = plugin_code_list & %w[iam secrets_manager].freeze
+        auth_plugins_used = plugin_code_list & %w[iam secrets_manager federated_auth].freeze
 
         return unless auth_plugins_used.length > 1
 

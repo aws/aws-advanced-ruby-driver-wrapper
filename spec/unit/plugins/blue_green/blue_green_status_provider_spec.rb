@@ -59,7 +59,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::StatusProvider,
                           dup: double('config_dup', initial_host_info: nil, 'initial_host_info=': nil, wrapper_props: {},
                                                     'wrapper_props=': nil)))
   end
-  let(:plugin_manager) { double('plugin_manager', plugin_in_use?: false) }
+  let(:plugin_manager) { double('plugin_manager', plugin_in_use?: false, iam_token_plugin_in_use?: false) }
   let(:service_container) do
     AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
       connection_service, dialect_service, event_publisher,

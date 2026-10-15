@@ -171,6 +171,27 @@ module AwsAdvancedRubyDriverWrapper
     IAM_ACCESS_TOKEN_PROPERTY_NAME = WrapperProperty.new(:iam_access_token_property_name, 'Property name used to pass the IAM token',
                                                          default_value: :password, type: Symbol)
 
+    # -- Federated / Okta Authentication (SAML) --
+    IDP_ENDPOINT = WrapperProperty.new(:idp_endpoint, 'The hosting URL of the Identity Provider', default_value: nil, type: String)
+    IDP_PORT = WrapperProperty.new(:idp_port, 'The hosting port of the Identity Provider', default_value: 443, type: Integer)
+    IDP_NAME = WrapperProperty.new(:idp_name, 'The name of the Identity Provider implementation used', default_value: 'adfs',
+                                                                                                       type: String)
+    IDP_USERNAME = WrapperProperty.new(:idp_username, 'The federated user name', default_value: nil, type: String)
+    IDP_PASSWORD = WrapperProperty.new(:idp_password, 'The federated user password', default_value: nil, type: String)
+    IAM_ROLE_ARN = WrapperProperty.new(:iam_role_arn, 'The ARN of the IAM Role that is to be assumed', default_value: nil, type: String)
+    IAM_IDP_ARN = WrapperProperty.new(:iam_idp_arn, 'The ARN of the Identity Provider', default_value: nil, type: String)
+    RP_IDENTIFIER = WrapperProperty.new(:rp_identifier, 'The relying party identifier', default_value: 'urn:amazon:webservices',
+                                                                                        type: String)
+    DB_USER = WrapperProperty.new(:db_user, 'The database user used to access the database', default_value: nil, type: String)
+    SSL_INSECURE = WrapperProperty.new(:ssl_insecure, "Whether the IdP server's TLS certificate chain should not be verified",
+                                       default_value: false, type: :boolean)
+    HTTP_CLIENT_SOCKET_TIMEOUT_SEC = WrapperProperty.new(:http_client_socket_timeout_sec,
+                                                         'Socket timeout in seconds for IdP HTTP requests',
+                                                         default_value: 60.0, type: Float, validator: POSITIVE_FLOAT)
+    HTTP_CLIENT_CONNECT_TIMEOUT_SEC = WrapperProperty.new(:http_client_connect_timeout_sec,
+                                                          'Connect timeout in seconds for IdP HTTP requests',
+                                                          default_value: 60.0, type: Float, validator: POSITIVE_FLOAT)
+
     # -- Initial Connection Strategy --
     INITIAL_CONNECTION_SUBSTITUTE_HOST = WrapperProperty.new(
       :initial_connection_substitute_host,

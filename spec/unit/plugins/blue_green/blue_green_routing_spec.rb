@@ -172,6 +172,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
       before do
         allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(false)
         allow(plugin_manager).to receive(:connect).and_return(connection)
       end
 
@@ -192,6 +193,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
       before do
         allow(plugin_manager).to receive(:plugin_in_use?).and_return(true)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(true)
         allow(service_container).to receive(:connection_service).and_return(connection_service)
       end
 
@@ -238,6 +240,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
       before do
         allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(false)
       end
 
       subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, sub_host, [], nil) }
