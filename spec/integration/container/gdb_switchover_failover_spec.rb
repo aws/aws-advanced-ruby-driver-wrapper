@@ -345,6 +345,10 @@ RSpec.describe 'GDB Switchover Failover', :integration,
   # @param txn_scenario [Scenario, nil] optional open-transaction data-integrity scenario
   def run_planned_transition(from_writer_instance:, from_db_info:, target_cluster_id:,
                              scenarios:, aggregate_label:, txn_scenario: nil)
+    # Let the previous transition settle before any connection is opened, so the wait does not count
+    # against the drive threads' failover deadlines.
+    rds_util.wait_until_global_members_available
+
     conns = {}
     threads = {}
     results = {}
