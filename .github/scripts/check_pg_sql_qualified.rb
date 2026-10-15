@@ -36,11 +36,22 @@
 #   4. Internal SQL in a dialect file must live in a <<~SQL heredoc. A string literal that reads as
 #      SQL (carries a SQL clause keyword) outside a SQL heredoc is flagged, because Rules 1-3 only
 #      see heredoc bodies - a query written as a plain string would otherwise skip the operator scan.
+#      A non-SQL heredoc (e.g. <<~EOS) whose body reads as SQL is flagged for the same reason: the
+#      heredoc scans in Rules 1-3 only recognise the SQL terminator, so SQL under a different
+#      delimiter would skip the operator/function checks entirely.
+#   5. Inside SQL heredoc bodies, no SQL keyword that silently desugars into a search_path-resolved
+#      operator may appear: LIKE/BETWEEN (-> ~~, >=, <=), the list form IN (...) and NULLIF/simple
+#      CASE (-> =), and IS [NOT] DISTINCT FROM (-> =). These read as pure keywords yet PostgreSQL
+#      resolves the underlying operator through search_path exactly as a bare "=" would, so they
+#      must be rewritten using OPERATOR(pg_catalog....) (e.g. CASE WHEN a OPERATOR(pg_catalog.=) b
+#      ... instead of NULLIF(a, b) or the simple-CASE form). The *searched* CASE form
+#      (CASE WHEN <condition> ...) and POSITION(... IN ...) / SUBSTRING(... IN ...) are NOT flagged:
+#      they carry an explicit condition / are SQL-standard argument syntax, not an implicit "=".
 #
 # Rule 3 only scans the text inside <<~SQL ... SQL heredocs, so surrounding Ruby code and the
-# "NAME = <<~SQL" assignment line itself are never mistaken for SQL operators. String literals are
-# blanked before scanning so symbols inside them (e.g. '%aurora_stat_utils%', 'MASTER_SESSION_ID')
-# do not trigger a match.
+# "NAME = <<~SQL" assignment line itself are never mistaken for SQL operators. String literals and
+# SQL comments (-- ... and /* ... */) are blanked before scanning so symbols inside them (e.g.
+# '%aurora_stat_utils%', 'MASTER_SESSION_ID', or a "-" in a comment) do not trigger a match.
 #
 # A SEPARATE check (the KMS/shared section below) covers SQL that is built as ordinary Ruby strings
 # and shared across engines: the KMS encryption plugin's metadata SQL and pg_driver_dialect.rb's
@@ -55,6 +66,18 @@
 #   - Unqualified relation references (e.g. FROM pg_settings).
 #   - Cast target types (e.g. 'x'::regproc) - qualified today ('x'::pg_catalog.regproc) by
 #     convention, but not enforced.
+#   - The KMS/shared check (shared_sql_violations) is narrower than the dialect check by design,
+#     because that SQL is engine-portable and the only qualification lever it has is the #{eq}
+#     helper. It therefore guards only literal COMPARISON operators and does NOT:
+#       * apply Rule 2 (unqualified function calls) - "SELECT lower(a) ... WHERE a #{eq} ?" passes;
+#       * scan heredoc bodies - shared SQL is built from quoted literals, so a <<~SQL heredoc in a
+#         KMS/driver-dialect file is not reassembled or scanned;
+#       * reassemble a query across a line that holds no string literal - a piecewise build such as
+#         "sql = 'SELECT ... WHERE '; sql += x; sql << 'b = ?'" breaks the adjacency run, so a
+#         comparison on the trailing fragment is not gated.
+#     These hold today because the shared SQL uses #{eq} on every comparison, builds from adjacent
+#     quoted literals, and uses no bare function calls or heredocs. If that changes, promote the
+#     relevant dialect rule into the shared check rather than relying on this note.
 
 # Only the wrapper's own PostgreSQL dialect SQL is in scope. Application/ActiveRecord SQL passes
 # through the wrapper unchanged and is intentionally not governed by this rule.
@@ -72,13 +95,27 @@ QUALIFIER = /(?:pg_catalog|rds_tools)\.\s*/i
 
 # Keywords and SQL-standard constructs that legitimately appear as `WORD(` without a schema
 # qualifier and do NOT resolve through search_path, so Rule 2 must not flag them.
+#
+# NOTE: substring/overlay are intentionally NOT here. They are SQL-standard only in their
+# keyword-argument form (SUBSTRING(x FROM a FOR b), OVERLAY(x PLACING y FROM a)); the comma form
+# (SUBSTRING(x, a, b)) is, since PG 14, an ordinary function call that resolves through search_path.
+# They are exempted conditionally in unqualified_call_violations, based on the argument syntax.
 EXEMPT_CALL_WORDS = %w[
   operator
   select from where and or not in like between is null as on join using
   case when then else end exists distinct limit offset order group by having
-  cast coalesce nullif greatest least substring position extract overlay trim
+  cast coalesce nullif greatest least position extract trim
   values set returning asc desc union all any some true false
 ].freeze
+
+# Functions that are SQL-standard (and resolve to pg_catalog without a qualifier) ONLY when written
+# with their keyword-argument syntax. In the comma-argument form they are plain function calls that
+# go through search_path and so must be schema-qualified. Maps the function name to the keyword(s)
+# whose presence inside the argument list marks the standard form.
+STANDARD_SYNTAX_ONLY_CALLS = {
+  'substring' => /\bFROM\b|\bFOR\b/i,
+  'overlay' => /\bPLACING\b|\bFROM\b/i
+}.freeze
 
 # A function/keyword call token: `word(` not immediately preceded by `.` (which would make it
 # qualified) or by another identifier character. Case-insensitive; the captured word is checked
@@ -97,17 +134,50 @@ COMPARISON_OPERATOR = /~~\*|!~~|~~|!~|~|<=|>=|<>|!=|=|<|>/
 # operator character. A real query always carries at least one of these.
 SQL_KEYWORD = /\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|SET|ON|RETURNING)\b/i
 
+# Rule 5 (dialect heredocs): SQL keywords that silently desugar into a search_path-resolved operator
+# and so are just as unsafe as a bare "=", even though they read as pure keywords. Each entry pairs
+# a matcher with the operator it hides, used to build a "rewrite with OPERATOR(pg_catalog....)"
+# message. NOT listed (and deliberately safe): the *searched* CASE form "CASE WHEN <cond>" (carries
+# its own explicit condition), POSITION(... IN ...) and SUBSTRING(... IN ...) (SQL-standard argument
+# syntax, handled by the function rules), and IS NULL / IS NOT NULL (no operator).
+#   - LIKE / NOT LIKE        -> ~~        (pattern match)
+#   - BETWEEN ... AND ...    -> >= and <= (range)
+#   - IN (<list>)            -> =         (equality against each element); the predicate list form
+#                                         only, NOT the POSITION/SUBSTRING "... IN expr" argument form
+#   - NULLIF(a, b)           -> =         (internal equality test)
+#   - IS [NOT] DISTINCT FROM -> =         (null-safe equality)
+#   - simple CASE "CASE <expr> WHEN"      -> = (each WHEN compared to the CASE operand)
+KEYWORD_OPERATOR = [
+  [/\b(?:NOT\s+)?LIKE\b/i,                 '~~ (LIKE)'],
+  [/\bBETWEEN\b/i,                         '>= and <= (BETWEEN)'],
+  [/\bNULLIF\s*\(/i,                       '= (NULLIF)'],
+  [/\bIS\s+(?:NOT\s+)?DISTINCT\s+FROM\b/i, '= (IS DISTINCT FROM)'],
+  # Predicate "IN (" / "NOT IN (" - a "(" after IN marks the list form. POSITION/SUBSTRING use
+  # "IN <ident>" (no paren) and so do not match.
+  [/\b(?:NOT\s+)?IN\s*\(/i,                '= (IN list)'],
+  # Simple CASE: an expression between CASE and WHEN. The searched form "CASE WHEN" has nothing
+  # between the two keywords and is intentionally excluded.
+  [/\bCASE\s+(?!WHEN\b)\S.*?\bWHEN\b/im,   '= (simple CASE)']
+].freeze
+
 # Every symbolic operator that resolves through search_path and so must be wrapped in
-# OPERATOR(pg_catalog...) in the dialect heredocs: the comparison/pattern set above plus the
-# arithmetic and string-concatenation operators, with guards so "::" casts, "--" comments, and "//"
-# are not mistaken for operators. The KMS/shared check deliberately omits the arithmetic/concat
-# operators - it only guards comparisons - so it uses COMPARISON_OPERATOR rather than this.
+# OPERATOR(pg_catalog...) in the dialect heredocs: the comparison/pattern set above plus arithmetic,
+# string-concatenation, and the composite array/JSON/text-search operators. Composite (multi-char)
+# operators are matched as WHOLE TOKENS and listed before the single-char ones so the alternation is
+# greedy - this keeps the reported token (and the "wrap it as OPERATOR(pg_catalog.<token>)" message)
+# correct for e.g. "@>" or "->>", instead of flagging a stray ">" with the wrong suggested fix.
+# Guards keep "::" casts, "--"/"/*" comments (also blanked upstream), and "//" from matching, and a
+# "*" / "%" that is a SELECT-list star or a count(*)-style wildcard is excluded.
+COMPOSITE_OPERATOR = /->>|->|\#>>|\#>|@>|<@|@@|&&|\?\||\?&|\?|\|\|/
 BARE_OPERATOR = %r{
-  #{COMPARISON_OPERATOR}    # comparison / pattern-matching operators (shared)
-  | \|\|                    # string concatenation
-  | (?<![:*])-(?![-:])      # subtraction, but not part of "::", "--" comment, or arrow-like tokens
+  #{COMPOSITE_OPERATOR}     # array / JSON / text-search / concat operators (whole-token)
+  | #{COMPARISON_OPERATOR}  # comparison / pattern-matching operators (shared)
+  | (?<![:*])-(?![-:>])     # subtraction, but not "::", "--" comment, or "->" arrow
   | (?<![:])\+              # addition
   | (?<![:/])/(?![/*])      # division, but not "//" or a comment delimiter
+  | \*                      # multiplication (SELECT */count(*) wildcard filtered out in Rule 3)
+  | %                       # modulo
+  | \^                      # exponentiation
 }x
 
 # Extracts the bodies of SQL heredocs (<<~SQL / <<-SQL / <<SQL, optionally quoted) with the line
@@ -158,21 +228,105 @@ def blank_string_literals(sql)
   sql.gsub(/'(?:[^']|'')*'/) { |lit| ' ' * lit.length }
 end
 
+# Replaces every SQL comment (-- to end of line, and /* ... */ possibly spanning lines) with an
+# equal-length run of spaces, preserving newlines and byte offsets. Operator-looking characters in
+# a comment (e.g. "-- a-b", the "/" that closes a block comment) must not trigger an operator match,
+# and the "--"/"/*" markers themselves must not read as the "-" or "/" operators.
+def blank_sql_comments(sql)
+  masked = sql.gsub(/--[^\n]*/) { |m| ' ' * m.length }
+  masked.gsub(%r{/\*.*?\*/}m) { |m| m.gsub(/[^\n]/, ' ') }
+end
+
 # Rule 2 (dialect files): every bare function/keyword call in a SQL heredoc must be schema-qualified
 # unless its name is exempt. Fail-closed: an unqualified, non-exempt `word(` is a violation.
+# substring/overlay are exempt only in their SQL-standard keyword form (see STANDARD_SYNTAX_ONLY_CALLS):
+# the comma form is a plain, search_path-resolved call and is flagged.
 def unqualified_call_violations(path, source)
   found = []
   sql_heredoc_bodies(source).each do |body, start_line|
-    scannable = blank_string_literals(body)
+    scannable = blank_sql_comments(blank_string_literals(body))
     scannable.to_enum(:scan, CALL_TOKEN).each do
       word = Regexp.last_match(1)
-      next if EXEMPT_CALL_WORDS.include?(word.downcase)
-
+      down = word.downcase
       match_start = Regexp.last_match.begin(0)
+
+      if STANDARD_SYNTAX_ONLY_CALLS.key?(down)
+        # Exempt only when the argument list uses the keyword form (FROM/FOR/PLACING); the comma
+        # form resolves through search_path and must be qualified.
+        args = call_argument_region(scannable, Regexp.last_match.end(0) - 1)
+        next if args&.match?(STANDARD_SYNTAX_ONLY_CALLS[down])
+      elsif EXEMPT_CALL_WORDS.include?(down)
+        next
+      end
+
       line = start_line + scannable[0...match_start].count("\n")
       found << "#{path}:#{line}: unqualified call to '#{word}(' - prefix with pg_catalog. or " \
-               "rds_tools., or add '#{word.downcase}' to EXEMPT_CALL_WORDS if it is SQL-standard syntax."
+               "rds_tools., or add '#{down}' to EXEMPT_CALL_WORDS if it is SQL-standard syntax."
     end
+  end
+  found
+end
+
+# Returns the text between the "(" at +open_paren_index+ and its matching ")", or nil if unbalanced.
+# Used to inspect a call's argument list (e.g. to tell SUBSTRING(x FROM a) from SUBSTRING(x, a)).
+def call_argument_region(text, open_paren_index)
+  depth = 0
+  i = open_paren_index
+  while i < text.length
+    case text[i]
+    when '(' then depth += 1
+    when ')'
+      depth -= 1
+      return text[(open_paren_index + 1)...i] if depth.zero?
+    end
+    i += 1
+  end
+  nil
+end
+
+# Rule 5 (dialect files): SQL keywords inside a heredoc that silently desugar into a
+# search_path-resolved operator (see KEYWORD_OPERATOR). String literals and comments are blanked
+# first so the keyword must be real SQL syntax, not text inside a quoted value or comment.
+def keyword_operator_violations(path, source)
+  found = []
+  sql_heredoc_bodies(source).each do |body, start_line|
+    scannable = blank_sql_comments(blank_string_literals(body))
+    KEYWORD_OPERATOR.each do |pattern, hidden_op|
+      scannable.to_enum(:scan, pattern).each do
+        match_start = Regexp.last_match.begin(0)
+        token = Regexp.last_match[0].gsub(/\s+/, ' ').strip
+        line = start_line + scannable[0...match_start].count("\n")
+        found << "#{path}:#{line}: SQL keyword '#{token}' resolves operator #{hidden_op} through " \
+                 'search_path - rewrite the comparison explicitly as OPERATOR(pg_catalog....) ' \
+                 '(e.g. CASE WHEN a OPERATOR(pg_catalog.=) b ... instead of NULLIF/IN/simple CASE).'
+      end
+    end
+  end
+  found
+end
+
+# Rule 4b (dialect files): a non-SQL heredoc (<<~EOS, <<-FOO, ...) whose body reads as SQL is
+# flagged. Rules 1-3/5 only recognise the SQL terminator, so SQL hidden under another delimiter
+# would skip every operator/function check. Low risk today (everything uses <<~SQL) but closes the
+# delimiter-swap bypass.
+def non_sql_heredoc_violations(path, source)
+  found = []
+  lines = source.lines
+  i = 0
+  while i < lines.length
+    if (m = lines[i].match(/<<[~-]?['"]?([A-Za-z_]\w*)['"]?/)) && m[1] != 'SQL'
+      tag = m[1]
+      body_start = i + 1
+      j = body_start
+      j += 1 while j < lines.length && lines[j] !~ /^\s*#{Regexp.escape(tag)}\b/
+      body = lines[body_start...j].join
+      if body.match?(SQL_KEYWORD)
+        found << "#{path}:#{i + 1}: SQL in a <<~#{tag} heredoc - internal SQL must use a <<~SQL " \
+                 'heredoc so the operator/function qualification checks (Rules 1-3,5) cover it.'
+      end
+      i = j
+    end
+    i += 1
   end
   found
 end
@@ -296,6 +450,17 @@ def blank_runs(text, pattern)
   text.gsub(pattern) { |m| ' ' * m.length }
 end
 
+# True when the "*" at +index+ is a SELECT-list / count(*) wildcard rather than the multiplication
+# operator. A wildcard's nearest non-space neighbour on one side is a "(", "," or the SELECT keyword
+# before it, or a ")", "," or FROM after it; multiplication always has an operand on BOTH sides.
+def star_is_wildcard?(text, index)
+  before = text[0...index].rstrip
+  after  = text[(index + 1)..].to_s.lstrip
+  left_wildcard  = before.empty? || before.end_with?('(', ',') || before =~ /\bSELECT\z/i
+  right_wildcard = after.empty? || after.start_with?(')', ',') || after =~ /\AFROM\b/i
+  left_wildcard || right_wildcard
+end
+
 # The #{eq} helper spelled out for violation messages, with the "#" escaped so the interpolation
 # marker shows verbatim rather than being interpolated by this script.
 def eq_example
@@ -318,15 +483,18 @@ def dialect_violations(path, source)
   # Rule 2: bare (unqualified, non-exempt) function/keyword calls.
   found.concat(unqualified_call_violations(path, source))
 
-  # Rule 3: bare symbolic operators inside SQL heredoc bodies. Blank out OPERATOR(...) wrappers and
-  # string literals first; whatever operator characters remain are unqualified and therefore unsafe.
+  # Rule 3: bare symbolic operators inside SQL heredoc bodies. Blank out OPERATOR(...) wrappers,
+  # string literals, and SQL comments first; whatever operator characters remain are unqualified
+  # and therefore unsafe.
   sql_heredoc_bodies(source).each do |body, start_line|
-    scannable = blank_string_literals(body)
+    scannable = blank_sql_comments(blank_string_literals(body))
     scannable = scannable.gsub(/OPERATOR\(\s*pg_catalog\.[^)]*\)/i) { |m| ' ' * m.length }
 
     scannable.to_enum(:scan, BARE_OPERATOR).each do
       op_start = Regexp.last_match.begin(0)
       token = Regexp.last_match[0]
+      next if token == '*' && star_is_wildcard?(scannable, op_start)
+
       line = start_line + body[0...op_start].count("\n")
       found << "#{path}:#{line}: bare SQL operator '#{token}' - wrap it as OPERATOR(pg_catalog.#{token})."
     end
@@ -334,6 +502,12 @@ def dialect_violations(path, source)
 
   # Rule 4: SQL written as a plain string literal instead of a heredoc.
   found.concat(sql_outside_heredoc_violations(path, source))
+
+  # Rule 4b: SQL hidden in a non-SQL heredoc (<<~EOS) that would skip every scan.
+  found.concat(non_sql_heredoc_violations(path, source))
+
+  # Rule 5: SQL keywords that desugar into a search_path-resolved operator (LIKE, IN (...), ...).
+  found.concat(keyword_operator_violations(path, source))
 
   found
 end
@@ -376,12 +550,42 @@ SELFTEST_CASES = [
   ['Rule 2: SQL-standard SUBSTRING/POSITION are exempt',
    :dialect,
    "Q = <<~SQL\n  SELECT SUBSTRING(x FROM 0 FOR POSITION('.' IN x))\nSQL\n", false],
+  ['Rule 2: SUBSTRING comma form is a search_path call (flagged)',
+   :dialect,
+   "Q = <<~SQL\n  SELECT SUBSTRING(x, 0, 3) FROM pg_catalog.pg_settings\nSQL\n", true],
   ['Rule 3: bare operator in heredoc',
    :dialect,
    "Q = <<~SQL\n  SELECT 1 WHERE a = b\nSQL\n", true],
+  ['Rule 3: composite operator is reported as a whole token',
+   :dialect,
+   "Q = <<~SQL\n  SELECT 1 WHERE a @> b\nSQL\n", true],
+  ['Rule 3: SELECT * and count(*) are not multiplication',
+   :dialect,
+   "Q = <<~SQL\n  SELECT *, pg_catalog.count(*) FROM rds_tools.show_topology()\nSQL\n", false],
+  ['Rule 3: a SQL comment with operator chars does not false-flag',
+   :dialect,
+   "Q = <<~SQL\n  SELECT 1 -- a-b not an operator\n  FROM pg_catalog.pg_settings\nSQL\n", false],
   ['Rule 4: SQL as a plain string (no heredoc)',
    :dialect,
    "Q = \"SELECT col FROM t WHERE a OPERATOR(pg_catalog.=) b\"\n", true],
+  ['Rule 4b: SQL in a non-SQL heredoc (<<~EOS) is flagged',
+   :dialect,
+   "Q = <<~EOS\n  SELECT col FROM t WHERE a OPERATOR(pg_catalog.=) b\nEOS\n", true],
+  ['Rule 5: LIKE desugars to ~~ (flagged)',
+   :dialect,
+   "Q = <<~SQL\n  SELECT 1 FROM pg_catalog.pg_settings WHERE name LIKE 'x%'\nSQL\n", true],
+  ['Rule 5: IN (list) desugars to = (flagged)',
+   :dialect,
+   "Q = <<~SQL\n  SELECT 1 FROM pg_catalog.pg_settings WHERE name IN ('a', 'b')\nSQL\n", true],
+  ['Rule 5: NULLIF desugars to = (flagged)',
+   :dialect,
+   "Q = <<~SQL\n  SELECT NULLIF(a, b) FROM pg_catalog.pg_settings\nSQL\n", true],
+  ['Rule 5: searched CASE WHEN <cond> with qualified op is clean',
+   :dialect,
+   "Q = <<~SQL\n  SELECT CASE WHEN a OPERATOR(pg_catalog.=) b THEN 1 ELSE 0 END\nSQL\n", false],
+  ['Rule 5: POSITION(... IN ...) is not the IN-list predicate',
+   :dialect,
+   "Q = <<~SQL\n  SELECT POSITION('.' IN endpoint) FROM rds_tools.show_topology()\nSQL\n", false],
   ['Shared: literal operator on a continuation line with no keyword of its own',
    :shared,
    "def q\n  'SELECT 1 FROM t ' \\\n  \"WHERE a #{'#'}{eq} ? AND b = ?\"\nend\n", true],
