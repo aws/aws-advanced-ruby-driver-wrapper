@@ -10,10 +10,9 @@ permissions:
   id-token: write
   contents: read
 
-# These workflows create real RDS clusters and a real KMS key. Only one run of this workflow at a
-# time; within a run, the key is found or created once, before the engine legs start in parallel.
+# These workflows create real RDS clusters and a real KMS key.
 concurrency:
-  group: encryption-integration-tests
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
