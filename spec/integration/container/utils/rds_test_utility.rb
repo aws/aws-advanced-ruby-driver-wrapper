@@ -631,12 +631,27 @@ module Integration
       raise 'No global cluster identifier configured' if global_cluster_id.nil?
 
       target_arn = cluster_arn(target_cluster_id)
+      # RDS rejects a switchover while either member is still settling from a previous transition,
+      # with InvalidDBClusterStateFault ("the source DB cluster is in the modifying state"). A
+      # failback issued straight after a switchover hits this, and because the request never lands
+      # the global cluster is left with the wrong region as primary for every later test.
+      wait_until_global_members_available
       TestUtils.logger.info("GDB switchover: #{global_cluster_id} -> #{target_cluster_id}")
       @client.switchover_global_cluster(
         global_cluster_identifier: global_cluster_id,
         target_db_cluster_identifier: target_arn
       )
       wait_until_primary_cluster(target_cluster_id, timeout_secs: timeout_secs)
+    end
+
+    # Waits until every member cluster of the global cluster reports 'available', querying each in
+    # its own region.
+    def wait_until_global_members_available
+      env = TestEnvironment.current
+      [env.cluster_name, env.secondary_cluster_identifier].compact.each do |cluster_id|
+        util = cluster_id == env.secondary_cluster_identifier ? self.class.secondary_utility : self
+        util.wait_until_cluster_has_desired_status(cluster_id, 'available')
+      end
     end
 
     # Polls the global cluster members until the expected region is home to the global writer.

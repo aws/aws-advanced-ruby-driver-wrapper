@@ -35,13 +35,11 @@ RSpec.shared_context 'integration setup' do
     props
   end
 
-  # Base IAM props — extends base_wrapper_props with IAM plugin + region.
+  # Base IAM props — extends base_wrapper_props with the IAM plugin.
   let(:base_iam_props) do
-    props = base_wrapper_props.merge(
+    base_wrapper_props.merge(
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam'
     )
-    props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_REGION.name] = env.primary_region if env.global_cluster_endpoint
-    props
   end
 
   let(:base_config) do
