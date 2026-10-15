@@ -573,6 +573,19 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
         .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /iam.*secrets_manager|secrets_manager.*iam/)
     end
 
+    it 'raises when iam and federated_auth are specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'iam,federated_auth')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError, /iam.*federated_auth|federated_auth.*iam/)
+    end
+
+    it 'raises when secrets_manager and federated_auth are specified' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'secrets_manager,federated_auth')
+      expect { described_class.new(container) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError,
+                        /secrets_manager.*federated_auth|federated_auth.*secrets_manager/)
+    end
+
     it 'does not raise when neither auth plugin is specified' do
       container = service_container_with_wrapper_props(wrapper_plugins: 'failover')
       expect { described_class.new(container) }.not_to raise_error

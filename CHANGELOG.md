@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased]
 
 ### :magic_wand: Added
-- [Federated Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/federated-auth), which authenticates with Active Directory Federation Services (AD FS), exchanges the resulting SAML assertion for temporary AWS credentials via STS, and connects to the database with an RDS IAM authentication token. Enabled with the `federated_auth` plugin code.
+- [Federated Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/federated-auth), which authenticates with Active Directory Federation Services (AD FS), exchanges the resulting SAML assertion for temporary AWS credentials via STS, and connects to the database with an RDS IAM authentication token. Enabled with the `federated_auth` plugin code ([PR #207](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/207)).
 
 ## [1.0.1] - 2026-10-07
 

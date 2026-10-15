@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require 'cgi'
 require 'uri'
 require_relative 'base_saml_auth_plugin'
 
@@ -33,11 +34,14 @@ module AwsAdvancedRubyDriverWrapper
         #
         # @return [String] the base64 SAML assertion
         def self.fetch_saml_assertion(idp_endpoint:, idp_port:, idp_username:, idp_password:,
-                                      rp_identifier:, ssl_insecure:, socket_timeout_ms:, connect_timeout_ms:, **_rest)
+                                      rp_identifier:, ssl_insecure:, socket_timeout_sec:, connect_timeout_sec:, **_rest)
+          # One cookie jar shared by the sign-on GET and the credential POST, so cookies AD FS
+          # (or a load balancer in front of it) sets on the sign-on page are returned with the POST.
+          cookies = {}
           http = lambda do |method, url, body: nil, headers: {}|
             Utils::SamlUtils.http_request(
-              method:, url:, body:, headers:, ssl_insecure:,
-              open_timeout_ms: connect_timeout_ms, read_timeout_ms: socket_timeout_ms
+              method:, url:, body:, headers:, ssl_insecure:, cookies:,
+              open_timeout_sec: connect_timeout_sec, read_timeout_sec: socket_timeout_sec
             )
           end
 
@@ -54,7 +58,13 @@ module AwsAdvancedRubyDriverWrapper
           content = require_body!(response, 'sign-on POST')
 
           match = Utils::SamlUtils::SAML_RESPONSE_PATTERN.match(content)
-          raise Errors::SamlAuthError, 'FederatedAuthPlugin: failed to obtain SAML assertion from AD FS' unless match
+          unless match
+            # AD FS answers a rejected login with the sign-on page again (no SAMLResponse); the
+            # body is not included as it may contain sensitive markup.
+            raise Errors::SamlAuthError,
+                  'FederatedAuthPlugin: no SAML assertion in the AD FS response - check idp_username, ' \
+                  'idp_password, and idp_endpoint'
+          end
 
           match[1]
         end
@@ -105,7 +115,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def self.unescape_html(html)
-          html.gsub('&amp;', '&').gsub('&apos;', "'").gsub('&quot;', '"').gsub('&lt;', '<').gsub('&gt;', '>')
+          CGI.unescapeHTML(html)
         end
 
         private

@@ -81,8 +81,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::FederatedAu
       idp_password: 'idpSecret',
       rp_identifier: RP_IDENTIFIER,
       ssl_insecure: false,
-      socket_timeout_ms: 60_000,
-      connect_timeout_ms: 60_000
+      socket_timeout_sec: 60.0,
+      connect_timeout_sec: 60.0
     }.merge(overrides)
   end
 
@@ -132,13 +132,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::FederatedAu
         .to raise_error(SamlAuthError, /sign-on page.*500/)
     end
 
-    it 'raises SamlAuthError when the POST response carries no SAML assertion' do
+    it 'raises SamlAuthError with a diagnostic hint when the POST response carries no SAML assertion' do
       allow(SamlUtils).to receive(:http_request) do |method:, **_rest|
         FakeHttpResponse.new(body: method == :get ? SIGN_ON_PAGE : '<html>no assertion here</html>')
       end
 
       expect { described_class.fetch_saml_assertion(**fetch_options) }
-        .to raise_error(SamlAuthError, /failed to obtain SAML assertion/)
+        .to raise_error(SamlAuthError, /no SAML assertion.*check idp_username, idp_password, and idp_endpoint/)
+    end
+
+    it 'does not include the response body in the no-assertion error' do
+      secret_markup = '<html>SENSITIVE-ERROR-DETail-xyz</html>'
+      allow(SamlUtils).to receive(:http_request) do |method:, **_rest|
+        FakeHttpResponse.new(body: method == :get ? SIGN_ON_PAGE : secret_markup)
+      end
+
+      expect { described_class.fetch_saml_assertion(**fetch_options) }
+        .to raise_error(SamlAuthError) { |e| expect(e.message).not_to include('SENSITIVE-ERROR-DETail') }
     end
   end
 

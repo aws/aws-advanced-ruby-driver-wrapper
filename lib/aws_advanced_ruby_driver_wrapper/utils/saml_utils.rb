@@ -70,12 +70,14 @@ module AwsAdvancedRubyDriverWrapper
       # @param body [String, nil] request body for :post
       # @param headers [Hash] request headers
       # @param ssl_insecure [Boolean] skip TLS verification when true
-      # @param open_timeout_ms [Integer] connect timeout in milliseconds
-      # @param read_timeout_ms [Integer] socket timeout in milliseconds
+      # @param open_timeout_sec [Float] connect timeout in seconds
+      # @param read_timeout_sec [Float] socket timeout in seconds
+      # @param cookies [Hash] a cookie jar, keyed by host then cookie name, shared across the
+      #   calls of one sign-on flow and mutated in place. Cookies are only sent back to the host
+      #   that set them, so following a redirect to another host cannot leak them.
       # @return [Net::HTTPResponse]
       def http_request(method:, url:, body: nil, headers: {}, ssl_insecure: false,
-                       open_timeout_ms: 60_000, read_timeout_ms: 60_000, max_redirects: 3)
-        cookies = {}
+                       open_timeout_sec: 60.0, read_timeout_sec: 60.0, max_redirects: 3, cookies: {})
         redirects = 0
         loop do
           validate_url!(url)
@@ -83,12 +85,12 @@ module AwsAdvancedRubyDriverWrapper
           http = Net::HTTP.new(uri.host, uri.port)
           http.use_ssl = true
           http.verify_mode = ssl_insecure ? OpenSSL::SSL::VERIFY_NONE : OpenSSL::SSL::VERIFY_PEER
-          http.open_timeout = open_timeout_ms / 1000.0
-          http.read_timeout = read_timeout_ms / 1000.0
+          http.open_timeout = open_timeout_sec
+          http.read_timeout = read_timeout_sec
 
           request = build_request(method, uri, body, headers, cookies)
           response = http.request(request)
-          merge_cookies!(cookies, response)
+          merge_cookies!(cookies, uri.host, response)
 
           if response.is_a?(Net::HTTPRedirection) && response['location'] && redirects < max_redirects
             url = absolute_redirect(uri, response['location'])
@@ -110,19 +112,21 @@ module AwsAdvancedRubyDriverWrapper
           end
         headers.each { |k, v| request[k] = v }
         request.body = body if body
-        request['Cookie'] = cookies.map { |k, v| "#{k}=#{v}" }.join('; ') unless cookies.empty?
+        host_jar = cookies[uri.host]
+        request['Cookie'] = host_jar.map { |k, v| "#{k}=#{v}" }.join('; ') if host_jar && !host_jar.empty?
         request
       end
 
-      def merge_cookies!(cookies, response)
+      def merge_cookies!(cookies, host, response)
+        jar = (cookies[host] ||= {})
         Array(response.get_fields('set-cookie')).each do |raw|
           pair = raw.split(';', 2).first.to_s.split('=', 2)
-          cookies[pair[0].strip] = pair[1] if pair.length == 2
+          jar[pair[0].strip] = pair[1] if pair.length == 2
         end
       end
 
       def absolute_redirect(uri, location)
-        location.start_with?('http') ? location : URI.join("#{uri.scheme}://#{uri.host}:#{uri.port}", location).to_s
+        URI.join(uri, location).to_s
       end
     end
   end

@@ -61,10 +61,16 @@ module AwsAdvancedRubyDriverWrapper
         Plugins::FailoverPlugin => 400,
         Plugins::Gdb::GdbFailoverPlugin => 500,
         Plugins::IamAuthPlugin => 1800,
-        Plugins::FederatedAuth::FederatedAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900,
+        Plugins::FederatedAuth::FederatedAuthPlugin => 2000,
         Plugins::KmsEncryptionPlugin => 2050
       }
+
+      # Plugins that authenticate by minting an RDS IAM token into the shared IAM token cache.
+      IAM_TOKEN_PLUGIN_CLASSES = [
+        Plugins::IamAuthPlugin,
+        Plugins::FederatedAuth::FederatedAuthPlugin
+      ].freeze
 
       class << self
         def register_plugin(plugin_code, plugin_class, weight: WEIGHT_RELATIVE_TO_PRIOR_PLUGIN)
@@ -165,6 +171,12 @@ module AwsAdvancedRubyDriverWrapper
         return false if @plugins.nil? || @plugins.empty?
 
         @plugins.any?(plugin_class)
+      end
+
+      # Whether any plugin that mints RDS IAM tokens into the shared cache is active.
+      # @see IAM_TOKEN_PLUGIN_CLASSES
+      def iam_token_plugin_in_use?
+        IAM_TOKEN_PLUGIN_CLASSES.any? { |plugin_class| plugin_in_use?(plugin_class) }
       end
 
       private

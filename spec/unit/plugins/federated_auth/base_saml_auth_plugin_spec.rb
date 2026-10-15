@@ -257,6 +257,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
 
       expect(@captured_idp).to eq(username: 'fallbackUser', password: 'fallbackPassword')
     end
+
+    # Regression: the connect flow overwrites driver_props[:user]/[:password] with db_user and the
+    # RDS token, and that hash is reused across reconnects (failover, retry, Blue/Green rerouting).
+    # The fallback IdP login must still be the ORIGINAL user/password on the second connect, not the
+    # overwritten db_user and stale token.
+    it 'keeps using the original user/password for the IdP login across a reconnect that reuses driver_props' do
+      captured = []
+      allow(described_class).to receive(:fetch_saml_assertion) do |idp_username:, idp_password:, **_rest|
+        captured << [idp_username, idp_password]
+        SAML_FAKE_SAML_ASSERTION
+      end
+
+      plugin = build_plugin
+      driver_props = { user: 'realUser', password: 'realPw' }
+      2.times do
+        plugin.connect(pg_host_info, driver_props, true, -> { raise StandardError, 'simulated' })
+      rescue StandardError
+        nil
+      end
+
+      expect(captured).to eq([%w[realUser realPw], %w[realUser realPw]])
+      expect(driver_props[:user]).to eq(SAML_DB_USER)
+      expect(driver_props[:password]).to eq(SAML_GENERATED_TOKEN)
+    end
   end
 
   describe '#connect retry on login error with a cached token' do
@@ -278,6 +302,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
       expect(result).to eq(:ok)
       expect(calls).to eq(2)
       expect(mock_token_generator).to have_received(:auth_token).once
+    end
+
+    it 'injects the freshly minted token, not the stale cached one, on the retry' do
+      allow(mock_storage_service).to receive(:get).with(SAML_TOKEN_CACHE_NAME, SAML_PG_CACHE_KEY)
+                                                  .and_return(valid_token_entry)
+      allow(mock_dialect_service).to receive(:login_error?).and_return(true)
+      allow(mock_token_generator).to receive(:auth_token).and_return('fresh-token')
+
+      driver_props = {}
+      passwords = []
+      calls = 0
+      retrying = lambda do
+        calls += 1
+        passwords << driver_props[:password]
+        raise StandardError, 'login failure' if calls == 1
+
+        :ok
+      end
+
+      build_plugin.connect(pg_host_info, driver_props, true, retrying)
+
+      # First attempt uses the cached token; the retry uses the freshly minted one.
+      expect(passwords).to eq([SAML_CACHED_TOKEN, 'fresh-token'])
     end
 
     it 'does not retry when the token was freshly minted (not from cache)' do
@@ -345,10 +392,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
   end
 
   describe '#connect against a global writer cluster' do
-    it 'exchanges credentials before the region lookup and reuses them to mint the token' do
-      # With an explicit iam_region the region lookup needs no RDS client, so the
-      # only observable effect of the global-writer path is the single up-front
-      # credential exchange that is reused when minting the token.
+    it 'with an explicit iam_region, defers the SAML exchange to the token-cache miss path' do
+      # iam_region makes the region resolvable without credentials, so there is no up-front
+      # SAML exchange - the IdP round-trip happens only when minting on a cache miss.
       connect_and_capture(
         plugin: build_plugin(iam_region: 'us-east-2'),
         host_info: arbitrary_host_info(SAML_GLOBAL_HOST)
@@ -357,6 +403,37 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
       expect(described_class).to have_received(:fetch_saml_assertion).once
       expect(described_class).to have_received(:credentials_from_saml).once
       expect(mock_token_generator).to have_received(:auth_token).once
+    end
+
+    it 'with an explicit iam_region and a cached token, does not call the IdP at all' do
+      # A global endpoint with iam_region no longer logs in to the IdP before the
+      # cache check, so a pool/failover storm of cache hits triggers zero IdP logins.
+      allow(mock_storage_service).to receive(:get).with(SAML_TOKEN_CACHE_NAME, SAML_PG_CACHE_KEY)
+                                                  .and_return(valid_token_entry)
+      allow(mock_storage_service).to receive(:get)
+        .with(SAML_TOKEN_CACHE_NAME, "us-east-2:#{SAML_GLOBAL_HOST}:#{SAML_DEFAULT_PG_PORT}:#{SAML_DB_USER}:#{SAML_PRINCIPAL_FINGERPRINT}")
+        .and_return(valid_token_entry)
+
+      connect_and_capture(
+        plugin: build_plugin(iam_region: 'us-east-2'),
+        host_info: arbitrary_host_info(SAML_GLOBAL_HOST)
+      )
+
+      expect(described_class).not_to have_received(:fetch_saml_assertion)
+      expect(mock_token_generator).not_to have_received(:auth_token)
+    end
+
+    it 'with no iam_region, assumes credentials up front and resolves the region with them' do
+      allow(SAML_IAM_AUTH_UTILS).to receive(:region_for).and_return('us-east-2')
+
+      connect_and_capture(
+        plugin: build_plugin(iam_region: nil),
+        host_info: arbitrary_host_info(SAML_GLOBAL_HOST)
+      )
+
+      expect(described_class).to have_received(:fetch_saml_assertion).at_least(:once)
+      expect(SAML_IAM_AUTH_UTILS).to have_received(:region_for)
+        .with(hash_including(credentials_provider: mock_credentials))
     end
   end
 
@@ -443,7 +520,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
         role_arn: 'role', idp_arn: 'idp', region: 'us-east-2'
       )
 
-      expect(Aws::STS::Client).to have_received(:new).with(region: 'us-east-2')
+      expect(Aws::STS::Client).to have_received(:new).with(region: 'us-east-2', credentials: nil)
       expect(sts_client).to have_received(:assume_role_with_saml).with(
         role_arn: 'role', principal_arn: 'idp', saml_assertion: SAML_FAKE_SAML_ASSERTION
       )

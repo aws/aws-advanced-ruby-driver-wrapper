@@ -359,17 +359,11 @@ module AwsAdvancedRubyDriverWrapper
           completed && @event_log.any? { |_, v| v.phase&.active_switchover_or_completed? }
         end
 
-        # True when any auth plugin backed by the shared IAM token cache (IAM, AD FS federated
-        # auth) is in use, so a switchover knows to purge that cache regardless of which
-        # one of them is actually active.
+        # True when any auth plugin backed by the shared IAM token cache (IAM or AD FS
+        # federated auth) is in use, so a switchover knows to purge that cache regardless
+        # of which one is active.
         def iam_token_cache_in_use?
-          plugin_manager = @service_container.plugin_manager
-          return false unless plugin_manager
-
-          [
-            Plugins::IamAuthPlugin,
-            Plugins::FederatedAuth::FederatedAuthPlugin
-          ].any? { |plugin_class| plugin_manager.plugin_in_use?(plugin_class) }
+          @service_container.plugin_manager&.iam_token_plugin_in_use? || false
         end
 
         def context_hash
