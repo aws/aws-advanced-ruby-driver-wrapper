@@ -1264,8 +1264,9 @@ public class TestEnvironment implements AutoCloseable {
       }
 
       if (!env.reuseDb) {
-        env.auroraUtil.ec2DeauthorizesIP(env.runnerIP);
-        LOGGER.finest(String.format("Test runner IP de-authorized. Usage count: %d",
+        // TODO: TEMPORARY
+        LOGGER.finest(String.format(
+            "Test runner IP de-authorization skipped (temporarily disabled). Usage count: %d",
             ipAddressUsageRefCount.get()));
       } else {
         LOGGER.finest("The IP address usage count hit 0, but the REUSE_RDS_DB was set to true, so IP "
@@ -2002,8 +2003,11 @@ public class TestEnvironment implements AutoCloseable {
           try {
             AuroraTestUtility secondaryUtil = new AuroraTestUtility(secondaryRegionCleanup, null);
             String runnerIP = secondaryUtil.getPublicIPAddress();
-            secondaryUtil.ec2DeauthorizesIP(runnerIP);
-            LOGGER.finer("De-authorized runner IP in secondary region " + secondaryRegionCleanup);
+            // TODO: TEMPORARY - see deAuthorizeIP. Not even refcount-guarded, so the first GDB leg
+            // to finish revoked the secondary-region ingress the other leg was still using.
+            // secondaryUtil.ec2DeauthorizesIP(runnerIP);
+            LOGGER.finer("De-authorization skipped (temporarily disabled) in secondary region "
+                + secondaryRegionCleanup);
           } catch (Exception ex) {
             LOGGER.warning("Failed to de-authorize IP in secondary region: " + ex.getMessage());
           }
