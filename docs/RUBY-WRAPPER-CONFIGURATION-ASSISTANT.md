@@ -255,6 +255,7 @@ production:
 ```
 
 - This matches the default list (§4.1) used when `wrapper_plugins` is unset; listing it keeps the config self-describing.
+- `wrapper_dialect` is optional (the wrapper detects it); setting it skips detection (§8.2). The other recipes set it for the same reason.
 - Changing the adapter name is the whole migration from `postgresql` - no application code moves.
 - Active Record keeps its own pool; the wrapper's plugins run underneath each pooled connection.
 
@@ -507,7 +508,6 @@ production:
   username: myuser
   password: <%= ENV['DB_PASSWORD'] %>
   wrapper_plugins: ""                 # or just an auth plugin, e.g. iam
-  cluster_id: my-proxy-cluster
 ```
 
 - RDS Proxy performs its own failover. The `failover` plugin **raises an error** on a proxy endpoint (`The failover plugin is not compatible with RDS Proxy endpoints`), and the default plugin list includes `failover` - so `wrapper_plugins` must be set explicitly here.
@@ -519,11 +519,10 @@ production:
 ```yaml
   host: db.my-domain.example.com
   wrapper_plugins: failover
-  cluster_id: my-cluster
   cluster_instance_host_pattern: "?.XXX.us-east-1.rds.amazonaws.com"
 ```
 
-The wrapper can't recognize the host as an RDS endpoint, so it can't build per-instance hostnames from topology. Set `cluster_instance_host_pattern` (`?` = instance identifier) **and** `cluster_id`. Leave out `initial_connection` (nothing to resolve). For `iam`, also set `iam_host` to a real RDS endpoint. For `gdb_failover`, use region-prefixed `global_cluster_instance_host_patterns` and `failover_home_region`. `bg` does not support CNAME aliases.
+The wrapper can't recognize the host as an RDS endpoint, so it can't build per-instance hostnames from topology. Set `cluster_instance_host_pattern` (`?` = instance identifier). Set `cluster_id` only if the process connects to more than one cluster (§3.12). Leave out `initial_connection` (nothing to resolve). For `iam`, also set `iam_host` to a real RDS endpoint. For `gdb_failover`, use region-prefixed `global_cluster_instance_host_patterns` and `failover_home_region`. `bg` does not support CNAME aliases.
 
 ### 3.12 Multiple clusters in one app - `cluster_id` per cluster
 
@@ -644,6 +643,7 @@ wrapper_plugins: failover,initial_connection,iam
 - A comma-separated **string** of plugin codes. Whitespace around codes is stripped.
 - **Setting it replaces the default list** rather than adding to it - list the defaults you want to keep.
 - `wrapper_plugins: ""` loads no plugins.
+- **Known issue (1.0.1):** `wrapper_plugins:` with nothing after it (or `wrapper_plugins: ~`) is read by YAML as `nil`, which the wrapper doesn't handle: it raises `NoMethodError: undefined method 'split' for nil` at connection setup (direct connections and `aws_mysql2`). Under `aws_postgresql` the blank key is dropped, so the default list is used. Until this is fixed, write `wrapper_plugins: ""` for no plugins, or remove the key for the defaults.
 - An unknown code raises `Invalid plugin: <code>`. A duplicated code raises `Duplicate plugins detected`.
 
 ### 4.3 Plugin ordering
@@ -696,7 +696,7 @@ This is the per-plugin reference. Every parameter and default here matches the w
 
 Detects that the cluster promoted a different instance and reconnects the connection to the new writer (or a reader, per `failover_mode`). A per-cluster topology monitor thread (one per `cluster_id`) discovers topology; connections that hit a communication error request a refresh and wait while the monitor confirms the new writer, then reconnect together. The monitor probes instances in parallel and checks each instance's own role, so it never relies solely on a possibly stale reader view.
 
-- **Compatible with:** Aurora clusters, RDS Multi-AZ DB clusters. Endpoints: cluster writer/reader/custom, instance; IP and custom domain with `cluster_instance_host_pattern` (+ `cluster_id`).
+- **Compatible with:** Aurora clusters, RDS Multi-AZ DB clusters. Endpoints: cluster writer/reader/custom, instance; IP and custom domain with `cluster_instance_host_pattern`.
 - **Not compatible with:** Aurora Global Database (use `gdb_failover`), RDS Multi-AZ DB instance / Single-AZ / community (nothing to fail over to), RDS Proxy (raises an error), Aurora Limitless shard groups.
 - **Mutually exclusive with:** `gdb_failover`.
 - The wrapper **reconnects; it does not replay** the statement that was running. Application-level retry stays the app's job (§9.3).
@@ -1045,7 +1045,9 @@ An unknown code raises `Unknown dialect code: <code>`.
 
 When `wrapper_dialect` is unset, the wrapper guesses from the host (global writer endpoint → `global-aurora-*`; cluster endpoint → `aurora-*`; other RDS hosts → `rds-*`; anything else → `pg` / `mysql`), then on the first connection queries the database to refine the guess (for example from `aurora-pg` to `global-aurora-pg` or `multi-az-pg-cluster`). The result is cached per endpoint for 24 hours, then detected again on the next connection, so a long-running process picks up an endpoint whose deployment type changed (for example a cluster later added to a Global Database).
 
-Setting `wrapper_dialect` explicitly skips the probing and removes ambiguity; recommend it for production configurations, and always show it in Global Database configurations. If the user is unsure of the deployment type, leaving it unset is safe.
+`wrapper_dialect` is optional. Setting it skips the probing and removes ambiguity, so set it when the deployment type is known, and always show it in Global Database configurations. If the user is unsure of the deployment type, leaving it unset is safe.
+
+One effect of leaving it unset: until the dialect has been confirmed, `initial_connection` can't tell whether a writer cluster endpoint belongs to a single-region cluster or a Global Database. So the **first** connection to a writer cluster endpoint in a process is treated as unresolved - it skips host substitution and role verification and connects through the endpoint as-is. Later connections (once the dialect is confirmed and cached) behave normally. Setting `wrapper_dialect` avoids this.
 
 ### 8.3 Driver dialects
 
@@ -1149,7 +1151,7 @@ Legend: ✅ compatible · ❌ not compatible · blank = no constraint recorded.
 | `bg` | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ ⁷ | ❌ |
 | `kms_encryption` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-1. Set `cluster_instance_host_pattern` (and `cluster_id` for a custom domain).
+1. Set `cluster_instance_host_pattern`.
 2. Set region-prefixed `global_cluster_instance_host_patterns` and `failover_home_region`.
 3. Requires `initial_connection` on the global endpoint.
 4. Set `iam_host` to a valid RDS endpoint (and `iam_region` if it can't be parsed).
@@ -1175,7 +1177,7 @@ Endpoint patterns:
 - **Aurora Global endpoint + `iam`:** include `initial_connection`.
 - **Aurora custom endpoint + failover:** `custom_endpoint,failover`.
 - **Several clusters in one process:** distinct `cluster_id` per cluster.
-- **IP / own domain + failover:** `cluster_instance_host_pattern` + `cluster_id`.
+- **IP / own domain + failover:** `cluster_instance_host_pattern`.
 
 ---
 
@@ -1238,7 +1240,7 @@ Same plugin set as Aurora (`failover,initial_connection`, plus auth if needed). 
 
 ### 12.5 RDS Proxy
 
-See §3.11. No `failover` (raises an error) and no `initial_connection`; set `cluster_id`. Auth plugins and `bg` work. For `bg` behind a proxy, the blue cluster must be registered with the proxy before the Blue/Green Deployment is created.
+See §3.11. No `failover` (raises an error) and no `initial_connection`. Auth plugins and `bg` work. For `bg` behind a proxy, AWS requires the blue cluster to be registered with the proxy before the Blue/Green Deployment is created, and doesn't support RDS Proxy with Blue/Green on Aurora Global Databases ([Blue/Green limitations](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/blue-green-deployments-considerations.html)).
 
 ---
 
@@ -1263,7 +1265,7 @@ Connection errors at connect time are translated the way the stock adapters tran
 
 ### 13.3 Pool sizing
 
-Set the pool to at least the web server's thread count (Puma `RAILS_MAX_THREADS`), since each thread holds one connection while it works. If the app uses `load_async` with the global thread pool, add that executor's concurrency (`global_executor_concurrency`, default 4). Raise the pool with the thread count rather than guessing. Use `pool` on Active Record 7.2 / 8.0. On 8.1 prefer `max_connections`; `pool` still works there but is deprecated. The recipes in this document use `pool`.
+Set the pool to at least the web server's thread count - the number of threads each server process uses to handle requests (Puma's `RAILS_MAX_THREADS`) - since each busy thread holds one connection. If the app uses `load_async` (Active Record's `relation.load_async`, which runs a query on a background thread pool while the request thread keeps working) with the global thread pool, add that executor's concurrency (`global_executor_concurrency`, default 4), because those background threads take connections from the same pool. Raise the pool with the thread count rather than guessing. Use `pool` on Active Record 7.2 / 8.0. On 8.1 prefer `max_connections`; `pool` still works there but is deprecated. The recipes in this document use `pool`.
 
 ### 13.4 Session state across failover
 
@@ -1301,7 +1303,7 @@ These work with the wrapper adapters on `1.0.1+` and need no extra configuration
 
 ### 14.1 Logging
 
-The wrapper logs through `AwsAdvancedRubyDriverWrapper.logger`, which defaults to its own `Logger` on `$stderr` at `INFO`. It can be replaced with any object responding to `debug`/`info`/`warn`/`error`/`fatal`.
+The wrapper logs through `AwsAdvancedRubyDriverWrapper.logger`, which defaults to its own `Logger` on `$stderr` at `INFO`. By default, wrapper messages therefore go to stderr, **not** the Rails log. It can be replaced with any object responding to `debug`/`info`/`warn`/`error`/`fatal`.
 
 **To turn on debug logging for the wrapper only**, give it a dedicated logger at `DEBUG`. Don't assign `Rails.logger` and then raise its level - that turns on `DEBUG` for the whole app.
 
@@ -1347,11 +1349,11 @@ All under `AwsAdvancedRubyDriverWrapper::Errors`, subclasses of `AwsError`:
 | `SecretsManagerAuthError: Timed out fetching secret after 60s` | Secrets Manager not reachable (network path, VPC endpoint, region) or very slow | Check connectivity to Secrets Manager from the app and `secret_region` / `secret_endpoint` |
 | Writes fail with a read-only error right after deploy | The writing entry points at the `-ro-` reader endpoint | Point writing at the cluster endpoint without `-ro-` |
 | `ActiveRecord::ConnectionFailed ... FailoverFailedError` | Failover could not reach a new instance within `failover_timeout_sec` (not a success) | Check cluster health and reachability of instance endpoints (security groups, `cluster_instance_host_pattern` for IP/CNAME hosts); the pool will replace the connection |
-| App code sees `FailoverSuccessError` under Active Record and crashes | The adapter re-raises it unchanged after reconnecting | Rescue it and replay idempotent work (§9.3) |
+| A request or job fails with `FailoverSuccessError` under Active Record (the process keeps running; later work uses the reconnected connection) | The adapter re-raises it unchanged after reconnecting | Rescue it and replay idempotent work (§9.3) |
 | Session settings (timezone, search path, statement timeout) lost after failover | Not declared under `variables:` | Move them under `variables:` (§13.4) |
-| Failover doesn't work behind an IP address or own domain name; topology never resolves | No `cluster_instance_host_pattern`, so per-instance hostnames can't be built | Set `cluster_instance_host_pattern` and `cluster_id` (§3.11) |
+| Failover doesn't work behind an IP address or own domain name; topology never resolves | No `cluster_instance_host_pattern`, so per-instance hostnames can't be built | Set `cluster_instance_host_pattern` (§3.11) |
 | Topology from one cluster appears in another / failover reconnects to the wrong cluster | Several clusters share the default `cluster_id` | Distinct `cluster_id` per cluster |
-| Topology monitor uses the wrong user or database, or ignores timeout overrides | The monitor keeps the context of the first connection that created it for that `cluster_id` | Put `topology_monitoring_*` settings on every connection sharing the `cluster_id`, or give it its own `cluster_id` |
+| Topology monitor uses the wrong user or database, or ignores timeout overrides | The monitor keeps the context of the first connection that created it for that `cluster_id` | Put `topology_monitoring_*` settings on every connection sharing the `cluster_id` |
 | Global Database connection fails at setup | Missing `global_cluster_instance_host_patterns`, or missing `failover_home_region` on the global endpoint | Set both (§5.2) |
 | IAM auth fails on MySQL | Missing `enable_cleartext_plugin: true` (or no TLS) | Add it with `ssl_mode: verify_identity` + `sslca` |
 | IAM token generated for the wrong host/region | Connecting through IP, own domain, or global endpoint | `iam_host` (+ `iam_region`); `initial_connection` on the global endpoint |
@@ -1395,7 +1397,7 @@ Flag these whenever they appear in user configs:
 | `failover` / `initial_connection` on a single instance or community database | Nothing to fail over to or resolve | Leave them out (set `wrapper_plugins` explicitly) |
 | Several clusters without distinct `cluster_id` | Topology cache collisions, wrong-cluster failover | Distinct `cluster_id` per cluster |
 | Different `cluster_id` values for entries pointing at the same cluster | Duplicate monitor threads and caches | Same `cluster_id` for the same cluster |
-| IP / own domain host without `cluster_instance_host_pattern` (+ `cluster_id`) | Topology discovery can't build per-instance hostnames | Set both |
+| IP / own domain host without `cluster_instance_host_pattern` | Topology discovery can't build per-instance hostnames | Set `cluster_instance_host_pattern` |
 | Asking for read/write splitting or per-query reader balancing | Not a wrapper feature in Ruby | Active Record roles (§3.7); a connection stays on the reader it opened |
 | Asking for an internal connection pool | Not a wrapper feature in Ruby | Active Record's pool; with direct connections, the app owns pooling |
 | Asking for EFM / host health probing | No such plugin in Ruby | Driver socket/statement timeouts, `topology_monitoring_*` timeouts for monitor connections; failover reacts when a call fails |
@@ -1404,7 +1406,7 @@ Flag these whenever they appear in user configs:
 | IAM on MySQL without `enable_cleartext_plugin: true` | Authentication fails | Add it, with TLS verification |
 | IAM / Secrets Manager without TLS verification | Credentials exposed or server impersonation | `sslmode: verify-full` / `ssl_mode: verify_identity` + CA bundle |
 | Temporary AWS credentials in environment variables | Never refreshed - auth fails at expiry | IAM roles or assume-role configuration |
-| `bg` on RDS Multi-AZ DB cluster, Aurora Global Database, or via a CNAME | Unsupported | Use `failover` for Multi-AZ DB clusters; connect via an RDS endpoint |
+| `bg` on RDS Multi-AZ DB cluster, Aurora Global Database, or via a CNAME | Unsupported | Remove `bg` - Blue/Green handling isn't available for that deployment; for a CNAME, connect through the RDS endpoint instead |
 | `custom_endpoint` with `gdb_failover` or `bg` | Meaningless combination | Drop one |
 | `initial_connection` on a custom endpoint without `initial_connection_substitute_host` | Passes the endpoint through unchanged - no effect | Set `any` / `reader`, or drop it |
 | `kms_encryption` without the server-side HMAC trigger | Plaintext can land in an encrypted column silently | Create the trigger on every encrypted column |
@@ -1467,7 +1469,8 @@ Pick **one**; they are mutually exclusive. Community databases support neither.
 ```
 What is the host?
 ├─ Aurora / Multi-AZ DB cluster writer or reader endpoint, or Aurora Global endpoint → include it (default)
-├─ Aurora custom endpoint → include only with `initial_connection_substitute_host: any` or `reader`
+├─ Aurora custom endpoint → include it only if new connections should be resolved to a member instance
+│  (`initial_connection_substitute_host: any` or `reader`); without that setting it's harmless but has no effect
 └─ Instance endpoint, RDS Proxy, IP address, own domain → leave it out
 ```
 
@@ -1608,7 +1611,7 @@ If a user wants to dig deeper, point them at:
 - Repository: `https://github.com/aws/aws-advanced-ruby-driver-wrapper`
 - Issues / discussions: `https://github.com/aws/aws-advanced-ruby-driver-wrapper/issues`, `https://github.com/aws/aws-advanced-ruby-driver-wrapper/discussions`
 
-When a user pastes a backtrace mentioning a class under `AwsAdvancedRubyDriverWrapper::Plugins::<Name>`, that's the source of truth for the named plugin.
+If a pasted backtrace includes a frame under `AwsAdvancedRubyDriverWrapper::Plugins::<Name>`, that plugin raised or handled the error; look it up in §5.
 
 ---
 
