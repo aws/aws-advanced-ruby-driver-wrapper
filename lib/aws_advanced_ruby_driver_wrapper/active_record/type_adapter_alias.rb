@@ -37,7 +37,7 @@ module AwsAdvancedRubyDriverWrapper
   # type explicitly registered for :aws_postgresql is normalized to :postgresql and so also applies
   # to the plain postgresql connections (and vice versa). This is documented in the CHANGELOG.
   module TypeAdapterAlias
-    ADAPTER_ALIASES = { aws_postgresql: :postgresql, aws_mysql2: :mysql2 }.freeze
+    ADAPTER_ALIASES = { aws_postgresql: :postgresql, aws_mysql2: :mysql2, aws_trilogy: :trilogy }.freeze
 
     # Prepended onto ActiveRecord::Type::AdapterSpecificRegistry. Normalizing the adapter in lookup
     # covers both the framework path and a direct Type.lookup(..., adapter: :aws_postgresql); any
