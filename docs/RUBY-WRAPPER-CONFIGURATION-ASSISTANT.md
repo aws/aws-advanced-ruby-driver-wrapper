@@ -311,7 +311,7 @@ MySQL (Active Record) - differences:
 ```yaml
   adapter: aws_mysql2
   enable_cleartext_plugin: true      # required for MySQL IAM; the wrapper does not set it
-  ssl_mode: verify_identity          # required in practice: the token is sent in cleartext
+  ssl_mode: verify_identity          # required in practice: the token is sent unencrypted unless the connection uses TLS
   sslca: /path/to/global-bundle.pem
   wrapper_dialect: aurora-mysql
 ```
@@ -413,7 +413,7 @@ ActiveRecord::Base.connected_to(role: :reading) do
 end
 ```
 
-Traps: if the block never wraps the work, reads silently stay on the primary - verify in logs. A `connected_to(role: :reading)` block inside an open write transaction still switches to the replica, so its reads run outside that transaction: they don't see the transaction's uncommitted writes, and may miss very recent commits because of replica lag.
+Traps: only queries inside a `connected_to(role: :reading)` block go to a replica; everything outside it silently stays on the primary, so verify in logs. A `connected_to(role: :reading)` block inside an open write transaction still switches to the replica, so its reads run outside that transaction: they don't see the transaction's uncommitted writes, and may miss very recent commits because of replica lag.
 
 **3.7b - The HTTP verb decides** (Rails database selector middleware, generated with `bin/rails g active_record:multi_db`):
 
@@ -715,7 +715,7 @@ Detects that the cluster promoted a different instance and reconnects the connec
 | `cluster_topology_high_refresh_rate_sec` | Float | `0.1` | Interval between topology updates during the high-rate period (writer discovery, and typically about 30 seconds after a new writer is detected). |
 | `cluster_topology_max_instance_monitors` | Integer | `16` | Maximum per-instance topology monitors run in parallel during a topology update. |
 
-**Topology-monitoring connections.** The monitor opens its own connections. Prefix any setting with `topology_monitoring_` to apply it only to those connections, e.g. `topology_monitoring_connect_timeout: 10`. The prefix is stripped and the setting is passed to the underlying driver, so use an option that driver accepts (pg: `connect_timeout`, `keepalives_idle`, ...; mysql2: `connect_timeout`, `read_timeout`, ...). The monitor is created by the first connection for a `cluster_id` and keeps that connection's context, so put the prefixed settings on **every** connection that shares the `cluster_id`.
+**Topology-monitoring connections.** The monitor opens its own connections. Prefix any setting with `topology_monitoring_` to apply it only to those connections, e.g. `topology_monitoring_connect_timeout: 10`. The prefix is stripped and the setting is passed to the underlying driver, so use an option that driver accepts (pg: `connect_timeout`, `keepalives_idle`, ...; mysql2: `connect_timeout`, `read_timeout`, ...). There is one monitor per `cluster_id`, created with the settings of whichever connection for that `cluster_id` opens first, and it keeps them for its lifetime. If only some entries set the prefixed settings, whether they apply depends on which connection happens to open first - so put them on **every** connection that shares the `cluster_id`.
 
 ### 5.2 `gdb_failover` - Aurora Global Database failover
 
@@ -836,7 +836,7 @@ Fetches database credentials from a Secrets Manager secret (JSON) and connects w
 | `secret_rotation_retry_base_delay_sec` | Float | `0.5` | Initial delay for that loop; grows exponentially. Only used when the timeout is `> 0`. |
 | `aws_credentials_provider` | Object | SDK default chain | Custom credentials provider (§6.4). |
 
-Secrets are cached process-wide, keyed by `secret_id`, region, `secret_endpoint`, and credential identity. After expiry, connections keep using the cached value while the secret is re-fetched in the background, until the refresh completes; a cached secret is dropped for good 20 minutes after it was fetched. A fetch that doesn't finish within 60 seconds fails with `SecretsManagerAuthError` (`Timed out fetching secret after 60s`).
+Secrets are cached process-wide, keyed by `secret_id`, region, `secret_endpoint`, and credential identity. A secret is served fresh for `secret_expiration_sec`. After that, the next connection still uses the cached value while a background refresh replaces it. If no refresh succeeds, the entry is dropped for good 20 minutes after it was fetched, regardless of `secret_expiration_sec`. A fetch that doesn't finish within 60 seconds fails with `SecretsManagerAuthError` (`Timed out fetching secret after 60s`).
 
 ### 5.7 `bg` - Blue/Green Deployment
 
