@@ -29,6 +29,14 @@ module AwsAdvancedRubyDriverWrapper
       READ_ONLY_ERROR_CODES = Set[1290, 1836].freeze
       LOCK_WAIT_TIMEOUT_ERROR_CODE = 1205
 
+      # A protocol violation raised while receiving the authentication response. Unlike a clean
+      # ER_ACCESS_DENIED_ERROR (1045), trilogy raises this from its C extension as a codeless
+      # Trilogy::QueryError (error_code nil, not a ConnectionError), so it is matched by its message
+      # marker rather than by code. The server aborting the auth handshake this way means the
+      # credential was not accepted, so for login-retry purposes it is a login error.
+      AUTH_PROTOCOL_VIOLATION = 'trilogy_auth_recv'
+      PROTOCOL_VIOLATION_MARKER = 'TRILOGY_PROTOCOL_VIOLATION'
+
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
       end
@@ -46,7 +54,9 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def login_error?(error)
-        check_cause_chain(error) { |_, current| LOGIN_ERROR_CODES.include?(error_code(current)) }
+        check_cause_chain(error) do |_, current|
+          LOGIN_ERROR_CODES.include?(error_code(current)) || auth_protocol_violation?(current)
+        end
       end
 
       def login_error_by_sql_state?(_sql_state)
@@ -73,6 +83,18 @@ module AwsAdvancedRubyDriverWrapper
 
       def error_code(error)
         error.respond_to?(:error_code) ? error.error_code : nil
+      end
+
+      # True for a codeless protocol violation raised during the auth handshake. trilogy surfaces a
+      # rejected/aborted credential exchange as a Trilogy::QueryError carrying "TRILOGY_PROTOCOL_VIOLATION
+      # (trilogy_auth_recv)" with no MySQL error code, so it is identified by message rather than code.
+      # Scoped to the auth phase so a mid-session protocol error is not misread as a login failure.
+      def auth_protocol_violation?(error)
+        return false unless defined?(::Trilogy::Error) && error.is_a?(::Trilogy::Error)
+        return false unless error_code(error).nil?
+
+        message = error.message.to_s
+        message.include?(PROTOCOL_VIOLATION_MARKER) && message.include?(AUTH_PROTOCOL_VIOLATION)
       end
     end
   end
