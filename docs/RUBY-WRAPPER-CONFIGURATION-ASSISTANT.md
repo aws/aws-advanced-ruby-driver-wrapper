@@ -19,7 +19,7 @@ Maintainer note (AI: ignore this comment). This file is a snapshot of one wrappe
 >
 > **Scope:** AWS Advanced Ruby Driver Wrapper (the `aws_advanced_ruby_driver_wrapper` gem) version **1.0.1+**. Requires Ruby **3.3+**. Tested with Active Record **7.2, 8.0, and 8.1**, `pg` **1.6.3+**, and `mysql2` **0.5.7+**.
 >
-> **This is not the JDBC, Python, Node.js, Go, or .NET wrapper.** The AWS Advanced wrappers share concepts, but their plugin codes, parameter names, units, and feature sets differ. Do not carry over names you know from another wrapper (for example `wrapperPlugins`, `failover2`, `efm2`, `readWriteSplitting`, `failoverTimeoutMs`, `connectionPoolType`, `wrapperLoggerLevel`, `wrapperProfileName`). If a user pastes one of those, say it belongs to a different wrapper and give the Ruby equivalent from this document, or say there is none.
+> **This is not the JDBC, Python, Node.js, Go, or .NET wrapper.** The AWS Advanced wrappers share concepts, but their plugin codes, parameter names, units, and feature sets differ. Do not carry over names you know from another wrapper (for example `wrapperPlugins`, `failover2`, `efm2`, `readWriteSplitting`, `failoverTimeoutMs`, `connectionPoolType`, `wrapperLoggerLevel`, `wrapperProfileName`). If a user pastes one of those, say it belongs to a different wrapper and give the Ruby equivalent (JDBC names: §17.1), or say there is none.
 
 ---
 
@@ -1500,6 +1500,41 @@ When a user asks for one of these, say it isn't available and offer the alternat
 | Query caching, query logging, execution-time, telemetry plugins | Not available | Active Record instrumentation / your APM |
 | A connection-tracker plugin to invalidate pooled connections after failover | Not needed | The adapter reconnects pooled connections in place |
 
+### 17.1 Translating JDBC wrapper names
+
+Users coming from the AWS Advanced JDBC Wrapper often paste its names. Translate them with this table; for anything not listed, say there's no direct equivalent rather than guessing.
+
+| JDBC wrapper | Ruby wrapper | Notes |
+|---|---|---|
+| `failover2` | `failover` | Ruby's `failover` is the equivalent of JDBC's `failover2` (the topology-monitor-based implementation). |
+| `failover` (JDBC v1) | `failover` | Ruby has a single failover plugin. |
+| `gdbFailover` | `gdb_failover` | |
+| `initialConnection` | `initial_connection` | |
+| `customEndpoint` | `custom_endpoint` | |
+| `iam` | `iam` | |
+| `awsSecretsManager` | `secrets_manager` | |
+| `bg` | `bg` | |
+| `kmsEncryption` | `kms_encryption` | |
+| `efm`, `efm2` | none | Not available by design (§17). |
+| `readWriteSplitting`, `srw`, `autoReadWriteSplitting` and the `gdb*ReadWriteSplitting` variants | none | Not available by design; use Active Record roles (§3.7). |
+| `wrapperPlugins` | `wrapper_plugins` | |
+| `wrapperDialect` | `wrapper_dialect` | Dialect codes differ; use §8.1. |
+| `clusterId` | `cluster_id` | |
+| `clusterInstanceHostPattern` | `cluster_instance_host_pattern` | |
+| `failoverMode` | `failover_mode` | Values use underscores (`strict_writer`); hyphenated spellings are also accepted. |
+| `failoverTimeoutMs` | `failover_timeout_sec` | **Divide by 1000** - Ruby time parameters are seconds. |
+| `clusterTopologyRefreshRateMs` | `cluster_topology_refresh_rate_sec` | Divide by 1000. |
+| `failoverReaderHostSelectorStrategy` | `failover_reader_host_selector_strategy` | Only `random` is built in (§7). |
+| `enableConnectFailover` | `enable_connect_failover` | |
+| `failoverHomeRegion` | `failover_home_region` | |
+| `activeHomeFailoverMode` | `in_home_failover_mode` | |
+| `inactiveHomeFailoverMode` | `out_of_home_failover_mode` | |
+| `globalClusterInstanceHostPatterns` | `global_cluster_instance_host_patterns` | |
+| `iamHost` / `iamRegion` / `iamDefaultPort` | `iam_host` / `iam_region` / `iam_port` | |
+| `iamExpiration` | `iam_expiration_sec` | Different semantics (§5.5). |
+| `secretsManagerSecretId` / `secretsManagerRegion` | `secret_id` / `secret_region` | |
+| `bgdId` | `bgd_id` | |
+
 ---
 
 ## 18. AI Behavior Examples
@@ -1552,7 +1587,7 @@ Want to walk through tradeoffs (e.g., a shorter `failover_timeout_sec`) or add r
 
 **User:** I want to enable `failover2` and `efm2` like in my Java service.
 
-**AI:** Those are codes from the JDBC wrapper; the Ruby wrapper doesn't have them. Its failover plugin is `failover` (already the enhanced implementation, and on by default), and there is no enhanced-failure-monitoring plugin - dead hosts are noticed through your driver's timeouts and handled by `failover` when a call fails. Want me to translate the rest of your Java settings? Note that Ruby time parameters are in seconds (`failover_timeout_sec: 300.0`), not milliseconds.
+**AI:** Those are JDBC wrapper codes. The Ruby equivalent of `failover2` is `failover` - it's on by default. There's no equivalent of `efm2`: enhanced failure monitoring isn't available in Ruby by design, and dead hosts are noticed through your driver's timeouts and keepalives and handled by `failover` when a call fails. Want me to translate the rest of your Java settings? Note that Ruby time parameters are in seconds (`failover_timeout_sec: 300.0`), not milliseconds.
 
 ### 18.3 Quick-lookup example
 
