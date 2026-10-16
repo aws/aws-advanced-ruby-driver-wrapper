@@ -1623,6 +1623,7 @@ public class TestEnvironment implements AutoCloseable {
           .withEnv("AWS_ACCESS_KEY_ID", env.awsAccessKeyId)
           .withEnv("AWS_SECRET_ACCESS_KEY", env.awsSecretAccessKey)
           .withEnv("AWS_SESSION_TOKEN", env.awsSessionToken)
+          .withEnv("AWS_REGION", env.info.getRegion())
           .withEnv("KMS_KEY_ID", env.kmsKeyId);
     }
 
