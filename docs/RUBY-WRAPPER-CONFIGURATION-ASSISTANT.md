@@ -43,6 +43,7 @@ When you are interviewing:
 - Start with one **anchor question** (see §1.3) to figure out the user's domain.
 - Ask follow-ups **one at a time** for non-experts. If the user answers tersely or shows expertise (uses correct plugin codes, references specific parameters), you may **group 3-5 related questions** in one turn.
 - Stop interviewing as soon as you have enough to produce a config that meets the user's stated requirements. Do not ask exhaustive questions for the sake of it.
+- **Before the first config in an interview, always know the engine, the deployment, and how the app authenticates** (static password, IAM, or Secrets Manager). Authentication changes the plugin list, the credential keys, the Gemfile, and the TLS requirements, so ask about it rather than assuming a password. Ask the questions that change the config first; leave lower-impact ones (error handling, session settings, pool tuning) for after the config, and don't block the config on them.
 - Avoid yes/no chains. Prefer "What X are you using?" over "Do you use X?".
 - The single most important early question is **how the app talks to the database**: through Active Record (Rails or standalone), or through the `pg` / `mysql2` gem directly. It decides the output format, who owns the connection pool, and how reads reach replicas (Active Record roles, or separate connections the app picks between).
 
@@ -112,7 +113,7 @@ Each track lists the questions to ask **in order**, the decision they drive, and
 2. **Engine?** (PostgreSQL / MySQL)
 3. **Database deployment?** (Aurora cluster / Aurora Global Database / RDS Multi-AZ DB cluster (3 instances) / RDS Multi-AZ DB instance (2 instances) / RDS Single-AZ instance / community or self-managed)
 4. **Endpoint?** (cluster writer, cluster reader, custom endpoint, instance, global writer, RDS Proxy, IP address, your own domain name / CNAME)
-5. **Auth?** (static password / IAM / Secrets Manager)
+5. **Auth?** (static password / IAM / Secrets Manager) - always ask before producing the config; don't assume a password.
 6. **What must keep working?** (nothing special - retries are fine / survive the loss of one instance / survive the loss of a region). Default to "survive the loss of one instance" for Aurora and RDS Multi-AZ DB clusters.
 7. **What does this code do with data?** (reads and writes through one connection / reads and writes but heavy reporting is a distinct path / read-only / authoritative writes only)
 
@@ -204,6 +205,8 @@ State that Active Record does not balance individual queries across replicas: a 
 ### 2.10 Track J - Troubleshooting
 
 This track covers problems caused by configuration. If the evidence points elsewhere (a wrapper bug, the network, the database itself), say so and point the user at §14.5 rather than guessing.
+
+An exception raised from inside the wrapper that isn't one of the documented error classes (§14.2) - for example a `NoMethodError` or `TypeError` with a backtrace in `aws_advanced_ruby_driver_wrapper` code - is a probable wrapper bug. Don't speculate about internal causes or offer configuration workarounds; collect the §14.5 details and point the user to the issue tracker.
 
 Walk through these in order until the cause is clear:
 
@@ -632,7 +635,7 @@ If `wrapper_plugins` is **not set**, the wrapper loads:
 failover,initial_connection
 ```
 
-This suits Aurora clusters and RDS Multi-AZ DB clusters (for an Aurora custom endpoint, see §3.13). It is **not** appropriate for RDS Proxy (the `failover` plugin raises an error on a proxy endpoint), Aurora Global Database (use `gdb_failover`), single instances, or community databases - set `wrapper_plugins` explicitly there.
+This suits Aurora clusters and RDS Multi-AZ DB clusters (for an Aurora custom endpoint, see §3.13). It is **not** appropriate for RDS Proxy (the `failover` plugin raises an error on a proxy endpoint), Aurora Global Database (it doesn't raise there, but loads the non-region-aware `failover` - use `gdb_failover` instead), single instances, or community databases - set `wrapper_plugins` explicitly there.
 
 ### 4.2 Specifying plugins
 
@@ -706,7 +709,7 @@ Detects that the cluster promoted a different instance and reconnects the connec
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `failover_mode` | String | depends on URL | Target role during failover: `strict_writer`, `reader_or_writer`, or `strict_reader`. A read-only cluster endpoint defaults to `reader_or_writer`; other URLs default to `strict_writer`. |
-| `failover_timeout_sec` | Float | `300.0` | Maximum time allowed to reconnect to a new writer or reader after failover starts. |
+| `failover_timeout_sec` | Float | `300.0` | Maximum time allowed to reconnect to a new writer or reader after failover starts. Failover connects directly to instance endpoints it knows from topology; it doesn't wait for the cluster endpoint's DNS to update. So the 40-60 second DNS delay after a failover (§5.3) is not a reason to increase `failover_timeout_sec`. |
 | `failover_reader_host_selector_strategy` | String | `random` | Strategy used to select a reader during reader failover (§7). |
 | `enable_connect_failover` | Boolean | `false` | Enables cluster-aware failover when the **initial** connection fails because of a network exception. The initial connection may be redirected to another instance. |
 | `cluster_instance_host_pattern` | String | auto-derived for RDS endpoints | Pattern used to build instance endpoints when the host is not a recognizable RDS endpoint (`?` = instance identifier). Required for IP addresses and custom domains. |
@@ -817,7 +820,10 @@ Tokens are cached per region, host, port, user, and credential identity, reused 
 
 Fetches database credentials from a Secrets Manager secret (JSON) and connects with them.
 
-- **Required:** `gem 'aws-sdk-secretsmanager'`; AWS credentials (§6.4).
+- **Required:** `gem 'aws-sdk-secretsmanager'`, and AWS credentials (§6.4) for the app.
+- **IAM permissions:** the app's AWS identity (its IAM role or credentials, not the database user) needs `secretsmanager:GetSecretValue` on the secret, so the plugin can fetch the database username and password. If the secret is encrypted with your own KMS key instead of the AWS default key, it also needs `kms:Decrypt` on that key.
+  - In the policy's `Resource`, use the secret's full ARN exactly as shown in the console, e.g. `arn:aws:secretsmanager:us-east-1:123456789012:secret:my-db-secret-AbCdEf`. The ARN already ends in a random 6-character suffix (`-AbCdEf`), so don't add `-*` after it - the policy would no longer match.
+  - If you only know the secret's name, use `arn:aws:secretsmanager:<region>:<account>:secret:<name>-??????` (each `?` matches one character of the suffix).
 - **Compatible with:** Aurora, Aurora Global, RDS Multi-AZ, RDS Single-AZ, RDS Proxy, Limitless. IP / custom domain need `secret_region` unless the secret id is an ARN.
 - **Not compatible with:** community databases.
 - **Mutually exclusive with:** `iam`.
@@ -936,7 +942,7 @@ Transparent client-side, column-level encryption using AWS KMS. Encrypts bound v
 | `cluster_instance_host_pattern` | String | auto-derived | Instance host pattern for IP / custom-domain hosts (§3.11). |
 | `aws_credentials_provider` | Object | SDK default chain | One provider shared by `iam`, `secrets_manager`, and `kms_encryption` (§6.4). |
 
-All plugin parameters are listed per plugin in §5. Everything that isn't a wrapper parameter is passed through to the underlying driver unchanged: TLS options, `connect_timeout`, `keepalives_*`, `read_timeout`, `enable_cleartext_plugin`, and so on. The wrapper does not validate driver options. What happens to an unknown key depends on the integration:
+All plugin parameters are listed per plugin in §5. Driver options - TLS options, `connect_timeout`, `keepalives_*`, `read_timeout`, `enable_cleartext_plugin`, and so on - are passed through to the underlying driver unchanged, and the wrapper does not validate them. Don't describe this as "every other key goes to the driver": under Active Record, keys that are neither wrapper parameters nor driver options are dropped or ignored. What happens to an unknown key depends on the integration:
 - **Direct `WrapperPgConnection`:** `pg` rejects it with `invalid connection option "<name>"`.
 - **Direct `WrapperMysql2Client`:** `mysql2` ignores it.
 - **Active Record (both adapters):** the key never causes an error - the adapters drop or ignore keys the driver doesn't know (§13.2). A misspelled wrapper parameter therefore has **no effect** rather than failing.
@@ -975,7 +981,31 @@ aws_credentials_provider: Aws::AssumeRoleCredentials.new(
 )
 ```
 
-`aws_credentials_provider` is read by `iam`, `secrets_manager`, and `kms_encryption` (`custom_endpoint` always uses the default chain). Because it's a Ruby object, set it in code (direct connection, or an Active Record configuration built in Ruby), not in plain YAML.
+`aws_credentials_provider` is read by `iam`, `secrets_manager`, and `kms_encryption` (`custom_endpoint` always uses the default chain). Because it's a Ruby object, it can't be written in `database.yml`. With a direct connection, pass it as a keyword argument. Under Rails, merge it into the wrapper-backed entries after Rails loads `database.yml`, with an initializer (works on Active Record 7.2, 8.0, and 8.1, including multiple databases and `connects_to` roles):
+
+```ruby
+# config/initializers/aws_wrapper_credentials.rb
+DB_CREDENTIALS_PROVIDER = Aws::AssumeRoleCredentials.new(
+  client: Aws::STS::Client.new(region: 'us-east-1'),
+  role_arn: 'arn:aws:iam::123456789012:role/db-connect',
+  role_session_name: 'my-app'
+)
+
+ActiveSupport.on_load(:active_record) do
+  configs = configurations.configurations.map do |db_config|
+    next db_config unless db_config.adapter.to_s.start_with?('aws_')
+
+    ActiveRecord::DatabaseConfigurations::HashConfig.new(
+      db_config.env_name, db_config.name,
+      db_config.configuration_hash.merge(aws_credentials_provider: DB_CREDENTIALS_PROVIDER)
+    )
+  end
+  self.configurations = ActiveRecord::DatabaseConfigurations.new(configs)
+  establish_connection
+end
+```
+
+This gives every wrapper entry the same provider; to vary it per entry, branch on `db_config.name`. If one assumed role for the whole process is enough, the simpler alternative is an assume-role profile in `~/.aws/config` (selected with `AWS_PROFILE`), which the default chain picks up and refreshes - on EC2 or ECS, use `credential_source = Ec2InstanceMetadata` / `EcsContainer` rather than `source_profile`.
 
 **Refreshed automatically:** EC2 instance profiles and Lambda roles, ECS task roles, assume role (`~/.aws/config` or `Aws::AssumeRoleCredentials`), SSO configured in `~/.aws/config`, web identity tokens, credential process.
 **Not refreshed:** temporary credentials in environment variables, and credentials pasted into `~/.aws/credentials` / `~/.aws/config`. These fail the moment they expire. Recommend IAM roles in production.
@@ -1082,6 +1112,8 @@ Unset: a read-only cluster endpoint (`.cluster-ro-`) → `reader_or_writer`; eve
 In-home = the Global Database primary region is the home region. Out-of-home = it isn't. Hyphenated spellings are also accepted.
 
 ### 9.3 Failover errors (`AwsAdvancedRubyDriverWrapper::Errors`)
+
+These are raised only by `failover` and `gdb_failover`. Without either plugin (for example `wrapper_plugins: ""` behind RDS Proxy), a lost connection surfaces as an ordinary driver or Active Record error, as it would without the wrapper.
 
 | Error class | Connection valid? | What to do |
 |---|:---:|---|
@@ -1249,7 +1281,7 @@ See §3.11. No `failover` (raises an error) and no `initial_connection`. Auth pl
 ### 13.1 Who owns what
 
 - **Active Record owns the connection pool** and the `writing` / `reading` roles. The wrapper has no internal pool and no read/write splitting; its plugins run underneath every pooled connection.
-- The pool is per process, per role (5 connections by default). A writing + reading pair doubles the count; multiply by process count before comparing with the database's connection limit.
+- The pool is per process, per role (5 connections by default), and connections are opened lazily. So a process's peak per role is the number of its threads that use the database at once, capped by the pool - a pool larger than the thread count is never filled. To estimate load on an instance, add up that peak across every process (web and job workers) for each role: the writing role's connections go to the writer, the reading role's to the reader instances. Compare each total with that instance's connection limit. The wrapper's monitors add a few connections of their own per process.
 - After a successful failover the adapter reuses the pooled connection in place (§9.3).
 
 ### 13.2 Keys in a `database.yml` entry
