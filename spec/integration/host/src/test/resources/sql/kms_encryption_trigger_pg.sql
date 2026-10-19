@@ -13,7 +13,6 @@ DECLARE
   col_name  text := TG_ARGV[0];
   col_value bytea;
   hmac_key  bytea;
-  cache_key text := 'hmac_key.' || TG_TABLE_NAME || '.' || col_name;
   unchanged boolean;
 BEGIN
   -- An UPDATE that leaves the encrypted value as it was is not re-checked; see
@@ -31,20 +30,14 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- A setting cached by an earlier transaction reads back as '' rather than being
-  -- undefined, so an empty value is treated as not cached.
-  hmac_key := decode(NULLIF(current_setting(cache_key, true), ''), 'hex');
+  -- Read the column's current HMAC key from key_storage.
+  SELECT ks.hmac_key INTO hmac_key
+    FROM encrypt.encryption_metadata em
+    JOIN encrypt.key_storage ks ON em.key_id = ks.id
+   WHERE em.table_name = TG_TABLE_NAME AND em.column_name = col_name;
+
   IF hmac_key IS NULL THEN
-    SELECT ks.hmac_key INTO hmac_key
-      FROM encrypt.encryption_metadata em
-      JOIN encrypt.key_storage ks ON em.key_id = ks.id
-     WHERE em.table_name = TG_TABLE_NAME AND em.column_name = col_name;
-
-    IF hmac_key IS NULL THEN
-      RAISE EXCEPTION 'No HMAC key is configured for %.%', TG_TABLE_NAME, col_name;
-    END IF;
-
-    PERFORM set_config(cache_key, encode(hmac_key, 'hex'), true);
+    RAISE EXCEPTION 'No HMAC key is configured for %.%', TG_TABLE_NAME, col_name;
   END IF;
 
   IF length(col_value) < 65
