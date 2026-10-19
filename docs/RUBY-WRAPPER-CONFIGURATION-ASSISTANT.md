@@ -178,8 +178,11 @@ State that Active Record does not balance individual queries across replicas: a 
 
 1. **Is the host a real Aurora custom endpoint** (`.cluster-custom-`)? A CNAME pointing at an RDS endpoint is a *custom domain*, not a custom endpoint - see §3.11 instead.
 2. **Need failover inside the custom endpoint's member set?** → `custom_endpoint,failover` (§3.13).
-3. **Should new connections be resolved to a member instance?** → add `initial_connection` with `initial_connection_substitute_host: any` (or `reader`); by default it passes a custom endpoint through unchanged.
-4. **Gemfile and credentials:** `aws-sdk-rds` and credentials that allow `rds:DescribeDBClusterEndpoints`.
+3. **Should new connections go straight to a member instance URL instead of the custom endpoint URL?** → add `initial_connection` to `wrapper_plugins` and set `initial_connection_substitute_host: any` (or `reader`); without that setting it connects through the custom endpoint URL unchanged.
+4. **Does this connection need to write?**
+   - *Yes* → recommend a separate writing connection on the **cluster (writer) endpoint**, not the custom endpoint: failover may promote an instance outside the custom endpoint to writer, and a custom endpoint connection can't follow it there. Keep the custom endpoint for reads.
+   - *No* → set `failover_mode: strict_reader` (or `reader_or_writer`) explicitly; the default for a custom endpoint URL is `strict_writer` (§3.13).
+5. **Gemfile and credentials:** `aws-sdk-rds` and credentials that allow `rds:DescribeDBClusterEndpoints`.
 
 ### 2.8 Track H - Column encryption (KMS)
 
@@ -328,7 +331,7 @@ Database prerequisites:
 - An IAM policy granting `rds-db:connect` for that DB user.
 
 Points to state:
-- Tokens are valid for 15 minutes. A cached token is reused until `iam_expiration_sec` (default and maximum `870.0`) elapses or until 60 seconds before the token's expiry, whichever comes first - so any value of `840.0` or more refreshes at the 840-second mark. The token cache is process-wide, and its lifetime is set by the first connection that uses `iam`; set the same value on every connection. A login failure with a cached token triggers one automatic refresh and retry.
+- Tokens are valid for 15 minutes. A cached token is reused until `iam_expiration_sec` (default and maximum `870.0`) elapses or until 60 seconds before the token's expiry, whichever comes first - so any value of `840.0` or more behaves the same (840 seconds). Tokens are only generated when a connection is opened, never in the background: once the cached token is past that point, the next new connection generates (cheaply, by local signing) and caches a fresh one. Lowering `iam_expiration_sec` therefore only means new connections get fresh tokens sooner; it has no effect if no connections are opened. The token cache is process-wide, and its lifetime is set by the first connection that uses `iam`; set the same value on every connection. A login failure with a cached token triggers one automatic refresh and retry.
 - Tokens are only used at connect time, so a long-lived pooled connection is not affected by token expiry.
 - Connecting through an IP address or your own domain name: set `iam_host` to a real RDS endpoint (and `iam_region` if it can't be parsed).
 - Connecting through the Aurora Global Database endpoint: include `initial_connection` and grant `rds:DescribeGlobalClusters`.
@@ -430,7 +433,7 @@ Rails.application.configure do
 end
 ```
 
-GET/HEAD requests go to `reading` unless the session wrote within `delay`; everything else goes to `writing`. A read inside a POST still goes to the primary. Read-your-own-write holds only inside the delay window and only for the session that wrote - raise the delay to match replica lag.
+GET/HEAD requests go to `reading` unless the session wrote within `delay`; everything else goes to `writing`. `delay` adds no latency to anything: it's a time window. After a request in a user's session writes, that session's GET/HEAD requests keep reading from the primary for the next `delay` (2 seconds here), so the user sees their own write even if the replica hasn't caught up yet. A read inside a POST still goes to the primary. Read-your-own-write holds only inside the delay window and only for the session that wrote - raise the delay to match replica lag.
 
 **3.7c - Direct gem: your code picks the connection.** Open one wrapper connection on the cluster endpoint (`failover_mode: 'strict_writer'`) and one on the reader endpoint (`failover_mode: 'strict_reader'`), each with its own plugin chain, and choose between them in code.
 
@@ -561,7 +564,8 @@ production:
 
 - Gemfile: `gem 'aws-sdk-rds'`; credentials must allow `rds:DescribeDBClusterEndpoints`.
 - Connections, including those opened during failover, are restricted to the custom endpoint's current members.
-- `initial_connection` is left out because it passes a custom endpoint through unchanged by default. Add it with `initial_connection_substitute_host: any` (or `reader`) if new connections should be resolved to a member instance.
+- **Set `failover_mode` explicitly.** It defaults to `strict_writer` for a custom endpoint URL, but after a failover the new writer may not be a member of the custom endpoint - and since failover can only reconnect to members, a `strict_writer` failover then has nowhere to go and fails after `failover_timeout_sec`. For read-only work, use `strict_reader` (or `reader_or_writer`). If the connection needs to write, recommend a separate writing connection on the cluster (writer) endpoint instead: failover may promote an instance outside the custom endpoint to writer, which a custom endpoint connection can't reach. Only if the user insists on writing through the custom endpoint, use `strict_writer` and warn about this risk.
+- `initial_connection` is left out because, without extra settings, it connects through the custom endpoint URL unchanged. To send new connections straight to a member instance URL instead of the custom endpoint URL, add `initial_connection` to `wrapper_plugins` and set `initial_connection_substitute_host: any` (or `reader`).
 
 ### 3.14 Blue/Green Deployment
 
@@ -709,7 +713,7 @@ Detects that the cluster promoted a different instance and reconnects the connec
 | Name | Type | Default | Description |
 |---|---|---|---|
 | `failover_mode` | String | depends on URL | Target role during failover: `strict_writer`, `reader_or_writer`, or `strict_reader`. A read-only cluster endpoint defaults to `reader_or_writer`; other URLs default to `strict_writer`. |
-| `failover_timeout_sec` | Float | `300.0` | Maximum time allowed to reconnect to a new writer or reader after failover starts. Failover connects directly to instance endpoints it knows from topology; it doesn't wait for the cluster endpoint's DNS to update. So the 40-60 second DNS delay after a failover (§5.3) is not a reason to increase `failover_timeout_sec`. |
+| `failover_timeout_sec` | Float | `300.0` | Maximum time allowed to reconnect to a new writer or reader after failover starts. It only affects the case where failover can't find a target: with `strict_writer`, no writer becomes reachable; with `strict_reader` / `reader_or_writer`, no matching instance is reachable. A normal failover finishes well within it, so lowering it makes requests fail fast (with `FailoverFailedError`) only in that outage case. Failover connects directly to instance endpoints it knows from topology; it doesn't wait for the cluster endpoint's DNS to update. So the 40-60 second DNS delay after a failover (§5.3) is not a reason to increase `failover_timeout_sec`. |
 | `failover_reader_host_selector_strategy` | String | `random` | Strategy used to select a reader during reader failover (§7). |
 | `enable_connect_failover` | Boolean | `false` | Enables cluster-aware failover when the **initial** connection fails because of a network exception. The initial connection may be redirected to another instance. |
 | `cluster_instance_host_pattern` | String | auto-derived for RDS endpoints | Pattern used to build instance endpoints when the host is not a recognizable RDS endpoint (`?` = instance identifier). Required for IP addresses and custom domains. |
@@ -719,6 +723,8 @@ Detects that the cluster promoted a different instance and reconnects the connec
 | `cluster_topology_max_instance_monitors` | Integer | `16` | Maximum per-instance topology monitors run in parallel during a topology update. |
 
 **Topology-monitoring connections.** The monitor opens its own connections. Prefix any setting with `topology_monitoring_` to apply it only to those connections, e.g. `topology_monitoring_connect_timeout: 10`. The prefix is stripped and the setting is passed to the underlying driver, so use an option that driver accepts (pg: `connect_timeout`, `keepalives_idle`, ...; mysql2: `connect_timeout`, `read_timeout`, ...). There is one monitor per `cluster_id`, created with the settings of whichever connection for that `cluster_id` opens first, and it keeps them for its lifetime. If only some entries set the prefixed settings, whether they apply depends on which connection happens to open first - so put them on **every** connection that shares the `cluster_id`.
+
+**What a short monitor connect timeout does.** When the writer is lost, the monitor doesn't keep retrying the old writer: it probes up to `cluster_topology_max_instance_monitors` instances in parallel, each on its own thread, and takes the new writer from whichever probe finds it first. So one unreachable instance doesn't stall discovery of the new writer. A short `topology_monitoring_connect_timeout` (e.g. `5`) only bounds how long each probe of an unreachable instance hangs before retrying. That helps the fallback "all readers agree on the new topology" check finish sooner, and lets a probe reconnect promptly when the instance comes back. It's a reasonable setting, but don't present it as what keeps failover fast.
 
 ### 5.2 `gdb_failover` - Aurora Global Database failover
 
@@ -810,7 +816,7 @@ Generates a short-lived IAM authentication token and injects it as the password 
 | `iam_host` | String | derived from host | Hostname used to generate the token. Required for IP addresses, custom domains, and when connecting through a custom endpoint where the token must name another RDS endpoint. |
 | `iam_port` | Integer | connection port, then dialect default | Port used to generate the token. Unset: the connection's `port` if one is given, otherwise the engine default (5432 / 3306). |
 | `iam_region` | String | parsed from host | Region used to generate the token. |
-| `iam_expiration_sec` | Float | `870.0` | How long a generated token is kept in the cache. A cached token is never used within 60 seconds of its 15-minute expiry, so values of `840.0` and above all refresh at 840 seconds. Process-wide: the first connection using `iam` sets it for all later connections. Values `> 870.0` or `<= 0` are rejected. |
+| `iam_expiration_sec` | Float | `870.0` | How long a generated token is kept in the cache. A cached token is never used within 60 seconds of its 15-minute expiry, so values of `840.0` and above all behave the same (840 seconds). There's no background refresh: an expired cached token is replaced the next time a connection is opened. Process-wide: the first connection using `iam` sets it for all later connections. Values `> 870.0` or `<= 0` are rejected. |
 | `iam_access_token_property_name` | Symbol | `:password` | Connection property the token is injected into. **Known issue (1.0.1):** a String value (which is what YAML produces) is rejected with `TypeError: iam_access_token_property_name: expected Symbol, got String`; until it's fixed, set it in Ruby as a Symbol. |
 | `aws_credentials_provider` | Object | SDK default chain | Custom credentials provider (§6.4). |
 
@@ -956,7 +962,7 @@ The wrapper opens its own connections for topology discovery and Blue/Green stat
 | `topology_monitoring_` | Topology monitor connections (`failover`, `gdb_failover`, topology discovery) |
 | `bg_monitoring_` | `bg` status-monitoring connections |
 
-Use them to give monitor connections shorter timeouts than application connections, so an unreachable node can't block discovery. There are no other monitoring prefixes.
+Use them to give monitor connections their own timeouts, separate from application connections (see the note on what a short monitor connect timeout does and doesn't do in §5.1). There are no other monitoring prefixes.
 
 ### 6.3 TLS
 
@@ -1121,7 +1127,9 @@ These are raised only by `failover` and `gdb_failover`. Without either plugin (f
 | `TransactionStateUnknownError` | Yes | Failover happened inside a transaction; its outcome is unknown. Re-apply session state, restart the transaction, replay all its statements. Check before retrying non-idempotent work. |
 | `FailoverFailedError` | No | No new instance was reached within `failover_timeout_sec`. Wait, then reconnect. |
 
-**Do not close or discard the connection on `FailoverSuccessError` / `TransactionStateUnknownError`** - the wrapper has already reconnected the same object.
+"Re-apply session state": under Active Record, declare session settings under `variables:` in `database.yml` and the adapter re-applies them automatically after a successful failover (§13.4); anything else (temporary tables, advisory locks, `SET` statements run in code) the app must redo. With a direct connection, the app re-applies all of it.
+
+**Do not close or throw away the connection on `FailoverSuccessError` / `TransactionStateUnknownError`** - the wrapper has already reconnected the same object. "Throw away" means closing it or removing it from the pool: don't call `close`, `disconnect!`, `discard!`, or `reconnect!`, and don't remove it from the pool. Returning it to the pool as usual (the end of a request, or a `with_connection` block finishing) is fine - the connection stays open and the next checkout reuses it.
 
 **Under Active Record** (`aws_postgresql` / `aws_mysql2`):
 - `FailoverSuccessError` and `TransactionStateUnknownError` → the adapter clears Active Record's prepared statement cache (statements are re-prepared on the new instance as they're used), re-runs `configure_connection` (re-applying `variables:`), and re-raises the error **unchanged**, so `rescue` sees the wrapper error class, not an Active Record one. The pooled connection is live; replay the work.
@@ -1154,7 +1162,7 @@ Legend: ✅ compatible · ❌ not compatible · blank = no constraint recorded.
 | `iam` + `secrets_manager` | ❌ `PluginConflictError` | Both set the connection credential. |
 | `custom_endpoint` + `gdb_failover` | ❌ meaningless | A custom endpoint is a single-region cluster construct. |
 | `bg` + `custom_endpoint` | ❌ meaningless | A switchover replaces the deployment; the custom endpoint's member subset doesn't carry over. |
-| `bg` + `gdb_failover` | ❌ meaningless | Blue/Green isn't supported on Aurora Global Database. |
+| `bg` + `gdb_failover` | ❌ meaningless | The `bg` plugin doesn't support Aurora Global Database (AWS itself does support Blue/Green Deployments on Global Databases, but the wrapper provides no switchover handling there). |
 | Every other pair | ✅ | |
 
 ### 10.2 Database type compatibility
@@ -1431,6 +1439,7 @@ Flag these whenever they appear in user configs:
 | Different `cluster_id` values for entries pointing at the same cluster | Duplicate monitor threads and caches | Same `cluster_id` for the same cluster |
 | IP / own domain host without `cluster_instance_host_pattern` | Topology discovery can't build per-instance hostnames | Set `cluster_instance_host_pattern` |
 | Asking for read/write splitting or per-query reader balancing | Not a wrapper feature in Ruby | Active Record roles (§3.7); a connection stays on the reader it opened |
+| Saying "reads inside a write transaction stay on the writer" | Only true for reads *outside* `connected_to(role: :reading)`. A `connected_to(role: :reading)` block inside an open write transaction still switches to the replica, so its reads don't see the transaction's uncommitted writes | Say precisely: reads outside the block use the writer (and see the transaction); reads inside the block go to a replica, outside the transaction (§3.7a) |
 | Asking for an internal connection pool | Not a wrapper feature in Ruby | Active Record's pool; with direct connections, the app owns pooling |
 | Asking for EFM / host health probing | No such plugin in Ruby | Driver socket/statement timeouts, `topology_monitoring_*` timeouts for monitor connections; failover reacts when a call fails |
 | Host selection strategy other than `random` without registering it (or a misspelled name) | Only `random` is built in, and in 1.0.1 an unknown name fails silently (known issue) - no connection spreading, and reader failover never selects a reader (§7) | Use `random`, or register a custom selector at boot (§7) |
