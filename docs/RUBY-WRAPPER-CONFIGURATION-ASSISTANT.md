@@ -973,7 +973,13 @@ The wrapper passes TLS options straight to the driver and applies them to **ever
 | PostgreSQL (`pg`) | `sslmode: verify-full` | `sslrootcert` |
 | MySQL (`mysql2`) | `ssl_mode: verify_identity` | `sslca` |
 
-Use the AWS global certificate bundle for RDS endpoints. Weaker modes (`require`) encrypt but don't confirm the server's identity. Through a proxy or your own domain name, the CA must match the endpoint you connect to. Server-side enforcement is separate: PostgreSQL `rds.force_ssl` (default `1` on RDS PostgreSQL 15+, `0` on 14 and older), MySQL `require_secure_transport` (off by default).
+Use the AWS global certificate bundle for RDS endpoints. Weaker modes (`require`) encrypt but don't confirm the server's identity. Through a proxy that terminates TLS, supply the CA for the proxy's certificate, not the RDS bundle.
+
+**Your own domain name (CNAME) pointing at an RDS endpoint:** the database still presents its RDS certificate, which names only RDS hostnames. So `sslmode: verify-full` / `ssl_mode: verify_identity` against the custom name fails the hostname check, and RDS doesn't let you install your own certificate to fix that. The options are:
+- connect through the RDS endpoint itself, to keep full verification; or
+- keep the custom name and use CA-only verification (`sslmode: verify-ca` / `ssl_mode: verify_ca` with the RDS bundle), which confirms the certificate comes from RDS but not which host it belongs to.
+
+There's one TLS setting per entry: the mode you choose applies to every connection the wrapper opens for it (application, instance, and monitor connections), so with `verify-ca` all of them get CA-only verification. Server-side enforcement is separate: PostgreSQL `rds.force_ssl` (default `1` on RDS PostgreSQL 15+, `0` on 14 and older), MySQL `require_secure_transport` (off by default).
 
 ### 6.4 AWS credentials
 
