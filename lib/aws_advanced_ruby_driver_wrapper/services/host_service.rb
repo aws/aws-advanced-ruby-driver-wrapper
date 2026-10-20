@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'concurrent/map'
+require_relative '../errors'
 require_relative '../host/random_host_selector'
 
 module AwsAdvancedRubyDriverWrapper
@@ -47,18 +48,45 @@ module AwsAdvancedRubyDriverWrapper
         # Register a non-default host selector. The selector is shared by every HostService in the process,
         # so it must be safe to call from multiple threads.
         #
+        # Strategy names are case-insensitive: they are normalized here and in #host_selector, so a
+        # selector registered as 'LeastLag' is found when a connection names 'leastlag'.
+        #
         # @param name [String] strategy name
         # @param selector [#select_host] any object responding to select_host(hosts, role, props)
         def register_host_selector(name, selector)
-          raise Errors::AwsError, "Cannot override default host selection strategy: '#{name}'" if DEFAULT_HOST_SELECTORS.key?(name)
+          normalized = normalize_strategy(name)
+          raise Errors::AwsError, "Cannot override default host selection strategy: '#{name}'" if DEFAULT_HOST_SELECTORS.key?(normalized)
 
-          @strategies[name] = selector
+          @strategies[normalized] = selector
         end
 
         # @param name [String] strategy name
         # @return [#select_host, nil] the registered selector, or nil if the name is unknown
         def host_selector(name)
-          @strategies[name]
+          @strategies[normalize_strategy(name)]
+        end
+
+        # Raises when no selector is registered under the given strategy name. Plugins call this when
+        # they are constructed, because they treat a selection failure during connect or failover as
+        # "no eligible host", which would otherwise hide a misspelled strategy.
+        #
+        # @param name [String] strategy name
+        def validate_strategy!(name)
+          raise unsupported_strategy_error(name) if host_selector(name).nil?
+        end
+
+        def normalize_strategy(name)
+          name.to_s.strip.downcase
+        end
+
+        # @param name [String] the strategy name as configured, reported without normalization
+        # @return [Errors::AwsError]
+        def unsupported_strategy_error(name)
+          Errors::AwsError.new(
+            "Unsupported host selection strategy: '#{name}'. Registered strategies: #{@strategies.keys.sort.join(', ')}. " \
+            'Register a custom strategy with AwsAdvancedRubyDriverWrapper::Services::HostService.register_host_selector ' \
+            'before opening a connection that uses it.'
+          )
         end
 
         # Removes every non-default host selector. For testing only.
@@ -76,9 +104,8 @@ module AwsAdvancedRubyDriverWrapper
       # @param props [Hash, nil]
       # @return [Host::HostInfo]
       def select_host(hosts, role, strategy, props = nil)
-        normalized = strategy.to_s.strip.downcase
-        selector = self.class.host_selector(normalized)
-        raise Errors::AwsError, "Unsupported host selection strategy: '#{strategy}'" if selector.nil?
+        selector = self.class.host_selector(strategy)
+        raise self.class.unsupported_strategy_error(strategy) if selector.nil?
 
         selector.select_host(hosts, role, props)
       end

@@ -49,7 +49,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def cluster_id
-        PropertyDefinition::CLUSTER_ID.get(wrapper_props)
+        PropertyDefinition::CLUSTER_ID.get_string(wrapper_props)
       end
 
       # Redact sensitive property values (passwords, IAM tokens, Secrets Manager

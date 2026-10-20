@@ -394,7 +394,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def iam_enabled?
-          @service_container.plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
+          @service_container.plugin_manager.iam_token_plugin_in_use?
         end
 
         def driver_dialect

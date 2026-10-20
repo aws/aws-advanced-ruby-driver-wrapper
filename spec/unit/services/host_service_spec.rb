@@ -90,6 +90,32 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::HostService do
     end
   end
 
+  describe '.validate_strategy!' do
+    after { described_class.reset_host_selectors }
+
+    it 'accepts a built-in strategy in any casing' do
+      expect { described_class.validate_strategy!('Random') }.not_to raise_error
+    end
+
+    it 'accepts a registered custom strategy' do
+      described_class.register_host_selector('custom', instance_double('CustomSelector'))
+      expect { described_class.validate_strategy!('custom') }.not_to raise_error
+    end
+
+    it 'raises an error for an unknown strategy' do
+      expect { described_class.validate_strategy!('randon') }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy: 'randon'/)
+    end
+
+    it 'lists the registered strategies and how to register a custom one' do
+      described_class.register_host_selector('least_lag', instance_double('CustomSelector'))
+
+      expect { described_class.validate_strategy!('randon') }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError,
+                        /Registered strategies: least_lag, random\..*HostService\.register_host_selector/)
+    end
+  end
+
   describe '.register_host_selector' do
     # The registry is per process, so a strategy registered by one example would leak into the next.
     after { described_class.reset_host_selectors }
@@ -112,6 +138,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::HostService do
       other_service = described_class.new(service_container)
 
       expect(other_service.select_host(hosts, nil, 'custom')).to eq(reader)
+    end
+
+    it 'finds a strategy registered with mixed case by any casing' do
+      custom_selector = instance_double('CustomSelector')
+      allow(custom_selector).to receive(:select_host).and_return(reader)
+
+      described_class.register_host_selector('LeastLag', custom_selector)
+
+      expect(service.select_host(hosts, nil, 'LeastLag')).to eq(reader)
+      expect(service.select_host(hosts, nil, 'leastlag')).to eq(reader)
+    end
+
+    it 'raises an error when overriding a default strategy with different casing' do
+      custom_selector = instance_double('CustomSelector')
+
+      expect { described_class.register_host_selector('Random', custom_selector) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Cannot override default host selection strategy/)
     end
 
     it 'raises an error when overriding a default strategy' do

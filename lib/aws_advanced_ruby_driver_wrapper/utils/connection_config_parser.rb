@@ -192,7 +192,9 @@ module AwsAdvancedRubyDriverWrapper
       # Validates that values in a config hash match the expected type of their corresponding WrapperProperty.
       # Raises TypeError if a value is present but incompatible. Strings that represent valid integers
       # are accepted for Integer-typed properties. Float-typed properties also accept Integers and
-      # strings that represent a valid integer or decimal number.
+      # strings that represent a valid integer or decimal number. String-typed properties also accept
+      # numbers and Symbol-typed properties also accept strings, since YAML (e.g. database.yml) parses
+      # unquoted values like `cluster_id: 1` as numbers and never produces symbols.
       def validate_props!(config)
         config.each do |key, value|
           prop = PropertyDefinition::KNOWN_PROPERTIES[key]
@@ -200,20 +202,27 @@ module AwsAdvancedRubyDriverWrapper
           next if value.nil?
           next if prop.type.nil?
 
-          valid = if prop.type == :boolean
-                    value.is_a?(TrueClass) || value.is_a?(FalseClass) ||
-                      (value.is_a?(String) && BOOLEAN_STRINGS.include?(value.downcase))
-                  elsif prop.type == Float
-                    value.is_a?(Float) || value.is_a?(Integer) ||
-                      (value.is_a?(String) && value.match?(/\A-?\d+(\.\d+)?\z/))
-                  else
-                    value.is_a?(prop.type) ||
-                      (prop.type == Integer && value.is_a?(String) && value.match?(/\A-?\d+\z/))
-                  end
-
-          raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}" unless valid
+          raise TypeError, "#{key}: expected #{prop.type}, got #{value.class}" unless valid_type?(prop.type, value)
 
           prop.validate!(value)
+        end
+      end
+
+      def valid_type?(type, value)
+        if type == :boolean
+          value.is_a?(TrueClass) || value.is_a?(FalseClass) ||
+            (value.is_a?(String) && BOOLEAN_STRINGS.include?(value.downcase))
+        elsif type == Float
+          value.is_a?(Float) || value.is_a?(Integer) ||
+            (value.is_a?(String) && value.match?(/\A-?\d+(\.\d+)?\z/))
+        elsif type == Integer
+          value.is_a?(Integer) || (value.is_a?(String) && value.match?(/\A-?\d+\z/))
+        elsif type == String
+          value.is_a?(String) || value.is_a?(Numeric)
+        elsif type == Symbol
+          value.is_a?(Symbol) || value.is_a?(String)
+        else
+          value.is_a?(type)
         end
       end
 

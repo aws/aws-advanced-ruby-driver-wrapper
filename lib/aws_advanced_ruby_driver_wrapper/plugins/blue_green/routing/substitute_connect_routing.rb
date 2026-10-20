@@ -63,13 +63,13 @@ module AwsAdvancedRubyDriverWrapper
             # Fall back to connecting via hostname (DNS will resolve to the correct IP post-switchover),
             # matching the effective behaviour of the Java/Go MySQL drivers which use the original
             # hostname for TLS regardless of the socket address.
-            if driver_props[:sslca] && !plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
+            if driver_props[:sslca] && !plugin_manager.iam_token_plugin_in_use?
               hostname_host = @substitute_host.deep_dup(host: @host)
               return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal,
                                      bg_plugin)
             end
 
-            if plugin_manager.plugin_in_use?(Plugins::IamAuthPlugin)
+            if plugin_manager.iam_token_plugin_in_use?
               if @iam_hosts.nil? || @iam_hosts.empty?
                 raise StandardError,
                       'Connecting with IP address when IAM authentication is enabled requires an \'iam_host\' parameter.'

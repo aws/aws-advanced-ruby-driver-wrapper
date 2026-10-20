@@ -137,7 +137,8 @@ module AwsAdvancedRubyDriverWrapper
 
       def select_candidate(hosts, role, strategy)
         @host_service.select_host(hosts, role, strategy)
-      rescue StandardError
+      rescue StandardError => e
+        logger.warn("Failed to select a host using the '#{strategy}' host selection strategy: #{e.message}")
         nil
       end
 

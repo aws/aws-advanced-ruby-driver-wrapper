@@ -109,6 +109,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
     end
   end
 
+  describe 'initialization' do
+    it 'raises an error when initial_connection_host_selector_strategy names an unknown strategy' do
+      expect { build_plugin(initial_connection_host_selector_strategy: 'randon') }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /Unsupported host selection strategy: 'randon'/)
+    end
+  end
+
   describe '#subscribed_methods' do
     it 'subscribes only to connect' do
       plugin = build_plugin

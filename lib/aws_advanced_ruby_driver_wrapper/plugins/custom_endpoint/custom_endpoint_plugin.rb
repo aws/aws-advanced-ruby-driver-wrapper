@@ -128,7 +128,8 @@ module AwsAdvancedRubyDriverWrapper
               @region,
               PropertyDefinition::CUSTOM_ENDPOINT_INFO_REFRESH_RATE_SEC.get_float(props),
               PropertyDefinition::CUSTOM_ENDPOINT_INFO_REFRESH_RATE_BACKOFF_FACTOR.get_int(props),
-              PropertyDefinition::CUSTOM_ENDPOINT_INFO_MAX_REFRESH_RATE_SEC.get_float(props)
+              PropertyDefinition::CUSTOM_ENDPOINT_INFO_MAX_REFRESH_RATE_SEC.get_float(props),
+              credentials_provider: PropertyDefinition::AWS_CREDENTIALS_PROVIDER.get(props)
             )
           end
         end

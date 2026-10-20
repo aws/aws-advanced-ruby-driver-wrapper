@@ -31,6 +31,7 @@ require_relative 'status_monitor'
 require_relative 'switchover_state'
 require_relative 'switchover_timer'
 require_relative '../../plugins/iam_auth_plugin'
+require_relative '../../plugins/federated_auth/federated_auth_plugin'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -191,7 +192,9 @@ module AwsAdvancedRubyDriverWrapper
           @monitors = { Role::SOURCE => nil, Role::TARGET => nil }
           old_monitors.each_value { |m| m&.stop }
 
-          Plugins::IamAuthPlugin.clear_cache(@storage_service) if iam_enabled?
+          # IamAuthPlugin and FederatedAuthPlugin all cache tokens under the same
+          # shared IAM_TOKEN_CACHE_NAME, so clearing through any one of them clears all of them.
+          Plugins::IamAuthPlugin.clear_cache(@storage_service) if iam_token_cache_in_use?
 
           @rollback = false
           @green_topology_recognized_logged = false
@@ -356,8 +359,11 @@ module AwsAdvancedRubyDriverWrapper
           completed && @event_log.any? { |_, v| v.phase&.active_switchover_or_completed? }
         end
 
-        def iam_enabled?
-          @service_container.plugin_manager&.plugin_in_use?(Plugins::IamAuthPlugin) || false
+        # True when any auth plugin backed by the shared IAM token cache (IAM or AD FS
+        # federated auth) is in use, so a switchover knows to purge that cache regardless
+        # of which one is active.
+        def iam_token_cache_in_use?
+          @service_container.plugin_manager&.iam_token_plugin_in_use? || false
         end
 
         def context_hash
