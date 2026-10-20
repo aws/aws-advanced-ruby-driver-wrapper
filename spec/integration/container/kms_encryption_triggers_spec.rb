@@ -84,8 +84,6 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     end
   end
 
-  # The trigger caches the column's HMAC key for the length of a transaction. A later transaction on
-  # the same connection must look it up again rather than reading back the expired cache entry.
   shared_examples 'a trigger across transactions on one connection' do
     it 'accepts a valid value in each of several transactions on the same connection' do
       3.times do |i|
