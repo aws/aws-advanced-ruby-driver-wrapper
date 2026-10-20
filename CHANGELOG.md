@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### :magic_wand: Added
 - [Federated Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/federated-auth), which authenticates with Active Directory Federation Services (AD FS), exchanges the resulting SAML assertion for temporary AWS credentials via STS, and connects to the database with an RDS IAM authentication token. Enabled with the `federated_auth` plugin code ([PR #207](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/207)).
+- [Okta Authentication Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/okta), which uses the same SAML-to-STS flow as AD FS but against Okta, is also available via the `okta` plugin code ([PR #215](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/215)).
 
 ### :crab: Changed
 - Simplified the KMS Encryption Plugin's PostgreSQL trigger SQL to read the column's HMAC key from `key_storage` for every row. Re-run the trigger SQL from the [documentation](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption#postgresql-1) to update existing deployments ([PR #216](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/216)).

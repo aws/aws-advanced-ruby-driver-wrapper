@@ -232,12 +232,4 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::FederatedAu
       end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::PluginConflictError)
     end
   end
-
-  describe 'default idp_name' do
-    it 'defaults the identity provider name to adfs' do
-      expect(
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::IDP_NAME.get(Concurrent::Map.new)
-      ).to eq('adfs')
-    end
-  end
 end

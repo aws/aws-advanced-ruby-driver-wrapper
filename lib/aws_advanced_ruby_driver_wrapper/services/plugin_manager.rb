@@ -24,6 +24,7 @@ require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
 require_relative '../plugins/iam_auth_plugin'
 require_relative '../plugins/federated_auth/federated_auth_plugin'
+require_relative '../plugins/federated_auth/okta_auth_plugin'
 require_relative '../plugins/initial_connection_strategy_plugin'
 require_relative '../plugins/kms_encryption/kms_encryption_plugin'
 require_relative '../plugins/secrets_manager_plugin'
@@ -46,6 +47,7 @@ module AwsAdvancedRubyDriverWrapper
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'federated_auth' => Plugins::FederatedAuth::FederatedAuthPlugin,
+        'okta' => Plugins::FederatedAuth::OktaAuthPlugin,
         'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
         'kms_encryption' => Plugins::KmsEncryptionPlugin,
         'secrets_manager' => Plugins::SecretsManagerPlugin
@@ -63,13 +65,15 @@ module AwsAdvancedRubyDriverWrapper
         Plugins::IamAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900,
         Plugins::FederatedAuth::FederatedAuthPlugin => 2000,
+        Plugins::FederatedAuth::OktaAuthPlugin => 2010,
         Plugins::KmsEncryptionPlugin => 2050
       }
 
       # Plugins that authenticate by minting an RDS IAM token into the shared IAM token cache.
       IAM_TOKEN_PLUGIN_CLASSES = [
         Plugins::IamAuthPlugin,
-        Plugins::FederatedAuth::FederatedAuthPlugin
+        Plugins::FederatedAuth::FederatedAuthPlugin,
+        Plugins::FederatedAuth::OktaAuthPlugin
       ].freeze
 
       class << self
@@ -200,7 +204,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def ensure_single_auth_plugin(plugin_code_list)
-        auth_plugins_used = plugin_code_list & %w[iam secrets_manager federated_auth].freeze
+        auth_plugins_used = plugin_code_list & %w[iam secrets_manager federated_auth okta].freeze
 
         return unless auth_plugins_used.length > 1
 

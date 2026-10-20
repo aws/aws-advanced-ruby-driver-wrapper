@@ -174,8 +174,6 @@ module AwsAdvancedRubyDriverWrapper
     # -- Federated / Okta Authentication (SAML) --
     IDP_ENDPOINT = WrapperProperty.new(:idp_endpoint, 'The hosting URL of the Identity Provider', default_value: nil, type: String)
     IDP_PORT = WrapperProperty.new(:idp_port, 'The hosting port of the Identity Provider', default_value: 443, type: Integer)
-    IDP_NAME = WrapperProperty.new(:idp_name, 'The name of the Identity Provider implementation used', default_value: 'adfs',
-                                                                                                       type: String)
     IDP_USERNAME = WrapperProperty.new(:idp_username, 'The federated user name', default_value: nil, type: String)
     IDP_PASSWORD = WrapperProperty.new(:idp_password, 'The federated user password', default_value: nil, type: String)
     IAM_ROLE_ARN = WrapperProperty.new(:iam_role_arn, 'The ARN of the IAM Role that is to be assumed', default_value: nil, type: String)
@@ -185,6 +183,7 @@ module AwsAdvancedRubyDriverWrapper
     DB_USER = WrapperProperty.new(:db_user, 'The database user used to access the database', default_value: nil, type: String)
     SSL_INSECURE = WrapperProperty.new(:ssl_insecure, "Whether the IdP server's TLS certificate chain should not be verified",
                                        default_value: false, type: :boolean)
+    APP_ID = WrapperProperty.new(:app_id, 'The ID of the AWS application configured on Okta', default_value: nil, type: String)
     HTTP_CLIENT_SOCKET_TIMEOUT_SEC = WrapperProperty.new(:http_client_socket_timeout_sec,
                                                          'Socket timeout in seconds for IdP HTTP requests',
                                                          default_value: 60.0, type: Float, validator: POSITIVE_FLOAT)
