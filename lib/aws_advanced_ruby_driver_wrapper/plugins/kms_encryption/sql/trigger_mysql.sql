@@ -57,12 +57,16 @@ END$$
 
 -- Called from a BEFORE INSERT trigger (and by the BEFORE UPDATE procedure) to reject a value that is
 -- not a valid kms_encryption payload. Replace SCHEMA_NAME with encryption_metadata_schema.
+-- The COMMENT records which version of this SQL is installed. Check it with:
+--   SELECT ROUTINE_COMMENT FROM information_schema.ROUTINES
+--    WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = 'validate_encrypted_data_hmac_before_insert';
 DROP PROCEDURE IF EXISTS validate_encrypted_data_hmac_before_insert$$
 CREATE PROCEDURE validate_encrypted_data_hmac_before_insert(
     IN p_table_name VARCHAR(64),
     IN p_column_name VARCHAR(64),
     IN column_value VARBINARY(65535)
 )
+COMMENT 'aws-advanced-ruby-driver-wrapper kms_encryption trigger v1'
 BEGIN
     DECLARE v_hmac_key VARBINARY(32);
 
