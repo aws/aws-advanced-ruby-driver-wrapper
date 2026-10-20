@@ -47,7 +47,7 @@ module AwsAdvancedRubyDriverWrapper
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
         'iam' => Plugins::IamAuthPlugin,
         'federated_auth' => Plugins::FederatedAuth::FederatedAuthPlugin,
-        'okta' => Plugins::Okta::OktaAuthPlugin,
+        'okta' => Plugins::FederatedAuth::OktaAuthPlugin,
         'initial_connection' => Plugins::InitialConnectionStrategyPlugin,
         'kms_encryption' => Plugins::KmsEncryptionPlugin,
         'secrets_manager' => Plugins::SecretsManagerPlugin
@@ -65,7 +65,7 @@ module AwsAdvancedRubyDriverWrapper
         Plugins::IamAuthPlugin => 1800,
         Plugins::SecretsManagerPlugin => 1900,
         Plugins::FederatedAuth::FederatedAuthPlugin => 2000,
-        Plugins::Okta::OktaAuthPlugin => 2010,
+        Plugins::FederatedAuth::OktaAuthPlugin => 2010,
         Plugins::KmsEncryptionPlugin => 2050
       }
 
@@ -73,7 +73,7 @@ module AwsAdvancedRubyDriverWrapper
       IAM_TOKEN_PLUGIN_CLASSES = [
         Plugins::IamAuthPlugin,
         Plugins::FederatedAuth::FederatedAuthPlugin,
-        Plugins::Okta::OktaAuthPlugin
+        Plugins::FederatedAuth::OktaAuthPlugin
       ].freeze
 
       class << self

@@ -20,7 +20,7 @@ require_relative 'base_saml_auth_plugin'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
-    module Okta
+    module FederatedAuth
       # Federated authentication against Okta. Authenticates to Okta's /authn API
       # for a one-time session token, redeems it at the AWS app's SSO SAML endpoint
       # for a SAML assertion, and then defers to BaseSamlAuthPlugin for the STS
@@ -77,13 +77,21 @@ module AwsAdvancedRubyDriverWrapper
                   "OktaAuthPlugin: Okta session token request failed (#{response.code} #{response.message})"
           end
 
-          token = begin
-            parsed = JSON.parse(response.body)
-            parsed['sessionToken'] if parsed.is_a?(Hash)
+          parsed = begin
+            JSON.parse(response.body)
           rescue JSON::ParserError
             nil
           end
-          raise Errors::SamlAuthError, 'OktaAuthPlugin: Okta did not return a session token' if token.nil? || token.empty?
+          parsed = nil unless parsed.is_a?(Hash)
+          token = parsed && parsed['sessionToken']
+          if token.nil? || token.empty?
+            # Okta's `status` is a non-sensitive auth-state enum (e.g. MFA_REQUIRED,
+            # PASSWORD_EXPIRED, LOCKED_OUT); surface it for clarity. It never carries
+            # credentials or the session token itself.
+            status = parsed && parsed['status']
+            detail = status.is_a?(String) && !status.empty? ? " (status: #{status})" : ''
+            raise Errors::SamlAuthError, "OktaAuthPlugin: Okta did not return a session token#{detail}"
+          end
 
           token
         end

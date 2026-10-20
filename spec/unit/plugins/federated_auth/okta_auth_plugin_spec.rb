@@ -36,7 +36,7 @@ require 'aws_advanced_ruby_driver_wrapper/utils/iam_auth_utils'
 require 'aws_advanced_ruby_driver_wrapper/utils/saml_utils'
 require 'aws_advanced_ruby_driver_wrapper/errors'
 
-RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Okta::OktaAuthPlugin do
+RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::OktaAuthPlugin do
   OKTA_SAML_UTILS = AwsAdvancedRubyDriverWrapper::Utils::SamlUtils
   OKTA_SAML_ERROR = AwsAdvancedRubyDriverWrapper::Errors::SamlAuthError
 
@@ -151,12 +151,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Okta::OktaAuthPlugin do
         .to raise_error(OKTA_SAML_ERROR, /session token request failed.*401/)
     end
 
-    it 'raises SamlAuthError when the response carries no session token' do
+    it 'raises SamlAuthError when the response carries no session token, surfacing the Okta status' do
       allow(OKTA_SAML_UTILS).to receive(:http_request)
         .and_return(OktaFakeHttpResponse.new(body: JSON.generate(status: 'MFA_REQUIRED')))
 
       expect { described_class.session_token(http, OKTA_ENDPOINT, 'user', 'pw') }
-        .to raise_error(OKTA_SAML_ERROR, /did not return a session token/)
+        .to raise_error(OKTA_SAML_ERROR, /did not return a session token \(status: MFA_REQUIRED\)/)
     end
 
     it 'raises SamlAuthError when the response body is not valid JSON' do
