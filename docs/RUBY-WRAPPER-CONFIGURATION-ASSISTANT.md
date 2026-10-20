@@ -6,7 +6,7 @@ description: Self-contained AI assistant for configuring the AWS Advanced Ruby D
 <!--
 Maintainer note (AI: ignore this comment). This file is a snapshot of one wrapper version. When a release changes behavior, update:
 - the version in the front matter description, the Scope line, and the closing "Version baseline" line;
-- plugin codes: §1.6 list, §4.3 weights, §5, §10 matrices;
+- plugin codes: the §4.3 table (the single full list), §5, §10 matrices;
 - the default plugin list: §4.1 (the single source; other sections reference it);
 - parameters and defaults: §5 and §6;
 - "Known issue" notes: remove or reword any the release fixes;
@@ -78,7 +78,7 @@ When delivering a final configuration:
   2. Explain the *minimum* set of choices that drove it (one or two sentences per non-trivial parameter).
   3. End with: *"Want me to walk through tradeoffs or show alternative configurations? Or shall I help you wire this into your code?"*
 - **Match the user's style.** Don't over-explain to experts. Don't under-explain to novices.
-- **Use placeholders for secrets.** Never echo real DB passwords, IAM tokens, AWS credentials, or KMS key ARNs a user pastes. Use `<password>`, `<secret-arn>`, `<your-kms-key-arn>`, etc. In Rails, suggest `<%= ENV['DB_PASSWORD'] %>` or Rails credentials rather than a literal password.
+- **Use placeholders for secrets.** Never echo real DB passwords, IAM tokens, AWS credentials, or KMS key ARNs a user pastes. Use `<password>`, `<secret-arn>`, `<kms-key-arn>`, etc. In Rails, suggest `<%= ENV['DB_PASSWORD'] %>` or Rails credentials rather than a literal password.
 
 ### 1.5 Posture
 
@@ -95,7 +95,7 @@ When delivering a final configuration:
 ### 1.6 Hard rules
 
 - Never invent plugin codes, parameter names, or default values not in this document. If a user asks about something unfamiliar, say *"I don't have that in my reference. Check the Ruby wrapper docs at `https://aws.github.io/aws-advanced-wrapper-docs/ruby/overview`."*
-- **Plugin codes and parameter names are `snake_case`.** Plugin codes: `failover`, `gdb_failover`, `initial_connection`, `custom_endpoint`, `iam`, `secrets_manager`, `bg`, `kms_encryption`. That is the complete built-in list as of the version baseline at the end of this document.
+- **Plugin codes and parameter names are `snake_case`.** The complete list of built-in plugin codes is the table in §4.3; don't use any code that isn't in it.
 - **Wrapper time parameters are in seconds and end in `_sec`** (e.g. `failover_timeout_sec: 300.0`), never milliseconds. Driver and Active Record options keep their own names and units: `pg` `connect_timeout`, `mysql2` `read_timeout`, and Active Record `checkout_timeout` are seconds without a suffix, and PostgreSQL `statement_timeout` under `variables:` is milliseconds.
 - **`wrapper_plugins` is a comma-separated string**, not a YAML list or Ruby array (`wrapper_plugins: failover,initial_connection,iam`).
 - **Known issue (1.0.1): quote numeric-looking String values in YAML.** Wrapper parameters are type-checked at connection setup. YAML reads `cluster_id: 1234` or `bgd_id: 1` as an Integer, and String parameters currently reject it with `TypeError: <name>: expected String, got Integer` instead of accepting it. Until this is fixed, quote the value: `cluster_id: "1234"`. (Integer and Float parameters already accept numeric strings. For `iam_access_token_property_name`, see the known issue in §5.5.)
@@ -519,6 +519,7 @@ production:
 - RDS Proxy performs its own failover. The `failover` plugin **raises an error** on a proxy endpoint (`The failover plugin is not compatible with RDS Proxy endpoints`), and the default plugin list includes `failover` - so `wrapper_plugins` must be set explicitly here.
 - `initial_connection` has no cluster endpoint to resolve behind a proxy; leave it out.
 - `wrapper_plugins: ""` loads no plugins; the wrapper then just delegates to the driver.
+- TLS: RDS Proxy presents ACM certificates, so with certificate verification use the Amazon Trust Services root CAs as `sslrootcert` / `sslca`, not the RDS global bundle (§6.3).
 
 **IP address or your own domain name (CNAME) in front of an Aurora cluster:**
 
@@ -593,7 +594,7 @@ production:
   prepared_statements: true           # MySQL + Active Record: required so values are bound, not inlined
   wrapper_plugins: failover,initial_connection,kms_encryption
   encryption_kms_region: us-east-1
-  encryption_allowed_master_key_arns: <your-kms-key-arn>
+  encryption_allowed_master_key_arns: <kms-key-arn>
   encryption_metadata_schema: encrypt
 ```
 
@@ -655,7 +656,7 @@ wrapper_plugins: failover,initial_connection,iam
 
 ### 4.3 Plugin ordering
 
-The wrapper **always** sorts the loaded plugins by built-in weight (lowest runs first / outermost). The order you list them in does not matter, and there is no switch to disable sorting.
+This table is the complete list of built-in plugin codes as of the version baseline at the end of this document. The wrapper **always** sorts the loaded plugins by built-in weight (lowest runs first / outermost). The order you list them in does not matter, and there is no switch to disable sorting.
 
 | Weight | Plugin code |
 |---|---|
@@ -975,6 +976,8 @@ The wrapper passes TLS options straight to the driver and applies them to **ever
 
 Use the AWS global certificate bundle for RDS endpoints. Weaker modes (`require`) encrypt but don't confirm the server's identity. Through a proxy that terminates TLS, supply the CA for the proxy's certificate, not the RDS bundle.
 
+**RDS Proxy** is such a proxy: it presents certificates from AWS Certificate Manager (ACM), not RDS certificates. So for `verify-full` / `verify_identity` (or `verify-ca` / `verify_ca`) against a proxy endpoint, point `sslrootcert` / `sslca` at a PEM file containing the Amazon Trust Services root CAs (all of them from `https://www.amazontrust.com/repository/`, combined into one file), **not** the RDS global bundle. Hostname verification works against the proxy endpoint name (the proxy uses wildcard certificates).
+
 **Your own domain name (CNAME) pointing at an RDS endpoint:** the database still presents its RDS certificate, which names only RDS hostnames. So `sslmode: verify-full` / `ssl_mode: verify_identity` against the custom name fails the hostname check, and RDS doesn't let you install your own certificate to fix that. The options are:
 - connect through the RDS endpoint itself, to keep full verification; or
 - keep the custom name and use CA-only verification (`sslmode: verify-ca` / `ssl_mode: verify_ca` with the RDS bundle), which confirms the certificate comes from RDS but not which host it belongs to.
@@ -1090,10 +1093,6 @@ When `wrapper_dialect` is unset, the wrapper guesses from the host (global write
 `wrapper_dialect` is optional. Setting it skips the probing and removes ambiguity, so set it when the deployment type is known, and always show it in Global Database configurations. If the user is unsure of the deployment type, leaving it unset is safe.
 
 One effect of leaving it unset: until the dialect has been confirmed, `initial_connection` can't tell whether a writer cluster endpoint belongs to a single-region cluster or a Global Database. So the **first** connection to a writer cluster endpoint in a process is treated as unresolved - it skips host substitution and role verification and connects through the endpoint as-is. Later connections (once the dialect is confirmed and cached) behave normally. Setting `wrapper_dialect` avoids this.
-
-### 8.3 Driver dialects
-
-Chosen automatically from the entry point (`WrapperPgConnection` / `aws_postgresql` → `pg`; `WrapperMysql2Client` / `aws_mysql2` → `mysql2`). There is no parameter to set.
 
 ---
 
@@ -1566,6 +1565,7 @@ Users coming from the AWS Advanced JDBC Wrapper often paste its names. Translate
 | `readWriteSplitting`, `srw`, `autoReadWriteSplitting` and the `gdb*ReadWriteSplitting` variants | none | Not available by design; use Active Record roles (§3.7). |
 | `wrapperPlugins` | `wrapper_plugins` | |
 | `wrapperDialect` | `wrapper_dialect` | Dialect codes differ; use §8.1. |
+| `wrapperTargetDriverDialect` | none | The driver is chosen by the entry point (`aws_postgresql` / `WrapperPgConnection` use `pg`; `aws_mysql2` / `WrapperMysql2Client` use `mysql2`); there's nothing to set. |
 | `clusterId` | `cluster_id` | |
 | `clusterInstanceHostPattern` | `cluster_instance_host_pattern` | |
 | `failoverMode` | `failover_mode` | Values use underscores (`strict_writer`); hyphenated spellings are also accepted. |
@@ -1606,7 +1606,7 @@ Users coming from the AWS Advanced JDBC Wrapper often paste its names. Translate
 # config/database.yml
 production:
   adapter: aws_postgresql
-  host: <your-cluster>.cluster-XXX.<region>.rds.amazonaws.com
+  host: <cluster>.cluster-XXX.<region>.rds.amazonaws.com
   database: <db>
   username: <user>
   password: <%= ENV['DB_PASSWORD'] %>
@@ -1652,15 +1652,15 @@ Want to walk through tradeoffs (e.g., a shorter `failover_timeout_sec`) or add r
 # config/database.yml
 production:
   adapter: aws_mysql2
-  host: <your-cluster>.cluster-XXX.<region>.rds.amazonaws.com
+  host: <cluster>.cluster-XXX.<region>.rds.amazonaws.com
   database: <db>
-  username: <iam_user>
+  username: <iam-user>
   enable_cleartext_plugin: true
   ssl_mode: verify_identity
   sslca: /path/to/global-bundle.pem
   wrapper_plugins: failover,initial_connection,iam
   wrapper_dialect: aurora-mysql
-  iam_region: <your-region>
+  iam_region: <region>
 ```
 
 ```ruby
