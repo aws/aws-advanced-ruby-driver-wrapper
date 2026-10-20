@@ -1,10 +1,17 @@
+# GitHub-hosted backup of the CodeBuild workflow gdb_integration_tests-codebuild.yml.
+#
+# Runs the same jobs on GitHub-hosted ubuntu runners. Kept as a manual-dispatch-only fallback; the
+# CodeBuild variant owns the schedule (commented out below). Shares the rds-integration-tests
+# concurrency group with the other GitHub-hosted RDS workflows (separate from the CodeBuild group).
+
 name: Global Database Integration Tests
 
 on:
   workflow_dispatch:
-  schedule:
-    # Every Monday at 9:00 AM UTC
-    - cron: '0 9 * * 1'
+  # The schedule moved to the CodeBuild variant gdb_integration_tests-codebuild.yml.
+  # schedule:
+  #   # Every Monday at 9:00 AM UTC
+  #   - cron: '0 9 * * 1'
 
 permissions:
   id-token: write
@@ -16,13 +23,16 @@ env:
   TEST_CONTAINER_REGISTRY: ecr
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Shared by every GitHub-hosted RDS workflow, so only one of them at a time claims DB clusters and
+  # security-group rules. Runs in this group execute one at a time; with `queue: max`, later runs
+  # wait in FIFO order (up to 100 pending) instead of being cancelled.
+  group: rds-integration-tests
+  queue: max
 
 jobs:
   gdb-integration-tests:
     name: GDB Integration Tests (${{ matrix.environment }})
-    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false

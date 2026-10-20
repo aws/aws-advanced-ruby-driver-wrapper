@@ -1,3 +1,9 @@
+# GitHub-hosted backup of the CodeBuild workflow pg_performance-codebuild.yml.
+#
+# Runs the same job on GitHub-hosted ubuntu runners. Kept as a manual-dispatch-only fallback; the
+# CodeBuild variant is the one wired to any automated trigger. Shares the rds-integration-tests
+# concurrency group with the other GitHub-hosted RDS workflows (separate from the CodeBuild group).
+
 name: Run Aurora PostgreSQL Performance Tests
 
 on:
@@ -13,13 +19,16 @@ env:
   TEST_CONTAINER_REGISTRY: ecr
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Shared by every GitHub-hosted RDS workflow, so only one of them at a time claims DB clusters and
+  # security-group rules. Runs in this group execute one at a time; with `queue: max`, later runs
+  # wait in FIFO order (up to 100 pending) instead of being cancelled.
+  group: rds-integration-tests
+  queue: max
 
 jobs:
   aurora-pg-performance-tests:
     name: 'Run Aurora PostgreSQL performance tests'
-    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: 'Clone repository'
