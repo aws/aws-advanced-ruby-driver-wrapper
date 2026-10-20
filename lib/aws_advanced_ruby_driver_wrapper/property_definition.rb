@@ -174,8 +174,6 @@ module AwsAdvancedRubyDriverWrapper
     # -- Federated / Okta Authentication (SAML) --
     IDP_ENDPOINT = WrapperProperty.new(:idp_endpoint, 'The hosting URL of the Identity Provider', default_value: nil, type: String)
     IDP_PORT = WrapperProperty.new(:idp_port, 'The hosting port of the Identity Provider', default_value: 443, type: Integer)
-    IDP_NAME = WrapperProperty.new(:idp_name, 'The name of the Identity Provider implementation used', default_value: 'adfs',
-                                                                                                       type: String)
     IDP_USERNAME = WrapperProperty.new(:idp_username, 'The federated user name', default_value: nil, type: String)
     IDP_PASSWORD = WrapperProperty.new(:idp_password, 'The federated user password', default_value: nil, type: String)
     IAM_ROLE_ARN = WrapperProperty.new(:iam_role_arn, 'The ARN of the IAM Role that is to be assumed', default_value: nil, type: String)
