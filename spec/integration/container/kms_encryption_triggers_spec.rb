@@ -29,7 +29,7 @@ require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/key_management_
 # Server-side enforcement. The plugin cannot guarantee an encrypted column never holds a plaintext -
 # only a database trigger can, by verifying each value's HMAC tag as it goes in (the HMAC key is
 # stored in key_storage, so the server can check integrity without any data key). This installs the
-# trigger SQL from host/src/test/resources/sql on both engines: a value in the plugin's real
+# trigger SQL the gem ships in lib/.../plugins/kms_encryption/sql on both engines: a value in the plugin's real
 # encrypted format is accepted, a plaintext is rejected, and a random binary value that is not a
 # valid payload is rejected. After a data key rotation, rows written with the previous key can still
 # be updated, while a changed value must carry the current key's HMAC tag.
@@ -162,13 +162,13 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
   # -- trigger installation --
 
   def sql_resource(name)
-    File.read(File.expand_path("host/src/test/resources/sql/#{name}", "#{__dir__}/.."))
+    File.read(File.expand_path("../../../lib/aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/sql/#{name}", __dir__))
   end
 
   # PostgreSQL understands the file's dollar-quoted bodies and multiple statements in one call. The
   # file names the default metadata schema, encrypt, which the specs replace with their own.
   def install_pg_trigger_functions(conn)
-    conn.exec(sql_resource('kms_encryption_trigger_pg.sql')
+    conn.exec(sql_resource('trigger_pg.sql')
                 .gsub(/\bencrypt\.(encryption_metadata|key_storage)\b/, "#{metadata_schema}.\\1"))
   end
 
@@ -183,7 +183,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
   # The MySQL file is written for the mysql CLI (DELIMITER $$), which no driver understands, so the
   # DELIMITER directives are stripped and each $$-separated statement is sent on its own.
   def install_mysql_trigger_functions(conn)
-    sql = sql_resource('kms_encryption_trigger_mysql.sql').gsub('SCHEMA_NAME', metadata_schema)
+    sql = sql_resource('trigger_mysql.sql').gsub('SCHEMA_NAME', metadata_schema)
     body = sql.lines.reject { |line| line.strip.start_with?('DELIMITER') }.join
 
     body.split('$$').each do |chunk|

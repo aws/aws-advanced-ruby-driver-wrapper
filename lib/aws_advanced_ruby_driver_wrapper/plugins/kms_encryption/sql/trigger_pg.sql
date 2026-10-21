@@ -48,3 +48,7 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Records which version of this SQL is installed. Check it with:
+--   SELECT obj_description('enforce_encrypted_column'::regproc, 'pg_proc');
+COMMENT ON FUNCTION enforce_encrypted_column() IS 'aws-advanced-ruby-driver-wrapper kms_encryption trigger v2';
