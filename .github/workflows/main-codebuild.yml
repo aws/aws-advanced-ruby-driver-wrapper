@@ -20,10 +20,10 @@ on:
       - '*'
 
 concurrency:
-  # Runs in this group execute one at a time; with `queue: max`, later runs wait in FIFO order
-  # (up to 100 pending) instead of being cancelled.
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push or PR update supersedes a stale commit instead of queueing behind it.
   group: ${{ github.workflow }}-${{ github.ref }}
-  queue: max
+  cancel-in-progress: true
 
 permissions:
   contents: read

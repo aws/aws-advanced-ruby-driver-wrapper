@@ -3,8 +3,8 @@
 # Runs the same jobs on the self-hosted CodeBuild runners instead of GitHub-hosted ones.
 # Triggers: the same as run-bg-integration-tests.yml (manual dispatch and a weekly schedule). The
 # schedule is commented out in run-bg-integration-tests.yml, so only this copy runs on schedule.
-# Shares the rds-integration-tests-codebuild concurrency group with the other CodeBuild RDS
-# workflows, so only one of them claims DB clusters and security-group rules at a time.
+# Uses a per-ref concurrency group with cancel-in-progress, so a newer run on the same ref
+# supersedes the one in progress.
 
 name: Run Blue/Green Integration Tests (CodeBuild)
 
@@ -19,16 +19,17 @@ permissions:
   contents: read
 
 env:
-  # Pull test container images from ECR Public rather than Docker Hub. These runners share an
-  # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
+  # Pull test container images from ECR Public rather than Docker Hub. CodeBuild builds egress
+  # through the account's shared NAT IP and carry no Docker Hub credentials, so anonymous Docker Hub
+  # pulls get rate limited.
   TEST_CONTAINER_REGISTRY: ecr
 
 concurrency:
-  # Shared by every CodeBuild RDS workflow, so only one of them at a time claims DB clusters and
-  # security-group rules. Runs in this group execute one at a time; with `queue: max`, later runs
-  # wait in FIFO order (up to 100 pending) instead of being cancelled.
-  group: rds-integration-tests-codebuild
-  queue: max
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push supersedes a stale commit. The "Clean up RDS resources" step runs on cancellation, so a
+  # superseded run tears down the DB clusters it created instead of leaking them.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   bg-integration-tests:

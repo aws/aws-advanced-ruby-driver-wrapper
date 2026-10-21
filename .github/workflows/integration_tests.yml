@@ -1,8 +1,8 @@
 # GitHub-hosted backup of the CodeBuild workflow integration_tests-codebuild.yml.
 #
 # Runs the same jobs on GitHub-hosted ubuntu runners. Kept as a manual-dispatch-only fallback; the
-# CodeBuild variant owns the push trigger (commented out below). Shares the rds-integration-tests
-# concurrency group with the other GitHub-hosted RDS workflows (separate from the CodeBuild group).
+# CodeBuild variant owns the push trigger (commented out below). Uses a per-ref
+# concurrency group with cancel-in-progress, so a newer run on the same ref supersedes the one in progress.
 
 name: Integration Tests
 
@@ -18,16 +18,17 @@ permissions:
   contents: read
 
 env:
-  # Pull test container images from ECR Public rather than Docker Hub. These runners share an
-  # outbound IP and have no Docker Hub credentials, so anonymous pulls get rate limited.
+  # Pull test container images from ECR Public rather than Docker Hub. GitHub-hosted runners pull
+  # from a pool of egress IPs shared across all GitHub customers, with no Docker Hub credentials, so
+  # anonymous Docker Hub pulls get rate limited.
   TEST_CONTAINER_REGISTRY: ecr
 
 concurrency:
-  # Shared by every GitHub-hosted RDS workflow, so only one of them at a time claims DB clusters and
-  # security-group rules. Runs in this group execute one at a time; with `queue: max`, later runs
-  # wait in FIFO order (up to 100 pending) instead of being cancelled.
-  group: rds-integration-tests
-  queue: max
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push supersedes a stale commit. The "Clean up RDS resources" step runs on cancellation, so a
+  # superseded run tears down the DB clusters it created instead of leaking them.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   default-integration-tests:
