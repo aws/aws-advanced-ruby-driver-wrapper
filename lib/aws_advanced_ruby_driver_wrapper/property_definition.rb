@@ -192,6 +192,13 @@ module AwsAdvancedRubyDriverWrapper
                                                default_value: 0.1, type: Float, validator: POSITIVE_FLOAT)
     BG_SWITCHOVER_TIMEOUT_SEC = WrapperProperty.new(:bg_switchover_timeout_sec, 'Blue/Green Deployment switchover timeout (in seconds).',
                                                     default_value: 180.0, type: Float, validator: POSITIVE_FLOAT)
+    BG_DROP_BLUE_CONNECTIONS = WrapperProperty.new(
+      :bg_drop_blue_connections,
+      'Whether to invalidate connections that were opened to the old blue environment once a Blue/Green ' \
+      'switchover completes. When enabled, the next use of such a connection closes it so the ' \
+      'failover plugin reconnects through Blue/Green routing, preventing stale reads from old blue.',
+      default_value: true, type: :boolean
+    )
 
     # -- IAM Authentication --
     IAM_HOST = WrapperProperty.new(:iam_host, 'Overrides the host used to generate the IAM token', default_value: nil, type: String)

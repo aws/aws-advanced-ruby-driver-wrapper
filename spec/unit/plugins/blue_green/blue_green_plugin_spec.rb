@@ -16,6 +16,7 @@
 
 require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/blue_green_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/drop_blue_connections_marker'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/status'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/role'
@@ -206,6 +207,90 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
       end
 
       plugin.connect(host_info, props, true, -> { connection })
+    end
+  end
+
+  describe 'dropping stale blue connections (#execute)' do
+    let(:marker_class) { bg::DropBlueConnectionsMarker }
+    let(:marker_key)   { described_class.drop_marker_key(bgd_id_val) }
+    let(:bg_name)      { described_class::BLUE_GREEN_NAME }
+
+    # close_connection is needed on the driver dialect for invalidation.
+    let(:driver_dialect) { double('driver_dialect', network_bound_methods: Set['connection.query'], close_connection: nil) }
+    let(:connection_service) do
+      double('connection_service',
+             current_host_info: host_info,
+             current_connection: connection,
+             driver_props: Concurrent::Map.new,
+             config: double('config', cluster_id: 'cluster-1'))
+    end
+
+    # A switchover time far above any real monotonic clock value, so a just-opened connection counts
+    # as "opened before the switchover".
+    let(:future_ns) { 1 << 62 }
+    let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: future_ns, active: true) }
+
+    before do
+      allow(storage_service).to receive(:get).and_return(nil)
+      allow(storage_service).to receive(:get).with(bg_name, marker_key, register_access: false).and_return(marker)
+      # Record this connection's connect-time host and open time.
+      plugin.connect(host_info, props, true, -> { connection })
+    end
+
+    context 'with an active marker for the connection host, opened before the switchover' do
+      it 'closes the connection and continues down the pipeline' do
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+
+      it 'does not invalidate the same connection twice for one marker' do
+        plugin.execute('connection.query', -> { :query_result })
+        expect(driver_dialect).not_to receive(:close_connection)
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+    end
+
+    context 'with a pending (not yet confirmed) marker' do
+      let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: future_ns) }
+
+      it 'does not invalidate the connection' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    context 'with an active marker whose switchover predates the connection' do
+      let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: 1, active: true) }
+
+      it 'does not invalidate a connection opened after the switchover' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+    end
+
+    context 'with an active marker that does not cover the connection host' do
+      let(:marker) do
+        marker_class.new(blue_hosts: ['green.cluster-abc.us-east-1.rds.amazonaws.com'], switchover_time_ns: future_ns, active: true)
+      end
+
+      it 'does not invalidate the connection' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    context 'when bg_drop_blue_connections is disabled' do
+      let(:props) do
+        Concurrent::Map.new.tap do |p|
+          p[:bgd_id] = bgd_id_val
+          p[:bg_drop_blue_connections] = false
+        end
+      end
+
+      it 'does not read the marker or invalidate the connection' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
     end
   end
 
