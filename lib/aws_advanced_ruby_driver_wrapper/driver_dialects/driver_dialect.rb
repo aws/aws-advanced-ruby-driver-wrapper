@@ -33,6 +33,11 @@ module AwsAdvancedRubyDriverWrapper
 
       DEFAULT_MONITORING_TIMEOUT_SEC = 5
 
+      # @return [String] the name of the Ruby driver gem this dialect drives
+      def name
+        raise NotImplementedError
+      end
+
       def connect(host_info, config)
         raise NotImplementedError
       end

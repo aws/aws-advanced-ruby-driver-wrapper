@@ -253,7 +253,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::OktaAuthPlu
       wrapper_props = Concurrent::Map.new
       wrapper_props[:wrapper_plugins] = 'okta,iam'
       connection_service = double('ConnectionService', wrapper_props:)
-      container = double('ServiceContainer', connection_service:)
+      container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(connection_service:)
 
       expect do
         AwsAdvancedRubyDriverWrapper::Services::PluginManager.new(container)

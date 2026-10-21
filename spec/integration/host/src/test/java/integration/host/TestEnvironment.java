@@ -1686,10 +1686,11 @@ public class TestEnvironment implements AutoCloseable {
         .withEnv("AWS_SESSION_TOKEN", env.awsSessionToken)
         .withEnv("AWS_REGION", otlpRegion);
 
+    // The collector's OTLP/HTTP receiver: Ruby's OTLP exporters send traces and metrics over HTTP.
     if (USE_OTLP_CONTAINER_FOR_TRACES) {
-      env.info.setTracesTelemetryInfo(new TestTelemetryInfo(TELEMETRY_OTLP_CONTAINER_NAME, 2000));
+      env.info.setTracesTelemetryInfo(new TestTelemetryInfo(TELEMETRY_OTLP_CONTAINER_NAME, 4318));
     }
-    env.info.setMetricsTelemetryInfo(new TestTelemetryInfo(TELEMETRY_OTLP_CONTAINER_NAME, 4317));
+    env.info.setMetricsTelemetryInfo(new TestTelemetryInfo(TELEMETRY_OTLP_CONTAINER_NAME, 4318));
 
     LOGGER.finest("Starting OTLP telemetry container");
     env.telemetryOtlpContainer.start();

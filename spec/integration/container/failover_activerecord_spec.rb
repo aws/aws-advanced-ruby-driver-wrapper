@@ -69,7 +69,8 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
-        "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}"
+        "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
+      **Integration::TelemetryHelper.wrapper_props
     }
     config[:variables] = variables if variables
     config[:prepared_statements] = prepared_statements unless prepared_statements.nil?

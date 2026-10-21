@@ -65,6 +65,7 @@ module PipelineRecordingHelper
     manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, [plugin])
     manager.instance_variable_set(:@pipeline_cache, {})
+    manager.instance_variable_set(:@telemetry_factory, AwsAdvancedRubyDriverWrapper::Utils::Telemetry::NullTelemetryFactory::INSTANCE)
     plugin.manager = manager
 
     container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new

@@ -12,7 +12,12 @@
 #  distributed under the License is distributed on an "AS IS" BASIS,
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
-#  limitations under the License.require 'rspec'
+#  limitations under the License.
+
+require 'rspec'
+require_relative 'telemetry_helper'
+
+Integration::TelemetryHelper.install
 
 RSpec.shared_context 'integration setup' do
   let(:env)      { Integration::TestEnvironment.current }
@@ -26,7 +31,8 @@ RSpec.shared_context 'integration setup' do
     props = {
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => '',
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
-      connect_timeout: 3
+      connect_timeout: 3,
+      **Integration::TelemetryHelper.wrapper_props
     }
     if env.global_cluster_endpoint
       props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name] =
@@ -110,6 +116,10 @@ RSpec.configure do |config|
     config.filter_run_including(kms_encryption: true)
   else
     config.filter_run_excluding(kms_encryption: true)
+  end
+
+  config.around(:each, :integration) do |example|
+    Integration::TelemetryHelper.in_test_span(example) { example.run }
   end
 
   config.before(:each, :integration) do |example|
