@@ -1,0 +1,214 @@
+# CodeBuild variant of main.yml.
+#
+# Runs the same jobs on the self-hosted CodeBuild runners instead of GitHub-hosted ones.
+# Triggers: the same as main.yml (manual dispatch, push to main, pull_request). The push and
+# pull_request triggers are commented out in main.yml, so each event runs only this copy.
+# pull_request runs a fork PR's code on these self-hosted runners. In place: the repository requires
+# maintainer approval before workflows run for all external contributors, and each job is a
+# separate CodeBuild build. As on GitHub-hosted runners, a fork PR's run gets no secrets and no
+# id-token: write.
+
+name: Check and Unit Tests (CodeBuild)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - '*'
+
+concurrency:
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push or PR update supersedes a stale commit instead of queueing behind it.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check-changes:
+    name: 'Check for changes'
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    outputs:
+      only_docs: ${{ steps.check.outputs.ONLY_DOCS }}
+      docs_changed: ${{ steps.check.outputs.DOCS_CHANGED }}
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 50
+      - name: 'Get changed files'
+        id: changed-files-specific
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          files_yaml: |
+            doc:
+              - '**/*.md'
+              - '**/docs/**'
+              - '**/*.jpg'
+              - '**/*.png'
+      - name: 'Determine change type'
+        id: check
+        run: |
+          if [[ "${{ steps.changed-files-specific.outputs.doc_only_changed }}" == "true" || "${{ steps.changed-files-specific.outputs.doc_only_modified }}" == "true" ]]; then
+            echo "ONLY_DOCS=true" >> $GITHUB_OUTPUT
+          else
+            echo "ONLY_DOCS=false" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{ steps.changed-files-specific.outputs.doc_any_changed }}" == "true" ]]; then
+            echo "DOCS_CHANGED=true" >> $GITHUB_OUTPUT
+          else
+            echo "DOCS_CHANGED=false" >> $GITHUB_OUTPUT
+          fi
+
+  markdown-link-check:
+    name: 'Markdown link check'
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.docs_changed == 'true' }}
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # main.yml uses tcort/github-action-markdown-link-check here. That is a Dockerfile action, so
+      # the runner has to `docker build` it, and on CodeBuild the build goes to the project's remote
+      # Docker server, which this project cannot reach. These steps run what that action
+      # (@e047c5b37f24ab722bbef1a27b6fab7f96bc4068, inputs use-quiet-mode: yes, folder-path: '.',
+      # max-depth: 0, config-file: mlc_config.json) runs: markdown-link-check over every *.md file
+      # in the repository, failing if the output reports an error.
+      - name: 'Set up Node.js'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: 'Check Markdown links'
+        run: |
+          set -o pipefail
+          npm i -g markdown-link-check@3.15.0
+          CONFIG_FILE='mlc_config.json'
+          MLC_ARGS=()
+          if [ -f "$CONFIG_FILE" ]; then
+            MLC_ARGS+=('--config' "$CONFIG_FILE")
+          else
+            echo "Cannot find $CONFIG_FILE, checking without a configuration file."
+          fi
+          MLC_ARGS+=('-q')
+          MLC_LOG="$RUNNER_TEMP/markdown-link-check.txt"
+          find . -name '*.md' -not -path './node_modules/*' -exec markdown-link-check '{}' "${MLC_ARGS[@]}" ';' 2>&1 | tee "$MLC_LOG"
+          if grep -q 'ERROR:' "$MLC_LOG"; then
+            exit 1
+          fi
+          echo 'All links are good!'
+
+  lint:
+    name: 'Static analysis'
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.only_docs == 'false' }}
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+      - name: Run RuboCop
+        run: bundle exec rubocop
+
+  pg-sql-qualification:
+    name: PostgreSQL SQL qualification check
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.only_docs == 'false' }}
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1
+        with:
+          ruby-version: '3.3'
+      - name: Check internal PostgreSQL SQL is schema-qualified
+        run: ruby .github/scripts/check_pg_sql_qualified.rb
+
+  test:
+    name: 'Unit tests'
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.only_docs == 'false' }}
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ruby-version: '3.3'
+            gemfile: gemfiles/activerecord_7.2.gemfile
+          - ruby-version: '3.4'
+            gemfile: gemfiles/activerecord_8.0.gemfile
+          - ruby-version: '4.0'
+            gemfile: gemfiles/activerecord_8.1.gemfile
+    env:
+      BUNDLE_GEMFILE: ${{ matrix.gemfile }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+      - name: Run unit tests
+        run: bundle exec rspec spec/unit
+      - name: Upload coverage reports
+        if: matrix.ruby-version == '3.3'
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+        with:
+          files: ./coverage/coverage.xml
+          flags: unittests
+          name: ruby-wrapper-unit-coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+  secret-scan:
+    name: Gitleaks secret scan
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Install Gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          # CodeBuild runners run as root and may not ship sudo.
+          if [ "$(id -u)" -eq 0 ]; then
+            install gitleaks /usr/local/bin/gitleaks
+          else
+            sudo install gitleaks /usr/local/bin/gitleaks
+          fi
+          rm -f gitleaks.tar.gz gitleaks
+          gitleaks version
+      - name: Run Gitleaks (full git history)
+        run: gitleaks detect --source . --redact --verbose
+
+  ci-gate:
+    name: 'CI Gate (CodeBuild)'
+    needs: [check-changes, markdown-link-check, lint, pg-sql-qualification, test, secret-scan]
+    if: ${{ always() }}
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: 'Verify required jobs did not fail'
+        run: |
+          # Fail only if a needed job actually failed or was cancelled.
+          # Skipped jobs (e.g. tests on doc-only PRs) are treated as passing,
+          # so this gate is the single required status check for branch protection.
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" \
+             || "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "A required job failed or was cancelled."
+            exit 1
+          fi
+          echo "All required jobs passed or were legitimately skipped."

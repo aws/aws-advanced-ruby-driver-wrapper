@@ -86,9 +86,9 @@ RSpec.describe 'Failover Performance', :integration,
 
   def wrapper_props(timeout_sec)
     {
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 300,
-      AwsRubyDatabaseDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'failover',
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 300,
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
         "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
       connect_timeout: PERF_RECONNECT_TIMEOUT_SEC,
       **driver_timeout_props(timeout_sec)

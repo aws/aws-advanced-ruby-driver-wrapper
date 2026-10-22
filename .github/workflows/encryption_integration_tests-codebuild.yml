@@ -1,0 +1,128 @@
+# CodeBuild variant of encryption_integration_tests.yml.
+#
+# Runs the same jobs on the self-hosted CodeBuild runners instead of GitHub-hosted ones.
+# Triggers: the same as encryption_integration_tests.yml (manual dispatch and push to main). The
+# push trigger is commented out in encryption_integration_tests.yml, so each push to main runs only
+# this copy. Uses a per-ref concurrency group with cancel-in-progress, so a newer run on the same
+# ref supersedes the one in progress.
+
+name: Encryption Integration Tests (CodeBuild)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. CodeBuild builds egress
+  # through the account's shared NAT IP and carry no Docker Hub credentials, so anonymous Docker Hub
+  # pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
+# These workflows create real RDS clusters and a real KMS key.
+concurrency:
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push supersedes a stale commit. The "Clean up RDS resources" step runs on cancellation, so a
+  # superseded run tears down the DB clusters it created instead of leaking them.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kms-key:
+    name: Find or create the test KMS key
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    outputs:
+      key_id: ${{ steps.kms.outputs.key_id }}
+
+    steps:
+      - name: 'Configure AWS Credentials'
+        id: creds
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_encryption_kms_key
+          role-duration-seconds: 900
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Find or create the test KMS key'
+        id: kms
+        run: |
+          ALIAS="alias/ruby-encryption-key"
+          KEY_ID=$(aws kms list-aliases \
+            --query "Aliases[?AliasName=='${ALIAS}'].TargetKeyId" --output text 2>/dev/null || echo "")
+
+          if [ -n "$KEY_ID" ]; then
+            STATE=$(aws kms describe-key --key-id "$KEY_ID" \
+              --query 'KeyMetadata.KeyState' --output text 2>/dev/null || echo "")
+            if [ "$STATE" != "Enabled" ]; then KEY_ID=""; fi
+          fi
+
+          if [ -z "$KEY_ID" ]; then
+            KEY_ID=$(aws kms create-key \
+              --description "aws_advanced_ruby_driver_wrapper encryption test key (cached)" \
+              --key-usage ENCRYPT_DECRYPT --key-spec SYMMETRIC_DEFAULT \
+              --tags TagKey=Project,TagValue=aws_advanced_ruby_driver_wrapper TagKey=Purpose,TagValue=testing \
+              --query 'KeyMetadata.KeyId' --output text)
+            aws kms create-alias --alias-name "$ALIAS" --target-key-id "$KEY_ID"
+            aws kms enable-key-rotation --key-id "$KEY_ID"
+          fi
+
+          echo "key_id=$KEY_ID" >> "$GITHUB_OUTPUT"
+          echo "Using KMS key: $KEY_ID"
+
+  encryption-integration-tests:
+    name: Run KMS Encryption Integration Tests
+    needs: kms-key
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [ 'mysql', 'pg' ]
+
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: 'Validate Gradle wrapper'
+        uses: gradle/actions/wrapper-validation@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: 'Set up Ruby 3.3'
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: 'Set up JDK 8'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: 'corretto'
+          java-version: 8
+
+      - name: 'Configure AWS Credentials'
+        id: creds
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_encryption_integration_tests
+          role-duration-seconds: 21600
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Run KMS Encryption Integration Tests'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-encryption --info
+        env:
+          RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          KMS_KEY_ID: ${{ needs.kms-key.outputs.key_id }}
+
+      - name: 'Archive encryption results'
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rspec-encryption-report-${{ matrix.environment }}
+          path: ./spec/integration/host/build/reports/tests/test/
+          if-no-files-found: ignore
+          retention-days: 5
