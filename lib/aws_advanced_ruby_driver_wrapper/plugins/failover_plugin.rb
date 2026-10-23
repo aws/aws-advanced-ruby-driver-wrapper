@@ -33,10 +33,20 @@ module AwsAdvancedRubyDriverWrapper
       include Logging
 
       ReaderFailoverResult = Data.define(:connection, :host_info)
+      FailoverCounters = Data.define(:triggered, :succeeded, :failed)
+
+      SUCCESSFUL_FAILOVER_ERRORS = [Errors::FailoverSuccessError, Errors::TransactionStateUnknownError].freeze
+
+      TELEMETRY_WRITER_FAILOVER = 'failover to writer host'
+      TELEMETRY_READER_FAILOVER = 'failover to replica'
 
       def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
         @wrapper_props = props
+        @telemetry_factory = service_container.telemetry_factory
+        @telemetry_failover_additional_top_trace = PropertyDefinition::TELEMETRY_FAILOVER_ADDITIONAL_TOP_TRACE.get_bool(props)
+        @writer_failover_counters = failover_counters('writer_failover')
+        @reader_failover_counters = failover_counters('reader_failover')
 
         @retry_util = Utils::RetryUtil.new(service_container)
         @failover_timeout = PropertyDefinition::FAILOVER_TIMEOUT_SEC.get_float(props)
@@ -237,9 +247,60 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         if @failover_mode == FailoverMode::STRICT_WRITER
-          failover_writer
+          with_failover_telemetry(TELEMETRY_WRITER_FAILOVER) { count_failover(@writer_failover_counters) { failover_writer } }
         else
-          failover_reader
+          with_failover_telemetry(TELEMETRY_READER_FAILOVER) { count_failover(@reader_failover_counters) { failover_reader } }
+        end
+      end
+
+      def failover_counters(prefix)
+        FailoverCounters.new(
+          triggered: @telemetry_factory.create_counter("#{prefix}.triggered.count"),
+          succeeded: @telemetry_factory.create_counter("#{prefix}.completed.success.count"),
+          failed: @telemetry_factory.create_counter("#{prefix}.completed.failed.count")
+        )
+      end
+
+      # Records a failover as a span. Failover always ends in an error: a successful one ends in one
+      # of SUCCESSFUL_FAILOVER_ERRORS, which marks the span as succeeded, and any other error marks it
+      # as failed. With telemetry_failover_additional_top_trace enabled, the span is also submitted as
+      # a trace of its own.
+      def with_failover_telemetry(span_name)
+        telemetry_context = nil
+        @telemetry_factory.in_context(span_name, :nested) do |context|
+          telemetry_context = context
+          yield
+        rescue *SUCCESSFUL_FAILOVER_ERRORS => e
+          context.success = true
+          context.record_exception(e)
+          raise
+        rescue StandardError => e
+          context.success = false
+          context.record_exception(e)
+          raise
+        end
+      ensure
+        submit_failover_copy(telemetry_context) if telemetry_context && @telemetry_failover_additional_top_trace
+      end
+
+      # Runs while the failover's outcome is propagating, so an error here must not replace it.
+      def submit_failover_copy(telemetry_context)
+        @telemetry_factory.post_copy(telemetry_context, :force_top_level)
+      rescue StandardError => e
+        logger.debug { "Unable to submit the failover trace as a trace of its own: #{e.message}" }
+      end
+
+      # Counts a failover as triggered, and then as succeeded or failed according to how it ends.
+      def count_failover(counters)
+        counters.triggered.inc
+        begin
+          yield
+        rescue *SUCCESSFUL_FAILOVER_ERRORS
+          counters.succeeded.inc
+          raise
+        rescue StandardError
+          counters.failed.inc
+          raise
         end
       end
 

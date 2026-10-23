@@ -29,9 +29,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
   let(:mock_driver_dialect) { double('DriverDialect', user_property_key: :user) }
   let(:mock_dialect_service) { double('DialectService', login_error?: false, driver_dialect: mock_driver_dialect) }
   let(:mock_service_container) do
-    double('ServiceContainer',
-           storage_service: mock_storage_service,
-           dialect_service: mock_dialect_service)
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service: mock_storage_service,
+                                                                 dialect_service: mock_dialect_service)
   end
 
   let(:base_props) do
@@ -683,6 +682,56 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::SecretsManagerPlugin do
 
     it 'still exposes the password via the accessor for internal use' do
       expect(entry.password).to eq('super-secret-pass')
+    end
+  end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    let(:mock_service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        storage_service: mock_storage_service, dialect_service: mock_dialect_service,
+        telemetry_factory: AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props)
+      )
+    end
+
+    it 'counts each credentials lookup and records it as a span' do
+      fetched = counter_value('secrets_manager.fetch_credentials.count')
+
+      in_application_span { build_plugin.connect(host_info, {}, true, -> { :connection }) }
+
+      expect(counter_value('secrets_manager.fetch_credentials.count')).to eq(fetched + 1)
+      span = span_named('fetch credentials')
+      expect(span.parent_span_id).to eq(span_named('application').span_id)
+      expect(span.status.code).to eq(OpenTelemetry::Trace::Status::UNSET)
+    end
+
+    it 'counts the re-fetch after a login error with cached credentials as a second lookup' do
+      cached = described_class::SecretEntry.new(username: 'old', password: 'old',
+                                                expires_at: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 600)
+      allow(mock_storage_service).to receive(:get).and_return(cached)
+      allow(mock_dialect_service).to receive(:login_error?).and_return(true)
+      attempts = 0
+      fetched = counter_value('secrets_manager.fetch_credentials.count')
+
+      build_plugin.connect(host_info, {}, true, lambda {
+        attempts += 1
+        raise StandardError, 'login failed' if attempts == 1
+
+        :connection
+      })
+
+      expect(counter_value('secrets_manager.fetch_credentials.count')).to eq(fetched + 2)
+    end
+
+    it 'records a failed lookup as a failed span' do
+      allow(mock_sm_client).to receive(:get_secret_value).and_raise(StandardError, 'access denied')
+
+      in_application_span do
+        expect { build_plugin.connect(host_info, {}, true, -> { :connection }) }.to raise_error(StandardError)
+      end
+
+      expect(span_named('fetch credentials').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
     end
   end
 end

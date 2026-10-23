@@ -95,7 +95,7 @@ module AwsAdvancedRubyDriverWrapper
             result = nil
 
             while routing && result.nil?
-              result = routing.apply(method_name, @wrapper_props, storage_service)
+              result = routing.apply(method_name, @wrapper_props, storage_service, telemetry_factory: @service_container.telemetry_factory)
 
               next unless result.nil?
 

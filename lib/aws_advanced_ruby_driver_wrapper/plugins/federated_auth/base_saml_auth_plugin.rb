@@ -28,6 +28,9 @@ module AwsAdvancedRubyDriverWrapper
     module FederatedAuth
       # Shared connect flow for the SAML-based authentication plugins (AD FS and
       # Okta).
+      #
+      # A subclass defines +self.fetch_saml_assertion+, +TELEMETRY_PREFIX+ (the prefix of its metric
+      # names) and +TELEMETRY_FETCH_SAML+ (the name of the span its SAML assertion fetch is recorded as).
       class BaseSamlAuthPlugin
         SUBSCRIBED_METHODS = Set['connect', 'internal_connect'].freeze
         # Reuse the IAM plugin's cache name.
@@ -43,6 +46,14 @@ module AwsAdvancedRubyDriverWrapper
           PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)
           service_container.storage_service.register(IAM_TOKEN_CACHE_NAME, ttl: expiration)
           @subscribed_methods = SUBSCRIBED_METHODS
+
+          # Each subclass names its metrics after itself, and its SAML assertion span after its IdP.
+          @telemetry_factory = service_container.telemetry_factory
+          @fetch_token_counter = @telemetry_factory.create_counter("#{self.class::TELEMETRY_PREFIX}.fetch_token.count")
+          @telemetry_factory.create_gauge(
+            "#{self.class::TELEMETRY_PREFIX}.token_cache.size",
+            &IamAuthPlugin.token_cache_size(service_container.storage_service)
+          )
         end
 
         def connect(host_info, driver_props, _is_initial_connection, pipeline_callable)
@@ -164,8 +175,10 @@ module AwsAdvancedRubyDriverWrapper
         def fetch_and_cache_token(saml_props, region, host, port, db_user, cache_key, expiration,
                                   idp_username, idp_password, credentials)
           credentials ||= obtain_credentials(saml_props, region, idp_username, idp_password)
+          @fetch_token_counter.inc
           token = Utils::IamAuthUtils.generate_token(
-            region:, hostname: host, port:, user: db_user, credentials_provider: credentials
+            region:, hostname: host, port:, user: db_user, credentials_provider: credentials,
+            telemetry_factory: @telemetry_factory
           )
           @service_container.storage_service.set(
             IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)
@@ -191,9 +204,9 @@ module AwsAdvancedRubyDriverWrapper
 
         # Fetches a SAML assertion from the IdP and exchanges it for AWS credentials.
         def obtain_credentials(saml_props, region, idp_username, idp_password)
-          assertion = self.class.fetch_saml_assertion(
-            **saml_fetch_options(saml_props, idp_username, idp_password)
-          )
+          assertion = @telemetry_factory.in_context(self.class::TELEMETRY_FETCH_SAML, :nested, record_failure: true) do
+            self.class.fetch_saml_assertion(**saml_fetch_options(saml_props, idp_username, idp_password))
+          end
           self.class.credentials_from_saml(
             assertion,
             role_arn: PropertyDefinition::IAM_ROLE_ARN.get(saml_props),

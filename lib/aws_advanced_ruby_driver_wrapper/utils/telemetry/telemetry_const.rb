@@ -38,13 +38,15 @@ module AwsAdvancedRubyDriverWrapper
       # Instrumentation scope name the wrapper's tracer and meter are registered under.
       INSTRUMENTATION_NAME = 'aws-advanced-ruby-driver-wrapper'
 
-      # Span attribute names.
+      # Span attribute names, and the prefix of the name of a copied span.
       module TelemetryConst
         TRACE_NAME_ANNOTATION = 'trace_name'
         RUBY_CALL_ANNOTATION = 'ruby_call'
         PARENT_TRACE_ANNOTATION = 'parent_trace_id'
         EXCEPTION_TYPE_ANNOTATION = 'exception_type'
         EXCEPTION_MESSAGE_ANNOTATION = 'exception_message'
+        SOURCE_TRACE_ANNOTATION = 'source_trace_id'
+        COPY_TRACE_NAME_PREFIX = 'copy: '
       end
     end
   end

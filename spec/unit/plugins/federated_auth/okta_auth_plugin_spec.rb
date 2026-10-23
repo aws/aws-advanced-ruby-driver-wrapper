@@ -178,7 +178,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::OktaAuthPlu
       double('DialectService', db_dialect: mock_db_dialect, login_error?: false, driver_dialect: mock_driver_dialect)
     end
     let(:mock_service_container) do
-      double('ServiceContainer', storage_service: mock_storage_service, dialect_service: mock_dialect_service)
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service: mock_storage_service,
+                                                                   dialect_service: mock_dialect_service)
     end
 
     def wrapper_props_map(hash)

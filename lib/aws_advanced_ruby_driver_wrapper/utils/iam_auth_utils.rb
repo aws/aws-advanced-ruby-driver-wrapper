@@ -19,10 +19,13 @@ require_relative 'rds_utils'
 require_relative 'rds_url_type'
 require_relative '../property_definition'
 require_relative '../logging'
+require_relative 'telemetry/null_telemetry'
 
 module AwsAdvancedRubyDriverWrapper
   module Utils
     module IamAuthUtils
+      TELEMETRY_FETCH_TOKEN = 'fetch authentication token'
+
       module_function
 
       TokenEntry = Data.define(:token, :expires_at) do
@@ -83,10 +86,15 @@ module AwsAdvancedRubyDriverWrapper
         arn&.match(/\Aarn:aws(?:-[a-z]+)*:rds:(?<region>[^:]+)/)&.[](:region)
       end
 
-      def generate_token(region:, hostname:, port:, user:, credentials_provider:)
-        Aws::RDS::AuthTokenGenerator
-          .new(credentials: credentials_provider)
-          .auth_token(region:, endpoint: "#{hostname}:#{port}", user_name: user)
+      # @param telemetry_factory [Telemetry::TelemetryFactory, Telemetry::NullTelemetryFactory] records
+      #   the token generation as a span
+      def generate_token(region:, hostname:, port:, user:, credentials_provider:,
+                         telemetry_factory: Telemetry::NullTelemetryFactory::INSTANCE)
+        telemetry_factory.in_context(TELEMETRY_FETCH_TOKEN, :nested, record_failure: true) do
+          Aws::RDS::AuthTokenGenerator
+            .new(credentials: credentials_provider)
+            .auth_token(region:, endpoint: "#{hostname}:#{port}", user_name: user)
+        end
       end
 
       def resolve_host(iam_host, host_info)

@@ -24,6 +24,7 @@ module AwsAdvancedRubyDriverWrapper
           include Logging
 
           MINIMUM_SLEEP_CHUNK_SEC = 0.05
+          TELEMETRY_SWITCHOVER = 'Blue/Green switchover'
 
           def match?(host_info, role)
             (@host.nil? || @host.downcase == host_info&.host&.downcase) &&
@@ -37,6 +38,11 @@ module AwsAdvancedRubyDriverWrapper
               "port: #{@port || '<null>'}, " \
               "role: #{@role || '<null>'}, " \
               "bgd_id: #{defined?(@bgd_id) ? (@bgd_id || '<null>') : '<n/a>'}]"
+          end
+
+          # Records the time a call is held while the switchover is in progress as a span.
+          def in_switchover_span(telemetry_factory, &)
+            telemetry_factory.in_context(TELEMETRY_SWITCHOVER, :nested, &)
           end
 
           # Blocks until the Blue/Green switchover phase is no longer IN_PROGRESS, or until the

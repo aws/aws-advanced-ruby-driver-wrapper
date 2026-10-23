@@ -244,6 +244,20 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
       expect(span_named('call').attributes).to include('ruby_call' => 'connection.query')
     end
 
+    it 'with record_failure, leaves the status of the span unset when the block returns' do
+      factory.in_context('call', :top_level, record_failure: true) { nil }
+
+      expect(span_named('call').status.code).to eq(status_codes::UNSET)
+    end
+
+    it 'with record_failure, marks the span as failed and records the error when the block raises' do
+      expect { factory.in_context('call', :top_level, record_failure: true) { raise IOError, 'lost' } }.to raise_error(IOError)
+
+      span = span_named('call')
+      expect(span.status.code).to eq(status_codes::ERROR)
+      expect(span.attributes).to include('exception_type' => 'IOError', 'exception_message' => 'lost')
+    end
+
     it 'marks the span as succeeded when the block is left early' do
       factory.in_context('call', :top_level, record_result: true) { break }
 
@@ -267,6 +281,75 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
       expect { |block| factory.in_context('call', :force_top_level, &block) }
         .to yield_with_args(telemetry::NullTelemetryContext::INSTANCE)
+    end
+  end
+
+  describe '#post_copy' do
+    let(:factory) { described_class.new(telemetry_props) }
+
+    def failover_context
+      context = nil
+      in_application_span do
+        factory.in_context('failover', :nested) do |ctx|
+          context = ctx
+          ctx.set_attribute('host', 'instance-1')
+          ctx.success = true
+        end
+      end
+      context
+    end
+
+    it 'records a top-level copy of the span, with the same timings, attributes and status' do
+      factory.post_copy(failover_context, :force_top_level)
+
+      original = span_named('failover')
+      copy = span_named('copy: failover')
+      expect(copy.parent_span_id).to eq(OpenTelemetry::Trace::INVALID_SPAN_ID)
+      expect(copy.trace_id).not_to eq(original.trace_id)
+      expect([copy.start_timestamp, copy.end_timestamp]).to eq([original.start_timestamp, original.end_timestamp])
+      expect(copy.status.code).to eq(OpenTelemetry::Trace::Status::OK)
+      expect(copy.attributes).to include('host' => 'instance-1', 'trace_name' => 'copy: failover',
+                                         'source_trace_id' => original.hex_trace_id)
+    end
+
+    it 'links the copy only to the span it copies, not to the trace in progress' do
+      in_application_span { factory.post_copy(failover_context, :force_top_level) }
+
+      copy = span_named('copy: failover')
+      expect(copy.links.map { |link| link.span_context.span_id }).to eq([span_named('failover').span_id])
+      expect(copy.attributes).not_to include('parent_trace_id')
+    end
+
+    it 'records a nested copy as a child of the current span' do
+      context = failover_context
+      in_application_span { factory.post_copy(context, :nested) }
+
+      application = finished_spans.reverse.find { |span| span.name == 'application' }
+      expect(span_named('copy: failover').parent_span_id).to eq(application.span_id)
+    end
+
+    it 'records nothing for the no_trace level' do
+      context = failover_context
+      expect { factory.post_copy(context, :no_trace) }.not_to(change { finished_spans.size })
+    end
+
+    it 'does nothing for a span that is not recording, such as one that was not sampled' do
+      unrecorded = telemetry::OpenTelemetryContext.new(OpenTelemetry::Trace::Tracer.new, 'failover', :force_top_level)
+      unrecorded.close
+
+      expect { factory.post_copy(unrecorded, :force_top_level) }.not_to(change { finished_spans.size })
+    end
+
+    it 'does nothing for a context that recorded no span' do
+      expect { factory.post_copy(telemetry::NullTelemetryContext::INSTANCE, :force_top_level) }
+        .not_to(change { finished_spans.size })
+    end
+
+    it 'does nothing when traces are not recorded, but still rejects a trace level it does not know' do
+      untraced = described_class.new({})
+
+      expect { untraced.post_copy(failover_context, :force_top_level) }.not_to raise_error
+      expect { untraced.post_copy(failover_context, :forced) }.to raise_error(ArgumentError, /Unknown trace level/)
     end
   end
 

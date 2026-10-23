@@ -27,6 +27,7 @@ module AwsAdvancedRubyDriverWrapper
 
       SUBSCRIBED_METHODS = Set['connect', 'internal_connect'].freeze
       SECRETS_MANAGER_CACHE_NAME = :secrets_manager
+      TELEMETRY_FETCH_CREDENTIALS = 'fetch credentials'
       MIN_EXPIRATION_SEC = 300
       SYNC_FETCH_TIMEOUT_SEC = 60
       # The partition segment of an ARN varies across AWS partitions, so match any of them.
@@ -126,6 +127,8 @@ module AwsAdvancedRubyDriverWrapper
         )
 
         @subscribed_methods = SUBSCRIBED_METHODS
+        @telemetry_factory = service_container.telemetry_factory
+        @fetch_credentials_counter = @telemetry_factory.create_counter('secrets_manager.fetch_credentials.count')
       end
 
       def connect(_host_info, driver_props, _is_initial_connection, pipeline_callable)
@@ -211,7 +214,17 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       # Returns true if credentials were freshly fetched from the service (suppresses login-error retry).
+      #
+      # Each lookup is counted and recorded as a span, whether it is answered from the cache or from
+      # the service.
       def fetch_secret_and_report_if_fresh?(force:)
+        @fetch_credentials_counter.inc
+        @telemetry_factory.in_context(TELEMETRY_FETCH_CREDENTIALS, :nested, record_failure: true) do
+          load_secret_and_report_if_fresh?(force:)
+        end
+      end
+
+      def load_secret_and_report_if_fresh?(force:)
         credentials = Utils::AwsCredentialsUtils.snapshot(@credentials_provider)
         cache_key = secret_cache_key(credentials)
         entry = cache_key && @service_container.storage_service.get(SECRETS_MANAGER_CACHE_NAME, cache_key)

@@ -63,9 +63,11 @@ module AwsAdvancedRubyDriverWrapper
         #   how the block finishes. An error raised by the block marks it failed and is recorded on the
         #   span. Leaving the block early with +break+, +next+, +return+ or +throw+ is not an error, so
         #   it marks the span as succeeded.
+        # @param record_failure [Boolean] whether to mark the span as failed, recording the error, when
+        #   the block raises, while leaving its status unset when it does not. Implied by +record_result+.
         # @yieldparam context [OpenTelemetryContext, NullTelemetryContext]
         # @return the block's result
-        def in_context(name, trace_level, record_result: false)
+        def in_context(name, trace_level, record_result: false, record_failure: false)
           if @traces_factory.nil?
             Telemetry.validate_trace_level!(trace_level)
             return yield NullTelemetryContext::INSTANCE
@@ -77,12 +79,26 @@ module AwsAdvancedRubyDriverWrapper
             yield context
           rescue Exception => e # rubocop:disable Lint/RescueException -- recorded, then re-raised
             failed = true
-            context.record_exception(e) if record_result
+            if record_result || record_failure
+              context.record_exception(e)
+              context.success = false
+            end
             raise
           ensure
-            context.success = !failed if record_result
+            context.success = true if record_result && !failed
             context.close
           end
+        end
+
+        # Records a copy of a closed context's span at another trace level, typically +:force_top_level+,
+        # so that work recorded inside a trace, such as a failover, can also be found as a trace of
+        # its own. The copy has the same timings, attributes and status, is named with a +copy: +
+        # prefix, and is linked to the original.
+        #
+        # @param context [OpenTelemetryContext, NullTelemetryContext] a context that has been closed
+        def post_copy(context, trace_level)
+          Telemetry.validate_trace_level!(trace_level)
+          @traces_factory&.post_copy(context, trace_level)
         end
 
         # @return [OpenTelemetryCounter, NullTelemetryCounter]
