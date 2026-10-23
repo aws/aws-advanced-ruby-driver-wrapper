@@ -41,6 +41,11 @@ group :test do
   gem 'aws-sdk-secretsmanager'
   gem 'debug'
   gem 'dotenv'
+  gem 'opentelemetry-exporter-otlp'
+  gem 'opentelemetry-exporter-otlp-metrics', '~> 0.15.0'
+  gem 'opentelemetry-metrics-sdk', '~> 0.22.0'
+  gem 'opentelemetry-propagator-xray'
+  gem 'opentelemetry-sdk'
   gem 'rspec'
   gem 'simplecov', require: false
   gem 'simplecov-cobertura', require: false

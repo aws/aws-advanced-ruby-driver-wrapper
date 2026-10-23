@@ -14,6 +14,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative '../utils/telemetry/null_telemetry'
+
 module AwsAdvancedRubyDriverWrapper
   module Services
     ServiceContainer = Struct.new(
@@ -24,7 +26,13 @@ module AwsAdvancedRubyDriverWrapper
       :plugin_manager,
       :session_state_service,
       :storage_service,
-      :monitor_service
-    )
+      :monitor_service,
+      :telemetry_factory
+    ) do
+      # A container that was given no telemetry factory records no telemetry.
+      def telemetry_factory
+        self[:telemetry_factory] || Utils::Telemetry::NullTelemetryFactory::INSTANCE
+      end
+    end
   end
 end

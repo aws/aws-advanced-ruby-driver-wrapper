@@ -85,6 +85,10 @@ module AwsAdvancedRubyDriverWrapper
         RubyMethod::CONNECTION_LO_TRUNCATE.name
       ]).freeze
 
+      def name
+        'pg'
+      end
+
       def connect(host_info, config)
         ::PG::Connection.new(**prepare_connect_config(host_info, config))
       end

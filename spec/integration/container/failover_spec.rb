@@ -45,7 +45,8 @@ RSpec.describe 'Failover', :integration,
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name =>
         "?.#{proxy_info.instance_endpoint_suffix}:#{proxy_info.instance_endpoint_port}",
-      connect_timeout: 10
+      connect_timeout: 10,
+      **Integration::TelemetryHelper.wrapper_props
     }
   end
 

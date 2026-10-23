@@ -56,6 +56,31 @@ module AwsAdvancedRubyDriverWrapper
     AWS_CREDENTIALS_PROVIDER = WrapperProperty.new(:aws_credentials_provider,
                                                    'AWS credentials provider for the plugins that call AWS services',
                                                    default_value: nil)
+    # -- Telemetry --
+    ENABLE_TELEMETRY = WrapperProperty.new(
+      :enable_telemetry,
+      'Enables telemetry and observability of the wrapper.',
+      default_value: false,
+      type: :boolean
+    )
+    TELEMETRY_SUBMIT_TOP_LEVEL = WrapperProperty.new(
+      :telemetry_submit_top_level,
+      'Submit the traces of wrapper calls as top-level traces, rather than only as children of a trace already in progress.',
+      default_value: false,
+      type: :boolean
+    )
+    TELEMETRY_TRACES_BACKEND = WrapperProperty.new(
+      :telemetry_traces_backend,
+      'Method to export the telemetry traces of the wrapper. Valid values are otlp and none.',
+      default_value: nil,
+      type: String
+    )
+    TELEMETRY_METRICS_BACKEND = WrapperProperty.new(
+      :telemetry_metrics_backend,
+      'Method to export the telemetry metrics of the wrapper. Valid values are otlp and none.',
+      default_value: nil,
+      type: String
+    )
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(
       :failover_timeout_sec,

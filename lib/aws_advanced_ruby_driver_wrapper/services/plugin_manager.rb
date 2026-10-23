@@ -86,30 +86,35 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def initialize(service_container)
+        @telemetry_factory = service_container.telemetry_factory
         @plugins = load_plugins(service_container)
         @pipeline_cache = {}
       end
 
       def connect(host_info, driver_props, is_initial_connection, plugin_to_skip: nil)
-        execute_with_subscribed_plugins(
-          'connect',
-          lambda do |plugin, next_plugin_callable|
-            plugin.connect(host_info, driver_props, is_initial_connection, next_plugin_callable)
-          end,
-          NOOP_CALLABLE,
-          plugin_to_skip:
-        )
+        @telemetry_factory.in_context('connect', :nested) do
+          execute_with_subscribed_plugins(
+            'connect',
+            lambda do |plugin, next_plugin_callable|
+              plugin.connect(host_info, driver_props, is_initial_connection, next_plugin_callable)
+            end,
+            NOOP_CALLABLE,
+            plugin_to_skip:
+          )
+        end
       end
 
       def internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, plugin_to_skip: nil)
-        execute_with_subscribed_plugins(
-          'internal_connect',
-          lambda do |plugin, next_plugin_callable|
-            plugin.internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, next_plugin_callable)
-          end,
-          NOOP_CALLABLE,
-          plugin_to_skip:
-        )
+        @telemetry_factory.in_context('internal_connect', :nested) do
+          execute_with_subscribed_plugins(
+            'internal_connect',
+            lambda do |plugin, next_plugin_callable|
+              plugin.internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, next_plugin_callable)
+            end,
+            NOOP_CALLABLE,
+            plugin_to_skip:
+          )
+        end
       end
 
       # The context of the call currently being executed, for plugins that need to know more about
@@ -153,15 +158,18 @@ module AwsAdvancedRubyDriverWrapper
         Thread.current[CURRENT_CALL_CONTEXT_KEY] = context
 
         begin
-          execute_with_subscribed_plugins(
-            method_name,
-            lambda do |plugin, next_plugin_callable|
-              # Read from the context rather than from args and block, so that a plugin which
-              # replaced either is honoured by the plugins after it and by the target method.
-              plugin.execute(method_name, next_plugin_callable, *context.args, **kwargs, &context.block)
-            end,
-            target_callable
-          )
+          @telemetry_factory.in_context(method_name, :top_level, record_result: true) do |telemetry_context|
+            telemetry_context.set_attribute(Utils::Telemetry::TelemetryConst::RUBY_CALL_ANNOTATION, method_name)
+            execute_with_subscribed_plugins(
+              method_name,
+              lambda do |plugin, next_plugin_callable|
+                # Read from the context rather than from args and block, so that a plugin which
+                # replaced either is honoured by the plugins after it and by the target method.
+                plugin.execute(method_name, next_plugin_callable, *context.args, **kwargs, &context.block)
+              end,
+              target_callable
+            )
+          end
         ensure
           Thread.current[CURRENT_CALL_CONTEXT_KEY] = previous_context
         end
@@ -264,28 +272,49 @@ module AwsAdvancedRubyDriverWrapper
 
       # Builds the plugin pipeline function chain. The pipeline allows plugins to perform logic both before and after
       # the target driver function is called.
+      #
+      # When traces are recorded, each plugin's part of the call is recorded as a span named after the
+      # plugin. That is decided here, once per pipeline, so a pipeline built without traces does no
+      # tracing work at all.
       def make_pipeline(target_method_name)
         subscribed_plugins = @plugins.select do |p|
           p.subscribed_methods.include?('*') || p.subscribed_methods.include?(target_method_name)
         end
         raise Errors::AwsError, 'Plugin pipeline is nil' if subscribed_plugins.empty?
 
+        traced = @telemetry_factory.traces_in_use?
         base_plugin = subscribed_plugins.last
+        base_plugin_name = plugin_name(base_plugin) if traced
         base = lambda do |plugin_callable, target_driver_callable, *, **|
-          plugin_callable.call(base_plugin, target_driver_callable)
+          if traced
+            call_traced(plugin_callable, base_plugin, base_plugin_name, target_driver_callable)
+          else
+            plugin_callable.call(base_plugin, target_driver_callable)
+          end
         end
 
         subscribed_plugins[0...-1].reverse.reduce(base) do |next_plugin_callable, plugin|
+          name = plugin_name(plugin) if traced
           lambda do |plugin_callable, target_driver_callable, method_name, plugin_to_skip|
             if plugin_to_skip == plugin
               next_plugin_callable.call(plugin_callable, target_driver_callable, method_name, plugin_to_skip)
             else
-              plugin_callable.call(plugin, lambda do
+              call_next = lambda do
                 next_plugin_callable.call(plugin_callable, target_driver_callable, method_name, plugin_to_skip)
-              end)
+              end
+              traced ? call_traced(plugin_callable, plugin, name, call_next) : plugin_callable.call(plugin, call_next)
             end
           end
         end
+      end
+
+      def call_traced(plugin_callable, plugin, name, next_plugin_callable)
+        @telemetry_factory.in_context(name, :nested) { plugin_callable.call(plugin, next_plugin_callable) }
+      end
+
+      # The plugin's code (such as +failover+), or the class name of a plugin that has none.
+      def plugin_name(plugin)
+        self.class.plugin_classes.key(plugin.class) || plugin.class.name&.split('::')&.last || plugin.class.to_s
       end
     end
   end
