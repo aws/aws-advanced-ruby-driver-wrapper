@@ -199,7 +199,7 @@ Technical documentation regarding the functionality of the AWS Advanced Ruby Dri
 
 ### Known Limitations
 
-#### trilogy
+#### Trilogy MySQL Driver 
 
 - The KMS Encryption Plugin is not supported with `trilogy`, which has no prepared statements, so a bind parameter could only reach the server in plaintext. The plugin refuses to start on a `trilogy` connection.
 - The Blue/Green Deployment Plugin has not been verified with `trilogy`.
