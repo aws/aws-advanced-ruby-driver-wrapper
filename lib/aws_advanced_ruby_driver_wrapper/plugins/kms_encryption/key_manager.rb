@@ -14,7 +14,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'base64'
 require 'digest'
 require 'securerandom'
 require_relative '../../logging'
@@ -105,7 +104,7 @@ module AwsAdvancedRubyDriverWrapper
 
           plaintext = with_retry('DECRYPT_DATA_KEY') do
             response = @kms_client.decrypt(
-              ciphertext_blob: Base64.strict_decode64(encrypted_data_key.to_s.delete("\n")),
+              ciphertext_blob: strict_decode64(encrypted_data_key.to_s.delete("\n")),
               **(master_key_arn ? { key_id: master_key_arn } : {})
             )
             response.plaintext.dup.b
@@ -130,7 +129,7 @@ module AwsAdvancedRubyDriverWrapper
             response = @kms_client.generate_data_key(key_id: master_key_arn, key_spec: KMS_KEY_SPEC)
             GeneratedDataKey.new(
               plaintext: response.plaintext.dup.b,
-              encrypted_data_key: Base64.strict_encode64(response.ciphertext_blob),
+              encrypted_data_key: strict_encode64(response.ciphertext_blob),
               hmac_key: SecureRandom.bytes(HMAC_KEY_LENGTH)
             )
           end
@@ -272,10 +271,20 @@ module AwsAdvancedRubyDriverWrapper
         # @param encrypted_data_key [String]
         # @return [String]
         def data_key_cache_key(encrypted_data_key)
-          "#{DATA_KEY_CACHE_PREFIX}#{Base64.strict_encode64(Digest::SHA256.digest(encrypted_data_key.to_s))}"
+          "#{DATA_KEY_CACHE_PREFIX}#{strict_encode64(Digest::SHA256.digest(encrypted_data_key.to_s))}"
         end
 
         private
+
+        # Strict base64 (RFC 4648: no line breaks, padding required), using the encoding built into
+        # Array#pack rather than the base64 gem. Decoding raises ArgumentError on invalid input.
+        def strict_encode64(bytes)
+          [bytes].pack('m0')
+        end
+
+        def strict_decode64(encoded)
+          encoded.unpack1('m0')
+        end
 
         def authorize_master_key!(master_key_arn)
           return if @config.master_key_allowed?(master_key_arn)
