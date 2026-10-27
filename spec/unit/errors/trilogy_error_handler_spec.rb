@@ -85,6 +85,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::TrilogyErrorHandler do
       cause = Trilogy::ProtocolError.from_code('access denied', 1045)
       expect(handler.login_error?(error_with_cause(cause))).to be true
     end
+
+    # trilogy raises these as a codeless Trilogy::QueryError, its message being the call that failed
+    # and the trilogy error name.
+    context 'with a protocol violation' do
+      it 'is true while the server answers the authentication' do
+        expect(handler.login_error?(Trilogy::QueryError.new('trilogy_auth_recv: TRILOGY_PROTOCOL_VIOLATION'))).to be true
+      end
+
+      it 'is false after the connection is established' do
+        expect(handler.login_error?(Trilogy::QueryError.new('trilogy_query_recv: TRILOGY_PROTOCOL_VIOLATION'))).to be false
+      end
+
+      it 'is not a network error' do
+        expect(handler.network_error?(Trilogy::QueryError.new('trilogy_auth_recv: TRILOGY_PROTOCOL_VIOLATION'))).to be false
+      end
+    end
+
+    it 'is false for any other failure while the server answers the authentication' do
+      expect(handler.login_error?(Trilogy::QueryError.new('trilogy_auth_recv: TRILOGY_UNEXPECTED_PACKET'))).to be false
+    end
   end
 
   describe '#read_only_error?' do
