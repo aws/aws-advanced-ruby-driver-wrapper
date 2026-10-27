@@ -24,9 +24,9 @@ require_relative '../services/host_service'
 require_relative '../utils/rds_utils'
 require_relative '../utils/rds_url_type'
 require_relative '../utils/retry_util'
+require_relative '../utils/telemetry/telemetry_const'
 require_relative '../wrapper_property'
 require_relative 'failover_mode'
-require_relative '../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins

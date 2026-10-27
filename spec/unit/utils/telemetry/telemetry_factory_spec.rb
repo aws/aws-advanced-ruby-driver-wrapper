@@ -338,10 +338,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
         .not_to(change { finished_spans.size })
     end
 
-    it 'does nothing when traces are not recorded' do
-      untraced = described_class.new({})
+    it 'records nothing when traces are not recorded' do
+      context = failover_context
 
-      expect { untraced.post_copy(failover_context, telemetry::TraceLevel::FORCE_TOP_LEVEL) }.not_to raise_error
+      [described_class.new({}), telemetry::NullTelemetryFactory::INSTANCE].each do |untraced|
+        expect { untraced.post_copy(context, telemetry::TraceLevel::FORCE_TOP_LEVEL) }.not_to(change { finished_spans.size })
+      end
     end
   end
 
