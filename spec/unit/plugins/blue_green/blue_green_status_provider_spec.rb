@@ -352,13 +352,41 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::StatusProvider,
         expect(current_marker).to be_nil
       end
 
-      it 'creates an active marker at POST even if it never saw a pending one (started mid-switchover)' do
+      it 'does not create a marker at POST if it never saw IN_PROGRESS (started mid-switchover)' do
         # Jump straight to POST without an IN_PROGRESS observation, as if the provider began watching
-        # the deployment after it was already past IN_PROGRESS.
+        # the deployment after it was already past IN_PROGRESS. It has no reliable switchover time, so
+        # it cannot tell which connections predate the switchover and must invalidate nothing.
         provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
 
-        expect(current_marker).to be_a(bg::DropBlueConnectionsMarker)
-        expect(current_marker.active?).to be(true)
+        expect(markers).to be_empty
+      end
+
+      it 'does not create a marker at COMPLETED if it never saw IN_PROGRESS (started while already COMPLETED)' do
+        # A deployment stays in SWITCHOVER_COMPLETED until it is deleted, so a process that starts then
+        # sees COMPLETED as its first status. Creating a marker with "now" would invalidate every
+        # connection this process opened before now — including connections opened to green after the
+        # switchover — and would repeat each time the marker's TTL lapses and COMPLETED is re-processed.
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::COMPLETED, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(markers).to be_empty
+      end
+
+      it 'activates the marker before publishing the POST status' do
+        # The held-call re-check in BlueGreenPlugin#execute relies on this ordering: the marker must be
+        # active by the time the POST status is published and wakes calls held in SuspendExecuteRouting,
+        # or a released call could re-check against a still-pending marker and run on retired blue.
+        marker_active_when_post_published = nil
+        allow(storage_service).to receive(:set) do |ns, key, value|
+          if ns == bg::BlueGreenPlugin::BLUE_GREEN_NAME && value.respond_to?(:current_phase) && value.current_phase == phase::POST
+            marker_active_when_post_published = store[marker_key]&.active?
+          end
+          store[key] = value
+        end
+
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(marker_active_when_post_published).to be(true)
       end
 
       it 'stores the marker in the long-lived drop-marker partition, not the status partition' do
