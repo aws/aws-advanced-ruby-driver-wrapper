@@ -53,7 +53,13 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ['lib']
 
+  # The wrapper requires these, and Ruby no longer installs them by default from 3.4 (base64,
+  # bigdecimal) and 4.0 (logger) on. Declaring them keeps a bundle that does not otherwise include
+  # them, such as an app using the drivers without Active Record, from failing to load the wrapper.
+  spec.add_dependency 'base64'
+  spec.add_dependency 'bigdecimal'
   spec.add_dependency 'concurrent-ruby', '~> 1.3', '>= 1.3.7'
+  spec.add_dependency 'logger'
 
   spec.post_install_message = <<~MSG
     ═══════════════════════════════════════════════════════════════
