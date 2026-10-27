@@ -23,6 +23,7 @@ require_relative 'monitor_service'
 require_relative 'session_state_service'
 require_relative '../utils/storage/storage_service'
 require_relative '../utils/events/batching_event_publisher'
+require_relative '../utils/telemetry/telemetry_factory'
 
 module AwsAdvancedRubyDriverWrapper
   module Services
@@ -50,9 +51,10 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     module ServiceUtility
-      def self.create_standard_container(config)
+      def self.create_standard_container(config, telemetry_factory: nil)
         container = ServiceContainer.new
         container.event_publisher = CoreServices.event_publisher
+        container.telemetry_factory = telemetry_factory || Utils::Telemetry::TelemetryFactory.new(config.wrapper_props)
         container.connection_service = ConnectionService.new(container, config)
         container.dialect_service = DialectService.new(container.connection_service, config.driver_name)
         container.host_service = HostService.new(container)
@@ -71,6 +73,7 @@ module AwsAdvancedRubyDriverWrapper
         container.event_publisher = parent_container.event_publisher
         container.dialect_service = parent_container.dialect_service
         container.host_service = parent_container.host_service
+        container.telemetry_factory = parent_container.telemetry_factory
         container
       end
     end

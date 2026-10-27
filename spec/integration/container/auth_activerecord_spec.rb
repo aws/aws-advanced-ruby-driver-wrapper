@@ -61,7 +61,8 @@ RSpec.describe 'Auth plugins (ActiveRecord)', :integration,
       username: username,
       password: password,
       database: info.default_dbname,
-      connect_timeout: 10
+      connect_timeout: 10,
+      **Integration::TelemetryHelper.wrapper_props
     }
 
     # Both plugins authenticate over the wire, so TLS is required.

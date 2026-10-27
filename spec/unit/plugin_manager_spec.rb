@@ -134,6 +134,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
     manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     manager.instance_variable_set(:@plugins, plugins)
     manager.instance_variable_set(:@pipeline_cache, {})
+    manager.instance_variable_set(:@telemetry_factory, AwsAdvancedRubyDriverWrapper::Utils::Telemetry::NullTelemetryFactory::INSTANCE)
     manager
   end
 

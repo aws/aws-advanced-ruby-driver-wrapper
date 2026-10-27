@@ -358,6 +358,7 @@ module Integration
       config[:bg_connect_timeout_sec] = 60.0
       config[:connect_timeout] = 10
       config[:read_timeout] = 10 if @driver == TestDriver::MYSQL
+      config.merge!(TelemetryHelper.wrapper_props)
 
       # IAM-specific props
       if combo.include?('iam')

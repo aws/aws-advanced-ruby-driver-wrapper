@@ -557,7 +557,8 @@ module AwsAdvancedRubyDriverWrapper
             @service_container.plugin_manager,
             @service_container.session_state_service,
             @service_container.storage_service,
-            @service_container.monitor_service
+            @service_container.monitor_service,
+            @service_container.telemetry_factory
           )
 
           @host_list_provider = @service_container.dialect_service.db_dialect.create_host_list_provider(scoped_container)

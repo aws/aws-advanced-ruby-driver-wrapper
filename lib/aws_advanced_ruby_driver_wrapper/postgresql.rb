@@ -20,6 +20,7 @@ require_relative '../aws_advanced_ruby_driver_wrapper'
 require_relative 'utils/connection_config_parser'
 require_relative 'utils/sql_encoding'
 require_relative 'services/service_utility'
+require_relative 'utils/telemetry/telemetry_factory'
 require_relative 'ruby_method'
 require_relative 'errors'
 
@@ -45,17 +46,20 @@ module AwsAdvancedRubyDriverWrapper
     def initialize(*, **)
       ensure_pg!
       config = Utils::ConnectionConfigParser.parse(:postgresql, *, **)
-      @service_container = Services::ServiceUtility.create_standard_container(config)
-      @service_container.host_service.refresh_host_list
-      @prepared_on = {}
-      @prepared_sql = {}
-      @async_conn = nil
-      @async_sql = nil
-      @copy_conn = nil
-      @copy_sql = nil
-      @lo_conn = nil
-      conn_service = @service_container.connection_service
-      @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
+      telemetry_factory = Utils::Telemetry::TelemetryFactory.new(config.wrapper_props)
+      telemetry_factory.in_context("#{self.class.name}.new", Utils::Telemetry::TraceLevel::TOP_LEVEL, record_result: true) do
+        @service_container = Services::ServiceUtility.create_standard_container(config, telemetry_factory:)
+        @service_container.host_service.refresh_host_list
+        @prepared_on = {}
+        @prepared_sql = {}
+        @async_conn = nil
+        @async_sql = nil
+        @copy_conn = nil
+        @copy_sql = nil
+        @lo_conn = nil
+        conn_service = @service_container.connection_service
+        @service_container.plugin_manager.connect(conn_service.initial_host_info, conn_service.driver_props, true)
+      end
     end
 
     # Every canonical pg operation that talks to the server, and everything this class has to know about one: the

@@ -66,7 +66,8 @@ RSpec.describe 'GDB Switchover Failover', :integration,
       instance_host_patterns: Integration::RdsTestUtility.global_instance_host_patterns,
       extra_props: {
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => failover_timeout_sec,
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       }.merge(extra_props)
     )
   end

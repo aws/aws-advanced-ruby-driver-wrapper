@@ -81,7 +81,8 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
         pd::FAILOVER_MODE.name => 'reader_or_writer',
         pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       )
 
       threads = [
@@ -221,7 +222,8 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
           "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
         # Short expiration so the monitor re-creation path is also exercised during the sleep below
         pd::CUSTOM_ENDPOINT_MONITOR_EXPIRATION_SEC.name => 30.0,
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       )
 
       conn = Integration::DriverHelper.wrapper_connect(@driver, **conn_config)
@@ -294,7 +296,8 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
         pd::FAILOVER_MODE.name => 'reader_or_writer',
         pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{@info.instance_endpoint_suffix}:#{@info.instance_endpoint_port}",
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       )
 
       conn = Integration::DriverHelper.wrapper_connect(@driver, **conn_config)
@@ -357,7 +360,8 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
         pd::PLUGINS.name => 'custom_endpoint',
         pd::CLUSTER_INSTANCE_HOST_PATTERN.name =>
           "?.#{@pb_info.instance_endpoint_suffix}:#{@pb_info.instance_endpoint_port}",
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       )
     end
 
@@ -418,7 +422,8 @@ RSpec.describe 'CustomEndpoint', :integration, :custom_endpoint,
         dbname: @pb_info.default_dbname
       ).merge(
         pd::PLUGINS.name => 'custom_endpoint',
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       )
 
       conn = nil
