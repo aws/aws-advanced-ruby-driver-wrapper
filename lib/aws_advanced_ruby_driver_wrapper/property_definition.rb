@@ -195,8 +195,10 @@ module AwsAdvancedRubyDriverWrapper
     BG_DROP_BLUE_CONNECTIONS = WrapperProperty.new(
       :bg_drop_blue_connections,
       'Whether to invalidate connections that were opened to the old blue environment once a Blue/Green ' \
-      'switchover completes. When enabled, the next use of such a connection closes it so the ' \
-      'failover plugin reconnects through Blue/Green routing, preventing stale reads from old blue.',
+      'switchover completes. When enabled, the next use of such a connection closes it: with the failover ' \
+      'plugin enabled it reconnects through Blue/Green routing and raises FailoverSuccessError, and without ' \
+      'failover the driver raises its closed-connection error. Either way the caller gets an explicit error ' \
+      'instead of a stale read from old blue.',
       default_value: true, type: :boolean
     )
 

@@ -181,7 +181,11 @@ module AwsAdvancedRubyDriverWrapper
 
           logger.warn { 'Blue/Green switchover has timed out.' }
           @summary_status = @rollback ? @builder.created : @builder.completed(@rollback)
-          activate_drop_marker
+          # A timeout means the wrapper stopped waiting, not that the switchover is confirmed. Only
+          # activate the marker if the switchover was last observed at POST (past the point of no
+          # return); timing out in PREPARATION/IN_PROGRESS could still roll back, and dropping blue
+          # connections then would hit a blue that is still primary.
+          activate_drop_marker if @latest_status_phase == Phase::POST
           update_monitors
           update_status_cache
           log_current_context
@@ -415,15 +419,15 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def store_drop_marker(marker)
-          @storage_service.set(BlueGreenPlugin::BLUE_GREEN_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id), marker)
+          @storage_service.set(BlueGreenPlugin::DROP_MARKER_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id), marker)
         end
 
         def read_drop_marker
-          @storage_service.get(BlueGreenPlugin::BLUE_GREEN_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id), register_access: false)
+          @storage_service.get(BlueGreenPlugin::DROP_MARKER_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id), register_access: false)
         end
 
         def remove_drop_marker
-          @storage_service.remove(BlueGreenPlugin::BLUE_GREEN_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id))
+          @storage_service.remove(BlueGreenPlugin::DROP_MARKER_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id))
         end
 
         def nano_time

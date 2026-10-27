@@ -33,6 +33,14 @@ module AwsAdvancedRubyDriverWrapper
 
         BLUE_GREEN_NAME = :blue_green
 
+        # Storage partition for the drop-blue-connections marker, kept separate from BLUE_GREEN_NAME so
+        # it can outlive the status cache's TTL. The marker is stored once per switchover and never
+        # re-stamped, so a connection that sits idle longer than the status cache's TTL must still find
+        # the marker on its next use. A long TTL is safe: a marker only matches connections opened before
+        # its own switchover, and a later switchover overwrites it.
+        DROP_MARKER_NAME = :blue_green_drop_marker
+        DROP_MARKER_TTL_SEC = 86_400
+
         # When present in wrapper_props, internal_connect calls bypass BG routing.
         # Used by BG monitoring connections to avoid being intercepted by their own plugin.
         BG_SKIP_ROUTING_KEY = :'bg.skip_routing'
@@ -69,6 +77,7 @@ module AwsAdvancedRubyDriverWrapper
           @checked_drop_marker_id = nil
 
           service_container.storage_service.register(BLUE_GREEN_NAME, ttl: 3600)
+          service_container.storage_service.register(DROP_MARKER_NAME, ttl: DROP_MARKER_TTL_SEC)
 
           network_methods = service_container.dialect_service.driver_dialect.network_bound_methods
           @subscribed_methods = (Set['connect', 'internal_connect'] | network_methods).freeze
@@ -125,15 +134,19 @@ module AwsAdvancedRubyDriverWrapper
               next unless result.nil?
 
               @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
-              if @bg_status.nil?
-                @end_time_ns.set(nano_time)
-                return pipeline_callable.call
-              end
+              break if @bg_status.nil?
+
               routing = @bg_status.execute_routing.find { |r| r.match?(current_host, host_role) }
             end
 
             @end_time_ns.set(nano_time)
-            result.nil? ? pipeline_callable.call : result
+            return result unless result.nil?
+
+            # The call may have been held through the switchover (e.g. suspended during IN_PROGRESS and
+            # released at POST, which has no execute routing). Re-check whether this connection is now a
+            # stale blue connection before running it, so a held call is not run against retired blue.
+            invalidate_stale_blue_connection if stale_blue_connection?
+            pipeline_callable.call
           ensure
             @end_time_ns.set(nano_time) if @start_time_ns.get.positive? && @end_time_ns.get.zero?
           end
@@ -244,7 +257,7 @@ module AwsAdvancedRubyDriverWrapper
         def stale_blue_connection?
           return false unless @drop_blue_connections
 
-          marker = storage_service.get(BLUE_GREEN_NAME, self.class.drop_marker_key(@bgd_id), register_access: false)
+          marker = storage_service.get(DROP_MARKER_NAME, self.class.drop_marker_key(@bgd_id), register_access: false)
           return false unless marker.is_a?(DropBlueConnectionsMarker) && marker.active?
           return false if marker.id == @checked_drop_marker_id
 
