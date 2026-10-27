@@ -45,7 +45,6 @@ module Integration
         {
           pd::ENABLE_TELEMETRY.name => true,
           pd::TELEMETRY_SUBMIT_TOP_LEVEL.name => true,
-          pd::TELEMETRY_FAILOVER_ADDITIONAL_TOP_TRACE.name => true,
           pd::TELEMETRY_TRACES_BACKEND.name => traces_enabled? ? 'otlp' : 'none',
           pd::TELEMETRY_METRICS_BACKEND.name => metrics_enabled? ? 'otlp' : 'none'
         }
