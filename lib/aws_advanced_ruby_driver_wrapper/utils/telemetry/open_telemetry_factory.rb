@@ -72,8 +72,9 @@ module AwsAdvancedRubyDriverWrapper
             OpenTelemetry::Context.with_current(OpenTelemetry::Context.empty) { context.record_copy(trace_level) }
           end
 
-          # Unlike gauges, counters need no registry: creating one again under the same name returns the
-          # instrument the meter already has, so every counter object adds to the same total.
+          # Unlike gauges, counters need no registry: in current versions of the metrics SDK (0.21 on),
+          # creating one again under the same name returns the instrument the meter already has, so every
+          # counter object adds to the same total.
           def create_counter(name)
             OpenTelemetryCounter.new(meter, trim(name))
           end
