@@ -202,7 +202,6 @@ Technical documentation regarding the functionality of the AWS Advanced Ruby Dri
 #### Trilogy MySQL Driver 
 
 - The KMS Encryption Plugin is not supported with `trilogy`, which has no prepared statements, so a bind parameter could only reach the server in plaintext. The plugin refuses to start on a `trilogy` connection.
-- The Blue/Green Deployment Plugin has not been verified with `trilogy`.
 - To authenticate with an IAM token, set `enable_cleartext_plugin: true` (and `ssl_mode`), since `trilogy` only sends the token with `mysql_clear_password` when that option is set.
 
 #### Amazon RDS Blue/Green Deployments
