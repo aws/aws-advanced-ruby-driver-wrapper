@@ -387,26 +387,19 @@ module AwsAdvancedRubyDriverWrapper
           store_drop_marker(marker)
         end
 
-        # Confirms the switchover's marker so stale blue connections begin to be invalidated. If the
-        # provider only started observing the switchover after IN_PROGRESS, an already-active marker is
-        # created instead.
+        # Confirms the switchover's pending marker so stale blue connections begin to be invalidated.
+        # A marker is only created when IN_PROGRESS is observed (see #ensure_drop_marker_pending), since
+        # that is the only point with a reliable switchover time. A provider that first sees the
+        # deployment at POST/COMPLETED cannot tell which of its connections predate the switchover and
+        # would wrongly cover connections opened after switchover, including to green.
         def activate_drop_marker
           return unless @drop_blue_connections
           return if @rollback
 
           marker = read_drop_marker
-          if marker.nil?
-            hosts = blue_host_set
-            return if hosts.empty?
+          return if marker.nil? || marker.active?
 
-            marker = DropBlueConnectionsMarker.new(blue_hosts: hosts, switchover_time_ns: nano_time, active: true)
-            @drop_marker_id = marker.id
-          else
-            return if marker.active?
-
-            marker = marker.activated
-          end
-          store_drop_marker(marker)
+          store_drop_marker(marker.activated)
         end
 
         # The blue host set: downcased SOURCE endpoint names plus their pre-switchover IP addresses.
