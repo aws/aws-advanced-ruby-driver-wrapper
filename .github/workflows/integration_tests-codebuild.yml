@@ -1,0 +1,185 @@
+# CodeBuild variant of integration_tests.yml.
+#
+# Runs the same jobs on the self-hosted CodeBuild runners instead of GitHub-hosted ones.
+# Triggers: the same as integration_tests.yml (manual dispatch and push to main). The push trigger
+# is commented out in integration_tests.yml, so each push to main runs only this copy.
+# Uses a per-ref concurrency group with cancel-in-progress, so a newer run on the same ref
+# supersedes the one in progress.
+
+name: Integration Tests (CodeBuild)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. CodeBuild builds egress
+  # through the account's shared NAT IP and carry no Docker Hub credentials, so anonymous Docker Hub
+  # pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
+concurrency:
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push supersedes a stale commit. The "Clean up RDS resources" step runs on cancellation, so a
+  # superseded run tears down the DB clusters it created instead of leaking them.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  default-integration-tests:
+    name: Run Integration Tests (Ruby 3.3, RDS default)
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [ 'mysql', 'pg' ]
+
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: 'Set up Ruby 3.3'
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: 'Set up JDK 8'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: 'corretto'
+          java-version: 8
+
+      - name: 'Set up Gradle'
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: 'Configure AWS Credentials'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_integration_tests
+          role-duration-seconds: 21600
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Run Integration Tests (Ruby 3.3, RDS default)'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-3.3-${{ matrix.environment }} --info
+        env:
+          RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          MYSQL_VERSION: default
+          PG_VERSION: default
+
+      - name: 'Archive results (Ruby 3.3, RDS default)'
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rspec-integration-report-3.3-${{ matrix.environment }}-default
+          path: ./spec/integration/host/build/reports/tests/test/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  latest-integration-tests:
+    name: Run Integration Tests (Ruby 4.0, RDS latest)
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [ 'mysql', 'pg' ]
+
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: 'Set up Ruby 4.0'
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1
+        with:
+          ruby-version: '4.0'
+          bundler-cache: true
+
+      - name: 'Set up JDK 8'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: 'corretto'
+          java-version: 8
+
+      - name: 'Set up Gradle'
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: 'Configure AWS Credentials'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_integration_tests
+          role-duration-seconds: 21600
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Run Integration Tests (Ruby 4.0, RDS latest)'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-ruby-4.0-${{ matrix.environment }} --info
+        env:
+          RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          MYSQL_VERSION: latest
+          PG_VERSION: latest
+
+      - name: 'Archive results (Ruby 4.0, RDS latest)'
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rspec-integration-report-4.0-${{ matrix.environment }}-latest
+          path: ./spec/integration/host/build/reports/tests/test/
+          if-no-files-found: ignore
+          retention-days: 5
+
+  multi-az-integration-tests:
+    name: Run Multi-AZ Cluster Integration Tests
+    runs-on: codebuild-rubyWrapper-${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [ 'mysql', 'pg' ]
+
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: 'Set up Ruby 3.3'
+        uses: ruby/setup-ruby@651ff0d62c5c79bed6d53ec518387aae20e72c1a # v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: 'Set up JDK 8'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: 'corretto'
+          java-version: 8
+
+      - name: 'Set up Gradle'
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - name: 'Configure AWS Credentials'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_DEPLOY_ROLE }}
+          role-session-name: ruby_multi_az_integration_tests
+          role-duration-seconds: 21600
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Run Multi-AZ Integration Tests'
+        run: ./gradlew --no-parallel --no-daemon :integration-testing:test-${{ matrix.environment }}-multi-az --info
+        env:
+          RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: 'Archive Multi-AZ results'
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: rspec-integration-report-multi-az-${{ matrix.environment }}
+          path: ./spec/integration/host/build/reports/tests/test/
+          if-no-files-found: ignore
+          retention-days: 5

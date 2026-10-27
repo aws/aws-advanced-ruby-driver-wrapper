@@ -112,13 +112,13 @@ This is a minimal configuration. To add failover tuning, IAM or Secrets Manager 
 
 If you use an AI assistant (Kiro, Cursor, Claude Code, GitHub Copilot, ChatGPT, Amazon Bedrock, etc.), you can give it the wrapper's configuration assistant skill to help build, review, or troubleshoot your wrapper configuration.
 
-The skill is a single self-contained markdown file, [`RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md`](./docs/RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 51,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently), and the AI receives it with every message, so tools that cache prompts handle it most cheaply.
+The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 51,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently), and the AI receives it with every message, so tools that cache prompts handle it most cheaply.
 
 #### Quick start
 
-1. Download or copy [`RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md`](./docs/RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md).
+1. Download or copy [`SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md), or the whole `skills/ruby-wrapper-configuration-assistant` folder.
 2. Add it to your AI tool:
-   - **Tools that support Agent Skills** (Kiro, Cursor, Claude Code, GitHub Copilot in VS Code, and others): create a folder named `ruby-wrapper-configuration-assistant` in one of the tool's skills directories, and save the file in it as `SKILL.md`. The folder name must match the `name` field at the top of the file (`ruby-wrapper-configuration-assistant`), as the Agent Skills format requires; a tool may not load the skill if they differ.
+   - **Tools that support Agent Skills** (Kiro, Cursor, Claude Code, GitHub Copilot in VS Code, and others): copy the `ruby-wrapper-configuration-assistant` folder (or create a folder with that name and save `SKILL.md` in it) into one of the tool's skills directories. The folder name must match the `name` field at the top of the file (`ruby-wrapper-configuration-assistant`), as the Agent Skills format requires; a tool may not load the skill if they differ.
 
      | Tool | Project skills directory | User skills directory |
      |---|---|---|
@@ -132,7 +132,7 @@ The skill is a single self-contained markdown file, [`RUBY-WRAPPER-CONFIGURATION
      ```bash
      mkdir -p .claude/skills/ruby-wrapper-configuration-assistant
      curl -fsSL -o .claude/skills/ruby-wrapper-configuration-assistant/SKILL.md \
-       https://raw.githubusercontent.com/aws/aws-advanced-ruby-driver-wrapper/main/docs/RUBY-WRAPPER-CONFIGURATION-ASSISTANT.md
+       https://raw.githubusercontent.com/aws/aws-advanced-ruby-driver-wrapper/main/skills/ruby-wrapper-configuration-assistant/SKILL.md
      ```
 
    - **Claude Projects**: upload it as a project knowledge document.

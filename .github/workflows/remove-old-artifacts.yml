@@ -1,9 +1,16 @@
+# GitHub-hosted backup of the CodeBuild workflow remove-old-artifacts-codebuild.yml.
+#
+# Runs the same job on GitHub-hosted ubuntu runners. Kept as a manual-dispatch-only fallback; the
+# CodeBuild variant owns the schedule (commented out below).
+
 name: Remove Old Artifacts
 
 on:
-  schedule:
-    # Every day at 1am
-    - cron: '0 1 * * *'
+  workflow_dispatch:
+  # The schedule moved to the CodeBuild variant remove-old-artifacts-codebuild.yml.
+  # schedule:
+  #   # Every day at 1am
+  #   - cron: '0 1 * * *'
 
 permissions:
   actions: write

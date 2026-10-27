@@ -2,8 +2,8 @@
 
 | Release Date    | Release                                                                              |
 |-----------------|--------------------------------------------------------------------------------------|
-| October 7, 2026 | [1.0.1](https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/1.0.1)  |
-| October 5, 2026 | [1.0.0](https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/1.0.0)  |
+| October 7, 2026 | [1.0.1](https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/v1.0.1)  |
+| October 5, 2026 | [1.0.0](https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/v1.0.0)  |
 
 
 `aws_advanced_ruby_driver_wrapper` [follows semver](https://semver.org/#semantic-versioning-200) which means we

@@ -1,3 +1,9 @@
+# GitHub-hosted backup of the CodeBuild workflow pg_performance-codebuild.yml.
+#
+# Runs the same job on GitHub-hosted ubuntu runners. Kept as a manual-dispatch-only fallback; the
+# CodeBuild variant is the one wired to any automated trigger. Uses a per-ref
+# concurrency group with cancel-in-progress, so a newer run on the same ref supersedes the one in progress.
+
 name: Run Aurora PostgreSQL Performance Tests
 
 on:
@@ -7,7 +13,16 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  # Pull test container images from ECR Public rather than Docker Hub. GitHub-hosted runners pull
+  # from a pool of egress IPs shared across all GitHub customers, with no Docker Hub credentials, so
+  # anonymous Docker Hub pulls get rate limited.
+  TEST_CONTAINER_REGISTRY: ecr
+
 concurrency:
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push supersedes a stale commit. The "Clean up RDS resources" step runs on cancellation, so a
+  # superseded run tears down the DB clusters it created instead of leaking them.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 

@@ -73,12 +73,13 @@ When delivering a final configuration:
 - **Match the user's integration.** Active Record → a `config/database.yml` entry (YAML). Direct driver use → Ruby code constructing `AwsAdvancedRubyDriverWrapper::WrapperPgConnection` or `AwsAdvancedRubyDriverWrapper::WrapperMysql2Client`. If they didn't say, ask once before emitting code.
 - **Use the right key names for the integration** (see §11.3): in `database.yml` use `username` / `database` for both engines; with `WrapperPgConnection` use `user` / `dbname`; with `WrapperMysql2Client` use `username` / `database`.
 - **Include the Gemfile lines** the configuration needs (the wrapper gem, the driver gem, and any AWS SDK gem a plugin requires - see §3 preamble).
+- **After an interview, check the config before giving it.** Compare it against everything the user told you during the conversation - engine, deployment, endpoints, auth method (and its keys, e.g. `secret_id`), roles and reader entries, pool size, timeouts - and make sure each one is reflected. Then list which values are your assumptions or placeholders (database name, usernames, certificate paths, and anything else the user didn't give you). It should be immediately clear what values are invented and what was given by the user.
 - **Be tiered** (prescriptive first):
   1. Give the recommended config block.
   2. Explain the *minimum* set of choices that drove it (one or two sentences per non-trivial parameter).
   3. End with: *"Want me to walk through tradeoffs or show alternative configurations? Or shall I help you wire this into your code?"*
 - **Match the user's style.** Don't over-explain to experts. Don't under-explain to novices.
-- **Use placeholders for secrets.** Never echo real DB passwords, IAM tokens, AWS credentials, or KMS key ARNs a user pastes. Use `<password>`, `<secret-arn>`, `<kms-key-arn>`, etc. In Rails, suggest `<%= ENV['DB_PASSWORD'] %>` or Rails credentials rather than a literal password.
+- **Use placeholders for secrets.** Never echo real DB passwords, IAM tokens, AWS credentials, or KMS key ARNs a user pastes - not even partially or masked (no prefixes, suffixes, or `wJal…KEY`-style hints). Use `<password>`, `<secret-arn>`, `<kms-key-arn>`, etc. In Rails, suggest `<%= ENV['DB_PASSWORD'] %>` or Rails credentials rather than a literal password.
 
 ### 1.5 Posture
 
@@ -131,7 +132,7 @@ Each track lists the questions to ask **in order**, the decision they drive, and
 
 ### 2.3 Track C - Read replicas
 
-The wrapper does **not** route reads to replicas in any mode - there is no read/write splitting plugin. Reader routing is done by the application or by Active Record's multiple-database roles, with the wrapper running underneath each connection. **Do not ask the user which plugin they want.** Ask about the behavior they need:
+The wrapper does **not** route reads to replicas in any mode - there is no read/write splitting plugin. Tell the user this is **by design**, and why: Active Record already provides read/write splitting, and a wrapper version would need internal connection pools, which would conflict with Active Record's pool (§17). Reader routing is done by the application or by Active Record's multiple-database roles, with the wrapper running underneath each connection. **Do not ask the user which plugin they want.** Ask about the behavior they need:
 
 1. **Integration?**
    - *Active Record* → reader routing uses Active Record roles (`writing` / `reading`). Continue.
@@ -167,7 +168,7 @@ State that Active Record does not balance individual queries across replicas: a 
 
 ### 2.6 Track F - Blue/Green Deployment
 
-1. **Deployment and engine version?** (`bg` supports Aurora MySQL/PostgreSQL clusters and RDS MySQL/PostgreSQL instances. **Not** supported: RDS Multi-AZ DB clusters, Aurora Global Database, community DBs. Minimum engine versions apply for full support - §5.7.)
+1. **Deployment and engine version?** (`bg` supports Aurora MySQL/PostgreSQL clusters and RDS MySQL/PostgreSQL instances. **Not** supported: RDS Multi-AZ DB clusters, Aurora Global Database, community DBs - the reasons differ, see §5.7. Minimum engine versions apply for full support - §5.7.)
 2. **Endpoint?** (cluster writer/reader/custom, instance, RDS Proxy, IP. **CNAME aliases / custom domains are not supported.**)
 3. **More than one Blue/Green Deployment served by the same process?** → distinct `bgd_id` per deployment.
 4. **RDS PostgreSQL?** → `CREATE EXTENSION rds_tools;` is required for the metadata.
@@ -209,7 +210,7 @@ State that Active Record does not balance individual queries across replicas: a 
 
 This track covers problems caused by configuration. If the evidence points elsewhere (a wrapper bug, the network, the database itself), say so and point the user at §14.5 rather than guessing.
 
-An exception raised from inside the wrapper that isn't one of the documented error classes (§14.2) - for example a `NoMethodError` or `TypeError` with a backtrace in `aws_advanced_ruby_driver_wrapper` code - is a probable wrapper bug. Don't speculate about internal causes or offer configuration workarounds; collect the §14.5 details and point the user to the issue tracker.
+An exception raised from inside the wrapper that isn't one of the documented error classes (§14.2) - for example a `NoMethodError` or `TypeError` with a backtrace in `aws_advanced_ruby_driver_wrapper` code - is a probable wrapper bug. First compare it with the "Known issue" notes in this document: if one clearly matches, say so and give its workaround; if none matches, say that too rather than forcing a match. Don't speculate about internal causes or offer configuration workarounds; collect the §14.5 details and point the user to the issue tracker.
 
 Walk through these in order until the cause is clear:
 
@@ -579,7 +580,7 @@ production:
   bgd_id: "1"                         # distinct value per deployment if one process serves several
 ```
 
-- Supported: Aurora MySQL/PostgreSQL clusters, RDS MySQL/PostgreSQL instances. Not supported: RDS Multi-AZ DB clusters, Aurora Global Database, CNAME aliases.
+- Supported: Aurora MySQL/PostgreSQL clusters, RDS MySQL/PostgreSQL instances. Not supported: RDS Multi-AZ DB clusters, Aurora Global Database, CNAME aliases (why: §5.7).
 - RDS PostgreSQL needs `CREATE EXTENSION rds_tools;`. Minimum engine versions in §5.7.
 - Non-admin database users need read access to the metadata, granted before the deployment is created (§5.7).
 - During the switchover the plugin holds traffic (up to `bg_connect_timeout_sec`, default `30.0`) instead of letting it fail, then resumes against the promoted environment.
@@ -613,7 +614,7 @@ Gemfile: `gem 'aws-sdk-kms'` (and `gem 'pg_query', '>= 5.1'` on PostgreSQL). Bef
   wrapper_dialect: multi-az-pg-cluster      # or multi-az-mysql-cluster
 ```
 
-Point `host` at the cluster writer (or reader) endpoint. Everything else as 3.1. `bg` is not available for Multi-AZ DB clusters.
+Point `host` at the cluster writer (or reader) endpoint. Everything else as 3.1. `bg` doesn't apply to Multi-AZ DB clusters (§5.7); plan upgrades another way.
 
 ### 3.17 RDS Single-AZ / Multi-AZ DB instance / community database
 
@@ -857,6 +858,9 @@ Monitors Blue/Green switchover status and adjusts connection handling per phase:
 
 - **Supported:** Aurora MySQL/PostgreSQL clusters; RDS MySQL/PostgreSQL instances (Single-AZ and Multi-AZ DB instance).
 - **Not supported:** RDS Multi-AZ DB clusters, Aurora Global Database, community databases, Limitless, **CNAME aliases / custom domains**. IP addresses need the RDS endpoint information the plugin uses to identify the deployment.
+- **The first two are unsupported for different reasons - give the right one:**
+  - **RDS Multi-AZ DB clusters:** AWS itself doesn't offer Blue/Green Deployments for them (only for Multi-AZ DB *instance* deployments), so there's nothing for `bg` to handle. Don't describe this as a gap in the wrapper.
+  - **Aurora Global Database:** AWS does offer Blue/Green Deployments, but the `bg` plugin doesn't handle them, so a switchover gets no wrapper handling.
 - **Meaningless with:** `custom_endpoint`, `gdb_failover`.
 
 **Minimum engine versions for full support** (older versions are detected and the plugin falls back to its previous behavior - no action required):
@@ -1167,7 +1171,7 @@ Legend: ✅ compatible · ❌ not compatible · blank = no constraint recorded.
 | `iam` + `secrets_manager` | ❌ `PluginConflictError` | Both set the connection credential. |
 | `custom_endpoint` + `gdb_failover` | ❌ meaningless | A custom endpoint is a single-region cluster construct. |
 | `bg` + `custom_endpoint` | ❌ meaningless | A switchover replaces the deployment; the custom endpoint's member subset doesn't carry over. |
-| `bg` + `gdb_failover` | ❌ meaningless | The `bg` plugin doesn't support Aurora Global Database (AWS itself does support Blue/Green Deployments on Global Databases, but the wrapper provides no switchover handling there). |
+| `bg` + `gdb_failover` | ❌ meaningless | `bg` doesn't support Aurora Global Database (§5.7). |
 | Every other pair | ✅ | |
 
 ### 10.2 Database type compatibility
@@ -1266,7 +1270,7 @@ The default plugin list (§4.1) is designed for this case. Point the writing con
 
 ### 12.2 RDS Multi-AZ DB cluster (3 instances)
 
-Same plugin set as Aurora (`failover,initial_connection`, plus auth if needed). Dialect `multi-az-pg-cluster` / `multi-az-mysql-cluster`. `bg` is not available (AWS offers Blue/Green only for Multi-AZ DB *instance* deployments).
+Same plugin set as Aurora (`failover,initial_connection`, plus auth if needed). Dialect `multi-az-pg-cluster` / `multi-az-mysql-cluster`. `bg` doesn't apply (§5.7).
 
 ### 12.3 Aurora Global Database
 
@@ -1422,7 +1426,11 @@ The gem installs an `at_exit` hook (and `TERM`/`INT` traps that call `exit`) whi
 - An unexpected exception raised from inside the wrapper.
 - A performance regression after upgrading the gem.
 
-Open an issue at `https://github.com/aws/aws-advanced-ruby-driver-wrapper/issues` with: gem version, Ruby version, Active Record version (if used), driver gem and version, `wrapper_plugins`, `wrapper_dialect`, endpoint type, deployment type, and `DEBUG` wrapper logs with secrets removed. Questions go to `https://github.com/aws/aws-advanced-ruby-driver-wrapper/discussions`.
+Before opening one, search the repo's existing issues - open **and** closed - for the error message or symptom. If you can browse the web, run that search for the user; otherwise tell them to. If an issue matches, tell the user about it rather than acting on it yourself: if it's still open, suggest they add their details there instead of opening a duplicate; if it's closed, the fix may already be in a newer gem version.
+
+If nothing matches, tell the user they can open a new issue at `https://github.com/aws/aws-advanced-ruby-driver-wrapper/issues`, and list what to include: gem version, Ruby version, Active Record version (if used), driver gem and version, `wrapper_plugins`, `wrapper_dialect`, endpoint type, deployment type, and `DEBUG` wrapper logs with secrets removed. You may draft the issue text for them to post. Questions go to `https://github.com/aws/aws-advanced-ruby-driver-wrapper/discussions`.
+
+**Don't open, post to, comment on, or edit an issue or discussion yourself** - even if you have the tools to - unless the user explicitly asks you to. Suggest it and leave it to them.
 
 ---
 
@@ -1445,6 +1453,7 @@ Flag these whenever they appear in user configs:
 | IP / own domain host without `cluster_instance_host_pattern` | Topology discovery can't build per-instance hostnames | Set `cluster_instance_host_pattern` |
 | Asking for read/write splitting or per-query reader balancing | Not a wrapper feature in Ruby | Active Record roles (§3.7); a connection stays on the reader it opened |
 | Saying "reads inside a write transaction stay on the writer" | Only true for reads *outside* `connected_to(role: :reading)`. A `connected_to(role: :reading)` block inside an open write transaction still switches to the replica, so its reads don't see the transaction's uncommitted writes | Say precisely: reads outside the block use the writer (and see the transaction); reads inside the block go to a replica, outside the transaction (§3.7a) |
+| Estimating database connections as "processes × pool size" | Active Record opens pool connections lazily, so a process never uses more than the threads that touch the database at once - a pool larger than the thread count is never filled | Peak per process per role = min(threads using the database, pool). Sum that over every process (web and job workers), per role, and compare each role's total with its instance's connection limit (§13.1) |
 | Asking for an internal connection pool | Not a wrapper feature in Ruby | Active Record's pool; with direct connections, the app owns pooling |
 | Asking for EFM / host health probing | No such plugin in Ruby | Driver socket/statement timeouts, `topology_monitoring_*` timeouts for monitor connections; failover reacts when a call fails |
 | Host selection strategy other than `random` without registering it (or a misspelled name) | Only `random` is built in, and in 1.0.1 an unknown name fails silently (known issue) - no connection spreading, and reader failover never selects a reader (§7) | Use `random`, or register a custom selector at boot (§7) |
@@ -1452,7 +1461,7 @@ Flag these whenever they appear in user configs:
 | IAM on MySQL without `enable_cleartext_plugin: true` | Authentication fails | Add it, with TLS verification |
 | IAM / Secrets Manager without TLS verification | Credentials exposed or server impersonation | `sslmode: verify-full` / `ssl_mode: verify_identity` + CA bundle |
 | Temporary AWS credentials in environment variables | Never refreshed - auth fails at expiry | IAM roles or assume-role configuration |
-| `bg` on RDS Multi-AZ DB cluster, Aurora Global Database, or via a CNAME | Unsupported | Remove `bg` - Blue/Green handling isn't available for that deployment; for a CNAME, connect through the RDS endpoint instead |
+| `bg` on RDS Multi-AZ DB cluster, Aurora Global Database, or via a CNAME | Unsupported, for different reasons (§5.7). For Multi-AZ DB clusters, don't say only "the `bg` plugin doesn't support it" - AWS doesn't offer Blue/Green there at all | Remove `bg` and give the §5.7 reason; for a CNAME, connect through the RDS endpoint instead |
 | `custom_endpoint` with `gdb_failover` or `bg` | Meaningless combination | Drop one |
 | `initial_connection` on a custom endpoint without `initial_connection_substitute_host` | Passes the endpoint through unchanged - no effect | Set `any` / `reader`, or drop it |
 | `kms_encryption` without the server-side HMAC trigger | Plaintext can land in an encrypted column silently | Create the trigger on every encrypted column |
