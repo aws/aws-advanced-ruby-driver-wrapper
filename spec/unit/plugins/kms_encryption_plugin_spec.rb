@@ -15,8 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/trilogy_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_plugin'
 require 'aws_advanced_ruby_driver_wrapper/services/plugin_call_context'
 require 'aws_advanced_ruby_driver_wrapper/services/service_container'
@@ -139,12 +140,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
 
     context 'with MySQL' do
-      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
 
       it 'does not need pg_query' do
         allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).and_raise(LoadError)
 
         expect { plugin }.not_to raise_error
+      end
+    end
+
+    # Trilogy has no prepared statements, so a parameter could only reach the server written into
+    # the SQL - in plaintext, before the plugin could encrypt it.
+    context 'with trilogy' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialect.new }
+
+      it 'refuses to be set up' do
+        allow(encryption::KmsEncryptionUtility).to receive(:new)
+
+        expect { described_class.new(service_container, props) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError, /trilogy/)
+        expect(encryption::KmsEncryptionUtility).not_to have_received(:new)
       end
     end
   end
@@ -664,7 +679,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
   # mysql2 binds every parameter positionally, writes binary columns as plain binary strings, and
   # reads them back the same way, so both halves of the plugin have to be checked over it too.
   describe 'with the mysql2 driver' do
-    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
 
     it 'encrypts the parameters of a statement bound with question marks' do
       call('statement.execute', args: %w[Jo 123-45-6789], sql: 'INSERT INTO users (name, ssn) VALUES (?, ?)')
