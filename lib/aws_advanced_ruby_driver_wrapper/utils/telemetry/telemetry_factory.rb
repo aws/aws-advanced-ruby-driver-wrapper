@@ -47,13 +47,12 @@ module AwsAdvancedRubyDriverWrapper
         # Opens a context that the caller must close. Prefer {#in_context}, which closes it.
         #
         # @param name [String] the span name
-        # @param trace_level [Symbol] one of {TRACE_LEVELS}
+        # @param trace_level [Symbol] one of the {TraceLevel} constants
         # @return [OpenTelemetryContext, NullTelemetryContext]
         def open_telemetry_context(name, trace_level)
-          Telemetry.validate_trace_level!(trace_level)
           return NullTelemetryContext::INSTANCE if @traces_factory.nil?
 
-          trace_level = :nested if trace_level == :top_level && !@submit_top_level
+          trace_level = TraceLevel::NESTED if trace_level == TraceLevel::TOP_LEVEL && !@submit_top_level
           @traces_factory.open_telemetry_context(name, trace_level)
         end
 
@@ -66,10 +65,7 @@ module AwsAdvancedRubyDriverWrapper
         # @yieldparam context [OpenTelemetryContext, NullTelemetryContext]
         # @return the block's result
         def in_context(name, trace_level, record_result: false)
-          if @traces_factory.nil?
-            Telemetry.validate_trace_level!(trace_level)
-            return yield NullTelemetryContext::INSTANCE
-          end
+          return yield NullTelemetryContext::INSTANCE if @traces_factory.nil?
 
           context = open_telemetry_context(name, trace_level)
           failed = false

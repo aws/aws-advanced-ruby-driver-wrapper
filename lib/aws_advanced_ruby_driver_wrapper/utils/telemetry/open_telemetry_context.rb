@@ -31,10 +31,10 @@ module AwsAdvancedRubyDriverWrapper
           @name = name
           parent = OpenTelemetry::Trace.current_span.context
           in_trace = parent.valid?
-          trace_level = :no_trace if trace_level == :nested && !in_trace
+          trace_level = TraceLevel::NO_TRACE if trace_level == TraceLevel::NESTED && !in_trace
 
           case trace_level
-          when :force_top_level, :top_level
+          when TraceLevel::FORCE_TOP_LEVEL, TraceLevel::TOP_LEVEL
             # A top-level span starts a trace of its own. When there was a trace in progress, the new
             # one is linked to it and records its ID, so the two can still be found together.
             links = in_trace ? [OpenTelemetry::Trace::Link.new(parent)] : nil
@@ -43,7 +43,7 @@ module AwsAdvancedRubyDriverWrapper
             set_attribute(TelemetryConst::TRACE_NAME_ANNOTATION, name)
             make_current
             logger.debug { "[OTLP] Telemetry '#{name}' trace ID: #{@span.context.hex_trace_id}" }
-          when :nested
+          when TraceLevel::NESTED
             @span = tracer.start_span(name)
             set_attribute(TelemetryConst::TRACE_NAME_ANNOTATION, name)
             make_current

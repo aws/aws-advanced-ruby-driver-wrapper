@@ -19,6 +19,7 @@ require_relative '../errors'
 require_relative '../property_definition'
 require_relative '../ruby_method'
 require_relative '../utils/sql_encoding'
+require_relative '../utils/telemetry/telemetry_const'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
@@ -92,7 +93,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def connect(host_info, driver_props, is_initial_connection, plugin_to_skip: nil)
-        @telemetry_factory.in_context('connect', :nested) do
+        @telemetry_factory.in_context('connect', Utils::Telemetry::TraceLevel::NESTED) do
           execute_with_subscribed_plugins(
             'connect',
             lambda do |plugin, next_plugin_callable|
@@ -105,7 +106,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, plugin_to_skip: nil)
-        @telemetry_factory.in_context('internal_connect', :nested) do
+        @telemetry_factory.in_context('internal_connect', Utils::Telemetry::TraceLevel::NESTED) do
           execute_with_subscribed_plugins(
             'internal_connect',
             lambda do |plugin, next_plugin_callable|
@@ -158,7 +159,7 @@ module AwsAdvancedRubyDriverWrapper
         Thread.current[CURRENT_CALL_CONTEXT_KEY] = context
 
         begin
-          @telemetry_factory.in_context(method_name, :top_level, record_result: true) do |telemetry_context|
+          @telemetry_factory.in_context(method_name, Utils::Telemetry::TraceLevel::TOP_LEVEL, record_result: true) do |telemetry_context|
             telemetry_context.set_attribute(Utils::Telemetry::TelemetryConst::RUBY_CALL_ANNOTATION, method_name)
             execute_with_subscribed_plugins(
               method_name,
@@ -309,7 +310,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def call_traced(plugin_callable, plugin, name, next_plugin_callable)
-        @telemetry_factory.in_context(name, :nested) { plugin_callable.call(plugin, next_plugin_callable) }
+        @telemetry_factory.in_context(name, Utils::Telemetry::TraceLevel::NESTED) { plugin_callable.call(plugin, next_plugin_callable) }
       end
 
       # The plugin's code (such as +failover+), or the class name of a plugin that has none.
