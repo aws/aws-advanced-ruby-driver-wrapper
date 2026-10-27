@@ -18,6 +18,7 @@ require 'concurrent'
 require_relative '../errors'
 require_relative '../host/host_info'
 require_relative '../host/host_availability'
+require_relative '../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -44,7 +45,7 @@ module AwsAdvancedRubyDriverWrapper
                              host_info
                            end
 
-        conn = driver_dialect.connect(target_host_info, driver_props)
+        conn = with_driver_span { driver_dialect.connect(target_host_info, driver_props) }
 
         if conn.nil?
           raise Errors::AwsError,
@@ -83,7 +84,7 @@ module AwsAdvancedRubyDriverWrapper
 
       def internal_connect(host_info, driver_props, _wrapper_props, _is_initial_connection, _pipeline_callable)
         driver_dialect = @service_container.dialect_service.driver_dialect
-        driver_dialect.connect(host_info, driver_props)
+        with_driver_span { driver_dialect.connect(host_info, driver_props) }
       end
 
       def execute(target_method_name, target_callable, *args, **, &)
@@ -92,7 +93,7 @@ module AwsAdvancedRubyDriverWrapper
         succeeded = false
 
         begin
-          result = target_callable.call(*args, **, &)
+          result = with_driver_span { target_callable.call(*args, **, &) }
           succeeded = true
           result
         ensure
@@ -102,6 +103,16 @@ module AwsAdvancedRubyDriverWrapper
                                              dialect, conn, succeeded: succeeded)
           end
         end
+      end
+
+      private
+
+      # Records the time spent in the driver itself as a span named after the driver.
+      def with_driver_span(&)
+        telemetry_factory = @service_container.telemetry_factory
+        return yield unless telemetry_factory.traces_in_use?
+
+        telemetry_factory.in_context(@service_container.dialect_service.driver_dialect.name, Utils::Telemetry::TraceLevel::NESTED, &)
       end
     end
   end

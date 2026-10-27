@@ -26,6 +26,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Mysql2WrapperResult do
   def build_service_container_with_plugins(plugins, current_connection = nil)
     plugin_manager = AwsAdvancedRubyDriverWrapper::Services::PluginManager.allocate
     plugin_manager.instance_variable_set(:@pipeline_cache, {})
+    plugin_manager.instance_variable_set(:@telemetry_factory, AwsAdvancedRubyDriverWrapper::Utils::Telemetry::NullTelemetryFactory::INSTANCE)
     plugin_manager.instance_variable_set(:@plugins, plugins)
     connection_service = double('ConnectionService', current_connection: current_connection)
     container = AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new

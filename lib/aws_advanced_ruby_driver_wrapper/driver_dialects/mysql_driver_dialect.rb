@@ -41,6 +41,10 @@ module AwsAdvancedRubyDriverWrapper
         RubyMethod::RESULT_FREE.name
       ]).freeze
 
+      def name
+        'mysql2'
+      end
+
       def connect(host_info, config)
         ::Mysql2::Client.new(**prepare_connect_config(host_info, config))
       end

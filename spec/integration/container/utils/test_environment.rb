@@ -62,6 +62,16 @@ module Integration
       @info.request.engine
     end
 
+    # @return [TestTelemetryInfo, nil] where to send traces, when the traces collector is running
+    def traces_telemetry_info
+      @info.traces_telemetry_info
+    end
+
+    # @return [TestTelemetryInfo, nil] where to send metrics, when the metrics collector is running
+    def metrics_telemetry_info
+      @info.metrics_telemetry_info
+    end
+
     def database_info
       @info.database_info
     end
