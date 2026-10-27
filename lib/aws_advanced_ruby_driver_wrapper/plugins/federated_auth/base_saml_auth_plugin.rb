@@ -22,6 +22,7 @@ require_relative '../../utils/iam_auth_utils'
 require_relative '../../utils/rds_utils'
 require_relative '../../utils/rds_url_type'
 require_relative '../../utils/saml_utils'
+require_relative '../../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -204,7 +205,8 @@ module AwsAdvancedRubyDriverWrapper
 
         # Fetches a SAML assertion from the IdP and exchanges it for AWS credentials.
         def obtain_credentials(saml_props, region, idp_username, idp_password)
-          assertion = @telemetry_factory.in_context(self.class::TELEMETRY_FETCH_SAML, :nested, record_failure: true) do
+          assertion = @telemetry_factory.in_context(self.class::TELEMETRY_FETCH_SAML, Utils::Telemetry::TraceLevel::NESTED,
+                                                    record_failure: true) do
             self.class.fetch_saml_assertion(**saml_fetch_options(saml_props, idp_username, idp_password))
           end
           self.class.credentials_from_saml(

@@ -20,6 +20,7 @@ require_relative 'rds_url_type'
 require_relative '../property_definition'
 require_relative '../logging'
 require_relative 'telemetry/null_telemetry'
+require_relative 'telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Utils
@@ -90,7 +91,7 @@ module AwsAdvancedRubyDriverWrapper
       #   the token generation as a span
       def generate_token(region:, hostname:, port:, user:, credentials_provider:,
                          telemetry_factory: Telemetry::NullTelemetryFactory::INSTANCE)
-        telemetry_factory.in_context(TELEMETRY_FETCH_TOKEN, :nested, record_failure: true) do
+        telemetry_factory.in_context(TELEMETRY_FETCH_TOKEN, Telemetry::TraceLevel::NESTED, record_failure: true) do
           Aws::RDS::AuthTokenGenerator
             .new(credentials: credentials_provider)
             .auth_token(region:, endpoint: "#{hostname}:#{port}", user_name: user)

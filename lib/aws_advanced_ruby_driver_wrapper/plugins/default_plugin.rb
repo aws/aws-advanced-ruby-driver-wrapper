@@ -18,6 +18,7 @@ require 'concurrent'
 require_relative '../errors'
 require_relative '../host/host_info'
 require_relative '../host/host_availability'
+require_relative '../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -111,7 +112,7 @@ module AwsAdvancedRubyDriverWrapper
         telemetry_factory = @service_container.telemetry_factory
         return yield unless telemetry_factory.traces_in_use?
 
-        telemetry_factory.in_context(@service_container.dialect_service.driver_dialect.name, :nested, &)
+        telemetry_factory.in_context(@service_container.dialect_service.driver_dialect.name, Utils::Telemetry::TraceLevel::NESTED, &)
       end
     end
   end

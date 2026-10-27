@@ -64,10 +64,10 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           def post_copy(context, trace_level)
-            return if trace_level == :no_trace || !context.is_a?(OpenTelemetryContext)
+            return if trace_level == TraceLevel::NO_TRACE || !context.is_a?(OpenTelemetryContext)
             # A top-level copy must not find the trace in progress, or it would be linked to that trace
             # as well as to the span it copies.
-            return context.record_copy(trace_level) if trace_level == :nested
+            return context.record_copy(trace_level) if trace_level == TraceLevel::NESTED
 
             OpenTelemetry::Context.with_current(OpenTelemetry::Context.empty) { context.record_copy(trace_level) }
           end

@@ -26,6 +26,7 @@ require_relative '../utils/rds_url_type'
 require_relative '../utils/retry_util'
 require_relative '../wrapper_property'
 require_relative 'failover_mode'
+require_relative '../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -267,7 +268,7 @@ module AwsAdvancedRubyDriverWrapper
       # a trace of its own.
       def with_failover_telemetry(span_name)
         telemetry_context = nil
-        @telemetry_factory.in_context(span_name, :nested) do |context|
+        @telemetry_factory.in_context(span_name, Utils::Telemetry::TraceLevel::NESTED) do |context|
           telemetry_context = context
           yield
         rescue *SUCCESSFUL_FAILOVER_ERRORS => e
@@ -285,7 +286,7 @@ module AwsAdvancedRubyDriverWrapper
 
       # Runs while the failover's outcome is propagating, so an error here must not replace it.
       def submit_failover_copy(telemetry_context)
-        @telemetry_factory.post_copy(telemetry_context, :force_top_level)
+        @telemetry_factory.post_copy(telemetry_context, Utils::Telemetry::TraceLevel::FORCE_TOP_LEVEL)
       rescue StandardError => e
         logger.debug { "Unable to submit the failover trace as a trace of its own: #{e.message}" }
       end

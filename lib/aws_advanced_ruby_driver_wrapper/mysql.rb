@@ -36,7 +36,7 @@ module AwsAdvancedRubyDriverWrapper
       ensure_mysql2!
       config = Utils::ConnectionConfigParser.parse(:mysql2, **)
       telemetry_factory = Utils::Telemetry::TelemetryFactory.new(config.wrapper_props)
-      telemetry_factory.in_context("#{self.class.name}.new", :top_level, record_result: true) do
+      telemetry_factory.in_context("#{self.class.name}.new", Utils::Telemetry::TraceLevel::TOP_LEVEL, record_result: true) do
         @service_container = Services::ServiceUtility.create_standard_container(config, telemetry_factory:)
         @service_container.host_service.refresh_host_list
         @async_conn = nil

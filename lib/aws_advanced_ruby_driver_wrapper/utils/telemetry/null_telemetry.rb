@@ -14,8 +14,6 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require_relative 'telemetry_const'
-
 module AwsAdvancedRubyDriverWrapper
   module Utils
     module Telemetry
@@ -58,19 +56,15 @@ module AwsAdvancedRubyDriverWrapper
 
       # The factory used when telemetry is disabled.
       class NullTelemetryFactory
-        def open_telemetry_context(_name, trace_level)
-          Telemetry.validate_trace_level!(trace_level)
+        def open_telemetry_context(_name, _trace_level)
           NullTelemetryContext::INSTANCE
         end
 
-        def in_context(_name, trace_level, record_result: false, record_failure: false)
-          Telemetry.validate_trace_level!(trace_level)
+        def in_context(_name, _trace_level, record_result: false, record_failure: false)
           yield NullTelemetryContext::INSTANCE
         end
 
-        def post_copy(_context, trace_level)
-          Telemetry.validate_trace_level!(trace_level)
-        end
+        def post_copy(_context, _trace_level); end
 
         def create_counter(_name)
           NullTelemetryCounter::INSTANCE

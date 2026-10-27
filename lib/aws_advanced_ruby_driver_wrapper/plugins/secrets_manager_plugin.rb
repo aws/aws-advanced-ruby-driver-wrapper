@@ -19,6 +19,7 @@ require_relative '../errors'
 require_relative '../logging'
 require_relative '../property_definition'
 require_relative '../utils/aws_credentials_utils'
+require_relative '../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -219,7 +220,7 @@ module AwsAdvancedRubyDriverWrapper
       # the service.
       def fetch_secret_and_report_if_fresh?(force:)
         @fetch_credentials_counter.inc
-        @telemetry_factory.in_context(TELEMETRY_FETCH_CREDENTIALS, :nested, record_failure: true) do
+        @telemetry_factory.in_context(TELEMETRY_FETCH_CREDENTIALS, Utils::Telemetry::TraceLevel::NESTED, record_failure: true) do
           load_secret_and_report_if_fresh?(force:)
         end
       end

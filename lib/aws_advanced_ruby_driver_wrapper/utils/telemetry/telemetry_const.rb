@@ -17,22 +17,19 @@
 module AwsAdvancedRubyDriverWrapper
   module Utils
     module Telemetry
-      # The levels a telemetry context can be opened at:
-      #
-      # - +:force_top_level+ - always starts a new trace, whatever the settings say.
-      # - +:top_level+ - starts a new trace when +telemetry_submit_top_level+ is enabled, and is
-      #   otherwise treated as +:nested+.
-      # - +:nested+ - becomes a child of the current span. Outside of any trace nothing is recorded,
-      #   so the wrapper does not start traces of its own unless asked to.
-      # - +:no_trace+ - records nothing.
-      TRACE_LEVELS = %i[force_top_level top_level nested no_trace].freeze
-
-      # Checked whether or not traces are recorded, so that a mistyped level fails wherever it is
-      # used rather than only once tracing is turned on.
-      #
-      # @raise [ArgumentError] unless the level is one of {TRACE_LEVELS}
-      def self.validate_trace_level!(trace_level)
-        raise ArgumentError, "Unknown trace level: #{trace_level.inspect}" unless TRACE_LEVELS.include?(trace_level)
+      # The levels a telemetry context can be opened at. Callers name a level with one of these
+      # constants, so that a mistyped level raises NameError where it is written.
+      module TraceLevel
+        # Always starts a new trace, whatever the settings say.
+        FORCE_TOP_LEVEL = :force_top_level
+        # Starts a new trace when +telemetry_submit_top_level+ is enabled, and is otherwise treated
+        # as {NESTED}.
+        TOP_LEVEL = :top_level
+        # Becomes a child of the current span. Outside of any trace nothing is recorded, so the
+        # wrapper does not start traces of its own unless asked to.
+        NESTED = :nested
+        # Records nothing.
+        NO_TRACE = :no_trace
       end
 
       # Instrumentation scope name the wrapper's tracer and meter are registered under.

@@ -28,7 +28,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
       factory = described_class.new({ telemetry_traces_backend: 'otlp', telemetry_metrics_backend: 'otlp' })
 
       expect(factory.in_use?).to be(false)
-      expect(factory.open_telemetry_context('call', :force_top_level)).to be(telemetry::NullTelemetryContext::INSTANCE)
+      expect(factory.open_telemetry_context('call', telemetry::TraceLevel::FORCE_TOP_LEVEL)).to be(telemetry::NullTelemetryContext::INSTANCE)
       expect(factory.create_counter('counter')).to be(telemetry::NullTelemetryCounter::INSTANCE)
       expect(factory.create_gauge('gauge') { 1 }).to be(telemetry::NullTelemetryGauge::INSTANCE)
     end
@@ -37,14 +37,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
       factory = described_class.new(telemetry_props)
 
       expect(factory.in_use?).to be(true)
-      expect(factory.open_telemetry_context('call', :no_trace)).to be_a(telemetry::OpenTelemetryContext)
+      expect(factory.open_telemetry_context('call', telemetry::TraceLevel::NO_TRACE)).to be_a(telemetry::OpenTelemetryContext)
       expect(factory.create_counter('counter')).to be_a(telemetry::OpenTelemetryCounter)
     end
 
     it 'accepts backend names in any case' do
       factory = described_class.new(telemetry_props(telemetry_traces_backend: 'OTLP', telemetry_metrics_backend: 'None'))
 
-      expect(factory.open_telemetry_context('call', :no_trace)).to be_a(telemetry::OpenTelemetryContext)
+      expect(factory.open_telemetry_context('call', telemetry::TraceLevel::NO_TRACE)).to be_a(telemetry::OpenTelemetryContext)
       expect(factory.create_counter('counter')).to be(telemetry::NullTelemetryCounter::INSTANCE)
     end
 
@@ -52,7 +52,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
       factory = described_class.new(telemetry_props(telemetry_traces_backend: 'none'))
 
       expect(factory.in_use?).to be(true)
-      expect(factory.open_telemetry_context('call', :force_top_level)).to be(telemetry::NullTelemetryContext::INSTANCE)
+      expect(factory.open_telemetry_context('call', telemetry::TraceLevel::FORCE_TOP_LEVEL)).to be(telemetry::NullTelemetryContext::INSTANCE)
       expect(factory.create_counter('counter')).to be_a(telemetry::OpenTelemetryCounter)
     end
 
@@ -116,13 +116,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
     context 'with a nested context' do
       it 'records nothing outside of a trace' do
-        open_and_close('wrapper call', :nested)
+        open_and_close('wrapper call', telemetry::TraceLevel::NESTED)
 
         expect(finished_spans).to be_empty
       end
 
       it 'records a child of the current span inside a trace' do
-        in_application_span { open_and_close('wrapper call', :nested) }
+        in_application_span { open_and_close('wrapper call', telemetry::TraceLevel::NESTED) }
 
         child = span_named('wrapper call')
         parent = span_named('application')
@@ -133,7 +133,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
       it 'makes its span the parent of the spans opened inside it' do
         in_application_span do
-          factory.in_context('outer', :nested) { open_and_close('inner', :nested) }
+          factory.in_context('outer', telemetry::TraceLevel::NESTED) { open_and_close('inner', telemetry::TraceLevel::NESTED) }
         end
 
         expect(span_named('inner').parent_span_id).to eq(span_named('outer').span_id)
@@ -141,7 +141,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
       it 'restores the span that was current before it was opened' do
         in_application_span do |application_span|
-          open_and_close('wrapper call', :nested)
+          open_and_close('wrapper call', telemetry::TraceLevel::NESTED)
 
           expect(OpenTelemetry::Trace.current_span).to eq(application_span)
         end
@@ -150,8 +150,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
     context 'with a top-level context when telemetry_submit_top_level is disabled' do
       it 'is recorded as a nested context' do
-        open_and_close('outside', :top_level)
-        in_application_span { open_and_close('inside', :top_level) }
+        open_and_close('outside', telemetry::TraceLevel::TOP_LEVEL)
+        in_application_span { open_and_close('inside', telemetry::TraceLevel::TOP_LEVEL) }
 
         expect(span_named('outside')).to be_nil
         expect(span_named('inside').parent_span_id).to eq(span_named('application').span_id)
@@ -162,7 +162,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
       let(:submit_top_level) { true }
 
       it 'starts a trace outside of any trace' do
-        open_and_close('wrapper call', :top_level)
+        open_and_close('wrapper call', telemetry::TraceLevel::TOP_LEVEL)
 
         span = span_named('wrapper call')
         expect(span.parent_span_id).to eq(OpenTelemetry::Trace::INVALID_SPAN_ID)
@@ -171,7 +171,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
       end
 
       it 'starts a trace of its own inside a trace, linked to the one in progress' do
-        in_application_span { open_and_close('wrapper call', :top_level) }
+        in_application_span { open_and_close('wrapper call', telemetry::TraceLevel::TOP_LEVEL) }
 
         span = span_named('wrapper call')
         application = span_named('application')
@@ -184,7 +184,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
     context 'with a forced top-level context' do
       it 'starts a trace even when telemetry_submit_top_level is disabled' do
-        open_and_close('wrapper call', :force_top_level)
+        open_and_close('wrapper call', telemetry::TraceLevel::FORCE_TOP_LEVEL)
 
         expect(span_named('wrapper call').parent_span_id).to eq(OpenTelemetry::Trace::INVALID_SPAN_ID)
       end
@@ -192,7 +192,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
     context 'with no trace' do
       it 'records nothing, even inside a trace' do
-        in_application_span { open_and_close('wrapper call', :no_trace) }
+        in_application_span { open_and_close('wrapper call', telemetry::TraceLevel::NO_TRACE) }
 
         expect(finished_spans.map(&:name)).to eq(['application'])
       end
@@ -203,24 +203,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     let(:factory) { described_class.new(telemetry_props(telemetry_submit_top_level: true)) }
 
     it 'returns the result of the block' do
-      expect(factory.in_context('call', :top_level) { 42 }).to eq(42)
+      expect(factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL) { 42 }).to eq(42)
     end
 
     it 'leaves the status of the span unset unless asked to record the result' do
-      factory.in_context('call', :top_level) { nil }
+      factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL) { nil }
 
       expect(span_named('call').status.code).to eq(status_codes::UNSET)
     end
 
     it 'marks the span as succeeded when the block returns' do
-      factory.in_context('call', :top_level, record_result: true) { nil }
+      factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL, record_result: true) { nil }
 
       expect(span_named('call').status.code).to eq(status_codes::OK)
     end
 
     it 'marks the span as failed and records the error when the block raises' do
       expect do
-        factory.in_context('call', :top_level, record_result: true) { raise ArgumentError, 'bad argument' }
+        factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL, record_result: true) { raise ArgumentError, 'bad argument' }
       end.to raise_error(ArgumentError, 'bad argument')
 
       span = span_named('call')
@@ -230,7 +230,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     end
 
     it 'closes the span when the block raises without recording the error unless asked to' do
-      expect { factory.in_context('call', :top_level) { raise ArgumentError } }.to raise_error(ArgumentError)
+      expect { factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL) { raise ArgumentError } }.to raise_error(ArgumentError)
 
       span = span_named('call')
       expect(span.status.code).to eq(status_codes::UNSET)
@@ -239,19 +239,23 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     end
 
     it 'yields a context whose attributes are recorded on the span' do
-      factory.in_context('call', :top_level) { |context| context.set_attribute('ruby_call', 'connection.query') }
+      factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL) { |context| context.set_attribute('ruby_call', 'connection.query') }
 
       expect(span_named('call').attributes).to include('ruby_call' => 'connection.query')
     end
 
     it 'with record_failure, leaves the status of the span unset when the block returns' do
-      factory.in_context('call', :top_level, record_failure: true) { nil }
+      factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL, record_failure: true) { nil }
 
       expect(span_named('call').status.code).to eq(status_codes::UNSET)
     end
 
     it 'with record_failure, marks the span as failed and records the error when the block raises' do
-      expect { factory.in_context('call', :top_level, record_failure: true) { raise IOError, 'lost' } }.to raise_error(IOError)
+      expect do
+        factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL, record_failure: true) do
+          raise IOError, 'lost'
+        end
+      end.to raise_error(IOError)
 
       span = span_named('call')
       expect(span.status.code).to eq(status_codes::ERROR)
@@ -259,27 +263,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     end
 
     it 'marks the span as succeeded when the block is left early' do
-      factory.in_context('call', :top_level, record_result: true) { break }
+      factory.in_context('call', telemetry::TraceLevel::TOP_LEVEL, record_result: true) { break }
 
       expect(span_named('call').status.code).to eq(status_codes::OK)
       expect(OpenTelemetry::Trace.current_span).to eq(OpenTelemetry::Trace::Span::INVALID)
     end
 
-    it 'rejects a trace level it does not know' do
-      expect { factory.in_context('call', :toplevel) { nil } }.to raise_error(ArgumentError, /Unknown trace level: :toplevel/)
-    end
-
-    it 'rejects a trace level it does not know even when traces are not recorded' do
-      [described_class.new({}), telemetry::NullTelemetryFactory::INSTANCE].each do |untraced|
-        expect { untraced.in_context('call', :toplevel) { nil } }.to raise_error(ArgumentError, /Unknown trace level/)
-        expect { untraced.open_telemetry_context('call', :toplevel) }.to raise_error(ArgumentError, /Unknown trace level/)
-      end
-    end
-
     it 'yields the null context when traces are not recorded' do
       factory = described_class.new({})
 
-      expect { |block| factory.in_context('call', :force_top_level, &block) }
+      expect { |block| factory.in_context('call', telemetry::TraceLevel::FORCE_TOP_LEVEL, &block) }
         .to yield_with_args(telemetry::NullTelemetryContext::INSTANCE)
     end
   end
@@ -290,7 +283,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     def failover_context
       context = nil
       in_application_span do
-        factory.in_context('failover', :nested) do |ctx|
+        factory.in_context('failover', telemetry::TraceLevel::NESTED) do |ctx|
           context = ctx
           ctx.set_attribute('host', 'instance-1')
           ctx.success = true
@@ -300,7 +293,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     end
 
     it 'records a top-level copy of the span, with the same timings, attributes and status' do
-      factory.post_copy(failover_context, :force_top_level)
+      factory.post_copy(failover_context, telemetry::TraceLevel::FORCE_TOP_LEVEL)
 
       original = span_named('failover')
       copy = span_named('copy: failover')
@@ -313,7 +306,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
     end
 
     it 'links the copy only to the span it copies, not to the trace in progress' do
-      in_application_span { factory.post_copy(failover_context, :force_top_level) }
+      in_application_span { factory.post_copy(failover_context, telemetry::TraceLevel::FORCE_TOP_LEVEL) }
 
       copy = span_named('copy: failover')
       expect(copy.links.map { |link| link.span_context.span_id }).to eq([span_named('failover').span_id])
@@ -322,7 +315,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
     it 'records a nested copy as a child of the current span' do
       context = failover_context
-      in_application_span { factory.post_copy(context, :nested) }
+      in_application_span { factory.post_copy(context, telemetry::TraceLevel::NESTED) }
 
       application = finished_spans.reverse.find { |span| span.name == 'application' }
       expect(span_named('copy: failover').parent_span_id).to eq(application.span_id)
@@ -330,26 +323,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory 
 
     it 'records nothing for the no_trace level' do
       context = failover_context
-      expect { factory.post_copy(context, :no_trace) }.not_to(change { finished_spans.size })
+      expect { factory.post_copy(context, telemetry::TraceLevel::NO_TRACE) }.not_to(change { finished_spans.size })
     end
 
     it 'does nothing for a span that is not recording, such as one that was not sampled' do
-      unrecorded = telemetry::OpenTelemetryContext.new(OpenTelemetry::Trace::Tracer.new, 'failover', :force_top_level)
+      unrecorded = telemetry::OpenTelemetryContext.new(OpenTelemetry::Trace::Tracer.new, 'failover', telemetry::TraceLevel::FORCE_TOP_LEVEL)
       unrecorded.close
 
-      expect { factory.post_copy(unrecorded, :force_top_level) }.not_to(change { finished_spans.size })
+      expect { factory.post_copy(unrecorded, telemetry::TraceLevel::FORCE_TOP_LEVEL) }.not_to(change { finished_spans.size })
     end
 
     it 'does nothing for a context that recorded no span' do
-      expect { factory.post_copy(telemetry::NullTelemetryContext::INSTANCE, :force_top_level) }
+      expect { factory.post_copy(telemetry::NullTelemetryContext::INSTANCE, telemetry::TraceLevel::FORCE_TOP_LEVEL) }
         .not_to(change { finished_spans.size })
     end
 
-    it 'does nothing when traces are not recorded, but still rejects a trace level it does not know' do
+    it 'does nothing when traces are not recorded' do
       untraced = described_class.new({})
 
-      expect { untraced.post_copy(failover_context, :force_top_level) }.not_to raise_error
-      expect { untraced.post_copy(failover_context, :forced) }.to raise_error(ArgumentError, /Unknown trace level/)
+      expect { untraced.post_copy(failover_context, telemetry::TraceLevel::FORCE_TOP_LEVEL) }.not_to raise_error
     end
   end
 

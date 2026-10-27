@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative '../../../logging'
+require_relative '../../../utils/telemetry/telemetry_const'
 
 module AwsAdvancedRubyDriverWrapper
   module Plugins
@@ -42,7 +43,7 @@ module AwsAdvancedRubyDriverWrapper
 
           # Records the time a call is held while the switchover is in progress as a span.
           def in_switchover_span(telemetry_factory, &)
-            telemetry_factory.in_context(TELEMETRY_SWITCHOVER, :nested, &)
+            telemetry_factory.in_context(TELEMETRY_SWITCHOVER, Utils::Telemetry::TraceLevel::NESTED, &)
           end
 
           # Blocks until the Blue/Green switchover phase is no longer IN_PROGRESS, or until the
