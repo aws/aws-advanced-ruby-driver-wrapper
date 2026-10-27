@@ -587,7 +587,7 @@ production:
 - [Unreleased] **Invalidating old-blue connections (`bg_drop_blue_connections`, default `true`):** connections that were already open to blue before the switchover (for example idle pooled connections) would otherwise keep serving reads from the old, now-retired blue environment. Once the switchover is confirmed, the plugin marks those connections stale and closes each one the next time it is used:
   - **With the `failover` plugin (recommended, as above):** closing the connection out from under the pipeline makes the failover plugin reconnect through Blue/Green routing and raise `FailoverSuccessError` (or `TransactionStateUnknownError` inside a transaction) — the same signal a normal failover raises, one per stale connection.
   - **Without a failover plugin:** the underlying driver raises its usual closed-connection error on that first use.
-  - Ruby cannot safely abort a connection from another thread, so each connection checks itself on its own thread at next use rather than being aborted immediately from the monitor. Queries already in flight are not interrupted (their results are not stale), and idle sessions on old blue stay open until their next use or until the pool reaps them. Set `bg_drop_blue_connections: false` to disable.
+  - Ruby cannot safely abort a connection from another thread, so each connection checks itself on its own thread at next use rather than being aborted immediately from the monitor. Queries already executing when the switchover starts run to completion on blue while it is still the primary; calls issued *during* the switchover are held, and if their connection was opened to blue it is closed before they run. Idle sessions on old blue stay open until their next use or until the pool reaps them. Set `bg_drop_blue_connections: false` to disable.
 
 ### 3.15 KMS column encryption
 
@@ -890,14 +890,15 @@ Grant **before** creating the Blue/Green Deployment: the green environment copie
 
 **Parameters:**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `bgd_id` | String | `'1'` | Identifies the deployment. All connections for one deployment share a value; different deployments need distinct values. |
-| `bg_connect_timeout_sec` | Float | `30.0` | Maximum wait for a new connection while traffic is suspended during switchover. |
-| `bg_baseline_sec` | Float | `60.0` | Baseline status-check interval. Keep below 900. |
-| `bg_increased_sec` | Float | `1.0` | Increased status-check interval. Configure within 0.5-2. |
-| `bg_high_sec` | Float | `0.1` | High-frequency status-check interval. Configure within 0.05-0.5. |
-| `bg_switchover_timeout_sec` | Float | `180.0` | Maximum switchover duration; after it the wrapper assumes completion and resumes normal operation. |
+| Name                                    | Type    | Default | Description                                                                                                                                                                                                                          |
+|-----------------------------------------|---------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bgd_id`                                | String  | `'1'`   | Identifies the deployment. All connections for one deployment share a value; different deployments need distinct values.                                                                                                             |
+| `bg_connect_timeout_sec`                | Float   | `30.0`  | Maximum wait for a new connection while traffic is suspended during switchover.                                                                                                                                                      |
+| `bg_baseline_sec`                       | Float   | `60.0`  | Baseline status-check interval. Keep below 900.                                                                                                                                                                                      |
+| `bg_increased_sec`                      | Float   | `1.0`   | Increased status-check interval. Configure within 0.5-2.                                                                                                                                                                             |
+| `bg_high_sec`                           | Float   | `0.1`   | High-frequency status-check interval. Configure within 0.05-0.5.                                                                                                                                                                     |
+| `bg_switchover_timeout_sec`             | Float   | `180.0` | Maximum switchover duration; after it the wrapper assumes completion and resumes normal operation.                                                                                                                                   |
+| [Unreleased] `bg_drop_blue_connections` | Boolean | `true`  | After a confirmed switchover, invalidate connections still open to old blue on their next use (fail over if the `failover` plugin is enabled, otherwise a driver closed-connection error) instead of letting them serve stale reads. |
 
 **Monitoring connections:** prefix driver settings with `bg_monitoring_` (e.g. `bg_monitoring_connect_timeout: 10`) to apply them only to the plugin's status connections. The prefix is stripped and the setting passed to the driver.
 

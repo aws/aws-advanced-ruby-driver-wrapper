@@ -214,6 +214,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
     let(:marker_class) { bg::DropBlueConnectionsMarker }
     let(:marker_key)   { described_class.drop_marker_key(bgd_id_val) }
     let(:bg_name)      { described_class::BLUE_GREEN_NAME }
+    let(:marker_name)  { described_class::DROP_MARKER_NAME }
 
     # close_connection is needed on the driver dialect for invalidation.
     let(:driver_dialect) { double('driver_dialect', network_bound_methods: Set['connection.query'], close_connection: nil) }
@@ -232,7 +233,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
 
     before do
       allow(storage_service).to receive(:get).and_return(nil)
-      allow(storage_service).to receive(:get).with(bg_name, marker_key, register_access: false).and_return(marker)
+      allow(storage_service).to receive(:get).with(marker_name, marker_key, register_access: false).and_return(marker)
       # Record this connection's connect-time host and open time.
       plugin.connect(host_info, props, true, -> { connection })
     end
@@ -255,6 +256,33 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
 
       it 'does not invalidate the connection' do
         expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+
+      # A pending check must not record the marker id, or activating the same marker later would never
+      # invalidate this connection — it would stay open on retired blue.
+      it 'still invalidates the connection once the same marker is activated' do
+        plugin.execute('connection.query', -> { :query_result })
+
+        allow(storage_service).to receive(:get).with(marker_name, marker_key, register_access: false).and_return(marker.activated)
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    # A connection opened through BG connect routing (route_connect) must also record its connect-time
+    # host/open time, so it is invalidated on next use just like a plainly-connected one.
+    context 'when the connection was opened through BG connect routing' do
+      let(:connect_routing) { double('connect_routing', match?: true, apply: connection) }
+      let(:connect_status) do
+        instance_double(bg::Status, current_phase: phase::PREPARATION, connect_routing: [connect_routing], role: role::SOURCE)
+      end
+
+      it 'invalidates the routed connection on its next use after the switchover' do
+        allow(storage_service).to receive(:get).with(bg_name, bgd_id_val).and_return(connect_status, nil)
+        plugin.connect(host_info, props, true, -> { connection })
+
+        expect(driver_dialect).to receive(:close_connection).with(connection)
         plugin.execute('connection.query', -> { :query_result })
       end
     end
