@@ -2,14 +2,17 @@ name: Check and Unit Tests
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - '*'
+  # The push and pull_request triggers moved to the CodeBuild variant main-codebuild.yml.
+  # push:
+  #   branches:
+  #     - main
+  # pull_request:
+  #   branches:
+  #     - '*'
 
 concurrency:
+  # One run per workflow per ref: a newer run on the same ref cancels the one in progress, so a new
+  # push or PR update supersedes a stale commit instead of queueing behind it.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -17,7 +20,45 @@ permissions:
   contents: read
 
 jobs:
+  check-changes:
+    name: 'Check for changes'
+    runs-on: ubuntu-latest
+    outputs:
+      only_docs: ${{ steps.check.outputs.ONLY_DOCS }}
+      docs_changed: ${{ steps.check.outputs.DOCS_CHANGED }}
+    steps:
+      - name: 'Clone repository'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 50
+      - name: 'Get changed files'
+        id: changed-files-specific
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          files_yaml: |
+            doc:
+              - '**/*.md'
+              - '**/docs/**'
+              - '**/*.jpg'
+              - '**/*.png'
+      - name: 'Determine change type'
+        id: check
+        run: |
+          if [[ "${{ steps.changed-files-specific.outputs.doc_only_changed }}" == "true" || "${{ steps.changed-files-specific.outputs.doc_only_modified }}" == "true" ]]; then
+            echo "ONLY_DOCS=true" >> $GITHUB_OUTPUT
+          else
+            echo "ONLY_DOCS=false" >> $GITHUB_OUTPUT
+          fi
+          if [[ "${{ steps.changed-files-specific.outputs.doc_any_changed }}" == "true" ]]; then
+            echo "DOCS_CHANGED=true" >> $GITHUB_OUTPUT
+          else
+            echo "DOCS_CHANGED=false" >> $GITHUB_OUTPUT
+          fi
+
   markdown-link-check:
+    name: 'Markdown link check'
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.docs_changed == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -29,6 +70,9 @@ jobs:
           max-depth: 0
 
   lint:
+    name: 'Static analysis'
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.only_docs == 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -42,6 +86,8 @@ jobs:
 
   pg-sql-qualification:
     name: PostgreSQL SQL qualification check
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.only_docs == 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -53,6 +99,9 @@ jobs:
         run: ruby .github/scripts/check_pg_sql_qualified.rb
 
   test:
+    name: 'Unit tests'
+    needs: check-changes
+    if: ${{ needs.check-changes.outputs.only_docs == 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -109,3 +158,21 @@ jobs:
           gitleaks version
       - name: Run Gitleaks (full git history)
         run: gitleaks detect --source . --redact --verbose
+
+  ci-gate:
+    name: 'CI Gate'
+    needs: [check-changes, markdown-link-check, lint, pg-sql-qualification, test, secret-scan]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Verify required jobs did not fail'
+        run: |
+          # Fail only if a needed job actually failed or was cancelled.
+          # Skipped jobs (e.g. tests on doc-only PRs) are treated as passing,
+          # so this gate is the single required status check for branch protection.
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" \
+             || "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "A required job failed or was cancelled."
+            exit 1
+          fi
+          echo "All required jobs passed or were legitimately skipped."

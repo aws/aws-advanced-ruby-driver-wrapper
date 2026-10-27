@@ -82,6 +82,10 @@ tasks.test {
     filter.excludeTestsMatching("integration.*")
 }
 
+val usingEcrImages =
+    (System.getProperty("test-container-registry") ?: System.getenv("TEST_CONTAINER_REGISTRY"))
+        ?.trim()?.lowercase() == "ecr"
+
 tasks.withType<Test> {
     useJUnitPlatform()
     outputs.upToDateWhen { false }
@@ -99,8 +103,21 @@ tasks.withType<Test> {
 
     systemProperty("java.util.logging.config.file", "${project.layout.buildDirectory.get()}/resources/test/logging-test.properties")
 
+    // Forwarded explicitly: the test JVM does not inherit the launcher's system properties, so
+    // -Dtest-container-registry would otherwise be dropped before ContainerImages reads it.
+    System.getProperty("test-container-registry")?.let {
+        systemProperty("test-container-registry", it)
+    }
+
     if (System.getProperty("os.name", "").lowercase().contains("windows")) {
         environment("DOCKER_HOST", System.getenv("DOCKER_HOST") ?: "tcp://localhost:2377")
+        environment("TESTCONTAINERS_RYUK_DISABLED", "true")
+    } else if (usingEcrImages && System.getenv("TESTCONTAINERS_RYUK_DISABLED") == null) {
+        // Selecting ECR moves every image this suite names off Docker Hub, but Testcontainers also
+        // starts its own Ryuk cleanup container, and testcontainers/ryuk has no ECR Public mirror.
+        // Left enabled, a run that chose ECR to escape Docker Hub's anonymous pull limit would
+        // still make an anonymous Docker Hub pull and could still fail on that limit. The runners
+        // that select ECR are ephemeral, so there are no leftover containers for Ryuk to clean up.
         environment("TESTCONTAINERS_RYUK_DISABLED", "true")
     }
 }

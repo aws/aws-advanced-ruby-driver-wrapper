@@ -67,6 +67,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -80,6 +81,7 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.waiters.WaiterResponse;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.AuthorizeSecurityGroupIngressRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeSecurityGroupRulesRequest;
 import software.amazon.awssdk.services.ec2.model.DescribeSecurityGroupRulesResponse;
 import software.amazon.awssdk.services.ec2.model.DescribeSecurityGroupsRequest;
@@ -155,6 +157,9 @@ public class AuroraTestUtility {
   private static final Logger LOGGER = Logger.getLogger(AuroraTestUtility.class.getName());
   private static final String DUPLICATE_IP_ERROR_CODE = "InvalidPermission.Duplicate";
   private static final String DEFAULT_SECURITY_GROUP = "default";
+  // The only ports the test harness reaches over the network: TCP 3306 (MySQL / MariaDB) and
+  // TCP 5432 (PostgreSQL). Security-group rules are scoped to these instead of all ports.
+  private static final int[] TEST_DATABASE_PORTS = {3306, 5432};
   private static final String DEFAULT_STORAGE_TYPE = "gp3";
   private static final int DEFAULT_IOPS = 64000;
   private static final int DEFAULT_ALLOCATED_STORAGE = 400;
@@ -698,71 +703,43 @@ public class AuroraTestUtility {
     if (StringUtils.isNullOrEmpty(ipAddress)) {
       return;
     }
-
-    if (ipExists(ipAddress)) {
-      return;
-    }
-
-    try {
-      IpRange ipRange = IpRange.builder()
-          .cidrIp(ipAddress + "/32")
-          .description("Test run at " + Instant.now())
-          .build();
-      IpPermission ipPermission = IpPermission.builder()
-          .ipRanges(ipRange)
-          .ipProtocol("-1") // All protocols
-          .fromPort(0) // For all ports
-          .toPort(65535)
-          .build();
-      ec2Client.authorizeSecurityGroupIngress(
-          (builder) -> builder.groupName(DEFAULT_SECURITY_GROUP).ipPermissions(ipPermission));
-    } catch (Ec2Exception exception) {
-      if (!DUPLICATE_IP_ERROR_CODE.equalsIgnoreCase(exception.awsErrorDetails().errorCode())) {
-        throw exception;
-      }
-    }
+    authorizeTestDatabasePorts(ipAddress, builder -> builder.groupName(DEFAULT_SECURITY_GROUP));
   }
 
   public void ec2AuthorizeIPByGroupId(String securityGroupId, String ipAddress) {
     if (StringUtils.isNullOrEmpty(ipAddress) || StringUtils.isNullOrEmpty(securityGroupId)) {
       return;
     }
-
-    try {
-      IpRange ipRange = IpRange.builder()
-          .cidrIp(ipAddress + "/32")
-          .description("Test run at " + Instant.now())
-          .build();
-      IpPermission ipPermission = IpPermission.builder()
-          .ipRanges(ipRange)
-          .ipProtocol("-1")
-          .fromPort(0)
-          .toPort(65535)
-          .build();
-      ec2Client.authorizeSecurityGroupIngress(
-          (builder) -> builder.groupId(securityGroupId).ipPermissions(ipPermission));
-    } catch (Ec2Exception exception) {
-      if (!DUPLICATE_IP_ERROR_CODE.equalsIgnoreCase(exception.awsErrorDetails().errorCode())) {
-        throw exception;
-      }
-    }
+    authorizeTestDatabasePorts(ipAddress, builder -> builder.groupId(securityGroupId));
   }
 
-  private boolean ipExists(String ipAddress) {
-    final String cidr = ipAddress + "/32";
-    final DescribeSecurityGroupsResponse response =
-        ec2Client.describeSecurityGroups(
-            (builder) -> builder.groupNames(DEFAULT_SECURITY_GROUP));
-
-    if (response == null || response.securityGroups().isEmpty()) {
-      return false;
+  // Opens only the two ports the test harness reaches over the network: TCP 3306 (MySQL / MariaDB)
+  // and TCP 5432 (PostgreSQL).
+  private void authorizeTestDatabasePorts(
+      String ipAddress, Consumer<AuthorizeSecurityGroupIngressRequest.Builder> groupSelector) {
+    final String description = "Test run at " + Instant.now();
+    for (int port : TEST_DATABASE_PORTS) {
+      try {
+        IpRange ipRange = IpRange.builder()
+            .cidrIp(ipAddress + "/32")
+            .description(description)
+            .build();
+        IpPermission ipPermission = IpPermission.builder()
+            .ipRanges(ipRange)
+            .ipProtocol("tcp")
+            .fromPort(port)
+            .toPort(port)
+            .build();
+        ec2Client.authorizeSecurityGroupIngress((builder) -> {
+          groupSelector.accept(builder);
+          builder.ipPermissions(ipPermission);
+        });
+      } catch (Ec2Exception exception) {
+        if (!DUPLICATE_IP_ERROR_CODE.equalsIgnoreCase(exception.awsErrorDetails().errorCode())) {
+          throw exception;
+        }
+      }
     }
-
-    return response.securityGroups().stream()
-        .flatMap(sg -> sg.ipPermissions().stream())
-        .filter(perm -> "-1".equals(perm.ipProtocol()))
-        .flatMap(perm -> perm.ipRanges().stream())
-        .anyMatch(range -> cidr.equals(range.cidrIp()));
   }
 
   /**
@@ -774,17 +751,20 @@ public class AuroraTestUtility {
     if (StringUtils.isNullOrEmpty(ipAddress)) {
       return;
     }
-    try {
-      ec2Client.revokeSecurityGroupIngress(
-          (builder) ->
-              builder
-                  .groupName(DEFAULT_SECURITY_GROUP)
-                  .cidrIp(ipAddress + "/32")
-                  .ipProtocol("-1") // All protocols
-                  .fromPort(0) // For all ports
-                  .toPort(65535));
-    } catch (Ec2Exception exception) {
-      // Ignore
+    // Mirror ec2AuthorizeIP: revoke only the TCP 3306 and 5432 rules it created.
+    for (int port : TEST_DATABASE_PORTS) {
+      try {
+        ec2Client.revokeSecurityGroupIngress(
+            (builder) ->
+                builder
+                    .groupName(DEFAULT_SECURITY_GROUP)
+                    .cidrIp(ipAddress + "/32")
+                    .ipProtocol("tcp")
+                    .fromPort(port)
+                    .toPort(port));
+      } catch (Ec2Exception exception) {
+        // Ignore
+      }
     }
   }
 
