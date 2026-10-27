@@ -237,9 +237,7 @@ public class TestEnvironmentProvider implements TestTemplateInvocationContextPro
                       TestEnvironmentFeatures.NETWORK_OUTAGES_ENABLED,
                       TestEnvironmentFeatures.AWS_CREDENTIALS_ENABLED,
                       config.noPgDriver ? TestEnvironmentFeatures.SKIP_PG_DRIVER_TESTS : null,
-                      config.noMysqlDriver ? TestEnvironmentFeatures.SKIP_MYSQL_DRIVER_TESTS : null,
-                      config.noTracesTelemetry ? null : TestEnvironmentFeatures.TELEMETRY_TRACES_ENABLED,
-                      config.noMetricsTelemetry ? null : TestEnvironmentFeatures.TELEMETRY_METRICS_ENABLED)));
+                      config.noMysqlDriver ? TestEnvironmentFeatures.SKIP_MYSQL_DRIVER_TESTS : null)));
         }
       }
     }

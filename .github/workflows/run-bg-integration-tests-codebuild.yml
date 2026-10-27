@@ -71,7 +71,6 @@ jobs:
         run: ./gradlew --no-parallel --no-daemon :integration-testing:${{ matrix.testTask }} --info
         env:
           RDS_DB_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          OTLP_AWS_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
 
       - name: Archive results
         if: always()
