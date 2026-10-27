@@ -309,6 +309,8 @@ module AwsAdvancedRubyDriverWrapper
         end
       end
 
+      # A plugin's span is not marked as failed when the call raises: the error passes out through every
+      # plugin's span, and is recorded once, on the call's top-level span.
       def call_traced(plugin_callable, plugin, name, next_plugin_callable)
         @telemetry_factory.in_context(name, Utils::Telemetry::TraceLevel::NESTED) { plugin_callable.call(plugin, next_plugin_callable) }
       end
