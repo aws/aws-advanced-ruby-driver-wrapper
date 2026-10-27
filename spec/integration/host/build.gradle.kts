@@ -173,7 +173,6 @@ tasks.register<Test>("test-ruby-3.3-mysql") {
         systemProperty("exclude-pg-driver", "true")
         systemProperty("exclude-pg-engine", "true")
         systemProperty("exclude-instances-1", "true")
-        systemProperty("exclude-instances-2", "true")
         systemProperty("exclude-instances-5", "true")
     }
 }
@@ -191,7 +190,6 @@ tasks.register<Test>("test-ruby-3.3-pg") {
         systemProperty("exclude-mysql-driver", "true")
         systemProperty("exclude-mysql-engine", "true")
         systemProperty("exclude-instances-1", "true")
-        systemProperty("exclude-instances-2", "true")
         systemProperty("exclude-instances-5", "true")
     }
 }
