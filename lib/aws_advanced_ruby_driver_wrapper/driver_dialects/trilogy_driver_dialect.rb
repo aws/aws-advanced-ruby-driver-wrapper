@@ -42,6 +42,10 @@ module AwsAdvancedRubyDriverWrapper
         RubyMethod::CONNECTION_SET_SERVER_OPTION.name
       ]).freeze
 
+      # A placeholder, or a quoted string or identifier, matched whole so that a question mark inside
+      # one is not taken for a placeholder. Quotes inside are escaped by a backslash or by doubling.
+      PLACEHOLDER_OR_QUOTED = /'(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.|"")*"|`(?:[^`]|``)*`|\?/m
+
       def name
         'trilogy'
       end
@@ -62,11 +66,11 @@ module AwsAdvancedRubyDriverWrapper
       # quoted and escaped by the connection the way ActiveRecord quotes its own binds for trilogy.
       # Only the types the wrapper binds in its own queries are accepted.
       def execute_with_params(connection, sql, params)
-        placeholders = sql.count('?')
+        placeholders = sql.scan(PLACEHOLDER_OR_QUOTED).count('?')
         raise ArgumentError, "SQL has #{placeholders} placeholders for #{params.size} parameters" unless placeholders == params.size
 
         literals = params.map { |value| literal(connection, value) }
-        bound_sql = sql.gsub('?') { literals.shift }
+        bound_sql = sql.gsub(PLACEHOLDER_OR_QUOTED) { |token| token == '?' ? literals.shift : token }
 
         execute(connection, bound_sql)
       end

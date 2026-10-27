@@ -105,6 +105,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialec
       dialect.execute_with_params(connection, 'SELECT ?, ?', ['a?b', 'c'])
     end
 
+    it 'leaves a question mark inside a quoted string or identifier in the SQL alone' do
+      sql = %q(SELECT `a?` FROM t WHERE note = 'why?' AND b = "c?" AND d = 'it''s?' AND e = 'x\'?' AND id = ?)
+      expect(connection).to receive(:query).with(sql.sub(/\?\z/, '7')).and_return(trilogy_result(nil, nil))
+
+      dialect.execute_with_params(connection, sql, [7])
+    end
+
     it 'refuses a value it cannot write as a literal' do
       expect { dialect.execute_with_params(connection, 'SELECT ?', [1.5]) }.to raise_error(ArgumentError, /Float/)
     end
