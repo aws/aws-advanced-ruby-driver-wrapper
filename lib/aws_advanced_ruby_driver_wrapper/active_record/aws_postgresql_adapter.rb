@@ -63,22 +63,36 @@ module ActiveRecord
         superclass.native_database_types.merge(datetime: NATIVE_DATABASE_TYPES[datetime_type])
       end
 
+      # SQLSTATEs and FATAL-message signals for an authentication/authorization rejection (invalid
+      # password, PAM failure, pg_hba.conf rejection). A failed *connect* usually carries no result, so
+      # the message text is the reliable signal and the SQLSTATE is only a bonus when one is present.
+      AUTH_REJECTION_SQLSTATES = %w[28P01 28000].freeze
+      AUTH_REJECTION_MESSAGE = /password authentication failed|PAM authentication failed|pg_hba\.conf rejects/
+
       # Note that this config includes wrapper properties.
       #
-      # Translates connection errors the same way the parent adapter does, so ActiveRecord can tell a
-      # missing database (which db:prepare creates) or rejected credentials from other failures.
+      # Mirrors the parent PostgreSQLAdapter.new_client so ActiveRecord can tell a missing database
+      # (which db:prepare creates) or rejected credentials from other failures.
       def self.new_client(config)
         AwsAdvancedRubyDriverWrapper::WrapperPgConnection.new(**config)
       rescue ::PG::Error => e
         dbname, user, host = config.values_at(:dbname, :user, :host)
         # The postgres maintenance database always exists, so a failure there is not a missing database.
         raise ActiveRecord::ConnectionNotEstablished, e.message if dbname == 'postgres'
-        raise ActiveRecord::NoDatabaseError.db_error(dbname) if dbname && e.message.include?(dbname)
+        raise ActiveRecord::NoDatabaseError.db_error(dbname) if dbname && e.message.include?(dbname) && !auth_rejection?(e)
         raise ActiveRecord::DatabaseConnectionError.username_error(user) if user && e.message.include?(user)
         raise ActiveRecord::DatabaseConnectionError.hostname_error(host) if host && e.message.include?(host)
 
         raise ActiveRecord::ConnectionNotEstablished, e.message
       end
+
+      # @return [Boolean] whether the PG error is an authentication/authorization rejection, by SQLSTATE
+      #   when the error carries a result and otherwise by its canonical FATAL text.
+      def self.auth_rejection?(error)
+        sqlstate = error.respond_to?(:result) ? error.result&.error_field(PG::PG_DIAG_SQLSTATE) : nil
+        AUTH_REJECTION_SQLSTATES.include?(sqlstate) || error.message.to_s.match?(AUTH_REJECTION_MESSAGE)
+      end
+      private_class_method :auth_rejection?
 
       def connect
         @connection_broken = false

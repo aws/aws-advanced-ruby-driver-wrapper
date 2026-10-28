@@ -91,6 +91,27 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
         .to raise_error(ActiveRecord::DatabaseConnectionError)
     end
 
+    it 'does not misclassify a pg_hba rejection mentioning the dbname as NoDatabaseError' do
+      message = 'FATAL:  pg_hba.conf rejects connection for host "10.0.0.1", user "myuser", database "mydb", no encryption'
+      # The message contains the dbname "mydb"; it must still be a credentials error (which is a
+      # DatabaseConnectionError), never NoDatabaseError - the two classes are unrelated.
+      expect { connect_failing_with(message) }.to raise_error(ActiveRecord::DatabaseConnectionError)
+    end
+
+    it 'does not misclassify a PAM authentication failure as NoDatabaseError' do
+      expect { connect_failing_with('FATAL:  PAM authentication failed for user "myuser"') }
+        .to raise_error(ActiveRecord::DatabaseConnectionError)
+    end
+
+    it 'treats an auth rejection carrying SQLSTATE 28P01 as a connection error, not a missing database' do
+      # SQLSTATE drives the classification even if the FATAL text happens to contain the dbname.
+      error = PG::ConnectionBad.new('FATAL:  authentication failed, database "mydb"')
+      allow(error).to receive(:result).and_return(instance_double(PG::Result, error_field: '28P01'))
+      allow(AwsAdvancedRubyDriverWrapper::WrapperPgConnection).to receive(:new).and_raise(error)
+      # NoDatabaseError is not a ConnectionNotEstablished, so this assertion also rules it out.
+      expect { described_class.new_client(config) }.to raise_error(ActiveRecord::ConnectionNotEstablished)
+    end
+
     it 'translates an unreachable host into DatabaseConnectionError' do
       expect { connect_failing_with("could not translate host name \"#{config[:host]}\" to address") }
         .to raise_error(ActiveRecord::DatabaseConnectionError)
