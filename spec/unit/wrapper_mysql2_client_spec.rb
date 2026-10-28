@@ -341,4 +341,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
       expect(plugin.sql_for('connection.ping')).to eq([nil])
     end
   end
+
+  # During a Blue/Green switchover the current connection is momentarily nil. A call in that window
+  # must fail as a connection error the adapter can translate, not a bare NoMethodError.
+  describe 'when the current connection is nil' do
+    let(:connection) { nil }
+
+    it 'raises a Mysql2 connection error rather than NoMethodError' do
+      # select_db reaches the client through method_missing, where the nil guard lives.
+      expect { client.select_db('other') }.to raise_error(Mysql2::Error, /not initialized/)
+    end
+  end
 end

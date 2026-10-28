@@ -986,4 +986,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
       expect(connection).to have_received(:lo_write).with(0, equal(buffer))
     end
   end
+
+  # During a Blue/Green switchover the current connection is momentarily nil. A call in that window
+  # must fail as a connection error the adapter can translate, not a bare NoMethodError.
+  describe 'when the current connection is nil' do
+    let(:connection) { nil }
+
+    it 'raises a PG connection error from execute_operation rather than NoMethodError' do
+      expect { wrapper.exec('SELECT 1') }.to raise_error(PG::ConnectionBad, /not initialized/)
+    end
+
+    it 'raises a PG connection error from method_missing rather than NoMethodError' do
+      expect { wrapper.set_client_encoding('UTF8') }.to raise_error(PG::ConnectionBad, /not initialized/)
+    end
+  end
 end
