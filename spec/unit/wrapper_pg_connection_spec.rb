@@ -366,11 +366,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
     end
   end
 
-  # pg gives most of its calls more than one spelling, and an application is free to use any of them.
-  # A spelling this class does not define is performed by the method that does define the operation,
-  # so that it enters the pipeline under the same name, publishes the same SQL and keeps the same
-  # bookkeeping. Before that, an unrecognized spelling was handed straight to the driver, which took
-  # the statement it carried past every plugin.
   # pg yields the result of a statement to a block when given one, clears it once the block returns and
   # returns the block's value in its place. The block has to be given the wrapped result, so that the
   # rows it reads still reach the plugins.
@@ -429,6 +424,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
     end
   end
 
+  # pg gives most of its calls more than one spelling, and an application is free to use any of them.
+  # A spelling this class does not define is performed by the method that does define the operation,
+  # so that it enters the pipeline under the same name, publishes the same SQL and keeps the same
+  # bookkeeping. Before that, an unrecognized spelling was handed straight to the driver, which took
+  # the statement it carried past every plugin.
   describe 'the other spellings pg gives a call' do
     it 'takes query through the pipeline as the exec it is named for' do
       allow(connection).to receive(:query).and_return(pg_result)
