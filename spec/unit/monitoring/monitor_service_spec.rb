@@ -174,7 +174,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::MonitorService do
 
       monitor = start_monitor(:test_monitor, 'key1')
       advance_clock(6)
-      storage_service.get(:test_data, 'key1')
+      storage_service.get(:test_data, 'key1', register_access: true)
       expect(delivered.pop(timeout: 2)).to eq(data_access_event(:test_data, 'key1'))
       advance_clock(6)
 
