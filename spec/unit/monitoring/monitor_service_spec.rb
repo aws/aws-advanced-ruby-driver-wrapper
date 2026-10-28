@@ -18,6 +18,7 @@ require_relative '../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/monitoring/monitor'
 require 'aws_advanced_ruby_driver_wrapper/services/monitor_service'
 require 'aws_advanced_ruby_driver_wrapper/utils/events/batching_event_publisher'
+require 'aws_advanced_ruby_driver_wrapper/utils/storage/storage_service'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Services::MonitorService do
   let(:test_monitor_class) do
@@ -112,6 +113,74 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::MonitorService do
       monitor_service.stop_and_remove_all
       expect(m1.state).to eq(:stopped)
       expect(m2.state).to eq(:stopped)
+    end
+  end
+
+  describe '#process_event' do
+    # A fake monotonic clock so expiration can be advanced deterministically instead of sleeping.
+    let(:clock) { { now: 1000.0 } }
+
+    def advance_clock(seconds)
+      clock[:now] += seconds
+    end
+
+    def data_access_event(data_type, key)
+      AwsAdvancedRubyDriverWrapper::Utils::Events::DataAccessEvent.new(data_type:, key:)
+    end
+
+    def start_monitor(monitor_type, key)
+      monitor_service.run_if_absent(monitor_type, key, service_container) { |_| test_monitor_class.new }
+    end
+
+    before do
+      allow(Process).to receive(:clock_gettime).and_wrap_original do |original, clock_id, *args|
+        clock_id == Process::CLOCK_MONOTONIC && args.empty? ? clock[:now] : original.call(clock_id, *args)
+      end
+      monitor_service.register_type(:test_monitor, expiration_timeout_sec: 10, produced_data_type: :test_data)
+    end
+
+    it 'extends the expiration of only the monitor whose key was accessed' do
+      accessed = start_monitor(:test_monitor, 'key1')
+      start_monitor(:test_monitor, 'key2')
+      advance_clock(6)
+      monitor_service.process_event(data_access_event(:test_data, 'key1'))
+      advance_clock(6)
+
+      expect(monitor_service.get(:test_monitor, 'key1')).to equal(accessed)
+      expect(monitor_service.get(:test_monitor, 'key2')).to be_nil
+    end
+
+    it 'does not extend monitors of a type that produces a different data type' do
+      monitor_service.register_type(:other_monitor, expiration_timeout_sec: 10, produced_data_type: :other_data)
+      accessed = start_monitor(:test_monitor, 'key1')
+      start_monitor(:other_monitor, 'key1')
+      advance_clock(6)
+      monitor_service.process_event(data_access_event(:test_data, 'key1'))
+      advance_clock(6)
+
+      expect(monitor_service.get(:test_monitor, 'key1')).to equal(accessed)
+      expect(monitor_service.get(:other_monitor, 'key1')).to be_nil
+    end
+
+    it 'extends the producing monitor when the data is read through the storage service' do
+      storage_service = AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService.new(event_publisher:)
+      storage_service.register(:test_data, ttl: 100)
+      storage_service.set(:test_data, 'key1', 'value')
+      delivered = Queue.new
+      allow(monitor_service).to receive(:process_event).and_wrap_original do |original, event|
+        original.call(event)
+        delivered << event
+      end
+
+      monitor = start_monitor(:test_monitor, 'key1')
+      advance_clock(6)
+      storage_service.get(:test_data, 'key1')
+      expect(delivered.pop(timeout: 2)).to eq(data_access_event(:test_data, 'key1'))
+      advance_clock(6)
+
+      expect(monitor_service.get(:test_monitor, 'key1')).to equal(monitor)
+    ensure
+      storage_service&.shutdown
     end
   end
 
