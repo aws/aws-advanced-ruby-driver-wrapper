@@ -112,7 +112,12 @@ This is a minimal configuration. To add failover tuning, IAM or Secrets Manager 
 
 If you use an AI assistant (Kiro, Cursor, Claude Code, GitHub Copilot, ChatGPT, Amazon Bedrock, etc.), you can give it the wrapper's configuration assistant skill to help build, review, or troubleshoot your wrapper configuration.
 
-The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 51,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently), and the AI receives it with every message, so tools that cache prompts handle it most cheaply.
+The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 51,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
+
+- **Tools that support Agent Skills** load only the skill's name and description (about 100 tokens) until a request needs the skill. They then load the full file, and it stays in context for the rest of that conversation.
+- **A system prompt, or a file pasted into a chat,** sends the full file with every message.
+
+Once the full file is in context, it is sent again with each message, so tools that cache prompts handle it most cheaply.
 
 #### Quick start
 
@@ -135,10 +140,10 @@ The skill is a single self-contained markdown file, [`skills/ruby-wrapper-config
        https://raw.githubusercontent.com/aws/aws-advanced-ruby-driver-wrapper/main/skills/ruby-wrapper-configuration-assistant/SKILL.md
      ```
 
-   - **Claude Projects**: upload it as a project knowledge document.
-   - **ChatGPT custom GPT**: upload it as a knowledge file.
+   - **Claude Projects**: upload it as a project knowledge document. Claude reads project knowledge in full while it fits in the context window, but when a project's knowledge approaches that limit, Claude switches to searching it for passages that match each question, so the model may miss the instructions and cross-references the skill depends on. Keep the project's other knowledge small, or use a separate project.
+   - **ChatGPT custom GPT**: a custom GPT searches its knowledge files and passes the model only the passages that match each question, so the model may miss the instructions and cross-references the skill depends on. Paste the file into a plain chat instead (below).
    - **Amazon Bedrock**: send the file as the system prompt of your `InvokeModel` or `Converse` request. Avoid attaching it to a Bedrock knowledge base: a knowledge base passes the model only the passages that match each question, so the model misses the instructions and cross-references the skill depends on.
-   - **Plain chat (ChatGPT, Claude, Gemini)**: paste it at the start of a new conversation, then ask your question.
+   - **Plain chat (ChatGPT, Claude, Gemini)**: paste it at the start of a new conversation, then ask your question. In ChatGPT, the file is about 32,000 tokens, which is more than the Free plan's context window and leaves little room on the Go and Plus plans' Instant models, so choose a Thinking model in the model picker or use the Pro plan.
 3. Ask the AI for help. It will interview you when it needs more details, or give you a configuration straight away if you ask it to skip the interview.
 
 #### Example prompts
