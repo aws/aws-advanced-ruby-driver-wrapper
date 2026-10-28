@@ -63,8 +63,9 @@ module AwsAdvancedRubyDriverWrapper
         # Retrieves an item. Returns nil if absent or expired.
         # @param name [Symbol] registered cache name.
         # @param key [Object] item key.
-        # @param register_access [Boolean] whether to publish a DataAccessEvent. Pass true when the item is
-        #   produced by a monitor, so the read keeps that monitor alive. A monitor reading its own data must not.
+        # @param register_access [Boolean] whether to publish a DataAccessEvent, which extends the expiration of
+        #   any monitor registered with this cache name as its produced_data_type. Pass true only when this read
+        #   should keep that monitor alive.
         # @return [Object, nil]
         def get(name, key, register_access: false)
           value = fetch_cache!(name).get(key)
@@ -81,8 +82,9 @@ module AwsAdvancedRubyDriverWrapper
         # plugin configuration (e.g. a plugin reading a cache owned by another, optional plugin).
         # @param name [Symbol] cache name (need not be registered).
         # @param key [Object] item key.
-        # @param register_access [Boolean] whether to publish a DataAccessEvent. Pass true when the item is
-        #   produced by a monitor, so the read keeps that monitor alive. A monitor reading its own data must not.
+        # @param register_access [Boolean] whether to publish a DataAccessEvent, which extends the expiration of
+        #   any monitor registered with this cache name as its produced_data_type. Pass true only when this read
+        #   should keep that monitor alive.
         # @return [Object, nil]
         def get_if_registered(name, key, register_access: false)
           cache = @caches[name]
