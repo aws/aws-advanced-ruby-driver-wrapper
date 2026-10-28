@@ -39,8 +39,10 @@ module AwsAdvancedRubyDriverWrapper
           build_cluster_pairs(source_status, target_status)
         end
 
+        # Keyed by downcased host so lookups line up with role_by_host (also downcased); the blue host
+        # set the drop-blue-connections marker is built from indexes this map with downcased endpoints.
         def merge_ips(ip_map)
-          @host_ip_addresses.merge!(ip_map)
+          ip_map.each { |host, ip| @host_ip_addresses[host.downcase] = ip }
         end
 
         def register_role(host_names, role)

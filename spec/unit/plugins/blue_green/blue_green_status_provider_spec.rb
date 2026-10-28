@@ -314,6 +314,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::StatusProvider,
         expect(marker.blue_hosts).to include(blue_writer_host, blue_reader_host, '10.0.0.1', '10.0.0.2')
       end
 
+      # The IP map can report endpoints in a different case than the topology; role_by_host is downcased,
+      # so the IPs must be keyed the same way or they would be dropped from the marker.
+      it 'includes blue IPs even when the IP map reports hosts in mixed case' do
+        mixed_case_ip_map = { blue_writer_host.upcase => '10.0.0.1', blue_reader_host.upcase => '10.0.0.2' }
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: mixed_case_ip_map))
+
+        expect(current_marker.blue_hosts).to include('10.0.0.1', '10.0.0.2')
+      end
+
       it 'activates the marker at POST, keeping its identity' do
         provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
         pending_id = current_marker.id
@@ -413,15 +422,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::StatusProvider,
           expect(markers).to be_empty
         end
 
-        it 'does not activate the pending marker when it times out in IN_PROGRESS' do
+        it 'discards the pending marker without activating it when it times out in IN_PROGRESS' do
           provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
           expect(current_marker.active?).to be(false)
 
           allow_any_instance_of(bg::SwitchoverTimer).to receive(:expired?).and_return(true)
           provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
 
-          # A timeout in IN_PROGRESS could still roll back, so the marker must stay pending.
-          expect(current_marker.active?).to be(false)
+          # A timeout in IN_PROGRESS could still roll back, so the marker is never activated. It is also
+          # discarded rather than left pending, since no later phase will arrive to activate it.
+          expect(current_marker).to be_nil
+          expect(markers).to be_empty
         end
 
         it 'keeps the marker active when it times out in POST' do

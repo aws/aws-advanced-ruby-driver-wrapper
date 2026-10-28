@@ -184,8 +184,15 @@ module AwsAdvancedRubyDriverWrapper
           # A timeout means the wrapper stopped waiting, not that the switchover is confirmed. Only
           # activate the marker if the switchover was last observed at POST (past the point of no
           # return); timing out in PREPARATION/IN_PROGRESS could still roll back, and dropping blue
-          # connections then would hit a blue that is still primary.
-          activate_drop_marker if @latest_status_phase == Phase::POST
+          # connections then would hit a blue that is still primary. In that case discard the pending
+          # marker so it does not linger unactivated for the full marker TTL: we have given up waiting
+          # on this switchover, and no later phase will arrive to activate it.
+          if @latest_status_phase == Phase::POST
+            activate_drop_marker
+          else
+            remove_drop_marker
+            @drop_marker_id = nil
+          end
           update_monitors
           update_status_cache
           log_current_context
