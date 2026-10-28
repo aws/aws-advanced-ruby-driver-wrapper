@@ -14,6 +14,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative 'mysql_text'
+
 module AwsAdvancedRubyDriverWrapper
   module Utils
     module Parser
@@ -21,10 +23,9 @@ module AwsAdvancedRubyDriverWrapper
         # Both placeholder styles are accepted, so that the same annotation works for mysql2's
         # positional +?+ and pg's numbered +$1+.
         ANNOTATION_PATTERN = %r{/\*@encrypt:([\w.]+)\*/\s*(?:\?|\$(\d+))}
-        STRIP_PATTERN = %r{/\*@encrypt:[\w.]+\*/\s*}
-        # The quote characters a literal can be wrapped in. A backtick quotes an identifier rather than
-        # a value, but is included so a +?+ inside a backtick-quoted name is not miscounted either.
-        QUOTES = ["'", '"', '`'].freeze
+        # Whitespace after an annotation is taken with it, but not a line break, which may be what ends
+        # a line comment the annotation sits in.
+        STRIP_PATTERN = %r{/\*@encrypt:[\w.]+\*/[^\S\n]*}
 
         module_function
 
@@ -33,9 +34,10 @@ module AwsAdvancedRubyDriverWrapper
         # @param sql [String]
         # @return [Hash{Integer => String}]
         def parse_annotations(sql)
-          return {} unless sql.is_a?(String) && !sql.empty?
+          # Most statements carry no annotation, so they are not scanned for placeholders at all.
+          return {} unless annotations?(sql)
 
-          question_marks = unquoted_question_mark_positions(sql)
+          question_marks = placeholder_positions(sql)
 
           sql.to_enum(:scan, ANNOTATION_PATTERN)
              .each_with_object({}) do |_, result|
@@ -66,31 +68,11 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         # The character positions of every +?+ that is a bind placeholder, skipping any inside a quoted
-        # literal so a literal question mark does not shift the count of the placeholder an annotation
-        # points at. A doubled quote reads as one closing and one opening quote, and a backslash escapes
-        # the next character except inside a backtick, which matches how the drivers read a literal.
-        def unquoted_question_mark_positions(sql)
+        # literal or a comment so that it does not shift the count of the placeholder an annotation
+        # points at. Only mysql2 binds with +?+, so the text is read by MySQL's rules.
+        def placeholder_positions(sql)
           positions = []
-          quote = nil
-          index = 0
-
-          while index < sql.length
-            char = sql[index]
-            if quote
-              if char == '\\' && quote != '`'
-                index += 2
-                next
-              end
-
-              quote = nil if char == quote
-            elsif QUOTES.include?(char)
-              quote = char
-            elsif char == '?'
-              positions << index
-            end
-            index += 1
-          end
-
+          MysqlText.each_code_char(sql) { |char, index| positions << index if char == '?' }
           positions
         end
       end

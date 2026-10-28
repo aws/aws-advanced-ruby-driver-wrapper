@@ -282,6 +282,46 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       expect_encrypted(bound_args[1].last, '123-45-6789')
     end
 
+    # MySQL numbers its placeholders by counting them, so a question mark that is only part of a
+    # comment must not be counted, or the encrypted column's value is bound in the clear.
+    context 'with MySQL and a question mark inside a comment' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+
+      it 'encrypts the parameter the parser placed after the comment' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (/* why? */ ?, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts the annotated parameter after the comment' do
+        sql = '/* why? */ INSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ?'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts what an UPDATE assigns when a comment sits between the keyword and the table' do
+        sql = 'UPDATE /* nightly */ users SET ssn = ? WHERE id = ?'
+        call('statement.execute', args: %w[123-45-6789 1], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+        expect(bound_args.last).to eq('1')
+      end
+
+      # Taking an annotation out of the statement must not take the line break after it as well, or
+      # the line comment it sits in runs on over the assignment on the next line.
+      it 'encrypts an assignment on the line after an annotation inside a line comment' do
+        sql = "UPDATE users SET name = ? -- by /*@encrypt:users.nick*/\n, ssn = ? WHERE id = ?"
+        call('statement.execute', args: %w[Jo 123-45-6789 1], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args[1], '123-45-6789')
+      end
+    end
+
     it 'does nothing when the call carries no SQL to parse and binds nothing' do
       args = []
       call('statement.execute', args: args, sql: nil)

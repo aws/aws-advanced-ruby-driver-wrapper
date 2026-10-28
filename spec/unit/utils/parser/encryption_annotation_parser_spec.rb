@@ -133,6 +133,56 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::EncryptionAnnotation
       expect(subject.parse_annotations(sql)).to eq({ 1 => 'users.ssn' })
     end
 
+    # A question mark inside a comment is not a bind placeholder either.
+    it 'does not count a question mark inside a block comment' do
+      sql = '/* why? */ INSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ?'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    it 'does not count a question mark inside a -- comment' do
+      sql = "-- why?\nINSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ?"
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    it 'does not count a question mark inside a # comment' do
+      sql = "# why?\nINSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ?"
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    it 'does not count a question mark inside a comment between the placeholders' do
+      sql = 'INSERT INTO users (name, ssn) SELECT ? /* or? */, /*@encrypt:users.ssn*/ ?'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    # MySQL needs whitespace after a double dash for it to start a comment; without it the dashes are
+    # two minus signs and the question mark after them is a placeholder.
+    it 'counts a question mark after a double dash with no space' do
+      sql = 'INSERT INTO users (n, ssn) SELECT 1--?, /*@encrypt:users.ssn*/ ?'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    # MySQL runs the contents of a /*! ... */ comment, so a question mark inside one is a placeholder.
+    it 'counts a question mark inside an executable comment' do
+      sql = 'INSERT INTO users (n, ssn) SELECT /*! ? */, /*@encrypt:users.ssn*/ ?'
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    it 'ignores an annotation that is only part of a comment' do
+      sql = "-- /*@encrypt:users.ssn*/ ?\nINSERT INTO users (ssn) VALUES (?)"
+      expect(subject.parse_annotations(sql)).to eq({})
+    end
+
+    it 'does not count a question mark inside a block comment that never closes' do
+      sql = 'INSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ? /* why? '
+      expect(subject.parse_annotations(sql)).to eq({ 2 => 'users.ssn' })
+    end
+
+    # Comments do not nest, so the annotation's own close ends the comment opened before it.
+    it 'reads the placeholder after an annotation that closes an open block comment' do
+      sql = 'INSERT INTO users (a, b, ssn) SELECT ?, ? /* note /*@encrypt:users.ssn*/ ?'
+      expect(subject.parse_annotations(sql)).to eq({ 3 => 'users.ssn' })
+    end
+
     it 'returns empty hash for nil' do
       expect(subject.parse_annotations(nil)).to eq({})
     end
@@ -156,6 +206,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::EncryptionAnnotation
     it 'handles extra whitespace between annotation and ?' do
       sql = 'INSERT INTO users (ssn) VALUES (/*@encrypt:users.ssn*/   ?)'
       expect(subject.strip_annotations(sql)).to eq('INSERT INTO users (ssn) VALUES (?)')
+    end
+
+    # The line break may be what ends a line comment the annotation sits in.
+    it 'keeps the line break after an annotation' do
+      sql = "UPDATE users SET a = ? -- /*@encrypt:users.a*/ \n, ssn = ?"
+      expect(subject.strip_annotations(sql)).to eq("UPDATE users SET a = ? -- \n, ssn = ?")
     end
 
     it 'removes an annotation and preserves the numbered placeholder' do
