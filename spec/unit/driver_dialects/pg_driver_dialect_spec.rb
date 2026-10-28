@@ -221,10 +221,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
-  # PostgreSQL has no versioned comments for the version to decide.
-  describe '#server_version' do
+  # PostgreSQL has no executable comments for a version to decide.
+  describe '#executable_comment_version' do
     it 'returns nil' do
-      expect(dialect.server_version(connection)).to be_nil
+      expect(dialect.executable_comment_version(connection)).to be_nil
     end
   end
 

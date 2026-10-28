@@ -124,7 +124,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       # mysql2 reports the version it learned when it connected, so reading it costs no round trip.
-      def server_version(connection)
+      def executable_comment_version(connection)
         return nil if connection.nil?
 
         info = connection.server_info

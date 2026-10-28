@@ -55,7 +55,7 @@ module AwsAdvancedRubyDriverWrapper
           false
         end
 
-        def server_version(_connection)
+        def executable_comment_version(_connection)
           nil
         end
       end

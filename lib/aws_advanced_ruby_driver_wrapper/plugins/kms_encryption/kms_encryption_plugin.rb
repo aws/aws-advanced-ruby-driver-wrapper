@@ -586,7 +586,7 @@ module AwsAdvancedRubyDriverWrapper
       # @raise [Errors::MetadataError] when the statement writes a column the plugin has confirmed is
       #   encrypted with a value it cannot encrypt (see {#check_write})
       def parameter_columns(sql)
-        version = server_version
+        version = executable_comment_version
         annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql, server_version: version)
         stripped = stripped_sql(sql)
         analysis = analysis_of(stripped, version)
@@ -608,7 +608,7 @@ module AwsAdvancedRubyDriverWrapper
       # that writes nothing, so it is reported as nothing having been read rather than as nothing
       # being there to read.
       #
-      # @param version [Integer, nil] see {#server_version}
+      # @param version [Integer, nil] see {#executable_comment_version}
       # @return [Utils::Parser::SqlParser::SqlAnalysisResult]
       def analysis_of(sql, version)
         sql_parser.analyze_sql(sql, server_version: version)
@@ -695,7 +695,7 @@ module AwsAdvancedRubyDriverWrapper
       def column_configs(sql)
         return {} unless ready_for_statement?(sql)
 
-        version = server_version
+        version = executable_comment_version
         annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql, server_version: version)
         tables = statement_tables(analysis_of(stripped_sql(sql), version), annotations)
         return {} if tables.empty?
@@ -840,17 +840,17 @@ module AwsAdvancedRubyDriverWrapper
         Utils::Parser::EncryptionAnnotationParser.strip_annotations(sql)
       end
 
-      # The version of the MySQL server the statement is sent to, as MySQL numbers it (8.0.39 is
-      # 80039). It decides whether a versioned /*!80023 ... */ comment is part of the statement, and so
-      # which column each placeholder after it belongs to. It is read from the connection every time
-      # rather than kept, since a failover or a blue/green switchover can move the connection to a
-      # server of another version.
+      # The version of the MySQL server the statement is sent to, which decides whether a versioned
+      # /*!80023 ... */ comment is part of the statement, and so which column each placeholder after it
+      # belongs to (see DriverDialects::DriverDialect#executable_comment_version). It is read from the
+      # connection every time rather than kept, since a failover or a blue/green switchover can move
+      # the connection to a server of another version.
       #
-      # @return [Integer, nil] nil on PostgreSQL, whose placeholders are numbered, and when the
+      # @return [Integer, nil] nil on PostgreSQL, which has no executable comments, and when the
       #   connection cannot say
-      def server_version
+      def executable_comment_version
         @service_container.dialect_service.driver_dialect
-                          .server_version(@service_container.connection_service.current_connection)
+                          .executable_comment_version(@service_container.connection_service.current_connection)
       end
 
       # -- Lazily built collaborators --
