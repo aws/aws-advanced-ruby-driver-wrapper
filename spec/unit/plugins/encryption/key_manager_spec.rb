@@ -14,6 +14,9 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+# The key manager encodes with Array#pack; the expected values here come from Base64, so the specs
+# also check that the two agree.
+require 'base64'
 require_relative '../../../spec_helper'
 require 'aws-sdk-kms'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/data_key_cache'
