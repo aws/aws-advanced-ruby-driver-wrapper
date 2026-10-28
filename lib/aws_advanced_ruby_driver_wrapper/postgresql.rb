@@ -177,6 +177,10 @@ module AwsAdvancedRubyDriverWrapper
       lotell: :lo_tell, lotruncate: :lo_truncate
     }.freeze
 
+    # The operations pg yields the result of when given a block, clearing it once the block returns and
+    # returning the block's value in its place.
+    YIELDS_RESULT = %i[exec async_exec exec_params exec_prepared].freeze
+
     # A statement can also be prepared by sending a +PREPARE+ rather than by calling pg's own
     # +prepare+, and the +exec_prepared+ that runs it looks no different either way. The two are read
     # here so that a statement prepared the first way is remembered like one prepared the second, and
@@ -198,24 +202,24 @@ module AwsAdvancedRubyDriverWrapper
 
     # Explicitly define critical methods (bypass method_missing to avoid method_missing overhead).
 
-    def exec(sql, *params)
-      execute_operation(:exec, [sql, *params])
+    def exec(sql, *params, &)
+      execute_operation(:exec, [sql, *params], &)
     end
 
     # pg spells this operation +exec+, +query+, +async_exec+ and +async_query+, all of which run the
     # same libpq call. +query+ is defined here rather than left to method_missing because it is the
     # spelling applications use most after +exec+, and it enters the pipeline as +connection.exec+,
     # since that is the libpq operation being performed.
-    def query(sql, *params)
-      execute_operation(:exec, [sql, *params], spelling: :query)
+    def query(sql, *params, &)
+      execute_operation(:exec, [sql, *params], spelling: :query, &)
     end
 
-    def exec_params(sql, params, result_format = 0, type_map = nil)
-      execute_operation(:exec_params, [sql, params, result_format, type_map])
+    def exec_params(sql, params, result_format = 0, type_map = nil, &)
+      execute_operation(:exec_params, [sql, params, result_format, type_map], &)
     end
 
-    def async_exec(sql, *params)
-      execute_operation(:async_exec, [sql, *params])
+    def async_exec(sql, *params, &)
+      execute_operation(:async_exec, [sql, *params], &)
     end
 
     def transaction(&)
@@ -254,8 +258,8 @@ module AwsAdvancedRubyDriverWrapper
       execute_operation(:send_prepare, [stmt_name, sql, param_types])
     end
 
-    def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil)
-      execute_operation(:exec_prepared, [stmt_name, params, result_format, type_map])
+    def exec_prepared(stmt_name, params = [], result_format = 0, type_map = nil, &)
+      execute_operation(:exec_prepared, [stmt_name, params, result_format, type_map], &)
     end
 
     def describe_prepared(stmt_name)
@@ -348,6 +352,10 @@ module AwsAdvancedRubyDriverWrapper
     # made, since an `after` step may be what forgets it, and it is handed to the result as well, so that a
     # plugin which has to inspect the statement still sees it when the rows are read.
     def execute_operation(operation, args = [], kwargs = {}, spelling: operation, &)
+      if block_given? && YIELDS_RESULT.include?(operation)
+        return yield_result(execute_operation(operation, args, kwargs, spelling: spelling), &)
+      end
+
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
       conn = current_conn
       # Guard against a missing connection. Fail loudly instead.
@@ -520,6 +528,12 @@ module AwsAdvancedRubyDriverWrapper
 
     def network_bound_methods
       @network_bound_methods ||= driver_dialect.network_bound_methods
+    end
+
+    def yield_result(result)
+      yield result
+    ensure
+      result.clear
     end
 
     def wrap_pg_result(result, sql = nil)

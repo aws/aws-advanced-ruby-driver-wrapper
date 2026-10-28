@@ -366,6 +366,64 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperPgConnection do
     end
   end
 
+  # pg yields the result of a statement to a block when given one, clears it once the block returns and
+  # returns the block's value in its place. The block has to be given the wrapped result, so that the
+  # rows it reads still reach the plugins.
+  describe 'a statement run with a block' do
+    {
+      exec: ['SELECT ssn FROM users'],
+      query: ['SELECT ssn FROM users'],
+      async_exec: ['SELECT ssn FROM users'],
+      async_query: ['SELECT ssn FROM users'],
+      sync_exec: ['SELECT ssn FROM users'],
+      exec_params: ['SELECT ssn FROM users WHERE name = $1', ['Jo']],
+      exec_prepared: ['select_user', ['Jo']]
+    }.each do |method_name, args|
+      context "##{method_name}" do
+        before do
+          allow(connection).to receive(:prepare)
+          allow(connection).to receive(method_name).and_return(pg_result)
+          allow(pg_result).to receive(:to_a).and_return([{ 'ssn' => '123-45-6789' }])
+          allow(pg_result).to receive(:clear)
+          wrapper.prepare('select_user', 'SELECT ssn FROM users WHERE name = $1')
+        end
+
+        it 'yields the wrapped result and returns the block value' do
+          yielded = nil
+          returned = wrapper.public_send(method_name, *args) do |result|
+            yielded = result
+            'block value'
+          end
+
+          expect(yielded).to be_a(AwsAdvancedRubyDriverWrapper::WrapperPgResult)
+          expect(returned).to eq('block value')
+        end
+
+        it 'reads the rows through the pipeline' do
+          wrapper.public_send(method_name, *args, &:to_a)
+
+          expect(plugin.method_names).to include('result.to_a')
+        end
+
+        it 'clears the result once the block returns' do
+          wrapper.public_send(method_name, *args) { nil }
+
+          expect(pg_result).to have_received(:clear)
+        end
+
+        it 'clears the result even when the block raises' do
+          expect { wrapper.public_send(method_name, *args) { raise 'no' } }.to raise_error('no')
+          expect(pg_result).to have_received(:clear)
+        end
+
+        it 'returns the wrapped result without a block' do
+          expect(wrapper.public_send(method_name, *args)).to be_a(AwsAdvancedRubyDriverWrapper::WrapperPgResult)
+          expect(pg_result).not_to have_received(:clear)
+        end
+      end
+    end
+  end
+
   # pg gives most of its calls more than one spelling, and an application is free to use any of them.
   # A spelling this class does not define is performed by the method that does define the operation,
   # so that it enters the pipeline under the same name, publishes the same SQL and keeps the same
