@@ -107,6 +107,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     end
   end
 
+  describe '#server_version' do
+    it 'returns the version the server reports, as MySQL numbers it' do
+      allow(connection).to receive(:server_info).and_return({ id: 80_039, version: '8.0.39' })
+      expect(dialect.server_version(connection)).to eq(80_039)
+    end
+
+    it 'returns nil when the version cannot be read' do
+      allow(connection).to receive(:server_info).and_raise(StandardError, 'closed')
+      expect(dialect.server_version(connection)).to be_nil
+    end
+
+    it 'returns nil without a connection' do
+      expect(dialect.server_version(nil)).to be_nil
+    end
+  end
+
   describe '#closed?' do
     it 'delegates to connection.closed?' do
       allow(connection).to receive(:closed?).and_return(true)

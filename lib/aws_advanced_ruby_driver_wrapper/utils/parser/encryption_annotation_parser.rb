@@ -32,12 +32,14 @@ module AwsAdvancedRubyDriverWrapper
         # Returns a 1-based map of parameter index => "table.column" for each
         # /*@encrypt:table.column*/ ? or /*@encrypt:table.column*/ $n placeholder.
         # @param sql [String]
+        # @param server_version [Integer, nil] the MySQL server's version, which decides whether a
+        #   versioned +/*!+ comment is part of the statement (see MysqlText.each_segment)
         # @return [Hash{Integer => String}]
-        def parse_annotations(sql)
+        def parse_annotations(sql, server_version: nil)
           # Most statements carry no annotation, so they are not scanned for placeholders at all.
           return {} unless annotations?(sql)
 
-          question_marks = placeholder_positions(sql)
+          question_marks = placeholder_positions(sql, server_version)
 
           sql.to_enum(:scan, ANNOTATION_PATTERN)
              .each_with_object({}) do |_, result|
@@ -70,9 +72,9 @@ module AwsAdvancedRubyDriverWrapper
         # The character positions of every +?+ that is a bind placeholder, skipping any inside a quoted
         # literal or a comment so that it does not shift the count of the placeholder an annotation
         # points at. Only mysql2 binds with +?+, so the text is read by MySQL's rules.
-        def placeholder_positions(sql)
+        def placeholder_positions(sql, server_version)
           positions = []
-          MysqlText.each_code_char(sql) { |char, index| positions << index if char == '?' }
+          MysqlText.each_code_char(sql, server_version: server_version) { |char, index| positions << index if char == '?' }
           positions
         end
       end

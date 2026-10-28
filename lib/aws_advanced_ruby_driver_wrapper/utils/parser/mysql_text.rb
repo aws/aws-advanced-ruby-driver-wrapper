@@ -28,16 +28,20 @@ module AwsAdvancedRubyDriverWrapper
         # What a block comment that never closes is reported as by {each_code_char}.
         UNCLOSED_COMMENT = '/*'
 
+        # The server version from which MySQL reads a six-digit version in a +/*!+ comment.
+        SIX_DIGIT_VERSIONS_FROM = 80_100
+
         module_function
 
         # Yields every character that is code, along with its index, skipping quoted literals and
         # comments (see {each_segment}).
         #
+        # @param server_version [Integer, nil] see {each_segment}
         # @param comments [Boolean] see {each_segment}
         # @return [String, nil] the quote character, or {UNCLOSED_COMMENT}, still open when the text
         #   ran out; nil when the text ended in code or in a line comment
-        def each_code_char(text, comments: true)
-          each_segment(text, comments: comments) do |kind, from, to|
+        def each_code_char(text, server_version: nil, comments: true)
+          each_segment(text, server_version: server_version, comments: comments) do |kind, from, to|
             (from...to).each { |index| yield(text[index], index) } if kind == :code
           end
         end
@@ -49,9 +53,13 @@ module AwsAdvancedRubyDriverWrapper
         # What is left is to be read for its literals alone (+comments: false+), not scanned for
         # comments again: blanking +0--/**/?+ leaves +0--    ?+, where the dashes now look like the
         # start of a comment the server never saw.
-        def blank_comments(text)
+        #
+        # @param server_version [Integer, nil] see {each_segment}
+        def blank_comments(text, server_version: nil)
           blanked = text.dup
-          each_segment(text) { |kind, from, to| blanked[from...to] = ' ' * (to - from) if kind == :comment }
+          each_segment(text, server_version: server_version) do |kind, from, to|
+            blanked[from...to] = ' ' * (to - from) if kind == :comment
+          end
           blanked
         end
 
@@ -62,42 +70,120 @@ module AwsAdvancedRubyDriverWrapper
         # doubled quote reads as one closing and one opening quote, which leaves the state right
         # either way. A comment is +/* ... */+, +#+ to the end of the line, or +--+ to the end of the
         # line when whitespace or a control character follows the dashes, as MySQL requires; without
-        # it the dashes are two minus signs. A +/*! ... */+ comment is code that MySQL runs, unless it
-        # names a server version newer than the one it reaches, so its contents are read as code.
+        # it the dashes are two minus signs.
         #
+        # A +/*! ... */+ comment holds code that MySQL runs, so only its opening +/*!+ and its closing
+        # +*/+ are comment and what is between them is read as code. When the +!+ is followed by a
+        # version, +/*!80023 ... */+, MySQL runs the code only on a server of that version or later,
+        # and on an older one the whole of it is a comment. Which of the two it is depends on the
+        # server the statement is sent to, so the comment is read as code when that is not known.
+        #
+        # @param server_version [Integer, nil] the version of the server the statement is sent to, as
+        #   MySQL numbers it (8.0.39 is 80039), or nil when it is not known
         # @param comments [Boolean] whether to look for comments at all; false for text whose comments
         #   have already been blanked (see {blank_comments}), so that only literals are skipped
         # @yieldparam kind [Symbol] +:code+, +:literal+ or +:comment+
         # @return [String, nil] as {each_code_char}
-        def each_segment(text, comments: true)
+        def each_segment(text, server_version: nil, comments: true)
           index = 0
           code_from = 0
+          executable_open = false
 
           while index < text.length
-            char = text[index]
-            if QUOTES.include?(char)
-              kind = :literal
-              finish = literal_end(text, index)
-            elsif comments && block_comment?(text, index)
-              kind = :comment
-              close = text.index('*/', index + 2)
-              finish = close && (close + 2)
-            elsif comments && (char == '#' || dash_comment?(text, index))
-              kind = :comment
-              finish = text.index("\n", index) || text.length
-            else
+            kind, finish = if comments
+                             segment_at(text, index, server_version, executable_open)
+                           elsif QUOTES.include?(text[index])
+                             [:literal, literal_end(text, index)]
+                           end
+            if kind.nil?
               index += 1
               next
             end
 
+            case kind
+            when :executable_open then executable_open = true
+            when :executable_close then executable_open = false
+            end
             yield(:code, code_from, index) if code_from < index
-            yield(kind, index, finish || text.length)
-            return kind == :literal ? char : UNCLOSED_COMMENT if finish.nil?
+            yield(kind == :literal ? :literal : :comment, index, finish || text.length)
+            return kind == :literal ? text[index] : UNCLOSED_COMMENT if finish.nil?
 
             index = code_from = finish
           end
 
           yield(:code, code_from, index) if code_from < index
+          executable_open ? UNCLOSED_COMMENT : nil
+        end
+
+        # What starts at +index+, if it is not code.
+        #
+        # @return [Array(Symbol, Integer), nil] its kind and the index just past it, which is nil when it
+        #   never ends; nil when the character is code
+        def segment_at(text, index, server_version, executable_open)
+          char = text[index]
+          if QUOTES.include?(char)
+            [:literal, literal_end(text, index)]
+          elsif text[index, 3] == '/*!'
+            executable_comment(text, index, server_version)
+          elsif executable_open && text[index, 2] == '*/'
+            [:executable_close, index + 2]
+          elsif text[index, 2] == '/*'
+            close = text.index('*/', index + 2)
+            [:comment, close && (close + 2)]
+          elsif char == '#' || dash_comment?(text, index)
+            [:comment, text.index("\n", index) || text.length]
+          end
+        end
+
+        # A +/*!+ comment: its opener and version when MySQL runs what it holds, or the whole of it when
+        # the version it names is newer than the server's.
+        def executable_comment(text, index, server_version)
+          version, digits = comment_version(text, index + 3, server_version)
+          return [:executable_open, index + 3 + digits] unless version && server_version && version > server_version
+
+          [:comment, skipped_comment_end(text, index + 3 + digits)]
+        end
+
+        # The version a +/*!+ comment names, read as MySQL reads it: six digits followed by whitespace
+        # on a server that takes six, otherwise five digits, and no version at all with fewer. The end
+        # of the comment right after six digits is not whitespace, so MySQL reads five of them then.
+        #
+        # @return [Array(Integer, Integer), Array(nil, Integer)] the version, or nil, and how many
+        #   digits it took up
+        def comment_version(text, from, server_version)
+          six = text[from, 7].to_s
+          if server_version.to_i >= SIX_DIGIT_VERSIONS_FROM && six.match?(/\A\d{6}(?:\s|\z)/)
+            [six[0, 6].to_i, 6]
+          elsif text[from, 5].to_s.match?(/\A\d{5}\z/)
+            [text[from, 5].to_i, 5]
+          else
+            [nil, 0]
+          end
+        end
+
+        # Where a +/*!+ comment MySQL does not run ends. MySQL lets one comment be nested inside one of
+        # these, so the first +*/+ after a nested +/*+ closes the nested one rather than this one.
+        #
+        # @return [Integer, nil] the index just past its close, or nil when it never closes
+        def skipped_comment_end(text, from)
+          nested = false
+          index = from
+
+          while index < text.length
+            pair = text[index, 2]
+            if pair == '*/'
+              return index + 2 unless nested
+
+              nested = false
+              index += 2
+            elsif pair == '/*' && !nested
+              nested = true
+              index += 2
+            else
+              index += 1
+            end
+          end
+
           nil
         end
 
@@ -115,10 +201,6 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           nil
-        end
-
-        def block_comment?(text, index)
-          text[index, 2] == '/*' && text[index + 2] != '!'
         end
 
         def dash_comment?(text, index)

@@ -18,13 +18,13 @@ require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/mysql_text'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlText do
-  describe '.each_code_char' do
-    def code(text)
-      chars = +''
-      unclosed = described_class.each_code_char(text) { |char, _index| chars << char }
-      [chars, unclosed]
-    end
+  def code(text, server_version = nil)
+    chars = +''
+    unclosed = described_class.each_code_char(text, server_version: server_version) { |char, _index| chars << char }
+    [chars, unclosed]
+  end
 
+  describe '.each_code_char' do
     it 'yields every character of plain code' do
       expect(code('a = ?')).to eq(['a = ?', nil])
     end
@@ -54,7 +54,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlText do
     end
 
     it 'reads the contents of an executable comment as code' do
-      expect(code('/*! ? */')).to eq(['/*! ? */', nil])
+      expect(code('/*! ? */')).to eq([' ? ', nil])
+    end
+
+    it 'reads a block comment inside an executable comment as a comment' do
+      expect(code('/*! a /* b? */ ? */ c')).to eq([' a  ?  c', nil])
+    end
+
+    it 'reports an executable comment that never closes' do
+      expect(code('/*! ?')).to eq([' ?', '/*'])
     end
 
     it 'reports the quote of a literal that never closes' do
@@ -82,6 +90,56 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlText do
     # MySQL does not nest comments: the first */ closes the comment, however many /* came before it.
     it 'ends a block comment at the first close' do
       expect(code('/* a /* b */ ? */')).to eq([' ? */', nil])
+    end
+  end
+
+  describe '.each_code_char with a versioned executable comment' do
+    it 'reads the contents as code on a server of that version or later' do
+      expect(code('/*!80023 ? */', 80_023)).to eq([' ? ', nil])
+      expect(code('/*!80023 ? */', 80_039)).to eq([' ? ', nil])
+    end
+
+    it 'skips the whole comment on an older server' do
+      expect(code('a /*!80023 ? */ b', 80_022)).to eq(['a  b', nil])
+    end
+
+    it 'reads the contents as code when the server version is not known' do
+      expect(code('/*!99999 ? */', nil)).to eq([' ? ', nil])
+    end
+
+    # MySQL lets one comment be nested inside a versioned comment it skips.
+    it 'skips one comment nested inside a comment it skips' do
+      expect(code('/*!99999 a /* b */ ? */ ?', 80_039)).to eq([' ?', nil])
+    end
+
+    it 'does not treat a quote inside a skipped comment as opening a literal' do
+      expect(code("/*!99999 '*/ ?", 80_039)).to eq([' ?', nil])
+    end
+
+    it 'reports a skipped comment that never closes' do
+      expect(code('/*!99999 ?', 80_039)).to eq(['', '/*'])
+    end
+
+    it 'reads fewer than five digits as no version at all' do
+      expect(code('/*!8002 ? */', 70_000)).to eq(['8002 ? ', nil])
+    end
+
+    # A six-digit version is read only by a server that takes one, MySQL 8.1 and later; an older
+    # server reads the first five digits as the version and the sixth as code.
+    it 'reads a six-digit version on a server that takes one' do
+      expect(code('/*!100000 ? */', 80_100)).to eq(['', nil])
+      expect(code('/*!100000 ? */', 80_400)).to eq(['', nil])
+      expect(code('/*!080400 ? */', 80_400)).to eq([' ? ', nil])
+    end
+
+    it 'reads the first five digits of a six-digit version on an older server' do
+      expect(code('/*!100000 ? */', 80_039)).to eq(['0 ? ', nil])
+    end
+
+    # MySQL needs whitespace after six digits to read them as the version, and the end of the
+    # comment is not enough.
+    it 'reads five digits when the comment ends right after six' do
+      expect(code('/*!800000*/ ?', 80_400)).to eq(['0 ?', nil])
     end
   end
 

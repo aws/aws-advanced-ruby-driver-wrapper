@@ -221,6 +221,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  # PostgreSQL has no versioned comments for the version to decide.
+  describe '#server_version' do
+    it 'returns nil' do
+      expect(dialect.server_version(connection)).to be_nil
+    end
+  end
+
   describe '#reported_in_transaction' do
     it 'returns true when inside a valid transaction block' do
       allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_INTRANS)

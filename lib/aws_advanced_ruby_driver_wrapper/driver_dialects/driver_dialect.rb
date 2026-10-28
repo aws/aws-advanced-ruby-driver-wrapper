@@ -159,6 +159,14 @@ module AwsAdvancedRubyDriverWrapper
       def reported_in_transaction(_connection)
         nil
       end
+
+      # The version of the server the connection is to, as MySQL numbers it (8.0.39 is 80039), which
+      # decides whether a versioned /*!80023 ... */ comment in a MySQL statement is part of it.
+      # @param connection [Object]
+      # @return [Integer, nil] nil when the driver has no such comments or the version cannot be read
+      def server_version(_connection)
+        nil
+      end
     end
   end
 end

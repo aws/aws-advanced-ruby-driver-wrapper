@@ -46,6 +46,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
       sql = 'UPDATE customers SET email = ? WHERE id = ?'
       expect(mysql_parser.analyze_sql(sql)).to eq(mysql_parser.analyze_sql(sql))
     end
+
+    # A connection can reach a server of another version after a failover or a blue/green
+    # switchover, and a versioned comment can read differently there.
+    it 'parses a statement again for a server of another version' do
+      sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+
+      expect(mysql_parser.analyze_sql(sql, server_version: 80_039).parameter_column_names).to eq({ 3 => 'ssn' })
+      expect(mysql_parser.analyze_sql(sql, server_version: 80_028).parameter_column_names)
+        .to eq({ 1 => 'name', 2 => 'ssn' })
+    end
+
+    it 'passes no server version to the PostgreSQL analyzer' do
+      pg_analyzer = AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer
+      allow(pg_analyzer).to receive(:analyze).and_call_original
+
+      described_class.new(pg_dialect).analyze_sql('SELECT 1', server_version: 80_039)
+
+      expect(pg_analyzer).to have_received(:analyze).with('SELECT 1')
+    end
   end
 
   describe '#analyze_sql query_type' do

@@ -126,13 +126,15 @@ module AwsAdvancedRubyDriverWrapper
 
         module_function
 
-        def analyze(sql)
+        # @param server_version [Integer, nil] the version of the server the statement is sent to, as
+        #   MySQL numbers it, which decides whether a versioned +/*!+ comment is part of the statement
+        def analyze(sql, server_version: nil)
           return QueryAnalysis.unknown unless sql.is_a?(String) && !sql.strip.empty?
 
           # A comment can sit anywhere whitespace can - between a keyword and its table, inside a
           # column list, next to a placeholder - so every pattern below reads the text with its
           # comments blanked out, and every scan of it below looks for literals alone.
-          sql = MysqlText.blank_comments(sql)
+          sql = MysqlText.blank_comments(sql, server_version: server_version)
           body, preceding_parameters = statement_body(sql)
           return QueryAnalysis.unknown if body.nil?
 

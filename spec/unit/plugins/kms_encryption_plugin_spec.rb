@@ -50,10 +50,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
                                                       config: encryption_config)
   end
   let(:plugin_manager) { instance_double(services::PluginManager) }
+  # The driver connection the statement goes out on, which is asked for the MySQL server's version.
+  let(:connection) { nil }
   let(:service_container) do
     instance_double(services::ServiceContainer, plugin_manager: plugin_manager,
                                                 dialect_service: instance_double(services::DialectService,
-                                                                                 driver_dialect: driver_dialect))
+                                                                                 driver_dialect: driver_dialect),
+                                                connection_service: instance_double(services::ConnectionService,
+                                                                                    current_connection: connection))
   end
   subject(:plugin) { described_class.new(service_container, props, encryption_utility: encryption_utility) }
 
@@ -319,6 +323,63 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
 
         expect(bound_args.first).to eq('Jo')
         expect_encrypted(bound_args[1], '123-45-6789')
+      end
+    end
+
+    # MySQL runs what a versioned comment holds only on a server of that version or later, so
+    # whether a question mark inside one is a placeholder depends on the server the statement goes to.
+    context 'with MySQL and a question mark inside a versioned comment' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+      let(:server_id) { 80_028 }
+      let(:connection) { double('Mysql2::Client', server_info: { id: server_id, version: '8.0.28' }) }
+
+      it 'encrypts the parameter after a comment the server is too old to run' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts the annotated parameter after a comment the server is too old to run' do
+        sql = 'INSERT INTO users (ssn) SELECT /*!80030 ?, */ /*@encrypt:users.ssn*/ ?'
+        call('statement.execute', args: %w[123-45-6789], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+      end
+
+      context 'when the server runs the comment' do
+        let(:server_id) { 80_039 }
+
+        it 'counts the placeholder inside it' do
+          sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+          call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+          expect(bound_args.take(2)).to eq(%w[Jo 1])
+          expect_encrypted(bound_args.last, '123-45-6789')
+        end
+      end
+
+      # A failover or a blue/green switchover can move the connection to a server of another
+      # version, so the version is read for every statement rather than once.
+      it 'reads the statement for the server the connection has moved to' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+        expect_encrypted(bound_args.last, '123-45-6789')
+
+        allow(connection).to receive(:server_info).and_return({ id: 80_039, version: '8.0.39' })
+        call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+        expect(bound_args.take(2)).to eq(%w[Jo 1])
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'reads the comment as part of the statement when the version cannot be read' do
+        allow(connection).to receive(:server_info).and_raise(StandardError, 'closed')
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+        expect_encrypted(bound_args.last, '123-45-6789')
       end
     end
 

@@ -542,10 +542,46 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
       expect(bound(result)).to eq([['ssn', 2]])
     end
 
-    it 'counts a question mark inside an executable comment' do
+    it 'reads the contents of an executable comment as part of the statement' do
       result = subject.analyze('INSERT INTO users (n, ssn) VALUES (/*! ? */, ?)')
 
-      expect(bound(result)).to eq([['ssn', 2]])
+      expect(bound(result)).to eq([['n', 1], ['ssn', 2]])
+    end
+
+    # MySQL runs a versioned executable comment only on a server of that version or later; on an
+    # older one it is an ordinary comment, and a question mark inside it is not a placeholder.
+    context 'with a versioned executable comment' do
+      let(:sql) { 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)' }
+
+      it 'counts its question mark on a server that runs it' do
+        result = subject.analyze(sql, server_version: 80_039)
+
+        expect(bound(result)).to eq([['ssn', 3]])
+      end
+
+      it 'does not count its question mark on a server too old to run it' do
+        result = subject.analyze(sql, server_version: 80_028)
+
+        expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+        expect(result.write_columns_complete).to be(true)
+      end
+
+      it 'counts its question mark when the server version is not known' do
+        expect(bound(subject.analyze(sql))).to eq([['ssn', 3]])
+      end
+
+      # The comment's markers are not part of the statement, so the INSERT is read past them whether
+      # or not the server runs what is between them.
+      it 'reads an INSERT with a versioned modifier between its keyword and INTO' do
+        modifier = 'INSERT /*!50000 IGNORE */ INTO users (name, ssn) VALUES (?, ?)'
+
+        [nil, 40_000, 80_039].each do |server_version|
+          result = subject.analyze(modifier, server_version: server_version)
+
+          expect(result.tables).to eq(['users'])
+          expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+        end
+      end
     end
 
     # MySQL does not read -- followed by /* as a comment, so the placeholder after the block comment
