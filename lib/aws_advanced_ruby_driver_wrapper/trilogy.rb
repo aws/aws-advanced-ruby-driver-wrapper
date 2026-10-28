@@ -100,7 +100,7 @@ module AwsAdvancedRubyDriverWrapper
 
     def method_missing(method_name, *, **, &)
       conn = current_conn
-      raise NoMethodError, 'Connection not initialized' if conn.nil?
+      raise Trilogy::BaseConnectionError, 'connection is not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"

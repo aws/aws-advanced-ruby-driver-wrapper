@@ -208,6 +208,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient do
     end
   end
 
+  # During a Blue/Green switchover the current connection is momentarily nil. A call in that window
+  # must fail as a connection error the adapter can translate, not a bare NoMethodError.
+  describe 'when the current connection is nil' do
+    let(:connection) { nil }
+
+    it 'raises a Trilogy connection error rather than NoMethodError' do
+      # change_db reaches the client through method_missing, where the nil guard lives.
+      expect { client.change_db('other') }.to raise_error(Trilogy::BaseConnectionError, /not initialized/)
+    end
+  end
+
   describe '#inspect' do
     it 'does not expose the connection config' do
       expect(client.inspect).to match(/\A#<AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient:0x\h+>\z/)
