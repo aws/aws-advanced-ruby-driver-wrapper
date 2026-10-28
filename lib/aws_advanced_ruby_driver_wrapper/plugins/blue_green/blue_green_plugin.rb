@@ -52,9 +52,9 @@ module AwsAdvancedRubyDriverWrapper
 
         PROVIDERS = Concurrent::Map.new
 
-        # Storage key, within the BLUE_GREEN_NAME cache, under which the drop-blue-connections marker
-        # for a deployment is kept. It is distinct from the status key so it survives the provider's
-        # reset_context_when_completed.
+        # Storage key, within the DROP_MARKER_NAME cache, under which the drop-blue-connections marker
+        # for a deployment is kept. DROP_MARKER_NAME is a separate partition from the status cache, so
+        # the marker survives both the status cache's TTL and the provider's reset_context_when_completed.
         def self.drop_marker_key(bgd_id)
           "#{bgd_id}::drop_blue_connections_marker"
         end
@@ -75,6 +75,7 @@ module AwsAdvancedRubyDriverWrapper
           @connection_open_time_ns = nil
           @connect_time_host = nil
           @checked_drop_marker_id = nil
+          @pending_stale_marker_id = nil
 
           service_container.storage_service.register(BLUE_GREEN_NAME, ttl: 3600)
           service_container.storage_service.register(DROP_MARKER_NAME, ttl: DROP_MARKER_TTL_SEC)
@@ -104,6 +105,12 @@ module AwsAdvancedRubyDriverWrapper
 
             return pipeline_callable.call if CLOSING_METHODS.include?(method_name)
 
+            # Read the status before the stale check. The provider stores the active drop marker before
+            # it writes the POST/COMPLETED status, so reading status first closes the race where a stale
+            # check sees a still-pending marker and the COMPLETED early return below then skips re-checking
+            # the now-active marker: if the switchover has completed, the check below sees the active marker.
+            @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
+
             # Invalidate a connection opened to the old blue environment before a confirmed switchover,
             # so the failover plugin reconnects through BG routing instead of serving a stale read. This
             # runs before the NOT_CREATED/COMPLETED early return below, because after the switchover the
@@ -113,7 +120,6 @@ module AwsAdvancedRubyDriverWrapper
               return pipeline_callable.call
             end
 
-            @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
             if @bg_status.nil? || @bg_status.current_phase == Phase::NOT_CREATED || @bg_status.current_phase == Phase::COMPLETED
               return pipeline_callable.call
             end
@@ -249,11 +255,19 @@ module AwsAdvancedRubyDriverWrapper
 
           @connection_open_time_ns = nano_time
           @connect_time_host = host_info&.host&.downcase
+          # A (re)connect produces a fresh connection (e.g. after failover): reset the per-connection
+          # marker latches so this new incarnation re-evaluates the current marker from a clean slate
+          # instead of inheriting the retired connection's checked/pending state.
+          @checked_drop_marker_id = nil
+          @pending_stale_marker_id = nil
         end
 
         # Whether this connection should be invalidated because it was opened to the old blue environment
         # before a now-confirmed switchover. The marker is read on every call so a later switchover's
-        # marker is noticed; once a marker has been checked, it is not checked again.
+        # marker is noticed. A marker that does not apply to this connection is latched immediately and
+        # never re-examined; a marker that does apply is only latched once #invalidate_stale_blue_connection
+        # confirms the close, so a transient close failure leaves the connection to be invalidated again on
+        # its next use instead of silently serving stale reads for the rest of its life.
         def stale_blue_connection?
           return false unless @drop_blue_connections
 
@@ -261,8 +275,15 @@ module AwsAdvancedRubyDriverWrapper
           return false unless marker.is_a?(DropBlueConnectionsMarker) && marker.active?
           return false if marker.id == @checked_drop_marker_id
 
-          @checked_drop_marker_id = marker.id
-          marker.stale?(@connect_time_host, @connection_open_time_ns)
+          if marker.stale?(@connect_time_host, @connection_open_time_ns)
+            @pending_stale_marker_id = marker.id
+            true
+          else
+            # This connection does not predate the switchover and never will against this marker (markers
+            # are immutable), so latch it now to skip re-reading the marker on every future call.
+            @checked_drop_marker_id = marker.id
+            false
+          end
         end
 
         # Closes the connection directly through the driver dialect rather than the pipeline's close
@@ -278,6 +299,10 @@ module AwsAdvancedRubyDriverWrapper
 
           conn = @service_container.connection_service.current_connection
           @service_container.dialect_service.driver_dialect.close_connection(conn) unless conn.nil?
+          # Only now that the close is confirmed do we latch the marker as handled. If the close raised
+          # and was swallowed below, the marker stays unlatched so the next use retries the invalidation
+          # rather than serving a stale read from retired blue for the rest of the connection's life.
+          @checked_drop_marker_id = @pending_stale_marker_id
         rescue StandardError => e
           logger.debug { "[bgd_id: '#{@bgd_id}'] Failed to invalidate stale blue connection: #{e.class}: #{e.message}" }
         end

@@ -249,6 +249,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
         expect(driver_dialect).not_to receive(:close_connection)
         expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
       end
+
+      # A close that raises is swallowed, but the marker must not be latched as handled — otherwise the
+      # still-open connection would serve stale reads from retired blue for the rest of its life.
+      it 'retries invalidation on the next use when the close fails' do
+        expect(driver_dialect).to receive(:close_connection).with(connection).ordered.and_raise(StandardError, 'boom')
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+
+        expect(driver_dialect).to receive(:close_connection).with(connection).ordered
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
     end
 
     context 'with a pending (not yet confirmed) marker' do
@@ -303,6 +313,19 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
 
       it 'does not invalidate the connection' do
         expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    # The provider stores the active marker before it writes the COMPLETED status, so a connection
+    # that reads a COMPLETED status must still be invalidated via the marker rather than racing
+    # past it on the COMPLETED early-return path.
+    context 'with an active marker and a COMPLETED status' do
+      let(:completed_status) { instance_double(bg::Status, current_phase: phase::COMPLETED) }
+
+      it 'invalidates the stale connection instead of taking the COMPLETED early return' do
+        allow(storage_service).to receive(:get).with(bg_name, bgd_id_val).and_return(completed_status)
+        expect(driver_dialect).to receive(:close_connection).with(connection)
         plugin.execute('connection.query', -> { :query_result })
       end
     end
