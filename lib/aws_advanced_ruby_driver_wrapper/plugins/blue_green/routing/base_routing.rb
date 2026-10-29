@@ -25,7 +25,7 @@ module AwsAdvancedRubyDriverWrapper
           include Logging
 
           MINIMUM_SLEEP_CHUNK_SEC = 0.05
-          TELEMETRY_SWITCHOVER = 'Blue/Green switchover'
+          TELEMETRY_SWITCHOVER = 'Blue/Green Deployment switchover'
 
           def match?(host_info, role)
             (@host.nil? || @host.downcase == host_info&.host&.downcase) &&
