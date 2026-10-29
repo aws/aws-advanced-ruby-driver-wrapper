@@ -337,7 +337,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
     end
 
     def switchover_span_parent
-      span_named('Blue/Green switchover')&.parent_span_id
+      span_named(routing::BaseRouting::TELEMETRY_SWITCHOVER)&.parent_span_id
     end
 
     it 'records the time SuspendConnectRouting holds a connect as a switchover span' do
