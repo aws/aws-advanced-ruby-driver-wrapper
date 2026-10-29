@@ -250,6 +250,7 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def cached_info
+          # Explicitly unregistered: a monitor reading its own data must not keep itself alive.
           storage_service.get(ENDPOINT_INFO_CACHE_NAME, @custom_endpoint_host.url, register_access: false)
         end
 

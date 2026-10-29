@@ -32,9 +32,7 @@ module Integration
 
     # Reads the cached topology host list for a cluster id, or nil if nothing is cached yet.
     def cached_hosts(cluster_id)
-      AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(
-        :topology, cluster_id, register_access: false
-      )
+      AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(:topology, cluster_id)
     end
 
     # Resolves the cluster id a connection with these props will cache its topology under. The RDS host

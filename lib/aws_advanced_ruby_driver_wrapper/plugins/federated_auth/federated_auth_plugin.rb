@@ -14,7 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'cgi'
+require 'cgi/escape'
 require 'uri'
 require_relative 'base_saml_auth_plugin'
 
