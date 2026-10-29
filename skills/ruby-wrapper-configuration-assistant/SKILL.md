@@ -11,6 +11,15 @@ Maintainer note (AI: ignore this comment). This file is a snapshot of one wrappe
 - parameters and defaults: §5 and §6;
 - "Known issue" notes: remove or reword any the release fixes;
 - §17 when a listed feature is added.
+
+skills/ruby-wrapper-troubleshooting-assistant/SKILL.md repeats some of these facts. When you change any of the
+following here, update the matching section there too:
+- error classes (§9.3, §14.2) -> its §6.1;
+- plugin codes and the default list (§4.1, §4.3) -> its §6.2;
+- parameters and defaults (§5, §6) -> its §6.3;
+- "Known issue" notes -> its §6.4;
+- error messages quoted in §14.3 -> its §4 playbooks;
+- logging setup (§14.1) -> its §3.4.
 -->
 
 # AWS Advanced Ruby Driver Wrapper - Configuration Assistant
@@ -208,9 +217,9 @@ State that Active Record does not balance individual queries across replicas: a 
 
 ### 2.10 Track J - Troubleshooting
 
-This track covers problems caused by configuration. If the evidence points elsewhere (a wrapper bug, the network, the database itself), say so and point the user at §14.5 rather than guessing.
+This track covers problems caused by configuration. If the evidence points elsewhere (a wrapper bug, the network, AWS permissions, the database itself), say so rather than guessing. The `ruby-wrapper-troubleshooting-assistant` skill covers those problems - isolating the cause, environment checks, reading wrapper logs, and drafting an issue report. If the user has it, suggest they use it; otherwise point them at §14.5.
 
-An exception raised from inside the wrapper that isn't one of the documented error classes (§14.2) - for example a `NoMethodError` or `TypeError` with a backtrace in `aws_advanced_ruby_driver_wrapper` code - is a probable wrapper bug. First compare it with the "Known issue" notes in this document: if one clearly matches, say so and give its workaround; if none matches, say that too rather than forcing a match. Don't speculate about internal causes or offer configuration workarounds; collect the §14.5 details and point the user to the issue tracker.
+An exception raised from inside the wrapper that isn't one of the documented error classes (§14.2) - for example a `NoMethodError` or `TypeError` with a backtrace in `aws_advanced_ruby_driver_wrapper` code - is a probable wrapper bug. First compare it with the "Known issue" notes in this document: if one clearly matches, say so and give its workaround; if none matches, say that too rather than forcing a match. Don't speculate about internal causes or offer configuration workarounds; suggest the troubleshooting skill if the user has it, or collect the §14.5 details and point the user to the issue tracker.
 
 Walk through these in order until the cause is clear:
 
@@ -550,6 +559,8 @@ production:
 
 Without distinct `cluster_id` values (default `'1'`), both clusters' topologies collide in the shared cache → failover can reconnect to the wrong cluster, and the topology monitor mixes stale data. Rule of thumb: same physical cluster (writer and reader entries, several pools) → same `cluster_id`; different clusters → different `cluster_id`.
 
+An Aurora Global Database counts as one cluster: every `gdb_failover` connection to it (§3.9, §3.10) shares one `cluster_id`, whichever region's endpoint it uses, because the global dialects read one topology covering all regions. A connection that treats one region's cluster on its own (`failover` with `aurora-pg` / `aurora-mysql` on a regional endpoint) sees only that region's instances, so give it its own `cluster_id`.
+
 ### 3.13 Aurora custom endpoint
 
 ```yaml
@@ -719,7 +730,7 @@ Detects that the cluster promoted a different instance and reconnects the connec
 | `failover_reader_host_selector_strategy` | String | `random` | Strategy used to select a reader during reader failover (§7). |
 | `enable_connect_failover` | Boolean | `false` | Enables cluster-aware failover when the **initial** connection fails because of a network exception. The initial connection may be redirected to another instance. |
 | `cluster_instance_host_pattern` | String | auto-derived for RDS endpoints | Pattern used to build instance endpoints when the host is not a recognizable RDS endpoint (`?` = instance identifier). Required for IP addresses and custom domains. |
-| `cluster_id` | String | `'1'` | Shares one topology monitor and cache between connections to the same cluster (§3.12). |
+| `cluster_id` | String | `'1'` | Shares one topology monitor and cache between connections to the same cluster (§3.12). A Global Database is one cluster for `gdb_failover` connections in any region. |
 | `cluster_topology_refresh_rate_sec` | Float | `5.0` | Interval at which the topology monitor refreshes a stable cluster. |
 | `cluster_topology_high_refresh_rate_sec` | Float | `0.1` | Interval between topology updates during the high-rate period (writer discovery, and typically about 30 seconds after a new writer is detected). |
 | `cluster_topology_max_instance_monitors` | Integer | `16` | Maximum per-instance topology monitors run in parallel during a topology update. |
@@ -1132,8 +1143,8 @@ These are raised only by `failover` and `gdb_failover`. Without either plugin (f
 
 | Error class | Connection valid? | What to do |
 |---|:---:|---|
-| `FailoverSuccessError` | Yes | Failover succeeded outside a transaction. Re-apply session state, then replay the interrupted statement. |
-| `TransactionStateUnknownError` | Yes | Failover happened inside a transaction; its outcome is unknown. Re-apply session state, restart the transaction, replay all its statements. Check before retrying non-idempotent work. |
+| `FailoverSuccessError` | Yes | Failover succeeded outside a transaction. The interrupted statement may or may not have taken effect: a write in autocommit mode commits as it runs, and the server may have finished it before the reply was lost. Re-apply session state, then retry a read, or replay a write only if it's idempotent. |
+| `TransactionStateUnknownError` | Yes | Failover happened inside a transaction. If the connection dropped on a statement inside it, the transaction was rolled back (the server rolls back an open transaction when its session ends). If it dropped on the commit, the commit may have completed before the acknowledgement was lost - that's the unknown case. Re-apply session state and restart the transaction, replaying all its statements; after a failed commit, check whether its changes are there before retrying non-idempotent work. |
 | `FailoverFailedError` | No | No new instance was reached within `failover_timeout_sec`. Wait, then reconnect. |
 
 "Re-apply session state": under Active Record, declare session settings under `variables:` in `database.yml` and the adapter re-applies them automatically after a successful failover (§13.4); anything else (temporary tables, advisory locks, `SET` statements run in code) the app must redo. With a direct connection, the app re-applies all of it.
@@ -1155,7 +1166,7 @@ rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
 end
 ```
 
-Only wrap work that is safe to replay; for `TransactionStateUnknownError`, check the transaction's effect first.
+Only wrap work that is safe to replay. For `TransactionStateUnknownError` raised from the commit (under Active Record, the end of the `transaction do` block), check the transaction's effect first.
 
 ---
 
@@ -1366,7 +1377,7 @@ AwsAdvancedRubyDriverWrapper.logger = wrapper_logger
 
 Outside Rails, or when the wrapper still uses its default logger, `AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG` affects only the wrapper. To send wrapper messages to the app log at the app's normal level, `AwsAdvancedRubyDriverWrapper.logger = Rails.logger` is fine - just don't use it for debug.
 
-Property values whose names contain `password`, `token`, `secret`, or `credential` are redacted in wrapper log output. Even so, keep `DEBUG` to a diagnosis window in production (volume, and connection metadata).
+The wrapper's log lines don't include passwords, tokens, or secret values - they show hostnames, roles, and error messages. Even so, keep `DEBUG` to a diagnosis window in production (volume, and connection metadata such as hostnames).
 
 ### 14.2 Error classes to recognize
 
@@ -1406,7 +1417,7 @@ All under `AwsAdvancedRubyDriverWrapper::Errors`, subclasses of `AwsError`:
 | Global Database connection fails at setup | Missing `global_cluster_instance_host_patterns`, or missing `failover_home_region` on the global endpoint | Set both (§5.2) |
 | IAM auth fails on MySQL | Missing `enable_cleartext_plugin: true` (or no TLS) | Add it with `ssl_mode: verify_identity` + `sslca` |
 | IAM token generated for the wrong host/region | Connecting through IP, own domain, or global endpoint | `iam_host` (+ `iam_region`); `initial_connection` on the global endpoint |
-| `IamAuthError` / `SecretsManagerAuthError` hours after deploy | Temporary AWS credentials in environment variables expired | Use a refreshing source (instance profile, task role, assume role in config) (§6.4) |
+| New connections fail hours after deploy while existing ones keep working. `iam`: the database rejects the token (`PAM authentication failed` / MySQL `Access denied`; under Active Record `ActiveRecord::DatabaseConnectionError` with the username/password message). `secrets_manager`: the secret fetch raises an AWS SDK error such as `ExpiredTokenException` | Temporary AWS credentials in environment variables expired. Tokens are still signed with them locally, so the database rejects them; a cached secret keeps working until it's dropped (20 minutes after the last successful fetch), then the fetch fails | Use a refreshing source (instance profile, task role, assume role in config) (§6.4) |
 | `LoadError` when connecting with `kms_encryption` on PostgreSQL | `pg_query` missing | `gem 'pg_query', '>= 5.1'` |
 | `Errors::MetadataError` writing an encrypted column on MySQL via Active Record | Prepared statements off, so the value was inlined as a literal | `prepared_statements: true` |
 | `Errors::EncryptionError` reading an encrypted column | Value isn't valid ciphertext for that column (pre-existing plaintext, or tampered) | Encrypt existing data; `encryption_return_unverified_data` only for a bounded migration |

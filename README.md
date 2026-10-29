@@ -112,7 +112,7 @@ This is a minimal configuration. To add failover tuning, IAM or Secrets Manager 
 
 If you use an AI assistant (Kiro, Cursor, Claude Code, GitHub Copilot, ChatGPT, Amazon Bedrock, etc.), you can give it the wrapper's configuration assistant skill to help build, review, or troubleshoot your wrapper configuration.
 
-The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 51,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
+The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 52,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
 
 - **Tools that support Agent Skills** load only the skill's name and description (about 100 tokens) until a request needs the skill. They then load the full file, and it stays in context for the rest of that conversation.
 - **A system prompt, or a file pasted into a chat,** sends the full file with every message.
@@ -177,6 +177,34 @@ What's wrong with my database.yml?
 
 The skill targets wrapper version 1.0.1 and later. If it doesn't know something, it says so and points you to the [Ruby wrapper documentation](https://aws.github.io/aws-advanced-wrapper-docs/ruby/overview).
 
+### Troubleshooting the Wrapper with AI Tools
+
+A second skill, the troubleshooting assistant, helps an AI assistant find out why the wrapper isn't doing what you expect: installation and load errors, connection setup errors, IAM and Secrets Manager authentication failures, failover that doesn't happen or fails, Active Record integration problems, Blue/Green, custom endpoints, Global Database, KMS encryption, and performance. It works out whether the cause is your configuration, your environment (network, AWS permissions, TLS), a wrapper bug, or something outside the wrapper, helps you narrow it down and read the wrapper's logs, and drafts an issue report when the problem needs one.
+
+The skill is [`skills/ruby-wrapper-troubleshooting-assistant/SKILL.md`](./skills/ruby-wrapper-troubleshooting-assistant/SKILL.md), about 20,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (about 13,000 in ChatGPT). The two skills are independent: install either one or both. Add it to your AI tool the same way as the configuration assistant (see [Quick start](#quick-start)), using the folder name `ruby-wrapper-troubleshooting-assistant`. For example, for Claude Code:
+
+```bash
+mkdir -p .claude/skills/ruby-wrapper-troubleshooting-assistant
+curl -fsSL -o .claude/skills/ruby-wrapper-troubleshooting-assistant/SKILL.md \
+  https://raw.githubusercontent.com/aws/aws-advanced-ruby-driver-wrapper/main/skills/ruby-wrapper-troubleshooting-assistant/SKILL.md
+```
+
+Then describe the problem, and include the error message and backtrace if you have one. Remove passwords and other secrets from anything you paste.
+
+```
+My Rails app on Aurora PostgreSQL gets AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError
+a few times a day, but there's no failover in the RDS events. What's going on?
+```
+
+```
+Failover fails with "The request to discover the new topology timed out or was unsuccessful".
+Here are the wrapper's debug logs:
+
+<paste the logs>
+```
+
+The skill targets wrapper version 1.0.1 and later.
+
 ## Documentation
 
 Technical documentation regarding the functionality of the AWS Advanced Ruby Driver Wrapper is published at the [AWS Advanced Wrapper documentation site](https://aws.github.io/aws-advanced-wrapper-docs/ruby/overview). Since the wrapper requires an underlying Ruby driver, please refer to the individual driver's documentation for driver-specific information.
@@ -208,7 +236,7 @@ Support for Blue/Green deployments using the wrapper requires specific metadata 
 If you encounter a bug with the AWS Advanced Ruby Driver Wrapper, we would like to hear about it.
 Please search the [existing issues](https://github.com/aws/aws-advanced-ruby-driver-wrapper/issues) to see if others are also experiencing the issue before reporting the problem in a new issue. GitHub issues are intended for bug reports and feature requests.
 
-When opening a new issue, please fill in all required fields in the issue template to help expedite the investigation process.
+When opening a new issue, please fill in all required fields in the issue template to help expedite the investigation process. The [troubleshooting assistant skill](#troubleshooting-the-wrapper-with-ai-tools) can help you find the cause first, and draft the issue if it turns out to be a bug.
 
 For all other questions, please use [GitHub discussions](https://github.com/aws/aws-advanced-ruby-driver-wrapper/discussions).
 
