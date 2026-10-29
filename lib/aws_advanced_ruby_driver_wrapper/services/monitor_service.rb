@@ -144,7 +144,7 @@ module AwsAdvancedRubyDriverWrapper
       # Processes events from the event publisher.
       # @param event [Event] the event to process.
       def process_event(event)
-        return unless event == Utils::Events::DataAccessEvent
+        return unless event.is_a?(Utils::Events::DataAccessEvent)
 
         handle_data_access_event(event)
       end

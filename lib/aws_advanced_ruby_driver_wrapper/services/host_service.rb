@@ -117,8 +117,7 @@ module AwsAdvancedRubyDriverWrapper
       def hosts
         rules = @service_container.storage_service.get_if_registered(
           :custom_endpoint_allowed_blocked,
-          @service_container.connection_service.initial_host_info&.url,
-          register_access: false
+          @service_container.connection_service.initial_host_info&.url
         )
         return @all_hosts if rules.nil?
 
