@@ -586,9 +586,10 @@ module AwsAdvancedRubyDriverWrapper
       # @raise [Errors::MetadataError] when the statement writes a column the plugin has confirmed is
       #   encrypted with a value it cannot encrypt (see {#check_write})
       def parameter_columns(sql)
-        annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql)
+        version = executable_comment_version
+        annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql, server_version: version)
         stripped = stripped_sql(sql)
-        analysis = analysis_of(stripped)
+        analysis = analysis_of(stripped, version)
         write = write_statement?(analysis, stripped)
         inferred = analysis.parameter_column_names
         return {} if !write && annotations.empty? && inferred.empty?
@@ -607,9 +608,10 @@ module AwsAdvancedRubyDriverWrapper
       # that writes nothing, so it is reported as nothing having been read rather than as nothing
       # being there to read.
       #
+      # @param version [Integer, nil] see {#executable_comment_version}
       # @return [Utils::Parser::SqlParser::SqlAnalysisResult]
-      def analysis_of(sql)
-        sql_parser.analyze_sql(sql)
+      def analysis_of(sql, version)
+        sql_parser.analyze_sql(sql, server_version: version)
       rescue StandardError => e
         logger.warn("The statement could not be analysed: #{e.message}")
         Utils::Parser::SqlParser::SqlAnalysisResult.new(
@@ -693,8 +695,9 @@ module AwsAdvancedRubyDriverWrapper
       def column_configs(sql)
         return {} unless ready_for_statement?(sql)
 
-        annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql)
-        tables = statement_tables(analysis_of(stripped_sql(sql)), annotations)
+        version = executable_comment_version
+        annotations = Utils::Parser::EncryptionAnnotationParser.parse_annotations(sql, server_version: version)
+        tables = statement_tables(analysis_of(stripped_sql(sql), version), annotations)
         return {} if tables.empty?
 
         # When two of the statement's tables encrypt a column of the same name, the first of them
@@ -835,6 +838,19 @@ module AwsAdvancedRubyDriverWrapper
 
       def stripped_sql(sql)
         Utils::Parser::EncryptionAnnotationParser.strip_annotations(sql)
+      end
+
+      # The version of the MySQL server the statement is sent to, which decides whether a versioned
+      # /*!80023 ... */ comment is part of the statement, and so which column each placeholder after it
+      # belongs to (see DriverDialects::DriverDialect#executable_comment_version). It is read from the
+      # connection every time rather than kept, since a failover or a blue/green switchover can move
+      # the connection to a server of another version.
+      #
+      # @return [Integer, nil] nil on PostgreSQL, which has no executable comments, and when the
+      #   connection cannot say
+      def executable_comment_version
+        @service_container.dialect_service.driver_dialect
+                          .executable_comment_version(@service_container.connection_service.current_connection)
       end
 
       # -- Lazily built collaborators --

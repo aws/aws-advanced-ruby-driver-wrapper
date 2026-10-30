@@ -14,6 +14,7 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+require_relative 'mysql_text'
 require_relative 'query_analysis'
 require_relative 'query_type'
 
@@ -63,18 +64,17 @@ module AwsAdvancedRubyDriverWrapper
 
         INSERT_COLUMNS = /#{INSERT_START}#{IDENTIFIER_NC}\s*\(([^)]+)\)/i
         # The body of a SET clause, ended at the WHERE that follows it, at the statement terminator, or
-        # at the end of the text. Matched against a copy with every quoted literal blanked (see
-        # +mask_quoted_literals+), so a +WHERE+ or +;+ that is only part of a string value does not end
-        # the clause early; the offsets it reports still index the original text.
+        # at the end of the text. Matched against a copy with every quoted literal and comment blanked
+        # (see +mask_non_code+), so a +WHERE+ or +;+ that is only part of a string value or a comment
+        # does not end the clause early; the offsets it reports still index the original text.
         SET_CLAUSE     = /\bSET\b([^;]+?)(?:\bWHERE\b|\z)/im
         VALUES_CLAUSE  = /\A\s*VALUES?\s*/i
         ON_DUPLICATE   = /\AON\s+DUPLICATE\s+KEY\s+UPDATE\b/i
         ASSIGNMENT     = /\A#{IDENTIFIER_CAP}\s*=\s*(.+)\z/m
         NULL_VALUE     = /\ANULL\z/i
-        QUOTES         = ["'", '"', '`'].freeze
         # The body of a WHERE clause, ended at the first trailing-clause keyword or at the end of the
-        # text. Like SET_CLAUSE, matched against a quote-blanked copy so a keyword that is only part of
-        # a string value - +WHERE note = 'a ORDER BY b'+ - does not end the clause early.
+        # text. Like SET_CLAUSE, matched against a blanked copy so a keyword that is only part of a
+        # string value or a comment - +WHERE note = 'a ORDER BY b'+ - does not end the clause early.
         WHERE_CLAUSE   = /
           \bWHERE\b([^;]+?)
           (?:\bGROUP\s+BY\b|\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b|
@@ -107,12 +107,10 @@ module AwsAdvancedRubyDriverWrapper
         CREATE_KEYWORD = /\ACREATE\b/
         DROP_KEYWORD   = /\ADROP\b/
 
-        # Whitespace and comments in front of a statement. Query instrumentation and ORMs prepend a
-        # comment routinely, and it says nothing about what the statement does.
-        # Wrapped in an atomic group, and matching whitespace one character at a time rather than in
-        # +\s++ runs, so that leading whitespace and comments cannot be re-partitioned on backtracking
-        # - which would be quadratic on input like "/* /* /* ...".
-        LEADING_NOISE  = %r{\A(?>(?:\s|/\*.*?\*/|--[^\n]*|#[^\n]*)+)}m
+        # Whitespace in front of a statement, which includes what any comment in front of it was
+        # blanked to (see +analyze+). Query instrumentation and ORMs prepend a comment routinely, and
+        # it says nothing about what the statement does.
+        LEADING_NOISE  = /\A\s+/
         CTE_START      = /\AWITH\s+(?:RECURSIVE\s+)?/i
         CTE_NAME       = /\A#{IDENTIFIER_NC}\s*/
         CTE_AS         = /\AAS\s+(?:(?:NOT\s+)?MATERIALIZED\s*)?/i
@@ -128,9 +126,15 @@ module AwsAdvancedRubyDriverWrapper
 
         module_function
 
-        def analyze(sql)
+        # @param server_version [Integer, nil] the version of the server the statement is sent to, as
+        #   MySQL numbers it, which decides whether a versioned +/*!+ comment is part of the statement
+        def analyze(sql, server_version: nil)
           return QueryAnalysis.unknown unless sql.is_a?(String) && !sql.strip.empty?
 
+          # A comment can sit anywhere whitespace can - between a keyword and its table, inside a
+          # column list, next to a placeholder - so every pattern below reads the text with its
+          # comments blanked out, and every scan of it below looks for literals alone.
+          sql = MysqlText.blank_comments(sql, server_version: server_version)
           body, preceding_parameters = statement_body(sql)
           return QueryAnalysis.unknown if body.nil?
 
@@ -372,9 +376,10 @@ module AwsAdvancedRubyDriverWrapper
             complete = false unless values.length == columns.length
             columns.each_with_index do |column_name, position|
               value = values[position]
-              if value == '?'
+              code = code_of(value.to_s)
+              if code == '?'
                 bound << ColumnInfo.new(table_name: table_name, column_name: column_name, parameter_index: index)
-              elsif !NULL_VALUE.match?(value.to_s)
+              elsif !NULL_VALUE.match?(code)
                 unbound << ColumnInfo.new(table_name: table_name, column_name: column_name)
               end
               index += placeholder_count(value.to_s)
@@ -391,7 +396,7 @@ module AwsAdvancedRubyDriverWrapper
         # @param first_index [Integer] the number the statement's first bind parameter has
         # @return [Array(Array<ColumnInfo>, Array<ColumnInfo>, Boolean)] as extract_insert_columns
         def extract_set_columns(sql, table_name, first_index)
-          match = SET_CLAUSE.match(mask_quoted_literals(sql))
+          match = SET_CLAUSE.match(mask_non_code(sql))
           return [[], [], false] unless match
 
           # The offsets come from the masked copy; the clause read from them is the original text.
@@ -440,10 +445,11 @@ module AwsAdvancedRubyDriverWrapper
             end
 
             value = match[2].strip
+            code = code_of(value)
             column = ColumnInfo.new(table_name: table_name, column_name: column_name_of(match[1]), parameter_index: index)
-            if value == '?'
+            if code == '?'
               bound << column
-            elsif !NULL_VALUE.match?(value)
+            elsif !NULL_VALUE.match?(code)
               unbound << column.with(parameter_index: nil)
             end
             index += placeholder_count(value)
@@ -462,14 +468,18 @@ module AwsAdvancedRubyDriverWrapper
         #
         # @param first_index [Integer] the number the statement's first bind parameter has
         def extract_where_columns(sql, first_index = 1)
-          match = WHERE_CLAUSE.match(mask_quoted_literals(sql))
+          masked = mask_non_code(sql)
+          match = WHERE_CLAUSE.match(masked)
           return [].freeze unless match
 
           # The offsets come from the masked copy; the clause read from them is the original text.
+          # Its placeholders are counted on the masked copy, so that a question mark inside a string
+          # value is not taken for one.
           where_body = sql[match.begin(1)...match.end(1)]
-          return [].freeze unless where_body.include?('?')
+          masked_body = masked[match.begin(1)...match.end(1)]
+          return [].freeze unless masked_body.include?('?')
 
-          base = first_index + placeholder_count(sql[0...match.begin(1)])
+          base = first_index + masked[0...match.begin(1)].count('?')
 
           cols = []
           pos = 0
@@ -477,10 +487,10 @@ module AwsAdvancedRubyDriverWrapper
             pos = m.end(0)
             # Groups: 1=BETWEEN col, 2=BETWEEN sentinel, 3=+col OP ?+, 4=+? OP col+, 5=IN col, 6=LIKE col
             col = strip_quotes((m[1] || m[3] || m[4] || m[5] || m[6]).to_s)
-            index = base + placeholder_count(where_body[0...m.begin(0)])
+            index = base + masked_body[0...m.begin(0)].count('?')
             # One entry per bound parameter the predicate consumes: one for +=+ or +LIKE+, two for a
             # +BETWEEN+, and one per placeholder for an +IN (?, ?, ...)+.
-            placeholder_count(m[0]).times do |offset|
+            masked_body[m.begin(0)...m.end(0)].count('?').times do |offset|
               cols << ColumnInfo.new(table_name: nil, column_name: col, parameter_index: index + offset)
             end
           end
@@ -547,7 +557,7 @@ module AwsAdvancedRubyDriverWrapper
 
           depth = 0
           closed_at = nil
-          unclosed_quote = each_unquoted_char(group) do |char, index|
+          unclosed = MysqlText.each_code_char(group, comments: false) do |char, index|
             next if closed_at
 
             # No else: only parentheses affect the depth, so every other character is ignored.
@@ -558,18 +568,18 @@ module AwsAdvancedRubyDriverWrapper
               closed_at = index if depth.zero?
             end
           end
-          return [nil, nil] if unclosed_quote || closed_at.nil?
+          return [nil, nil] if unclosed || closed_at.nil?
 
           [group[1...closed_at], group[(closed_at + 1)..]]
         end
 
-        # Splits a comma separated list, ignoring commas inside quotes or nested parentheses.
+        # Splits a comma separated list, ignoring commas inside quotes, comments or nested parentheses.
         #
-        # @return [Array<String>, nil] nil when the quotes or parentheses do not balance
+        # @return [Array<String>, nil] nil when the quotes, comments or parentheses do not balance
         def split_top_level(text)
           depth = 0
           boundaries = []
-          unclosed_quote = each_unquoted_char(text) do |char, index|
+          unclosed = MysqlText.each_code_char(text, comments: false) do |char, index|
             # No else: only parentheses and top-level commas matter, so every other character is ignored.
             case char
             when '(' then depth += 1
@@ -577,7 +587,7 @@ module AwsAdvancedRubyDriverWrapper
             when ',' then boundaries << index if depth.zero?
             end
           end
-          return nil if unclosed_quote || !depth.zero?
+          return nil if unclosed || !depth.zero?
 
           from = 0
           parts = boundaries.map do |at|
@@ -589,51 +599,27 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         # How many bind parameters a value expression consumes. A question mark inside a quoted
-        # literal is not one of them.
+        # literal is not one of them, and neither was one inside a comment, which +analyze+ blanked.
         def placeholder_count(text)
           count = 0
-          each_unquoted_char(text) { |char, _index| count += 1 if char == '?' }
+          MysqlText.each_code_char(text, comments: false) { |char, _index| count += 1 if char == '?' }
           count
         end
 
-        # The text with the contents of every quoted literal, and the quote marks themselves, replaced
-        # by spaces. Length and every offset are left unchanged, so a clause boundary found here with a
-        # pattern slices the original text exactly, while a keyword or terminator that was only part of
-        # a string value is no longer there to be found.
-        def mask_quoted_literals(text)
+        # The text with every quoted literal, quotes included, replaced by spaces, on top of the
+        # comments +analyze+ blanked. Length and every offset are left unchanged, so a clause boundary
+        # found here with a pattern slices the original text exactly, while a keyword or terminator
+        # that was only part of a string value or a comment is no longer there to be found.
+        def mask_non_code(text)
           masked = ' ' * text.length
-          each_unquoted_char(text) { |char, index| masked[index] = char }
+          MysqlText.each_code_char(text, comments: false) { |char, index| masked[index] = char }
           masked
         end
 
-        # Walks the text once, yielding every character that is not inside a quoted literal along
-        # with its index. Backslash escapes are skipped, and a doubled quote reads as one closing and
-        # one opening quote, which leaves the state right either way.
-        #
-        # @return [String, nil] the quote character still open when the text ran out, nil when the
-        #   text ended outside a quoted literal
-        def each_unquoted_char(text)
-          index = 0
-          quote = nil
-
-          while index < text.length
-            char = text[index]
-            if quote
-              if char == '\\' && quote != '`'
-                index += 2
-                next
-              end
-
-              quote = nil if char == quote
-            elsif QUOTES.include?(char)
-              quote = char
-            else
-              yield(char, index)
-            end
-            index += 1
-          end
-
-          quote
+        # A value expression with its literals taken out and the space a blanked comment left trimmed,
+        # so that a comment next to a lone placeholder or NULL does not hide what the value is.
+        def code_of(value)
+          mask_non_code(value).strip
         end
       end
     end

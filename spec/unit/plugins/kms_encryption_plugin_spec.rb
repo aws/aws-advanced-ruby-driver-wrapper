@@ -50,10 +50,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
                                                       config: encryption_config)
   end
   let(:plugin_manager) { instance_double(services::PluginManager) }
+  # The driver connection the statement goes out on, which is asked for the MySQL server's version.
+  let(:connection) { nil }
   let(:service_container) do
     instance_double(services::ServiceContainer, plugin_manager: plugin_manager,
                                                 dialect_service: instance_double(services::DialectService,
-                                                                                 driver_dialect: driver_dialect))
+                                                                                 driver_dialect: driver_dialect),
+                                                connection_service: instance_double(services::ConnectionService,
+                                                                                    current_connection: connection))
   end
   subject(:plugin) { described_class.new(service_container, props, encryption_utility: encryption_utility) }
 
@@ -280,6 +284,103 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
 
       expect_encrypted(bound_args[1].last, '123-45-6789')
+    end
+
+    # MySQL numbers its placeholders by counting them, so a question mark that is only part of a
+    # comment must not be counted, or the encrypted column's value is bound in the clear.
+    context 'with MySQL and a question mark inside a comment' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+
+      it 'encrypts the parameter the parser placed after the comment' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (/* why? */ ?, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts the annotated parameter after the comment' do
+        sql = '/* why? */ INSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ?'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts what an UPDATE assigns when a comment sits between the keyword and the table' do
+        sql = 'UPDATE /* nightly */ users SET ssn = ? WHERE id = ?'
+        call('statement.execute', args: %w[123-45-6789 1], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+        expect(bound_args.last).to eq('1')
+      end
+
+      # Taking an annotation out of the statement must not take the line break after it as well, or
+      # the line comment it sits in runs on over the assignment on the next line.
+      it 'encrypts an assignment on the line after an annotation inside a line comment' do
+        sql = "UPDATE users SET name = ? -- by /*@encrypt:users.nick*/\n, ssn = ? WHERE id = ?"
+        call('statement.execute', args: %w[Jo 123-45-6789 1], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args[1], '123-45-6789')
+      end
+    end
+
+    # MySQL runs what a versioned comment holds only on a server of that version or later, so
+    # whether a question mark inside one is a placeholder depends on the server the statement goes to.
+    context 'with MySQL and a question mark inside a versioned comment' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+      let(:server_id) { 80_028 }
+      let(:connection) { double('Mysql2::Client', server_info: { id: server_id, version: '8.0.28' }) }
+
+      it 'encrypts the parameter after a comment the server is too old to run' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts the annotated parameter after a comment the server is too old to run' do
+        sql = 'INSERT INTO users (ssn) SELECT /*!80030 ?, */ /*@encrypt:users.ssn*/ ?'
+        call('statement.execute', args: %w[123-45-6789], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+      end
+
+      context 'when the server runs the comment' do
+        let(:server_id) { 80_039 }
+
+        it 'counts the placeholder inside it' do
+          sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+          call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+          expect(bound_args.take(2)).to eq(%w[Jo 1])
+          expect_encrypted(bound_args.last, '123-45-6789')
+        end
+      end
+
+      # A failover or a blue/green switchover can move the connection to a server of another
+      # version, so the version is read for every statement rather than once.
+      it 'reads the statement for the server the connection has moved to' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+        expect_encrypted(bound_args.last, '123-45-6789')
+
+        allow(connection).to receive(:server_info).and_return({ id: 80_039, version: '8.0.39' })
+        call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+        expect(bound_args.take(2)).to eq(%w[Jo 1])
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'reads the comment as part of the statement when the version cannot be read' do
+        allow(connection).to receive(:server_info).and_raise(StandardError, 'closed')
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
     end
 
     it 'does nothing when the call carries no SQL to parse and binds nothing' do

@@ -39,28 +39,34 @@ module AwsAdvancedRubyDriverWrapper
         MAX_CACHE_ENTRIES = 1000
 
         def initialize(driver_dialect)
-          @analyzer = resolve_analyzer(driver_dialect)
+          @pg = pg_dialect?(driver_dialect)
+          @analyzer = resolve_analyzer
           # A parser belongs to one connection, which is used by one thread at a time, so this plain
           # hash needs no lock. Insertion order is used as the eviction order (least-recently-used).
           @cache = {}
         end
 
         # Returns the analysis for +sql+, parsing it only on the first sight of a given statement and
-        # serving repeats from a bounded cache. The result is a pure function of the SQL for this
-        # parser's dialect, so caching by the SQL string is safe.
+        # serving repeats from a bounded cache. The result is a pure function of the SQL and the
+        # server version for this parser's dialect, so caching by the two of them is safe. The version
+        # is part of the key because a connection can reach a server of another version after a
+        # failover or a blue/green switchover.
         #
+        # @param server_version [Integer, nil] the MySQL server's version, which decides whether a
+        #   versioned +/*!+ comment is part of the statement; ignored on PostgreSQL
         # @raise [StandardError] whatever the underlying analyzer raises on SQL it cannot read
-        def analyze_sql(sql)
+        def analyze_sql(sql, server_version: nil)
           return empty_result unless sql.is_a?(String) && !sql.strip.empty?
 
-          cached = @cache.delete(sql)
+          key = [sql, server_version]
+          cached = @cache.delete(key)
           unless cached.nil?
-            @cache[sql] = cached # re-insert so it counts as most-recently-used
+            @cache[key] = cached # re-insert so it counts as most-recently-used
             return cached
           end
 
-          result = build_analysis(sql)
-          @cache[sql] = result
+          result = build_analysis(sql, server_version)
+          @cache[key] = result
           @cache.shift if @cache.size > MAX_CACHE_ENTRIES # evict the least-recently-used entry
           result
         end
@@ -81,8 +87,8 @@ module AwsAdvancedRubyDriverWrapper
 
         private
 
-        def build_analysis(sql)
-          analysis = @analyzer.analyze(sql)
+        def build_analysis(sql, server_version)
+          analysis = @pg ? @analyzer.analyze(sql) : @analyzer.analyze(sql, server_version: server_version)
           SqlAnalysisResult.new(
             query_type: analysis.query_type,
             affected_tables: analysis.tables.to_set { |table_name| strip_schema_prefix(table_name) },
@@ -109,8 +115,8 @@ module AwsAdvancedRubyDriverWrapper
           end
         end
 
-        def resolve_analyzer(driver_dialect)
-          if pg_dialect?(driver_dialect)
+        def resolve_analyzer
+          if @pg
             require_relative 'pg_statement_analyzer'
             # Loaded now rather than on the first statement, so a missing pg_query gem is reported
             # when the parser is created instead of in the middle of a query.

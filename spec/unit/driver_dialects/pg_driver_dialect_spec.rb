@@ -221,6 +221,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  # PostgreSQL has no executable comments for a version to decide.
+  describe '#executable_comment_version' do
+    it 'returns nil' do
+      expect(dialect.executable_comment_version(connection)).to be_nil
+    end
+  end
+
   describe '#reported_in_transaction' do
     it 'returns true when inside a valid transaction block' do
       allow(connection).to receive(:transaction_status).and_return(PG::PQTRANS_INTRANS)
