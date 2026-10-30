@@ -42,6 +42,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
 
   let(:host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: host_val, port: port_val) }
   let(:props)     { Concurrent::Map.new }
+  let(:null_telemetry) { AwsAdvancedRubyDriverWrapper::Utils::Telemetry::NullTelemetryFactory::INSTANCE }
 
   describe 'BaseRouting#match?' do
     # Use RejectConnectRouting as a concrete carrier of BaseRouting
@@ -89,7 +90,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
   describe 'SuspendConnectRouting' do
     let(:bgd_id)          { 'bgd-001' }
     let(:storage_service) { double('storage_service') }
-    let(:service_container) { double('service_container', storage_service: storage_service) }
+    let(:service_container) { AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service:) }
 
     subject { routing::SuspendConnectRouting.new(nil, nil, role::SOURCE, bgd_id) }
 
@@ -141,7 +142,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
       end
 
       it 'returns nil' do
-        expect(subject.apply('connection.query', props, storage_service)).to be_nil
+        expect(subject.apply('connection.query', props, storage_service, telemetry_factory: null_telemetry)).to be_nil
       end
     end
 
@@ -153,7 +154,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
       end
 
       it 'raises BlueGreenTimeoutError' do
-        expect { subject.apply('connection.query', props, storage_service) }
+        expect { subject.apply('connection.query', props, storage_service, telemetry_factory: null_telemetry) }
           .to raise_error(errors::BlueGreenTimeoutError)
       end
     end
@@ -265,7 +266,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
   describe 'SuspendUntilCorrespondingHostFoundConnectRouting' do
     let(:bgd_id)          { 'bgd-001' }
     let(:storage_service) { double('storage_service') }
-    let(:service_container) { double('service_container', storage_service: storage_service) }
+    let(:service_container) { AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service:) }
 
     subject { routing::SuspendUntilCorrespondingHostFoundConnectRouting.new(host_val, nil, role::SOURCE, bgd_id) }
 
@@ -322,6 +323,61 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
         expect { subject.apply(host_info, nil, props, true, service_container) }
           .to raise_error(errors::BlueGreenTimeoutError)
       end
+    end
+  end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    let(:bgd_id) { 'bgd-001' }
+    let(:storage_service) { double('storage_service', get: nil) }
+    let(:telemetry_factory) { AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props) }
+    let(:service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service:, telemetry_factory:)
+    end
+
+    def switchover_span_parent
+      span_named(routing::BaseRouting::TELEMETRY_SWITCHOVER)&.parent_span_id
+    end
+
+    it 'records the time SuspendConnectRouting holds a connect as a switchover span' do
+      in_application_span do
+        routing::SuspendConnectRouting.new(nil, nil, role::SOURCE, bgd_id).apply(host_info, nil, props, true, service_container)
+      end
+
+      expect(switchover_span_parent).to eq(span_named('application').span_id)
+    end
+
+    it 'closes the switchover span when the hold times out' do
+      in_progress = instance_double(bg::Status, current_phase: phase::IN_PROGRESS, wait: nil, notify: nil)
+      allow(storage_service).to receive(:get).and_return(in_progress)
+      props[:bg_connect_timeout_sec] = 0.01
+
+      in_application_span do
+        expect do
+          routing::SuspendConnectRouting.new(nil, nil, role::SOURCE, bgd_id).apply(host_info, nil, props, true, service_container)
+        end.to raise_error(errors::BlueGreenTimeoutError)
+        expect(OpenTelemetry::Trace.current_span.name).to eq('application')
+      end
+      expect(switchover_span_parent).to eq(span_named('application').span_id)
+    end
+
+    it 'records the time SuspendExecuteRouting holds a call as a switchover span' do
+      in_application_span do
+        routing::SuspendExecuteRouting.new(nil, nil, role::SOURCE, bgd_id)
+                                      .apply('connection.query', props, storage_service, telemetry_factory:)
+      end
+
+      expect(switchover_span_parent).to eq(span_named('application').span_id)
+    end
+
+    it 'records the time SuspendUntilCorrespondingHostFoundConnectRouting holds a connect as a switchover span' do
+      in_application_span do
+        routing::SuspendUntilCorrespondingHostFoundConnectRouting.new(host_val, nil, role::SOURCE, bgd_id)
+                                                                 .apply(host_info, nil, props, true, service_container)
+      end
+
+      expect(switchover_span_parent).to eq(span_named('application').span_id)
     end
   end
 end

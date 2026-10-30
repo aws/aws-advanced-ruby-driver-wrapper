@@ -65,6 +65,7 @@ module AwsAdvancedRubyDriverWrapper
           @refresh_cv = ConditionVariable.new
           @refresh_required = false
           @connection_issue = false
+          @info_changed_counter = service_container.telemetry_factory.create_counter('custom_endpoint.info_changed.count')
         end
 
         def endpoint_info?
@@ -168,6 +169,7 @@ module AwsAdvancedRubyDriverWrapper
           logger.debug("[#{@endpoint_id}] Custom endpoint info changed: #{endpoint_info}")
           cache_allowed_blocked(endpoint_info)
           cache_info(endpoint_info)
+          @info_changed_counter.inc
           speedup_refresh_rate
 
           elapsed = monotonic_time - start

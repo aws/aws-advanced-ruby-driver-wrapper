@@ -95,9 +95,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
            driver_dialect: AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager::PG_DIALECT)
   end
   let(:mock_service_container) do
-    double('ServiceContainer',
-           storage_service: mock_storage_service,
-           dialect_service: mock_dialect_service)
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service: mock_storage_service,
+                                                                 dialect_service: mock_dialect_service)
   end
 
   let(:mock_credentials) { instance_double(Aws::Credentials, access_key_id: 'AKID', secret_access_key: 'SECRET') }
@@ -650,6 +649,73 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::IamAuthPlugin do
 
     it 'returns nil for a malformed token string' do
       expect(IAM_AUTH_UTILS.parse_token_expiry('not a url at all @@@@')).to be_nil
+    end
+  end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    # Collecting metrics reads the token cache gauge.
+    before { allow(mock_storage_service).to receive(:size).with(IAM_TOKEN_CACHE_NAME).and_return(0) }
+
+    let(:mock_service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        storage_service: mock_storage_service, dialect_service: mock_dialect_service,
+        telemetry_factory: AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props)
+      )
+    end
+
+    it 'counts each token it generates and records the generation as a span' do
+      fetched = counter_value('iam.fetch_token.count')
+
+      in_application_span { connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props) }
+
+      expect(counter_value('iam.fetch_token.count')).to eq(fetched + 1)
+      expect(span_named('fetch authentication token').parent_span_id).to eq(span_named('application').span_id)
+    end
+
+    it 'counts one token fetch when a cached token is rejected and a fresh one is generated' do
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY).and_return(valid_token_entry)
+      allow(mock_dialect_service).to receive(:login_error?).and_return(true)
+      attempts = 0
+      fetched = counter_value('iam.fetch_token.count')
+
+      build_plugin.connect(pg_host_info, base_pg_props, true, lambda {
+        attempts += 1
+        raise StandardError, 'login failure' if attempts == 1
+
+        :ok
+      })
+
+      expect(counter_value('iam.fetch_token.count')).to eq(fetched + 1)
+    end
+
+    it 'does not count a connection that uses a cached token' do
+      allow(mock_storage_service).to receive(:get).with(IAM_TOKEN_CACHE_NAME, PG_CACHE_KEY).and_return(valid_token_entry)
+      fetched = counter_value('iam.fetch_token.count')
+
+      connect_and_capture_token(plugin: build_plugin, host_info: pg_host_info, props: base_pg_props)
+
+      expect(counter_value('iam.fetch_token.count')).to eq(fetched)
+    end
+
+    it 'builds its token cache gauge callback so that the gauge does not keep the plugin alive' do
+      factory = mock_service_container.telemetry_factory
+      callback = nil
+      allow(factory).to receive(:create_gauge) { |_name, &block| callback = block }
+
+      build_plugin
+
+      expect(callback.binding.receiver).not_to be_a(described_class)
+      expect(callback.binding.local_variables).to eq([:storage_service])
+    end
+
+    it 'reports the size of the token cache as a gauge' do
+      allow(mock_storage_service).to receive(:size).with(IAM_TOKEN_CACHE_NAME).and_return(3)
+      build_plugin
+
+      gauge = collect_metrics.find { |metric| metric.name == 'iam.token_cache.size' }
+      expect(gauge.data_points.map(&:value)).to eq([3])
     end
   end
 end

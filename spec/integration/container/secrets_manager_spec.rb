@@ -262,7 +262,8 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'initial_connection,secrets_manager',
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => region,
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name
+        AwsAdvancedRubyDriverWrapper::PropertyDefinition::CLUSTER_ID.name => env.cluster_name,
+        **Integration::TelemetryHelper.wrapper_props
       }
     end
 
@@ -319,7 +320,8 @@ RSpec.describe 'AwsSecretsManagerAuthentication', :integration,
 
     sm_props = {
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'secrets_manager',
-      AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id
+      AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => secret_id,
+      **Integration::TelemetryHelper.wrapper_props
     }
     sm_props[AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name] = region if region
 

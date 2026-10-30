@@ -66,8 +66,17 @@ module TelemetryHelper
 
   # @return [Array<OpenTelemetry::SDK::Metrics::State::MetricData>] the metrics collected now
   def collect_metrics
+    TelemetryHelper.metric_exporter.reset
     TelemetryHelper.metric_exporter.pull
     TelemetryHelper.metric_exporter.metric_snapshots
+  end
+
+  # Counters are cumulative and the SDK is installed once for the whole run, so a test compares a
+  # counter's value before and after what it exercises.
+  #
+  # @return [Integer] the counter's total so far, or 0 if nothing has been counted yet
+  def counter_value(name)
+    collect_metrics.find { |metric| metric.name == name }&.data_points&.sum(&:value).to_i
   end
 
   # Runs the block inside a span of the application's own, as an instrumented application would.
@@ -79,6 +88,17 @@ module TelemetryHelper
     base.before do
       TelemetryHelper.span_exporter.reset
       TelemetryHelper.metric_exporter.reset
+    end
+  end
+end
+
+# A gauge's callback outlives the example that created it, since gauges are kept for the whole
+# process, and it would otherwise go on reading that example's doubles whenever metrics are
+# collected.
+RSpec.configure do |config|
+  config.after do
+    if defined?(AwsAdvancedRubyDriverWrapper::Utils::Telemetry::OpenTelemetryFactory)
+      AwsAdvancedRubyDriverWrapper::Utils::Telemetry::OpenTelemetryFactory.clear_gauge_callbacks!
     end
   end
 end

@@ -38,6 +38,7 @@ module AwsAdvancedRubyDriverWrapper
           @props = props
           @should_wait_for_info = PropertyDefinition::WAIT_FOR_CUSTOM_ENDPOINT_INFO.get_bool(props)
           @wait_timeout_sec = PropertyDefinition::WAIT_FOR_CUSTOM_ENDPOINT_INFO_TIMEOUT_SEC.get_float(props)
+          @wait_for_info_counter = service_container.telemetry_factory.create_counter('custom_endpoint.wait_for_info.count')
 
           @custom_endpoint_host = nil
           @endpoint_id = nil
@@ -138,6 +139,7 @@ module AwsAdvancedRubyDriverWrapper
           return if monitor.endpoint_info?
 
           monitor.request_endpoint_info_update
+          @wait_for_info_counter.inc
           logger.debug("CustomEndpointPlugin: waiting up to #{@wait_timeout_sec}s for endpoint info on #{@custom_endpoint_host.url}")
 
           return if monitor.wait_for_info?(@wait_timeout_sec)

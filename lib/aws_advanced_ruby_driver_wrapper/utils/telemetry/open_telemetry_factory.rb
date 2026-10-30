@@ -63,6 +63,15 @@ module AwsAdvancedRubyDriverWrapper
             OpenTelemetryContext.new(tracer, name, trace_level)
           end
 
+          def post_copy(context, trace_level)
+            return if trace_level == TraceLevel::NO_TRACE || !context.is_a?(OpenTelemetryContext)
+            # A top-level copy must not find the trace in progress, or it would be linked to that trace
+            # as well as to the span it copies.
+            return context.record_copy(trace_level) if trace_level == TraceLevel::NESTED
+
+            OpenTelemetry::Context.with_current(OpenTelemetry::Context.empty) { context.record_copy(trace_level) }
+          end
+
           # Unlike gauges, counters need no registry: in current versions of the metrics SDK (0.21 on),
           # creating one again under the same name returns the instrument the meter already has, so every
           # counter object adds to the same total.
@@ -80,6 +89,15 @@ module AwsAdvancedRubyDriverWrapper
               gauge.callback = callback
               gauge
             end
+          end
+
+          # Stops every gauge from reporting until it is created again: a gauge without a callback is
+          # skipped when metrics are collected. The gauges themselves stay registered, since
+          # registering one again under the same name would not take a new callback. For testing only.
+          #
+          # @api private
+          def clear_gauge_callbacks!
+            @gauges_lock.synchronize { @gauges.each_value { |gauge| gauge.callback = nil } }
           end
 
           private

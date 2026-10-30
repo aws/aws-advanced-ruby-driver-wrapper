@@ -21,6 +21,14 @@ processors:
 
 exporters:
   awsxray:
+    # The wrapper records traces only through OpenTelemetry, not the X-Ray SDK (which is in
+    # maintenance mode). The AWS X-Ray service itself accepts OpenTelemetry traces, so this collector
+    # forwards the tests' OTLP traces to it; any other OpenTelemetry backend would work the same way.
+    #
+    # These span attributes are exported as X-Ray annotations rather than metadata, so that traces
+    # can be filtered on them: by test, by wrapper call, and by the test trace a wrapper call's trace
+    # belongs to.
+    indexed_attributes: [test_name, engine, deployment, ruby_call, parent_trace_id, source_trace_id]
   awsemf:
     log_group_name: "aws_advanced_ruby_driver_wrapper"
 

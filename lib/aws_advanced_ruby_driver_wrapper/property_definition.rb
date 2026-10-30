@@ -81,6 +81,14 @@ module AwsAdvancedRubyDriverWrapper
       default_value: nil,
       type: String
     )
+    TELEMETRY_FAILOVER_ADDITIONAL_TOP_TRACE = WrapperProperty.new(
+      :telemetry_failover_additional_top_trace,
+      'Also submit the trace of each failover as a top-level trace of its own. Only a failover that was ' \
+      'traced is submitted: one inside a trace in progress, or inside a wrapper call that was submitted ' \
+      'as a top-level trace.',
+      default_value: false,
+      type: :boolean
+    )
     # -- Failover --
     FAILOVER_TIMEOUT_SEC = WrapperProperty.new(
       :failover_timeout_sec,
