@@ -584,6 +584,10 @@ production:
 - RDS PostgreSQL needs `CREATE EXTENSION rds_tools;`. Minimum engine versions in §5.7.
 - Non-admin database users need read access to the metadata, granted before the deployment is created (§5.7).
 - During the switchover the plugin holds traffic (up to `bg_connect_timeout_sec`, default `30.0`) instead of letting it fail, then resumes against the promoted environment.
+- [Unreleased] **Invalidating old-blue connections (`bg_drop_blue_connections`, default `true`):** connections that were already open to blue before the switchover (for example idle pooled connections) would otherwise keep serving reads from the old, now-retired blue environment. Once the switchover is confirmed, the plugin marks those connections stale and closes each one the next time it is used:
+  - **With the `failover` plugin (recommended, as above):** closing the connection out from under the pipeline makes the failover plugin reconnect through Blue/Green routing and raise `FailoverSuccessError` (or `TransactionStateUnknownError` inside a transaction) — the same signal a normal failover raises, one per stale connection.
+  - **Without a failover plugin:** the underlying driver raises its usual closed-connection error on that first use.
+  - Ruby cannot safely abort a connection from another thread, so each connection checks itself on its own thread at next use rather than being aborted immediately from the monitor. Queries already executing when the switchover starts run to completion on blue while it is still the primary; calls issued *during* the switchover are held, and if their connection was opened to blue it is closed before they run. Idle sessions on old blue stay open until their next use or until the pool reaps them. Set `bg_drop_blue_connections: false` to disable.
 
 ### 3.15 KMS column encryption
 
@@ -886,14 +890,15 @@ Grant **before** creating the Blue/Green Deployment: the green environment copie
 
 **Parameters:**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `bgd_id` | String | `'1'` | Identifies the deployment. All connections for one deployment share a value; different deployments need distinct values. |
-| `bg_connect_timeout_sec` | Float | `30.0` | Maximum wait for a new connection while traffic is suspended during switchover. |
-| `bg_baseline_sec` | Float | `60.0` | Baseline status-check interval. Keep below 900. |
-| `bg_increased_sec` | Float | `1.0` | Increased status-check interval. Configure within 0.5-2. |
-| `bg_high_sec` | Float | `0.1` | High-frequency status-check interval. Configure within 0.05-0.5. |
-| `bg_switchover_timeout_sec` | Float | `180.0` | Maximum switchover duration; after it the wrapper assumes completion and resumes normal operation. |
+| Name                                    | Type    | Default | Description                                                                                                                                                                                                                          |
+|-----------------------------------------|---------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bgd_id`                                | String  | `'1'`   | Identifies the deployment. All connections for one deployment share a value; different deployments need distinct values.                                                                                                             |
+| `bg_connect_timeout_sec`                | Float   | `30.0`  | Maximum wait for a new connection while traffic is suspended during switchover.                                                                                                                                                      |
+| `bg_baseline_sec`                       | Float   | `60.0`  | Baseline status-check interval. Keep below 900.                                                                                                                                                                                      |
+| `bg_increased_sec`                      | Float   | `1.0`   | Increased status-check interval. Configure within 0.5-2.                                                                                                                                                                             |
+| `bg_high_sec`                           | Float   | `0.1`   | High-frequency status-check interval. Configure within 0.05-0.5.                                                                                                                                                                     |
+| `bg_switchover_timeout_sec`             | Float   | `180.0` | Maximum switchover duration; after it the wrapper assumes completion and resumes normal operation.                                                                                                                                   |
+| [Unreleased] `bg_drop_blue_connections` | Boolean | `true`  | After a confirmed switchover, invalidate connections still open to old blue on their next use (fail over if the `failover` plugin is enabled, otherwise a driver closed-connection error) instead of letting them serve stale reads. |
 
 **Monitoring connections:** prefix driver settings with `bg_monitoring_` (e.g. `bg_monitoring_connect_timeout: 10`) to apply them only to the plugin's status connections. The prefix is stripped and the setting passed to the driver.
 
@@ -910,23 +915,23 @@ Transparent client-side, column-level encryption using AWS KMS. Encrypts bound v
 
 **Parameters:**
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `encryption_kms_region` | String | `AWS_REGION`, then `AWS_DEFAULT_REGION` | KMS region. Connection rejected if none of the three is set. |
-| `encryption_kms_endpoint` | String | none | KMS endpoint URL override. |
-| `encryption_allowed_master_key_arns` | String or Array | none | **Required.** KMS master keys the plugin may use; each must match a `key_storage.master_key_arn` exactly. The plugin refuses to start without it. |
-| `encryption_metadata_schema` | String | `encrypt` | Schema (database, on MySQL) holding the metadata tables. |
-| `encryption_metadata_cache_enabled` | Boolean | `true` | Cache metadata in memory. Leave on in production. |
-| `encryption_metadata_cache_expiration_sec` | Float | `3600.0` | Metadata cache validity. |
-| `encryption_metadata_cache_refresh_interval_sec` | Float | `300.0` | Background metadata refresh; `0` disables. |
-| `encryption_data_key_cache_enabled` | Boolean | `true` | Cache decrypted data keys. Disabling means a KMS `Decrypt` per statement touching an encrypted column. |
-| `encryption_data_key_cache_max_size` | Integer | `1000` | Maximum cached data keys. |
-| `encryption_data_key_cache_expiration_sec` | Float | `300.0` | Data key cache lifetime. |
-| `encryption_key_management_max_retries` | Integer | `3` | Retries for throttled/failed KMS operations. |
-| `encryption_key_management_retry_backoff_base_sec` | Float | `0.1` | Base delay for KMS retry backoff. |
-| `encryption_audit_logging_enabled` | Boolean | `false` | Audit record for every key-management, encrypt, and decrypt operation. |
-| `encryption_return_unverified_data` | Boolean | `false` | **Never in production.** Return values that can't be verified as this column's ciphertext instead of raising. For a bounded migration of pre-existing plaintext only. |
-| `aws_credentials_provider` | Object | SDK default chain | Custom credentials provider (§6.4). |
+| Name                                               | Type            | Default                                 | Description                                                                                                                                                           |
+|----------------------------------------------------|-----------------|-----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `encryption_kms_region`                            | String          | `AWS_REGION`, then `AWS_DEFAULT_REGION` | KMS region. Connection rejected if none of the three is set.                                                                                                          |
+| `encryption_kms_endpoint`                          | String          | none                                    | KMS endpoint URL override.                                                                                                                                            |
+| `encryption_allowed_master_key_arns`               | String or Array | none                                    | **Required.** KMS master keys the plugin may use; each must match a `key_storage.master_key_arn` exactly. The plugin refuses to start without it.                     |
+| `encryption_metadata_schema`                       | String          | `encrypt`                               | Schema (database, on MySQL) holding the metadata tables.                                                                                                              |
+| `encryption_metadata_cache_enabled`                | Boolean         | `true`                                  | Cache metadata in memory. Leave on in production.                                                                                                                     |
+| `encryption_metadata_cache_expiration_sec`         | Float           | `3600.0`                                | Metadata cache validity.                                                                                                                                              |
+| `encryption_metadata_cache_refresh_interval_sec`   | Float           | `300.0`                                 | Background metadata refresh; `0` disables.                                                                                                                            |
+| `encryption_data_key_cache_enabled`                | Boolean         | `true`                                  | Cache decrypted data keys. Disabling means a KMS `Decrypt` per statement touching an encrypted column.                                                                |
+| `encryption_data_key_cache_max_size`               | Integer         | `1000`                                  | Maximum cached data keys.                                                                                                                                             |
+| `encryption_data_key_cache_expiration_sec`         | Float           | `300.0`                                 | Data key cache lifetime.                                                                                                                                              |
+| `encryption_key_management_max_retries`            | Integer         | `3`                                     | Retries for throttled/failed KMS operations.                                                                                                                          |
+| `encryption_key_management_retry_backoff_base_sec` | Float           | `0.1`                                   | Base delay for KMS retry backoff.                                                                                                                                     |
+| `encryption_audit_logging_enabled`                 | Boolean         | `false`                                 | Audit record for every key-management, encrypt, and decrypt operation.                                                                                                |
+| `encryption_return_unverified_data`                | Boolean         | `false`                                 | **Never in production.** Return values that can't be verified as this column's ciphertext instead of raising. For a bounded migration of pre-existing plaintext only. |
+| `aws_credentials_provider`                         | Object          | SDK default chain                       | Custom credentials provider (§6.4).                                                                                                                                   |
 
 **Behaviors to state:**
 - Encryption applies to **bind parameters** only. A literal written into SQL text can't be encrypted; a write the plugin can confirm targets an encrypted column with a non-bound value raises `Errors::MetadataError`.
@@ -945,13 +950,13 @@ Transparent client-side, column-level encryption using AWS KMS. Encrypts bound v
 
 ### 6.1 Core
 
-| Name | Type | Default | Description |
-|---|---|---|---|
-| `wrapper_plugins` | String | the default list (§4.1) | Comma-separated plugin codes (§4). Replaces the default list when set; `""` loads none. |
-| `wrapper_dialect` | String | auto-detected | Database dialect code (§8). |
-| `cluster_id` | String | `'1'` | Key for the shared topology cache and monitor. **Must** be distinct per cluster when one process uses several clusters (§3.12). |
-| `cluster_instance_host_pattern` | String | auto-derived | Instance host pattern for IP / custom-domain hosts (§3.11). |
-| `aws_credentials_provider` | Object | SDK default chain | One provider shared by `iam`, `secrets_manager`, and `kms_encryption` (§6.4). |
+| Name                            | Type   | Default                 | Description                                                                                                                     |
+|---------------------------------|--------|-------------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `wrapper_plugins`               | String | the default list (§4.1) | Comma-separated plugin codes (§4). Replaces the default list when set; `""` loads none.                                         |
+| `wrapper_dialect`               | String | auto-detected           | Database dialect code (§8).                                                                                                     |
+| `cluster_id`                    | String | `'1'`                   | Key for the shared topology cache and monitor. **Must** be distinct per cluster when one process uses several clusters (§3.12). |
+| `cluster_instance_host_pattern` | String | auto-derived            | Instance host pattern for IP / custom-domain hosts (§3.11).                                                                     |
+| `aws_credentials_provider`      | Object | SDK default chain       | One provider shared by `iam`, `secrets_manager`, and `kms_encryption` (§6.4).                                                   |
 
 All plugin parameters are listed per plugin in §5. Driver options - TLS options, `connect_timeout`, `keepalives_*`, `read_timeout`, `enable_cleartext_plugin`, and so on - are passed through to the underlying driver unchanged, and the wrapper does not validate them. Don't describe this as "every other key goes to the driver": under Active Record, keys that are neither wrapper parameters nor driver options are dropped or ignored. What happens to an unknown key depends on the integration:
 - **Direct `WrapperPgConnection`:** `pg` rejects it with `invalid connection option "<name>"`.
@@ -962,10 +967,10 @@ All plugin parameters are listed per plugin in §5. Driver options - TLS options
 
 The wrapper opens its own connections for topology discovery and Blue/Green status. A prefix applies a setting only to those connections; it is stripped before the setting reaches the driver.
 
-| Prefix | Applies to |
-|---|---|
+| Prefix                 | Applies to                                                                    |
+|------------------------|-------------------------------------------------------------------------------|
 | `topology_monitoring_` | Topology monitor connections (`failover`, `gdb_failover`, topology discovery) |
-| `bg_monitoring_` | `bg` status-monitoring connections |
+| `bg_monitoring_`       | `bg` status-monitoring connections                                            |
 
 Use them to give monitor connections their own timeouts, separate from application connections (see the note on what a short monitor connect timeout does and doesn't do in §5.1). There are no other monitoring prefixes.
 
@@ -973,10 +978,10 @@ Use them to give monitor connections their own timeouts, separate from applicati
 
 The wrapper passes TLS options straight to the driver and applies them to **every** connection it opens, including monitor and failover connections. It does **not** turn TLS on for you and does not override what you set.
 
-| Driver | Verification | Certificate authority |
-|---|---|---|
-| PostgreSQL (`pg`) | `sslmode: verify-full` | `sslrootcert` |
-| MySQL (`mysql2`) | `ssl_mode: verify_identity` | `sslca` |
+| Driver            | Verification                | Certificate authority |
+|-------------------|-----------------------------|-----------------------|
+| PostgreSQL (`pg`) | `sslmode: verify-full`      | `sslrootcert`         |
+| MySQL (`mysql2`)  | `ssl_mode: verify_identity` | `sslca`               |
 
 Use the AWS global certificate bundle for RDS endpoints. Weaker modes (`require`) encrypt but don't confirm the server's identity. Through a proxy that terminates TLS, supply the CA for the proxy's certificate, not the RDS bundle.
 
@@ -1035,8 +1040,8 @@ This gives every wrapper entry the same provider; to vary it per entry, branch o
 
 Used by `initial_connection_host_selector_strategy` and `failover_reader_host_selector_strategy`.
 
-| Strategy | Behavior |
-|---|---|
+| Strategy | Behavior                                                                                                                  |
+|----------|---------------------------------------------------------------------------------------------------------------------------|
 | `random` | Picks uniformly at random among available hosts matching the requested role. **Default, and the only built-in strategy.** |
 
 There is no `roundRobin`, `leastConnections`, `weightedRandom`, `fastestResponse`, or `highestWeight` in this wrapper. To use another policy, register a selector at boot:
@@ -1104,25 +1109,25 @@ One effect of leaving it unset: until the dialect has been confirmed, `initial_c
 
 ### 9.1 `failover`: `failover_mode`
 
-| Value | Behavior |
-|---|---|
-| `strict_writer` | After failover, connect only to a writer. |
-| `strict_reader` | After failover, connect only to a reader. |
+| Value              | Behavior                                                                      |
+|--------------------|-------------------------------------------------------------------------------|
+| `strict_writer`    | After failover, connect only to a writer.                                     |
+| `strict_reader`    | After failover, connect only to a reader.                                     |
 | `reader_or_writer` | After failover, connect to a reader, or the writer if no reader is available. |
 
 Unset: a read-only cluster endpoint (`.cluster-ro-`) → `reader_or_writer`; every other URL → `strict_writer`. Hyphenated spellings (`strict-writer`) are also accepted; an unrecognized value raises `Invalid failover mode`.
 
 ### 9.2 `gdb_failover`: `in_home_failover_mode` / `out_of_home_failover_mode`
 
-| Value | Behavior |
-|---|---|
-| `strict_writer` | Only the writer (wherever the primary region is). |
-| `strict_home_reader` | Only a reader in the home region. |
-| `strict_out_of_home_reader` | Only a reader outside the home region. |
-| `strict_any_reader` | Any reader. |
-| `home_reader_or_writer` | A home-region reader; fall back to the writer. |
-| `out_of_home_reader_or_writer` | An out-of-home reader; fall back to the writer. |
-| `any_reader_or_writer` | Any reader; fall back to the writer. |
+| Value                          | Behavior                                          |
+|--------------------------------|---------------------------------------------------|
+| `strict_writer`                | Only the writer (wherever the primary region is). |
+| `strict_home_reader`           | Only a reader in the home region.                 |
+| `strict_out_of_home_reader`    | Only a reader outside the home region.            |
+| `strict_any_reader`            | Any reader.                                       |
+| `home_reader_or_writer`        | A home-region reader; fall back to the writer.    |
+| `out_of_home_reader_or_writer` | An out-of-home reader; fall back to the writer.   |
+| `any_reader_or_writer`         | Any reader; fall back to the writer.              |
 
 In-home = the Global Database primary region is the home region. Out-of-home = it isn't. Hyphenated spellings are also accepted.
 
@@ -1130,11 +1135,11 @@ In-home = the Global Database primary region is the home region. Out-of-home = i
 
 These are raised only by `failover` and `gdb_failover`. Without either plugin (for example `wrapper_plugins: ""` behind RDS Proxy), a lost connection surfaces as an ordinary driver or Active Record error, as it would without the wrapper.
 
-| Error class | Connection valid? | What to do |
-|---|:---:|---|
-| `FailoverSuccessError` | Yes | Failover succeeded outside a transaction. Re-apply session state, then replay the interrupted statement. |
-| `TransactionStateUnknownError` | Yes | Failover happened inside a transaction; its outcome is unknown. Re-apply session state, restart the transaction, replay all its statements. Check before retrying non-idempotent work. |
-| `FailoverFailedError` | No | No new instance was reached within `failover_timeout_sec`. Wait, then reconnect. |
+| Error class                    | Connection valid? | What to do                                                                                                                                                                             |
+|--------------------------------|:-----------------:|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `FailoverSuccessError`         |        Yes        | Failover succeeded outside a transaction. Re-apply session state, then replay the interrupted statement.                                                                               |
+| `TransactionStateUnknownError` |        Yes        | Failover happened inside a transaction; its outcome is unknown. Re-apply session state, restart the transaction, replay all its statements. Check before retrying non-idempotent work. |
+| `FailoverFailedError`          |        No         | No new instance was reached within `failover_timeout_sec`. Wait, then reconnect.                                                                                                       |
 
 "Re-apply session state": under Active Record, declare session settings under `variables:` in `database.yml` and the adapter re-applies them automatically after a successful failover (§13.4); anything else (temporary tables, advisory locks, `SET` statements run in code) the app must redo. With a direct connection, the app re-applies all of it.
 
@@ -1176,29 +1181,29 @@ Legend: ✅ compatible · ❌ not compatible · blank = no constraint recorded.
 
 ### 10.2 Database type compatibility
 
-| Plugin | Aurora Global | Aurora cluster | RDS Multi-AZ DB cluster (3) | RDS Multi-AZ DB instance (2) | RDS Single-AZ | Community |
-|---|---|---|---|---|---|---|
-| `custom_endpoint` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `failover` | ❌ (use `gdb_failover`) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `gdb_failover` | ✅ | ❌ (use `failover`) | ❌ (use `failover`) | ❌ | ❌ | ❌ |
-| `iam` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `secrets_manager` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| `initial_connection` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `bg` | ❌ | ✅ | ❌ | ✅ | ✅ | ❌ |
-| `kms_encryption` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Plugin               | Aurora Global          | Aurora cluster     | RDS Multi-AZ DB cluster (3) | RDS Multi-AZ DB instance (2) | RDS Single-AZ | Community |
+|----------------------|------------------------|--------------------|-----------------------------|------------------------------|---------------|-----------|
+| `custom_endpoint`    | ✅                      | ✅                  | ❌                           | ❌                            | ❌             | ❌         |
+| `failover`           | ❌ (use `gdb_failover`) | ✅                  | ✅                           | ❌                            | ❌             | ❌         |
+| `gdb_failover`       | ✅                      | ❌ (use `failover`) | ❌ (use `failover`)          | ❌                            | ❌             | ❌         |
+| `iam`                | ✅                      | ✅                  | ✅                           | ✅                            | ✅             | ❌         |
+| `secrets_manager`    | ✅                      | ✅                  | ✅                           | ✅                            | ✅             | ❌         |
+| `initial_connection` | ✅                      | ✅                  | ✅                           | ❌                            | ❌             | ❌         |
+| `bg`                 | ❌                      | ✅                  | ❌                           | ✅                            | ✅             | ❌         |
+| `kms_encryption`     | ✅                      | ✅                  | ✅                           | ✅                            | ✅             | ✅         |
 
 ### 10.3 Endpoint type compatibility
 
-| Plugin | Global | Cluster writer | Cluster reader | Custom endpoint | Instance | Multi-AZ cluster writer/reader | RDS Proxy | Limitless shard group | IP address | Own domain (CNAME) |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `custom_endpoint` | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `failover` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ ¹ | ✅ ¹ |
-| `gdb_failover` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ ² | ✅ ² |
-| `iam` | ✅ ³ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ⁴ | ✅ ⁴ |
-| `secrets_manager` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ⁵ | ✅ ⁵ |
-| `initial_connection` | ✅ | ✅ | ✅ | ✅ ⁶ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `bg` | ❌ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ | ✅ ⁷ | ❌ |
-| `kms_encryption` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Plugin               | Global | Cluster writer | Cluster reader | Custom endpoint | Instance | Multi-AZ cluster writer/reader | RDS Proxy | Limitless shard group | IP address | Own domain (CNAME) |
+|----------------------|--------|----------------|----------------|-----------------|----------|--------------------------------|-----------|-----------------------|------------|--------------------|
+| `custom_endpoint`    | ❌      | ❌              | ❌              | ✅               | ❌        | ❌                              | ❌         | ❌                     | ❌          | ❌                  |
+| `failover`           | ✅      | ✅              | ✅              | ✅               | ✅        | ✅                              | ❌         | ❌                     | ✅ ¹        | ✅ ¹                |
+| `gdb_failover`       | ✅      | ✅              | ✅              | ✅               | ✅        | ✅                              | ❌         | ❌                     | ✅ ²        | ✅ ²                |
+| `iam`                | ✅ ³    | ✅              | ✅              | ✅               | ✅        | ✅                              | ✅         | ✅                     | ✅ ⁴        | ✅ ⁴                |
+| `secrets_manager`    | ✅      | ✅              | ✅              | ✅               | ✅        | ✅                              | ✅         | ✅                     | ✅ ⁵        | ✅ ⁵                |
+| `initial_connection` | ✅      | ✅              | ✅              | ✅ ⁶             | ❌        | ✅                              | ❌         | ❌                     | ❌          | ❌                  |
+| `bg`                 | ❌      | ✅              | ✅              | ✅               | ✅        | ❌                              | ✅         | ❌                     | ✅ ⁷        | ❌                  |
+| `kms_encryption`     | ✅      | ✅              | ✅              | ✅               | ✅        | ✅                              | ✅         | ✅                     | ✅          | ✅                  |
 
 1. Set `cluster_instance_host_pattern`.
 2. Set region-prefixed `global_cluster_instance_host_patterns` and `failover_home_region`.
@@ -1210,15 +1215,15 @@ Legend: ✅ compatible · ❌ not compatible · blank = no constraint recorded.
 
 Endpoint patterns:
 
-| Endpoint | Pattern |
-|---|---|
-| Aurora Global | `<global-db>.global-<XYZ>.global.rds.amazonaws.com` |
-| Cluster writer (Aurora / Multi-AZ DB cluster) | `<cluster>.cluster-<XYZ>.<region>.rds.amazonaws.com` |
-| Cluster reader | `<cluster>.cluster-ro-<XYZ>.<region>.rds.amazonaws.com` |
-| Aurora custom endpoint | `<name>.cluster-custom-<XYZ>.<region>.rds.amazonaws.com` |
-| Instance (Aurora / RDS) | `<instance>.<XYZ>.<region>.rds.amazonaws.com` |
-| RDS Proxy | `<proxy>.proxy-<XYZ>.<region>.rds.amazonaws.com` |
-| Limitless shard group | `<sg>.shardgrp-<XYZ>.<region>.rds.amazonaws.com` |
+| Endpoint                                      | Pattern                                                  |
+|-----------------------------------------------|----------------------------------------------------------|
+| Aurora Global                                 | `<global-db>.global-<XYZ>.global.rds.amazonaws.com`      |
+| Cluster writer (Aurora / Multi-AZ DB cluster) | `<cluster>.cluster-<XYZ>.<region>.rds.amazonaws.com`     |
+| Cluster reader                                | `<cluster>.cluster-ro-<XYZ>.<region>.rds.amazonaws.com`  |
+| Aurora custom endpoint                        | `<name>.cluster-custom-<XYZ>.<region>.rds.amazonaws.com` |
+| Instance (Aurora / RDS)                       | `<instance>.<XYZ>.<region>.rds.amazonaws.com`            |
+| RDS Proxy                                     | `<proxy>.proxy-<XYZ>.<region>.rds.amazonaws.com`         |
+| Limitless shard group                         | `<sg>.shardgrp-<XYZ>.<region>.rds.amazonaws.com`         |
 
 ### 10.4 Important pairings
 
@@ -1234,29 +1239,29 @@ Endpoint patterns:
 
 ### 11.1 Requiring the gem
 
-| Use | Require |
-|---|---|
-| Rails (Bundler) | nothing extra - Bundler requires `aws_advanced_ruby_driver_wrapper` |
-| Plain Ruby, both engines | `require 'aws_advanced_ruby_driver_wrapper'` |
-| PostgreSQL only | `require 'aws_advanced_ruby_driver_wrapper/postgresql'` |
-| MySQL only | `require 'aws_advanced_ruby_driver_wrapper/mysql'` |
+| Use                      | Require                                                             |
+|--------------------------|---------------------------------------------------------------------|
+| Rails (Bundler)          | nothing extra - Bundler requires `aws_advanced_ruby_driver_wrapper` |
+| Plain Ruby, both engines | `require 'aws_advanced_ruby_driver_wrapper'`                        |
+| PostgreSQL only          | `require 'aws_advanced_ruby_driver_wrapper/postgresql'`             |
+| MySQL only               | `require 'aws_advanced_ruby_driver_wrapper/mysql'`                  |
 
 ### 11.2 Adapters and classes
 
-| Engine | Active Record adapter | Replaces | Direct class | Stands in for | Default port |
-|---|---|---|---|---|---|
-| PostgreSQL | `aws_postgresql` | `postgresql` | `AwsAdvancedRubyDriverWrapper::WrapperPgConnection` | `PG::Connection` | 5432 |
-| MySQL | `aws_mysql2` | `mysql2` | `AwsAdvancedRubyDriverWrapper::WrapperMysql2Client` | `Mysql2::Client` | 3306 |
+| Engine     | Active Record adapter | Replaces     | Direct class                                        | Stands in for    | Default port |
+|------------|-----------------------|--------------|-----------------------------------------------------|------------------|--------------|
+| PostgreSQL | `aws_postgresql`      | `postgresql` | `AwsAdvancedRubyDriverWrapper::WrapperPgConnection` | `PG::Connection` | 5432         |
+| MySQL      | `aws_mysql2`          | `mysql2`     | `AwsAdvancedRubyDriverWrapper::WrapperMysql2Client` | `Mysql2::Client` | 3306         |
 
 The direct classes accept the same arguments as the driver plus wrapper parameters as keyword arguments. Calls the app already makes on the driver connection keep working, and the plugins act on each.
 
 ### 11.3 Key names
 
-| Setting | `database.yml` (both engines) | `WrapperPgConnection` | `WrapperMysql2Client` |
-|---|---|---|---|
-| User | `username` | `user` | `username` |
-| Database | `database` | `dbname` | `database` |
-| Host / port / password | `host`, `port`, `password` | same | same |
+| Setting                | `database.yml` (both engines) | `WrapperPgConnection` | `WrapperMysql2Client` |
+|------------------------|-------------------------------|-----------------------|-----------------------|
+| User                   | `username`                    | `user`                | `username`            |
+| Database               | `database`                    | `dbname`              | `database`            |
+| Host / port / password | `host`, `port`, `password`    | same                  | same                  |
 
 The `aws_postgresql` adapter maps `username` → `user` and `database` → `dbname` for you.
 
@@ -1372,49 +1377,49 @@ Property values whose names contain `password`, `token`, `secret`, or `credentia
 
 All under `AwsAdvancedRubyDriverWrapper::Errors`, subclasses of `AwsError`:
 
-| Class | Meaning |
-|---|---|
-| `FailoverSuccessError` / `TransactionStateUnknownError` / `FailoverFailedError` | Failover outcomes (§9.3). |
-| `PluginConflictError` | Two failover plugins or two auth plugins in `wrapper_plugins`. |
-| `IamAuthError` | IAM token generation/authentication failure. |
-| `SecretsManagerAuthError` | Secrets Manager retrieval/authentication failure. |
-| `BlueGreenTimeoutError` / `BlueGreenSwitchoverError` | Blue/Green switchover handling. |
-| `EncryptionError` / `MetadataError` / `KeyManagementError` | `kms_encryption` read verification failure / refused plaintext write or metadata problem / KMS key operation failure. |
+| Class                                                                           | Meaning                                                                                                               |
+|---------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `FailoverSuccessError` / `TransactionStateUnknownError` / `FailoverFailedError` | Failover outcomes (§9.3).                                                                                             |
+| `PluginConflictError`                                                           | Two failover plugins or two auth plugins in `wrapper_plugins`.                                                        |
+| `IamAuthError`                                                                  | IAM token generation/authentication failure.                                                                          |
+| `SecretsManagerAuthError`                                                       | Secrets Manager retrieval/authentication failure.                                                                     |
+| `BlueGreenTimeoutError` / `BlueGreenSwitchoverError`                            | Blue/Green switchover handling.                                                                                       |
+| `EncryptionError` / `MetadataError` / `KeyManagementError`                      | `kms_encryption` read verification failure / refused plaintext write or metadata problem / KMS key operation failure. |
 
 ### 14.3 Common failure patterns
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `The failover plugin is not compatible with RDS Proxy endpoints` | Connecting to an RDS Proxy with the default plugin list (which includes `failover`) | Set `wrapper_plugins` explicitly without `failover` (e.g. `""` or `iam`); RDS Proxy handles failover |
-| `PluginConflictError: Only one failover plugin may be used at a time` | `failover` and `gdb_failover` both listed | Keep one: `gdb_failover` on Aurora Global Database, `failover` elsewhere |
-| `PluginConflictError: Only one authentication plugin may be used at a time` | `iam` and `secrets_manager` both listed | Keep one |
-| `Invalid plugin: <code>` | Typo, a code from another wrapper (`failover2`, `efm2`, `readWriteSplitting`, `awsSecretsManager`, `customEndpoint`, ...), or a custom plugin not registered | Use a code from §4.3, or register the custom plugin first |
-| `Duplicate plugins detected` | The same code listed twice | Remove the duplicate |
-| `Unknown dialect code: <code>` | Wrong `wrapper_dialect` spelling (e.g. `rds-multi-az-pg-cluster`, `postgresql`) | Use a code from §8.1 |
-| `PG::Error: invalid connection option "<name>"` with a direct `WrapperPgConnection` | A key that is neither a wrapper parameter nor a `pg` option - often a misspelled wrapper parameter or one from another wrapper (camelCase, `...Ms`) | Fix the spelling (§5/§6) |
-| A wrapper setting has no effect under Active Record (no error) | The key is misspelled or from another wrapper; the adapters drop or ignore unknown keys (§13.2) | Check each wrapper key's spelling against §5/§6 |
-| `invalid connection option` under `aws_postgresql` on `1.0.0` for keys like `max_connections`, `replica`, `migrations_paths` | `1.0.0` passed Active Record-only keys to `pg` | Upgrade to `1.0.1+` |
-| `TypeError: <name>: expected String, got Integer` | Known issue (1.0.1): a numeric-looking String parameter unquoted in YAML (`cluster_id: 1234`, `bgd_id: 1`) is rejected | Quote it until fixed (§1.6) |
-| `SecretsManagerAuthError: Timed out fetching secret after 60s` | Secrets Manager not reachable (network path, VPC endpoint, region) or very slow | Check connectivity to Secrets Manager from the app and `secret_region` / `secret_endpoint` |
-| Writes fail with a read-only error right after deploy | The writing entry points at the `-ro-` reader endpoint | Point writing at the cluster endpoint without `-ro-` |
-| `ActiveRecord::ConnectionFailed ... FailoverFailedError` | Failover could not reach a new instance within `failover_timeout_sec` (not a success) | Check cluster health and reachability of instance endpoints (security groups, `cluster_instance_host_pattern` for IP/CNAME hosts); the pool will replace the connection |
-| A request or job fails with `FailoverSuccessError` under Active Record (the process keeps running; later work uses the reconnected connection) | The adapter re-raises it unchanged after reconnecting | Rescue it and replay idempotent work (§9.3) |
-| Session settings (timezone, search path, statement timeout) lost after failover | Not declared under `variables:` | Move them under `variables:` (§13.4) |
-| Failover doesn't work behind an IP address or own domain name; topology never resolves | No `cluster_instance_host_pattern`, so per-instance hostnames can't be built | Set `cluster_instance_host_pattern` (§3.11) |
-| Topology from one cluster appears in another / failover reconnects to the wrong cluster | Several clusters share the default `cluster_id` | Distinct `cluster_id` per cluster |
-| Topology monitor uses the wrong user or database, or ignores timeout overrides | The monitor keeps the context of the first connection that created it for that `cluster_id` | Put `topology_monitoring_*` settings on every connection sharing the `cluster_id` |
-| Global Database connection fails at setup | Missing `global_cluster_instance_host_patterns`, or missing `failover_home_region` on the global endpoint | Set both (§5.2) |
-| IAM auth fails on MySQL | Missing `enable_cleartext_plugin: true` (or no TLS) | Add it with `ssl_mode: verify_identity` + `sslca` |
-| IAM token generated for the wrong host/region | Connecting through IP, own domain, or global endpoint | `iam_host` (+ `iam_region`); `initial_connection` on the global endpoint |
-| `IamAuthError` / `SecretsManagerAuthError` hours after deploy | Temporary AWS credentials in environment variables expired | Use a refreshing source (instance profile, task role, assume role in config) (§6.4) |
-| `LoadError` when connecting with `kms_encryption` on PostgreSQL | `pg_query` missing | `gem 'pg_query', '>= 5.1'` |
-| `Errors::MetadataError` writing an encrypted column on MySQL via Active Record | Prepared statements off, so the value was inlined as a literal | `prepared_statements: true` |
-| `Errors::EncryptionError` reading an encrypted column | Value isn't valid ciphertext for that column (pre-existing plaintext, or tampered) | Encrypt existing data; `encryption_return_unverified_data` only for a bounded migration |
-| `where(ssn: ...)` / uniqueness validation never matches on an encrypted column | Encryption is randomized | Filter on a non-encrypted column |
-| Encrypted string reads back as `"caf\xC3\xA9"` or loses backslashes | Active Record treats the binary column as binary | `attribute :col, :string` on the model |
-| Reads never reach a replica | The wrapper doesn't route reads; the `connected_to` block isn't wrapping the work, or the request is a POST under the database selector middleware | Use Active Record roles correctly (§3.7) and verify in logs |
-| `db:drop` / `db:test:prepare` fails with `database "<name>" is being accessed by other users`, `db:prepare` fails instead of creating the database, or failover never finds the new writer in forked workers | Known `1.0.0` issues | Upgrade to `1.0.1+` (§13.7) |
-| Blue/Green switchover not handled | Unsupported deployment (Multi-AZ DB cluster, Global), CNAME host, engine below the minimum version, or `rds_tools` missing on RDS PostgreSQL | See §5.7 |
+| Symptom                                                                                                                                                                                                      | Likely cause                                                                                                                                                 | Fix                                                                                                                                                                     |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `The failover plugin is not compatible with RDS Proxy endpoints`                                                                                                                                             | Connecting to an RDS Proxy with the default plugin list (which includes `failover`)                                                                          | Set `wrapper_plugins` explicitly without `failover` (e.g. `""` or `iam`); RDS Proxy handles failover                                                                    |
+| `PluginConflictError: Only one failover plugin may be used at a time`                                                                                                                                        | `failover` and `gdb_failover` both listed                                                                                                                    | Keep one: `gdb_failover` on Aurora Global Database, `failover` elsewhere                                                                                                |
+| `PluginConflictError: Only one authentication plugin may be used at a time`                                                                                                                                  | `iam` and `secrets_manager` both listed                                                                                                                      | Keep one                                                                                                                                                                |
+| `Invalid plugin: <code>`                                                                                                                                                                                     | Typo, a code from another wrapper (`failover2`, `efm2`, `readWriteSplitting`, `awsSecretsManager`, `customEndpoint`, ...), or a custom plugin not registered | Use a code from §4.3, or register the custom plugin first                                                                                                               |
+| `Duplicate plugins detected`                                                                                                                                                                                 | The same code listed twice                                                                                                                                   | Remove the duplicate                                                                                                                                                    |
+| `Unknown dialect code: <code>`                                                                                                                                                                               | Wrong `wrapper_dialect` spelling (e.g. `rds-multi-az-pg-cluster`, `postgresql`)                                                                              | Use a code from §8.1                                                                                                                                                    |
+| `PG::Error: invalid connection option "<name>"` with a direct `WrapperPgConnection`                                                                                                                          | A key that is neither a wrapper parameter nor a `pg` option - often a misspelled wrapper parameter or one from another wrapper (camelCase, `...Ms`)          | Fix the spelling (§5/§6)                                                                                                                                                |
+| A wrapper setting has no effect under Active Record (no error)                                                                                                                                               | The key is misspelled or from another wrapper; the adapters drop or ignore unknown keys (§13.2)                                                              | Check each wrapper key's spelling against §5/§6                                                                                                                         |
+| `invalid connection option` under `aws_postgresql` on `1.0.0` for keys like `max_connections`, `replica`, `migrations_paths`                                                                                 | `1.0.0` passed Active Record-only keys to `pg`                                                                                                               | Upgrade to `1.0.1+`                                                                                                                                                     |
+| `TypeError: <name>: expected String, got Integer`                                                                                                                                                            | Known issue (1.0.1): a numeric-looking String parameter unquoted in YAML (`cluster_id: 1234`, `bgd_id: 1`) is rejected                                       | Quote it until fixed (§1.6)                                                                                                                                             |
+| `SecretsManagerAuthError: Timed out fetching secret after 60s`                                                                                                                                               | Secrets Manager not reachable (network path, VPC endpoint, region) or very slow                                                                              | Check connectivity to Secrets Manager from the app and `secret_region` / `secret_endpoint`                                                                              |
+| Writes fail with a read-only error right after deploy                                                                                                                                                        | The writing entry points at the `-ro-` reader endpoint                                                                                                       | Point writing at the cluster endpoint without `-ro-`                                                                                                                    |
+| `ActiveRecord::ConnectionFailed ... FailoverFailedError`                                                                                                                                                     | Failover could not reach a new instance within `failover_timeout_sec` (not a success)                                                                        | Check cluster health and reachability of instance endpoints (security groups, `cluster_instance_host_pattern` for IP/CNAME hosts); the pool will replace the connection |
+| A request or job fails with `FailoverSuccessError` under Active Record (the process keeps running; later work uses the reconnected connection)                                                               | The adapter re-raises it unchanged after reconnecting                                                                                                        | Rescue it and replay idempotent work (§9.3)                                                                                                                             |
+| Session settings (timezone, search path, statement timeout) lost after failover                                                                                                                              | Not declared under `variables:`                                                                                                                              | Move them under `variables:` (§13.4)                                                                                                                                    |
+| Failover doesn't work behind an IP address or own domain name; topology never resolves                                                                                                                       | No `cluster_instance_host_pattern`, so per-instance hostnames can't be built                                                                                 | Set `cluster_instance_host_pattern` (§3.11)                                                                                                                             |
+| Topology from one cluster appears in another / failover reconnects to the wrong cluster                                                                                                                      | Several clusters share the default `cluster_id`                                                                                                              | Distinct `cluster_id` per cluster                                                                                                                                       |
+| Topology monitor uses the wrong user or database, or ignores timeout overrides                                                                                                                               | The monitor keeps the context of the first connection that created it for that `cluster_id`                                                                  | Put `topology_monitoring_*` settings on every connection sharing the `cluster_id`                                                                                       |
+| Global Database connection fails at setup                                                                                                                                                                    | Missing `global_cluster_instance_host_patterns`, or missing `failover_home_region` on the global endpoint                                                    | Set both (§5.2)                                                                                                                                                         |
+| IAM auth fails on MySQL                                                                                                                                                                                      | Missing `enable_cleartext_plugin: true` (or no TLS)                                                                                                          | Add it with `ssl_mode: verify_identity` + `sslca`                                                                                                                       |
+| IAM token generated for the wrong host/region                                                                                                                                                                | Connecting through IP, own domain, or global endpoint                                                                                                        | `iam_host` (+ `iam_region`); `initial_connection` on the global endpoint                                                                                                |
+| `IamAuthError` / `SecretsManagerAuthError` hours after deploy                                                                                                                                                | Temporary AWS credentials in environment variables expired                                                                                                   | Use a refreshing source (instance profile, task role, assume role in config) (§6.4)                                                                                     |
+| `LoadError` when connecting with `kms_encryption` on PostgreSQL                                                                                                                                              | `pg_query` missing                                                                                                                                           | `gem 'pg_query', '>= 5.1'`                                                                                                                                              |
+| `Errors::MetadataError` writing an encrypted column on MySQL via Active Record                                                                                                                               | Prepared statements off, so the value was inlined as a literal                                                                                               | `prepared_statements: true`                                                                                                                                             |
+| `Errors::EncryptionError` reading an encrypted column                                                                                                                                                        | Value isn't valid ciphertext for that column (pre-existing plaintext, or tampered)                                                                           | Encrypt existing data; `encryption_return_unverified_data` only for a bounded migration                                                                                 |
+| `where(ssn: ...)` / uniqueness validation never matches on an encrypted column                                                                                                                               | Encryption is randomized                                                                                                                                     | Filter on a non-encrypted column                                                                                                                                        |
+| Encrypted string reads back as `"caf\xC3\xA9"` or loses backslashes                                                                                                                                          | Active Record treats the binary column as binary                                                                                                             | `attribute :col, :string` on the model                                                                                                                                  |
+| Reads never reach a replica                                                                                                                                                                                  | The wrapper doesn't route reads; the `connected_to` block isn't wrapping the work, or the request is a POST under the database selector middleware           | Use Active Record roles correctly (§3.7) and verify in logs                                                                                                             |
+| `db:drop` / `db:test:prepare` fails with `database "<name>" is being accessed by other users`, `db:prepare` fails instead of creating the database, or failover never finds the new writer in forked workers | Known `1.0.0` issues                                                                                                                                         | Upgrade to `1.0.1+` (§13.7)                                                                                                                                             |
+| Blue/Green switchover not handled                                                                                                                                                                            | Unsupported deployment (Multi-AZ DB cluster, Global), CNAME host, engine below the minimum version, or `rds_tools` missing on RDS PostgreSQL                 | See §5.7                                                                                                                                                                |
 
 ### 14.4 Shutdown
 
@@ -1543,53 +1548,53 @@ Do you know the deployment type?
 
 When a user asks for one of these, say it isn't available and offer the alternative. For features marked **by design**, give the reason so the user doesn't wait for it. For the others, just say they aren't available - never promise, hint, or speculate that they will be added.
 
-| Requested | Status | Alternative |
-|---|---|---|
-| Read/write splitting plugin, automatic SQL-based routing, per-query reader balancing | Not available, **by design**: Active Record already provides read/write splitting, and a wrapper implementation would need internal pools to perform well, which would conflict with Active Record's pool | Active Record roles / two connections (§3.7) |
-| Internal connection pool | Not available, **by design**: it would conflict with Active Record's own pool | Active Record's pool; with direct connections, the app owns pooling |
-| Enhanced failure monitoring (host health probes) | Not available, **by design**: it requires closing a stalled connection from another thread, which can't be done reliably and safely in Ruby. Driver timeouts and TCP keepalive settings catch most if not all of the same failures | Driver timeouts and keepalives (pg: `connect_timeout`, `keepalives_idle` / `keepalives_interval` / `keepalives_count`; mysql2: `connect_timeout`, `read_timeout`, `write_timeout`); `failover` reacts when a call fails |
-| Configuration presets / profiles | Not available | The recipes in §3 |
-| Host selection strategies other than `random` | Not built in | Register a custom selector (§7) |
-| Federated / SAML / Okta authentication | Not available | `iam` or `secrets_manager` |
-| Aurora Limitless plugin | Not available | - |
-| Query caching, query logging, execution-time, telemetry plugins | Not available | Active Record instrumentation / your APM |
-| A connection-tracker plugin to invalidate pooled connections after failover | Not needed | The adapter reconnects pooled connections in place |
+| Requested                                                                            | Status                                                                                                                                                                                                                             | Alternative                                                                                                                                                                                                             |
+|--------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Read/write splitting plugin, automatic SQL-based routing, per-query reader balancing | Not available, **by design**: Active Record already provides read/write splitting, and a wrapper implementation would need internal pools to perform well, which would conflict with Active Record's pool                          | Active Record roles / two connections (§3.7)                                                                                                                                                                            |
+| Internal connection pool                                                             | Not available, **by design**: it would conflict with Active Record's own pool                                                                                                                                                      | Active Record's pool; with direct connections, the app owns pooling                                                                                                                                                     |
+| Enhanced failure monitoring (host health probes)                                     | Not available, **by design**: it requires closing a stalled connection from another thread, which can't be done reliably and safely in Ruby. Driver timeouts and TCP keepalive settings catch most if not all of the same failures | Driver timeouts and keepalives (pg: `connect_timeout`, `keepalives_idle` / `keepalives_interval` / `keepalives_count`; mysql2: `connect_timeout`, `read_timeout`, `write_timeout`); `failover` reacts when a call fails |
+| Configuration presets / profiles                                                     | Not available                                                                                                                                                                                                                      | The recipes in §3                                                                                                                                                                                                       |
+| Host selection strategies other than `random`                                        | Not built in                                                                                                                                                                                                                       | Register a custom selector (§7)                                                                                                                                                                                         |
+| Federated / SAML / Okta authentication                                               | Not available                                                                                                                                                                                                                      | `iam` or `secrets_manager`                                                                                                                                                                                              |
+| Aurora Limitless plugin                                                              | Not available                                                                                                                                                                                                                      | -                                                                                                                                                                                                                       |
+| Query caching, query logging, execution-time, telemetry plugins                      | Not available                                                                                                                                                                                                                      | Active Record instrumentation / your APM                                                                                                                                                                                |
+| A connection-tracker plugin to invalidate pooled connections after failover          | Not needed                                                                                                                                                                                                                         | The adapter reconnects pooled connections in place                                                                                                                                                                      |
 
 ### 17.1 Translating JDBC wrapper names
 
 Users coming from the AWS Advanced JDBC Wrapper often paste its names. Translate them with this table; for anything not listed, say there's no direct equivalent rather than guessing.
 
-| JDBC wrapper | Ruby wrapper | Notes |
-|---|---|---|
-| `failover2` | `failover` | Ruby's `failover` is the equivalent of JDBC's `failover2` (the topology-monitor-based implementation). |
-| `failover` (JDBC v1) | `failover` | Ruby has a single failover plugin. |
-| `gdbFailover` | `gdb_failover` | |
-| `initialConnection` | `initial_connection` | |
-| `customEndpoint` | `custom_endpoint` | |
-| `iam` | `iam` | |
-| `awsSecretsManager` | `secrets_manager` | |
-| `bg` | `bg` | |
-| `kmsEncryption` | `kms_encryption` | |
-| `efm`, `efm2` | none | Not available by design (§17). |
-| `readWriteSplitting`, `srw`, `autoReadWriteSplitting` and the `gdb*ReadWriteSplitting` variants | none | Not available by design; use Active Record roles (§3.7). |
-| `wrapperPlugins` | `wrapper_plugins` | |
-| `wrapperDialect` | `wrapper_dialect` | Dialect codes differ; use §8.1. |
-| `wrapperTargetDriverDialect` | none | The driver is chosen by the entry point (`aws_postgresql` / `WrapperPgConnection` use `pg`; `aws_mysql2` / `WrapperMysql2Client` use `mysql2`); there's nothing to set. |
-| `clusterId` | `cluster_id` | |
-| `clusterInstanceHostPattern` | `cluster_instance_host_pattern` | |
-| `failoverMode` | `failover_mode` | Values use underscores (`strict_writer`); hyphenated spellings are also accepted. |
-| `failoverTimeoutMs` | `failover_timeout_sec` | **Divide by 1000** - Ruby time parameters are seconds. |
-| `clusterTopologyRefreshRateMs` | `cluster_topology_refresh_rate_sec` | Divide by 1000. |
-| `failoverReaderHostSelectorStrategy` | `failover_reader_host_selector_strategy` | Only `random` is built in (§7). |
-| `enableConnectFailover` | `enable_connect_failover` | |
-| `failoverHomeRegion` | `failover_home_region` | |
-| `activeHomeFailoverMode` | `in_home_failover_mode` | |
-| `inactiveHomeFailoverMode` | `out_of_home_failover_mode` | |
-| `globalClusterInstanceHostPatterns` | `global_cluster_instance_host_patterns` | |
-| `iamHost` / `iamRegion` / `iamDefaultPort` | `iam_host` / `iam_region` / `iam_port` | |
-| `iamExpiration` | `iam_expiration_sec` | Different semantics (§5.5). |
-| `secretsManagerSecretId` / `secretsManagerRegion` | `secret_id` / `secret_region` | |
-| `bgdId` | `bgd_id` | |
+| JDBC wrapper                                                                                    | Ruby wrapper                             | Notes                                                                                                                                                                   |
+|-------------------------------------------------------------------------------------------------|------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `failover2`                                                                                     | `failover`                               | Ruby's `failover` is the equivalent of JDBC's `failover2` (the topology-monitor-based implementation).                                                                  |
+| `failover` (JDBC v1)                                                                            | `failover`                               | Ruby has a single failover plugin.                                                                                                                                      |
+| `gdbFailover`                                                                                   | `gdb_failover`                           |                                                                                                                                                                         |
+| `initialConnection`                                                                             | `initial_connection`                     |                                                                                                                                                                         |
+| `customEndpoint`                                                                                | `custom_endpoint`                        |                                                                                                                                                                         |
+| `iam`                                                                                           | `iam`                                    |                                                                                                                                                                         |
+| `awsSecretsManager`                                                                             | `secrets_manager`                        |                                                                                                                                                                         |
+| `bg`                                                                                            | `bg`                                     |                                                                                                                                                                         |
+| `kmsEncryption`                                                                                 | `kms_encryption`                         |                                                                                                                                                                         |
+| `efm`, `efm2`                                                                                   | none                                     | Not available by design (§17).                                                                                                                                          |
+| `readWriteSplitting`, `srw`, `autoReadWriteSplitting` and the `gdb*ReadWriteSplitting` variants | none                                     | Not available by design; use Active Record roles (§3.7).                                                                                                                |
+| `wrapperPlugins`                                                                                | `wrapper_plugins`                        |                                                                                                                                                                         |
+| `wrapperDialect`                                                                                | `wrapper_dialect`                        | Dialect codes differ; use §8.1.                                                                                                                                         |
+| `wrapperTargetDriverDialect`                                                                    | none                                     | The driver is chosen by the entry point (`aws_postgresql` / `WrapperPgConnection` use `pg`; `aws_mysql2` / `WrapperMysql2Client` use `mysql2`); there's nothing to set. |
+| `clusterId`                                                                                     | `cluster_id`                             |                                                                                                                                                                         |
+| `clusterInstanceHostPattern`                                                                    | `cluster_instance_host_pattern`          |                                                                                                                                                                         |
+| `failoverMode`                                                                                  | `failover_mode`                          | Values use underscores (`strict_writer`); hyphenated spellings are also accepted.                                                                                       |
+| `failoverTimeoutMs`                                                                             | `failover_timeout_sec`                   | **Divide by 1000** - Ruby time parameters are seconds.                                                                                                                  |
+| `clusterTopologyRefreshRateMs`                                                                  | `cluster_topology_refresh_rate_sec`      | Divide by 1000.                                                                                                                                                         |
+| `failoverReaderHostSelectorStrategy`                                                            | `failover_reader_host_selector_strategy` | Only `random` is built in (§7).                                                                                                                                         |
+| `enableConnectFailover`                                                                         | `enable_connect_failover`                |                                                                                                                                                                         |
+| `failoverHomeRegion`                                                                            | `failover_home_region`                   |                                                                                                                                                                         |
+| `activeHomeFailoverMode`                                                                        | `in_home_failover_mode`                  |                                                                                                                                                                         |
+| `inactiveHomeFailoverMode`                                                                      | `out_of_home_failover_mode`              |                                                                                                                                                                         |
+| `globalClusterInstanceHostPatterns`                                                             | `global_cluster_instance_host_patterns`  |                                                                                                                                                                         |
+| `iamHost` / `iamRegion` / `iamDefaultPort`                                                      | `iam_host` / `iam_region` / `iam_port`   |                                                                                                                                                                         |
+| `iamExpiration`                                                                                 | `iam_expiration_sec`                     | Different semantics (§5.5).                                                                                                                                             |
+| `secretsManagerSecretId` / `secretsManagerRegion`                                               | `secret_id` / `secret_region`            |                                                                                                                                                                         |
+| `bgdId`                                                                                         | `bgd_id`                                 |                                                                                                                                                                         |
 
 ---
 

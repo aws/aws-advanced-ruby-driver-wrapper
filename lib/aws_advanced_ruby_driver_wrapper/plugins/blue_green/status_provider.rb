@@ -18,6 +18,7 @@ require 'concurrent'
 require_relative '../../logging'
 require_relative '../../property_definition'
 require_relative '../../utils/rds_utils'
+require_relative 'drop_blue_connections_marker'
 require_relative 'iam_host_tracker'
 require_relative 'interval_rate'
 require_relative 'host_mapper'
@@ -60,6 +61,10 @@ module AwsAdvancedRubyDriverWrapper
           @rollback              = false
           @process_status_lock   = Mutex.new
           @monitor_generation    = 0
+
+          @drop_blue_connections = PropertyDefinition::BG_DROP_BLUE_CONNECTIONS.get_bool(wrapper_props)
+          # Identity of the drop-blue-connections marker created for the current switchover, if any.
+          @drop_marker_id        = nil
 
           @status_check_interval_map = {
             IntervalRate::BASELINE => PropertyDefinition::BG_INTERVAL_BASELINE_SEC.get_float(wrapper_props) * 1000,
@@ -176,6 +181,18 @@ module AwsAdvancedRubyDriverWrapper
 
           logger.warn { 'Blue/Green switchover has timed out.' }
           @summary_status = @rollback ? @builder.created : @builder.completed(@rollback)
+          # A timeout means the wrapper stopped waiting, not that the switchover is confirmed. Only
+          # activate the marker if the switchover was last observed at POST (past the point of no
+          # return); timing out in PREPARATION/IN_PROGRESS could still roll back, and dropping blue
+          # connections then would hit a blue that is still primary. In that case discard the pending
+          # marker so it does not linger unactivated for the full marker TTL: we have given up waiting
+          # on this switchover, and no later phase will arrive to activate it.
+          if @latest_status_phase == Phase::POST
+            activate_drop_marker
+          else
+            remove_drop_marker
+            @drop_marker_id = nil
+          end
           update_monitors
           update_status_cache
           log_current_context
@@ -190,6 +207,12 @@ module AwsAdvancedRubyDriverWrapper
           @monitor_generation += 1
           @monitors = { Role::SOURCE => nil, Role::TARGET => nil }
           old_monitors.each_value { |m| m&.stop }
+
+          # A completed switchover's marker must survive this reset so connections opened to the old
+          # blue environment are still invalidated on their next use. A rollback leaves blue as primary,
+          # so its marker is discarded instead. Either way a later switchover starts a fresh marker.
+          remove_drop_marker if @rollback
+          @drop_marker_id = nil
 
           # IamAuthPlugin, FederatedAuthPlugin, and OktaAuthPlugin all cache tokens under the same
           # shared IAM_TOKEN_CACHE_NAME, so clearing through any one of them clears all of them.
@@ -227,12 +250,15 @@ module AwsAdvancedRubyDriverWrapper
             @switchover_state.update_dns_flags(@bgd_id, role, interim_status)
             @summary_status = @builder.in_progress(@rollback)
             @switchover_state.trigger_in_progress_monitor_reset
+            ensure_drop_marker_pending
           when Phase::POST
             @switchover_state.update_dns_flags(@bgd_id, role, interim_status)
             @summary_status = @builder.post(@rollback)
+            activate_drop_marker
           when Phase::COMPLETED
             @switchover_state.update_dns_flags(@bgd_id, role, interim_status)
             @summary_status = @builder.completed(@rollback)
+            activate_drop_marker
           else
             raise ArgumentError, "[bgd_id: '#{@bgd_id}'] Unknown BG phase '#{@latest_status_phase}'."
           end
@@ -350,6 +376,62 @@ module AwsAdvancedRubyDriverWrapper
           @service_container.event_publisher.publish(
             Utils::Events::MonitorResetEvent.new(cluster_id: @cluster_id, endpoints: blue_endpoints)
           )
+        end
+
+        # Creates a pending drop-blue-connections marker the first time a switchover reaches IN_PROGRESS.
+        # The marker is only confirmed (see #activate_drop_marker) once the switchover passes the point
+        # of no return, so nothing is invalidated while it is still in progress and could roll back.
+        def ensure_drop_marker_pending
+          return unless @drop_blue_connections
+          return if @rollback
+          return if @drop_marker_id
+
+          hosts = blue_host_set
+          return if hosts.empty?
+
+          marker = DropBlueConnectionsMarker.new(blue_hosts: hosts, switchover_time_ns: nano_time)
+          @drop_marker_id = marker.id
+          store_drop_marker(marker)
+        end
+
+        # Confirms the switchover's pending marker so stale blue connections begin to be invalidated.
+        # A marker is only created when IN_PROGRESS is observed (see #ensure_drop_marker_pending), since
+        # that is the only point with a reliable switchover time. A provider that first sees the
+        # deployment at POST/COMPLETED cannot tell which of its connections predate the switchover and
+        # would wrongly cover connections opened after switchover, including to green.
+        def activate_drop_marker
+          return unless @drop_blue_connections
+          return if @rollback
+
+          marker = read_drop_marker
+          return if marker.nil? || marker.active?
+
+          store_drop_marker(marker.activated)
+        end
+
+        # The blue host set: downcased SOURCE endpoint names plus their pre-switchover IP addresses.
+        def blue_host_set
+          return Set.new unless @summary_status
+
+          blue = @summary_status.role_by_host.select { |_host, role| role == Role::SOURCE }.keys
+          ips  = blue.filter_map { |host| @host_mapper.host_ip_addresses[host] }
+          (blue + ips).to_set(&:downcase)
+        end
+
+        def store_drop_marker(marker)
+          @storage_service.set(BlueGreenPlugin::DROP_MARKER_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id), marker)
+        end
+
+        def read_drop_marker
+          @storage_service.get(BlueGreenPlugin::DROP_MARKER_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id), register_access: false)
+        end
+
+        def remove_drop_marker
+          @storage_service.remove(BlueGreenPlugin::DROP_MARKER_NAME, BlueGreenPlugin.drop_marker_key(@bgd_id))
+        end
+
+        def nano_time
+          Process.clock_gettime(Process::CLOCK_MONOTONIC, :nanosecond)
         end
 
         def switchover_finalized?

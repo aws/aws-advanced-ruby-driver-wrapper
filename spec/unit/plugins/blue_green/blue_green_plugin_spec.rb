@@ -16,6 +16,7 @@
 
 require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/blue_green_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/drop_blue_connections_marker'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/status'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/phase'
 require 'aws_advanced_ruby_driver_wrapper/plugins/blue_green/role'
@@ -206,6 +207,141 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
       end
 
       plugin.connect(host_info, props, true, -> { connection })
+    end
+  end
+
+  describe 'dropping stale blue connections (#execute)' do
+    let(:marker_class) { bg::DropBlueConnectionsMarker }
+    let(:marker_key)   { described_class.drop_marker_key(bgd_id_val) }
+    let(:bg_name)      { described_class::BLUE_GREEN_NAME }
+    let(:marker_name)  { described_class::DROP_MARKER_NAME }
+
+    # close_connection is needed on the driver dialect for invalidation.
+    let(:driver_dialect) { double('driver_dialect', network_bound_methods: Set['connection.query'], close_connection: nil) }
+    let(:connection_service) do
+      double('connection_service',
+             current_host_info: host_info,
+             current_connection: connection,
+             driver_props: Concurrent::Map.new,
+             config: double('config', cluster_id: 'cluster-1'))
+    end
+
+    # A switchover time far above any real monotonic clock value, so a just-opened connection counts
+    # as "opened before the switchover".
+    let(:future_ns) { 1 << 62 }
+    let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: future_ns, active: true) }
+
+    before do
+      allow(storage_service).to receive(:get).and_return(nil)
+      allow(storage_service).to receive(:get).with(marker_name, marker_key, register_access: false).and_return(marker)
+      # Record this connection's connect-time host and open time.
+      plugin.connect(host_info, props, true, -> { connection })
+    end
+
+    context 'with an active marker for the connection host, opened before the switchover' do
+      it 'closes the connection and continues down the pipeline' do
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+
+      it 'does not invalidate the same connection twice for one marker' do
+        plugin.execute('connection.query', -> { :query_result })
+        expect(driver_dialect).not_to receive(:close_connection)
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+
+      # A close that raises is swallowed, but the marker must not be latched as handled — otherwise the
+      # still-open connection would serve stale reads from retired blue for the rest of its life.
+      it 'retries invalidation on the next use when the close fails' do
+        expect(driver_dialect).to receive(:close_connection).with(connection).ordered.and_raise(StandardError, 'boom')
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+
+        expect(driver_dialect).to receive(:close_connection).with(connection).ordered
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+    end
+
+    context 'with a pending (not yet confirmed) marker' do
+      let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: future_ns) }
+
+      it 'does not invalidate the connection' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+
+      # A pending check must not record the marker id, or activating the same marker later would never
+      # invalidate this connection — it would stay open on retired blue.
+      it 'still invalidates the connection once the same marker is activated' do
+        plugin.execute('connection.query', -> { :query_result })
+
+        allow(storage_service).to receive(:get).with(marker_name, marker_key, register_access: false).and_return(marker.activated)
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    # A connection opened through BG connect routing (route_connect) must also record its connect-time
+    # host/open time, so it is invalidated on next use just like a plainly-connected one.
+    context 'when the connection was opened through BG connect routing' do
+      let(:connect_routing) { double('connect_routing', match?: true, apply: connection) }
+      let(:connect_status) do
+        instance_double(bg::Status, current_phase: phase::PREPARATION, connect_routing: [connect_routing], role: role::SOURCE)
+      end
+
+      it 'invalidates the routed connection on its next use after the switchover' do
+        allow(storage_service).to receive(:get).with(bg_name, bgd_id_val).and_return(connect_status, nil)
+        plugin.connect(host_info, props, true, -> { connection })
+
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    context 'with an active marker whose switchover predates the connection' do
+      let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: 1, active: true) }
+
+      it 'does not invalidate a connection opened after the switchover' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        expect(plugin.execute('connection.query', -> { :query_result })).to eq(:query_result)
+      end
+    end
+
+    context 'with an active marker that does not cover the connection host' do
+      let(:marker) do
+        marker_class.new(blue_hosts: ['green.cluster-abc.us-east-1.rds.amazonaws.com'], switchover_time_ns: future_ns, active: true)
+      end
+
+      it 'does not invalidate the connection' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    # The provider stores the active marker before it writes the COMPLETED status, so a connection
+    # that reads a COMPLETED status must still be invalidated via the marker rather than racing
+    # past it on the COMPLETED early-return path.
+    context 'with an active marker and a COMPLETED status' do
+      let(:completed_status) { instance_double(bg::Status, current_phase: phase::COMPLETED) }
+
+      it 'invalidates the stale connection instead of taking the COMPLETED early return' do
+        allow(storage_service).to receive(:get).with(bg_name, bgd_id_val).and_return(completed_status)
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
+    context 'when bg_drop_blue_connections is disabled' do
+      let(:props) do
+        Concurrent::Map.new.tap do |p|
+          p[:bgd_id] = bgd_id_val
+          p[:bg_drop_blue_connections] = false
+        end
+      end
+
+      it 'does not read the marker or invalidate the connection' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
     end
   end
 
