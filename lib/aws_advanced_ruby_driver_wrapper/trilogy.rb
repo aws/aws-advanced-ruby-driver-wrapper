@@ -74,6 +74,16 @@ module AwsAdvancedRubyDriverWrapper
                  bounded_conn: @query_conn, sql: @last_sql)
     end
 
+    # Trilogy's own query_with_flags calls query on the driver connection directly, so it is defined
+    # here to send the statement through the plugin pipeline instead.
+    def query_with_flags(sql, flags)
+      old_flags = current_conn.query_flags
+      current_conn.query_flags = flags
+      query(sql)
+    ensure
+      current_conn.query_flags = old_flags if old_flags
+    end
+
     # -- method_missing: covers non-network calls and rarely used network calls --
 
     # The network calls that are rare enough not to be worth a method of their own. They are entered

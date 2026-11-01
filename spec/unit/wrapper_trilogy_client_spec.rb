@@ -91,6 +91,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient do
     end
   end
 
+  describe '#query_with_flags' do
+    before do
+      allow(connection).to receive(:query_flags).and_return(1)
+      allow(connection).to receive(:query_flags=)
+    end
+
+    it 'runs the statement through the pipeline with the flags set' do
+      allow(connection).to receive(:query) do
+        expect(connection).to have_received(:query_flags=).with(4)
+        trilogy_result
+      end
+
+      expect(client.query_with_flags('SELECT 1', 4)).to equal(trilogy_result)
+      expect(plugin.method_names).to eq(['connection.query'])
+    end
+
+    it 'restores the flags afterwards, even when the statement fails' do
+      allow(connection).to receive(:query).and_raise(Trilogy::EOFError, 'eof')
+
+      expect { client.query_with_flags('SELECT 1', 4) }.to raise_error(Trilogy::EOFError)
+      expect(connection).to have_received(:query_flags=).with(1)
+    end
+  end
+
   # ActiveRecord reads every result set a statement leaves before it sends the next one.
   describe 'a statement that leaves more than one result set' do
     before do
