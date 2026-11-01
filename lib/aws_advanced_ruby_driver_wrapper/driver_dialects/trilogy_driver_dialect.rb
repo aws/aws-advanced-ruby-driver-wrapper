@@ -37,6 +37,7 @@ module AwsAdvancedRubyDriverWrapper
       NETWORK_BOUND_METHODS = (COMMON_NETWORK_BOUND_METHODS | Set[
         RubyMethod::CONNECTION_QUERY.name,
         RubyMethod::CONNECTION_CHANGE_DB.name,
+        RubyMethod::CONNECTION_SELECT_DB.name,
         RubyMethod::CONNECTION_NEXT_RESULT.name,
         RubyMethod::CONNECTION_ABANDON_RESULTS.name,
         RubyMethod::CONNECTION_SET_SERVER_OPTION.name
