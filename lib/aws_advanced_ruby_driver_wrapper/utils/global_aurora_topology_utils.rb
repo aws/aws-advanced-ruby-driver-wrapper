@@ -37,7 +37,7 @@ module AwsAdvancedRubyDriverWrapper
 
         if topology_result_empty?(results)
           # We expect at least 4 columns. Note that the server may return 0 columns if failover has occurred.
-          logger.debug('The topology query returned no rows or columns. ' \
+          logger.debug('The topology query returned a result with no rows or rows with no columns. ' \
                        'This may occur if the topology query is executed when the server is failing over.')
           return nil
         end
