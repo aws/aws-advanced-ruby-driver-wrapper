@@ -22,7 +22,8 @@ gem 'activerecord', '>= 7.2'
 gem 'mysql2', '>= 0.5.7'
 gem 'pg', '>= 1.6.3'
 gem 'pg_query', '>= 5.1'
-gem 'trilogy', '>= 2.9'
+# 2.13.2 fixes SQL injection through Trilogy#escape with multibyte encodings (GHSA-744p-w4gc-m3gh).
+gem 'trilogy', '>= 2.13.2'
 
 group :development do
   gem 'bundler'
