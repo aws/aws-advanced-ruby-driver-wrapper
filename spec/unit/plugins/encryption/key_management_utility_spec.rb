@@ -58,6 +58,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KeyManagementU
     allow(AwsAdvancedRubyDriverWrapper.logger).to receive(:warn)
   end
 
+  describe '.new' do
+    # Telling the user to pass driver: :mysql2 would only fail later, as trilogy has no prepare.
+    %w[Trilogy AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient].each do |class_name|
+      it "refuses a #{class_name} connection, as KMS encryption does not support trilogy" do
+        trilogy_connection = double(class: double(name: class_name))
+
+        expect { described_class.new(connection: trilogy_connection, kms_client: kms_client, config: config) }
+          .to raise_error(ArgumentError, 'KMS encryption does not support the trilogy driver')
+      end
+    end
+  end
+
   describe '#create_master_key' do
     let(:create_key_response) { double('CreateKeyResponse', key_metadata: double('KeyMetadata', arn: master_key_arn)) }
 

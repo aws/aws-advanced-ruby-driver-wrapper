@@ -325,6 +325,9 @@ module AwsAdvancedRubyDriverWrapper
           name = connection.class.name.to_s
           return DriverDialects::PgDriverDialect.new if name.start_with?('PG::') || name.end_with?('WrapperPgConnection')
           return DriverDialects::Mysql2DriverDialect.new if name.start_with?('Mysql2::') || name.end_with?('WrapperMysql2Client')
+          if name == 'Trilogy' || name.end_with?('WrapperTrilogyClient')
+            raise ArgumentError, 'KMS encryption does not support the trilogy driver'
+          end
 
           raise ArgumentError,
                 "Cannot infer the driver dialect from #{name.empty? ? connection.class : name}; " \
