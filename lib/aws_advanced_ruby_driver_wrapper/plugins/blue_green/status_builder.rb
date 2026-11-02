@@ -223,7 +223,7 @@ module AwsAdvancedRubyDriverWrapper
             next [] if host_pair.nil?
 
             blue_host_spec    = host_pair[0]
-            blue_ip_entry     = @host_mapper.host_ip_addresses[blue_host_spec.host]
+            blue_ip_entry     = @host_mapper.host_ip_addresses[blue_host_spec.host.downcase]
             blue_ip_host_spec = blue_ip_entry ? Host::HostInfo.new(host: blue_ip_entry, port: blue_host_spec.port,
                                                                    role: blue_host_spec.role) : blue_host_spec
 
