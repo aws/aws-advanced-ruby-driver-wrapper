@@ -421,14 +421,6 @@ module AwsAdvancedRubyDriverWrapper
           true
         end
 
-        def syntax_error?(err)
-          driver_dialect.sql_state(err)&.start_with?('42') || false
-        end
-
-        def db_error?(err)
-          !driver_dialect.sql_state(err).nil?
-        end
-
         # @note Callers must hold @connection_mutex (invoke within a @connection_mutex.synchronize block).
         def status_available?(conn)
           dialect = @service_container.dialect_service.db_dialect
@@ -508,10 +500,10 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def handle_collect_status_error(err, conn)
-          if syntax_error?(err)
+          if @service_container.dialect_service.schema_error?(err)
             @current_phase = Phase::NOT_CREATED
             logger.warn { "[#{@role}] current_phase: #{@current_phase}, exception while querying for blue/green status." }
-          elsif db_error?(err)
+          elsif @service_container.dialect_service.server_error?(err)
             if err.message.include?('An error occurred while retrieving the blue/green fast switchover metadata')
               @current_phase = Phase::NOT_CREATED
               return

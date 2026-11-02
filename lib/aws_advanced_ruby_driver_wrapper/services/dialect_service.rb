@@ -164,6 +164,20 @@ module AwsAdvancedRubyDriverWrapper
         @error_handler.read_only_error?(error)
       end
 
+      # Whether the server answered with an error (vs a client/transport failure).
+      # @param error [Exception]
+      # @return [Boolean]
+      def server_error?(error)
+        @error_handler.server_error?(error)
+      end
+
+      # Whether the error is a schema/syntax error (SQLSTATE class '42' or its per-driver equivalent).
+      # @param error [Exception]
+      # @return [Boolean]
+      def schema_error?(error)
+        @error_handler.schema_error?(error)
+      end
+
       private
 
       # Resolves the initial database dialect from the initial connection info.

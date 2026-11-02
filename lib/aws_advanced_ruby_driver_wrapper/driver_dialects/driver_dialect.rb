@@ -149,6 +149,14 @@ module AwsAdvancedRubyDriverWrapper
         :user
       end
 
+      # Returns the property key the underlying driver expects for the TLS CA certificate file.
+      # Used by Blue/Green substitute routing to tell whether TLS is active before deciding to
+      # connect by hostname rather than raw IP. mysql2 names it +:sslca+ (the default); override
+      # where it differs (trilogy uses +:ssl_ca+, pg uses +:sslrootcert+).
+      def tls_ca_property_key
+        :sslca
+      end
+
       # Applies default socket/connect timeouts to monitoring connection driver props.
       # These ensure that a query or close on a dead connection raises a timeout error
       # rather than hanging indefinitely or segfaulting.

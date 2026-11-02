@@ -98,6 +98,11 @@ module AwsAdvancedRubyDriverWrapper
         NETWORK_BOUND_METHODS
       end
 
+      # trilogy names the TLS CA certificate option +ssl_ca+, where mysql2 names it +sslca+.
+      def tls_ca_property_key
+        :ssl_ca
+      end
+
       private
 
       def literal(connection, value)

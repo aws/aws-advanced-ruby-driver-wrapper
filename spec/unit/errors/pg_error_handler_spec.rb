@@ -205,6 +205,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
     end
   end
 
+  describe '#server_error?' do
+    it 'is true when the error reports a SQLSTATE' do
+      expect(handler.server_error?(build_pg_error('42P01'))).to be true
+    end
+
+    it 'is false when the error reports no SQLSTATE' do
+      expect(handler.server_error?(StandardError.new)).to be false
+    end
+  end
+
+  describe '#schema_error?' do
+    it 'is true for a class-42 SQLSTATE (undefined table 42P01)' do
+      expect(handler.schema_error?(build_pg_error('42P01'))).to be true
+    end
+
+    it 'is true for an undefined-function SQLSTATE (42883)' do
+      expect(handler.schema_error?(build_pg_error('42883'))).to be true
+    end
+
+    it 'is false for a non-42 SQLSTATE' do
+      expect(handler.schema_error?(build_pg_error('25006'))).to be false
+    end
+  end
+
   private
 
   def build_pg_error(sql_state)

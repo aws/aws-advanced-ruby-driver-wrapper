@@ -103,6 +103,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#tls_ca_property_key' do
+    # libpq names the TLS CA option sslrootcert, not sslca, so Blue/Green substitute routing must
+    # look under the pg key to tell that TLS is active.
+    it 'is :sslrootcert' do
+      expect(dialect.tls_ca_property_key).to eq(:sslrootcert)
+    end
+  end
+
   describe '#prepare_connect_config' do
     it 'remaps :database to :dbname' do
       result = dialect.prepare_connect_config(host_info, config)

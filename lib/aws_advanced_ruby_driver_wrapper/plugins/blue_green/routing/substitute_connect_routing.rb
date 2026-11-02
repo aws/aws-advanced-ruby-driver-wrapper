@@ -63,7 +63,9 @@ module AwsAdvancedRubyDriverWrapper
             # Fall back to connecting via hostname (DNS will resolve to the correct IP post-switchover),
             # matching the effective behaviour of the Java/Go MySQL drivers which use the original
             # hostname for TLS regardless of the socket address.
-            if driver_props[:sslca] && !plugin_manager.iam_token_plugin_in_use?
+            # The TLS CA key is driver-specific (mysql2: :sslca, trilogy: :ssl_ca, pg: :sslrootcert), so it comes from the dialect.
+            tls_ca_key = dialect_service.driver_dialect.tls_ca_property_key
+            if driver_props[tls_ca_key] && !plugin_manager.iam_token_plugin_in_use?
               hostname_host = @substitute_host.deep_dup(host: @host)
               return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal,
                                      bg_plugin)

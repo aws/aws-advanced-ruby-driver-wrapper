@@ -163,7 +163,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
   describe 'SubstituteConnectRouting' do
     let(:connection)      { double('connection') }
     let(:plugin_manager)  { double('plugin_manager') }
-    let(:dialect_service) { double('dialect_service', login_error?: false) }
+    # Defaults to the mysql2/pg key so existing cases behave as before; trilogy overrides it to :ssl_ca.
+    let(:driver_dialect)  { double('driver_dialect', tls_ca_property_key: :sslca) }
+    let(:dialect_service) { double('dialect_service', login_error?: false, driver_dialect: driver_dialect) }
     let(:service_container) do
       double('service_container', plugin_manager: plugin_manager, dialect_service: dialect_service)
     end
@@ -182,6 +184,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
       it 'connects to the IP host directly' do
         expect(plugin_manager).to receive(:connect).with(ip_host, props, true, plugin_to_skip: nil).and_return(connection)
         subject.apply(host_info, props, props, true, service_container)
+      end
+    end
+
+    context 'when substitute host is an IP address with TLS active (trilogy ssl_ca key)' do
+      let(:ip_host) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 3306) }
+      let(:driver_dialect) { double('driver_dialect', tls_ca_property_key: :ssl_ca) }
+      let(:driver_props) { Concurrent::Map.new.tap { |m| m[:ssl_ca] = '/etc/ca.pem' } }
+
+      before do
+        allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(false)
+      end
+
+      subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [], nil) }
+
+      # Under the trilogy key the TLS CA is detected, so routing connects by the original hostname
+      # (not the raw IP) to keep the certificate CN verifying.
+      it 'falls back to the hostname rather than the raw IP' do
+        expect(plugin_manager).to receive(:connect) do |connect_host, *_|
+          expect(connect_host.host).to eq(host_val)
+          connection
+        end
+        subject.apply(host_info, driver_props, props, true, service_container)
       end
     end
 

@@ -190,6 +190,14 @@ module AwsAdvancedRubyDriverWrapper
         NETWORK_BOUND_METHODS
       end
 
+      # libpq names the TLS CA certificate option +sslrootcert+, where mysql2 names it +sslca+. pg
+      # also connects by +host+ (there is no +hostaddr+ in prepare_connect_config), so it has the same
+      # raw-IP/certificate-CN mismatch mysql2 does, and Blue/Green substitute routing must find the CA
+      # under the pg key to fall back to the hostname.
+      def tls_ca_property_key
+        :sslrootcert
+      end
+
       def prepare_connect_config(host_info, config)
         cfg = {}
         config.each { |k, v| cfg[k] = v }

@@ -126,6 +126,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::TrilogyErrorHandler do
     end
   end
 
+  describe '#server_error?' do
+    it 'is true for a server error carrying an error code' do
+      expect(handler.server_error?(Trilogy::ProtocolError.from_code('signalled', 1644))).to be true
+    end
+
+    it 'is false for a codeless client/connection error' do
+      expect(handler.server_error?(Trilogy::BaseConnectionError.new('connection is not initialized'))).to be false
+    end
+  end
+
+  describe '#schema_error?' do
+    it 'is true for a missing-table error (1146)' do
+      expect(handler.schema_error?(Trilogy::ProtocolError.from_code('no such table', 1146))).to be true
+    end
+
+    it 'is false for a non-schema server error' do
+      expect(handler.schema_error?(Trilogy::ProtocolError.from_code('signalled', 1644))).to be false
+    end
+
+    it 'is false for a codeless client/connection error' do
+      expect(handler.schema_error?(Trilogy::BaseConnectionError.new('gone'))).to be false
+    end
+  end
+
   private
 
   def error_with_cause(cause)
