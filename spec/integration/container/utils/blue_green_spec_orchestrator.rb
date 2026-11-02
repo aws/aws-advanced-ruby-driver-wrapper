@@ -39,7 +39,7 @@ module Integration
 
     LOGGER = LogObfuscator.install(Logger.new($stdout, progname: 'BlueGreenSpecOrchestrator'))
 
-    attr_reader :global_results, :instance_results, :combo_results, :capturing_logger
+    attr_reader :global_results, :instance_results, :combo_results, :invalidation_results, :capturing_logger
 
     def initialize(env:, driver:, rds_utility:, iam_enabled:, timeout: ORCHESTRATOR_TIMEOUT_SEC)
       @env = env
@@ -51,6 +51,7 @@ module Integration
       @global_results = BlueGreenGlobalResults.new
       @instance_results = Concurrent::Hash.new
       @combo_results = Concurrent::Hash.new
+      @invalidation_results = Concurrent::Hash.new
       @threads = []
       @stop = Concurrent::AtomicBoolean.new(false)
       @finish_latch = nil
@@ -150,6 +151,11 @@ module Integration
     # Host-verification results collected by the verify-full connection, across all blue hosts.
     def tls_verify_host_verification_results
       combo_results_for('bg-tls').flat_map(&:host_verification_results)
+    end
+
+    # Returns all stale-connection invalidation probe results (one per blue host).
+    def invalidation_probe_results
+      @invalidation_results.values
     end
 
     private
@@ -324,6 +330,8 @@ module Integration
       # Per blue host: infrastructure threads
       #   DirectBlueConnectivity, BlueDNS, DirectTopology = 3
       count += blue_hosts.size * 3
+      # Per blue host: stale-connection invalidation probe
+      count += blue_hosts.size
       # Per blue host: combo threads
       plugin_combos.each do |combo|
         count += if combo.include?('failover')
@@ -449,6 +457,19 @@ module Integration
           engine: @env.engine, deployment: @env.deployment,
           start_latch: start_latch, stop: @stop, finish_latch: finish_latch,
           results: instance_result, global: @global_results
+        )
+
+        # Stale-connection invalidation probe: opens a wrapper connection to blue before the switchover,
+        # holds it idle across the switchover, then exercises it once afterward to confirm the BG plugin
+        # invalidates it (explicit error, no stale read) and that a reconnect then succeeds on green.
+        probe_config = wrapper_config_for(host, host_id, combo: 'bg')
+        probe_config[:cluster_id] = "invalidation-probe-#{host_id}"
+        probe_result = InvalidationProbeResult.new(host_id: host_id)
+        @invalidation_results[host_id] = probe_result
+        @threads << build_invalidation_probe_thread(
+          host_id: host_id, driver: @driver, config: probe_config,
+          start_latch: start_latch, stop: @stop, finish_latch: finish_latch,
+          results: probe_result, global: @global_results
         )
 
         # --- Per-combo wrapper threads (write to @combo_results) ---

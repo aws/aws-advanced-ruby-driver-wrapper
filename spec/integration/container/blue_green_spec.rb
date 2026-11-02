@@ -285,6 +285,67 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
   end
 
   # =========================================================================
+  # Stale blue connection invalidation (bg_drop_blue_connections feature)
+  #
+  # These assertions cover the "invalidate stale blue connections" feature: with
+  # bg_drop_blue_connections enabled (the default), a wrapper connection opened to
+  # the OLD blue environment BEFORE the switchover is invalidated on its next use
+  # once the switchover is confirmed (POST/COMPLETED), so the caller gets an
+  # explicit error instead of a stale read from retired blue, and a reconnect then
+  # succeeds on green.
+  #
+  # They add assertions over the SAME single switchover performed above and do NOT
+  # trigger another switchover. The direct behavioral signal is a dedicated
+  # InvalidationProbe per blue host (opened before the switchover, held idle across
+  # it, exercised once afterward); the captured log additionally attributes the
+  # invalidation to the plugin and proves green is never invalidated.
+  # =========================================================================
+
+  context 'stale blue connection invalidation (bg_drop_blue_connections)' do
+    it 'invalidates a pre-switchover blue connection on its first use, then recovers on reconnect' do
+      skip 'Switchover rolled back — stale blue connections are only invalidated on a confirmed switchover' if @global.rollback?
+
+      exercised = @orchestrator.invalidation_probe_results.select(&:probed?)
+      expect(exercised).not_to be_empty,
+                               'No invalidation probe was exercised after the switchover — the idle pre-switchover blue ' \
+                               'connections never reached their post-switchover query (switchover may not have completed).'
+
+      not_invalidated = exercised.reject(&:invalidated?)
+      expect(not_invalidated).to be_empty,
+                                 'Expected every pre-switchover blue connection to raise an explicit error on its first ' \
+                                 'use after the switchover (invalidation, not a silent stale read), but these served a ' \
+                                 "result instead: #{not_invalidated.map(&:host_id).join(', ')}."
+
+      not_recovered = exercised.reject(&:recovered?)
+      expect(not_recovered).to be_empty,
+                               'Expected a reconnect after invalidation to succeed (routed to green) so the application ' \
+                               "keeps running, but recovery failed for: #{not_recovered.map(&:host_id).join(', ')}."
+    end
+
+    it 'actively invalidates at least one stale blue connection (plugin, not just a network drop)' do
+      skip 'Switchover rolled back' if @global.rollback?
+
+      expect(invalidation_log_entries(@captured_log)).not_to be_empty,
+                                                             'Expected the BG plugin to log at least one "Invalidating a connection ... ' \
+                                                             'retired by a Blue/Green switchover" — confirming the plugin itself retired ' \
+                                                             'the stale connection rather than the error coming only from a network drop.'
+    end
+
+    it 'invalidates only connections opened to old-blue hosts, never green' do
+      skip 'Switchover rolled back' if @global.rollback?
+
+      invalidated_hosts = invalidation_log_entries(@captured_log).map { |e| e[:host] }.uniq
+      skip 'No stale blue connections were invalidated' if invalidated_hosts.empty?
+
+      green = invalidated_hosts.select { |h| rds_utils.green_instance?(h) }
+      expect(green).to be_empty,
+                       "The BG plugin invalidated connection(s) to green host(s): #{green.join(', ')}. " \
+                       'Only connections opened to the retired blue environment should be invalidated; a connection to ' \
+                       'green must never be treated as stale.'
+    end
+  end
+
+  # =========================================================================
   # Failover plugin integration (Aurora only)
   # =========================================================================
 
@@ -412,6 +473,18 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
   end
 
   private
+
+  def rds_utils
+    AwsAdvancedRubyDriverWrapper::Utils::RdsUtils
+  end
+
+  # Extracts the stale-blue-connection invalidation log lines emitted by the BG plugin.
+  # Returns an array of {host:} hashes, one per connection the plugin invalidated.
+  def invalidation_log_entries(log_string)
+    log_string.scan(
+      %r{Invalidating a connection to (\S+) from the old blue environment retired by a Blue/Green switchover}
+    ).map { |m| { host: m[0] } }
+  end
 
   # Parses the switchover summary block from captured log output.
   # Returns an array of {timestamp:, offset_ms:, event:} hashes, or nil if not found.

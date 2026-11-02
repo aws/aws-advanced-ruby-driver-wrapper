@@ -188,6 +188,65 @@ module Integration
       end
     end
 
+    # Stale-connection invalidation probe. Opens a wrapper connection to blue BEFORE the switchover and
+    # holds it idle (no queries) across the whole switchover — the closest analogue to a connection left
+    # sitting in a pool. Once the switchover is confirmed done, it issues the connection's FIRST query:
+    # the BG plugin must invalidate the stale connection so this raises an explicit error instead of
+    # serving a (possibly stale) read. It then reconnects and confirms a query succeeds on green. Works
+    # identically on Aurora and RDS Multi-AZ (plain 'bg' combo — no failover, no server-identity query).
+    def build_invalidation_probe_thread(host_id:, driver:, config:, start_latch:, stop:, finish_latch:, results:, global:)
+      Thread.new do
+        Thread.current.name = "InvalidationProbe@#{host_id}"
+        conn = nil
+        begin
+          begin
+            conn = open_wrapper_with_retry(driver, config)
+          rescue StandardError => e
+            LOGGER.warn { "[InvalidationProbe@#{host_id}] Initial connection failed: #{e.class}: #{e.message}" }
+            start_latch.count_down
+            raise e
+          end
+          sleep(1)
+          start_latch.count_down
+          start_latch.wait(300)
+
+          # Stay idle through the switchover — do not touch the connection until it is confirmed done.
+          sleep(0.5) until stop.true? || global.switchover_done? || global.rollback?
+          next unless global.switchover_done? && !global.rollback?
+
+          # Let completion settle: the drop marker is stored before the COMPLETED status is published.
+          sleep(1)
+
+          # First use of the idle, pre-switchover blue connection: expect an explicit error
+          # (invalidation), never a silently-served result.
+          start_t = nano_time
+          begin
+            DriverHelper.execute(driver, conn, 'SELECT 1')
+            results.first_use.set(TimeHolder.new(start_t, nano_time, nil))
+          rescue StandardError => e
+            results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
+          end
+
+          # Recovery: a fresh connection must be routed to green and succeed, so the app keeps running.
+          safe_close(driver, conn)
+          conn = nil
+          start_t = nano_time
+          begin
+            conn = DriverHelper.wrapper_connect(driver, **config)
+            DriverHelper.execute(driver, conn, 'SELECT 1')
+            results.recovery.set(TimeHolder.new(start_t, nano_time, nil))
+          rescue StandardError => e
+            results.recovery.set(TimeHolder.new(start_t, nano_time, e.message))
+          end
+        rescue StandardError => e
+          global.unhandled_exceptions << e
+        ensure
+          safe_close(driver, conn)
+          finish_latch.count_down
+        end
+      end
+    end
+
     # Wrapper blue new connection: open/close loop, records connect time.
     def build_wrapper_blue_new_connection_thread(host_id:, driver:, config:, start_latch:, stop:, finish_latch:, results:, global:)
       Thread.new do

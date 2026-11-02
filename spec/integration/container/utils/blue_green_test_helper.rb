@@ -101,6 +101,35 @@ module Integration
     end
   end
 
+  # Thread-safe result for the stale-blue-connection invalidation probe (one per blue host).
+  # A single probe thread writes these; the spec reads them after the run.
+  class InvalidationProbeResult
+    attr_reader :host_id, :first_use, :recovery
+
+    def initialize(host_id:)
+      @host_id = host_id
+      @first_use = Concurrent::AtomicReference.new(nil) # first query on the stale connection after switchover
+      @recovery  = Concurrent::AtomicReference.new(nil) # query on a fresh connection after invalidation
+    end
+
+    # True once the probe issued its first post-switchover query.
+    def probed?
+      !@first_use.get.nil?
+    end
+
+    # True if that first query raised — i.e. the stale connection was invalidated instead of serving a read.
+    def invalidated?
+      holder = @first_use.get
+      !holder.nil? && !holder.error.nil?
+    end
+
+    # True if the reconnect after invalidation ran a query successfully (routed to green).
+    def recovered?
+      holder = @recovery.get
+      !holder.nil? && holder.error.nil?
+    end
+  end
+
   # Thread-safe global results not tied to a specific instance.
   class BlueGreenGlobalResults
     def initialize
