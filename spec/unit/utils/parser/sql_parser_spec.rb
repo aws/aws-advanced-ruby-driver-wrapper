@@ -18,11 +18,11 @@ require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/sql_parser'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/query_type'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/mysql_statement_analyzer'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
-  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
   let(:pg_dialect)    { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:mysql_parser) { described_class.new(mysql_dialect) }
 

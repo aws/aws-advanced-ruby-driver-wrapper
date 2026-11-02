@@ -21,6 +21,7 @@ gem 'activerecord', '~> 8.0.0'
 gem 'mysql2', '>= 0.5.7'
 gem 'pg', '>= 1.6.3'
 gem 'pg_query', '>= 5.1'
+gem 'trilogy', '>= 2.9'
 
 group :development do
   gem 'bundler'

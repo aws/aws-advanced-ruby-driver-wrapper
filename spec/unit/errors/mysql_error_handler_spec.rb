@@ -15,10 +15,10 @@
 #  limitations under the License.
 
 require 'aws_advanced_ruby_driver_wrapper/errors/mysql_error_handler'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::MysqlErrorHandler do
-  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
   describe '#network_error_by_sql_state?' do

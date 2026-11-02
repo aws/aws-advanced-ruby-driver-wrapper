@@ -89,6 +89,10 @@ module AwsAdvancedRubyDriverWrapper
         'pg'
       end
 
+      def database_engine
+        :postgresql
+      end
+
       def connect(host_info, config)
         ::PG::Connection.new(**prepare_connect_config(host_info, config))
       end

@@ -46,6 +46,9 @@ module AwsAdvancedRubyDriverWrapper
     CONNECTION_ABANDON_RESULTS     = define('connection.abandon_results!', check_bounded_connection: true)
     CONNECTION_SET_SERVER_OPTION   = define('connection.set_server_option', check_bounded_connection: false)
 
+    # -- Connection methods (trilogy-specific) --
+    CONNECTION_CHANGE_DB           = define('connection.change_db', check_bounded_connection: false)
+
     # -- Connection methods (pg-specific) --
     CONNECTION_EXEC                = define('connection.exec', check_bounded_connection: false)
     CONNECTION_ASYNC_EXEC          = define('connection.async_exec', check_bounded_connection: false)
