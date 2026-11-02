@@ -87,7 +87,12 @@ module AwsAdvancedRubyDriverWrapper
         attr_reader :subscribed_methods
 
         def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
-          route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: false)
+          conn = route_connect(host_info, driver_props, is_initial_connection, pipeline_callable, is_internal: false)
+          # Only this client's own connect describes its connection. Internal connects (topology
+          # monitoring, KMS metadata reads) run through this same plugin instance but open separate
+          # connections, so they must not overwrite this connection's open time, host, or marker latches.
+          record_connection_open(host_info)
+          conn
         end
 
         def internal_connect(host_info, driver_props, wrapper_props, is_initial_connection, pipeline_callable)
@@ -191,13 +196,13 @@ module AwsAdvancedRubyDriverWrapper
 
           begin
             @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
-            return regular_connect(pipeline_callable, is_initial_connection, host_info) if @bg_status.nil?
+            return regular_connect(pipeline_callable, is_initial_connection) if @bg_status.nil?
 
             host_role = @bg_status.role(host_info)
-            return regular_connect(pipeline_callable, is_initial_connection, host_info) if host_role.nil?
+            return regular_connect(pipeline_callable, is_initial_connection) if host_role.nil?
 
             routing = @bg_status.connect_routing.find { |r| r.match?(host_info, host_role) }
-            return regular_connect(pipeline_callable, is_initial_connection, host_info) if routing.nil?
+            return regular_connect(pipeline_callable, is_initial_connection) if routing.nil?
 
             @start_time_ns.set(nano_time)
             conn = nil
@@ -214,7 +219,7 @@ module AwsAdvancedRubyDriverWrapper
               @bg_status = storage_service.get(BLUE_GREEN_NAME, @bgd_id)
               if @bg_status.nil?
                 @end_time_ns.set(nano_time)
-                return regular_connect(pipeline_callable, is_initial_connection, host_info)
+                return regular_connect(pipeline_callable, is_initial_connection)
               end
               routing = @bg_status.connect_routing.find { |r| r.match?(host_info, host_role) }
             end
@@ -222,7 +227,6 @@ module AwsAdvancedRubyDriverWrapper
             @end_time_ns.set(nano_time)
             conn ||= pipeline_callable.call
 
-            record_connection_open(host_info)
             init_provider if is_initial_connection
             conn
           ensure
@@ -230,9 +234,8 @@ module AwsAdvancedRubyDriverWrapper
           end
         end
 
-        def regular_connect(pipeline_callable, is_initial_connection, host_info)
+        def regular_connect(pipeline_callable, is_initial_connection)
           conn = pipeline_callable.call
-          record_connection_open(host_info)
           init_provider if is_initial_connection
           conn
         end

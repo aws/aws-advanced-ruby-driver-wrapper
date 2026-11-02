@@ -297,6 +297,31 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
       end
     end
 
+    # The cluster topology monitor is a per-cluster singleton that reconnects through the owner
+    # connection's plugin instance via internal_connect, opening a SEPARATE connection. Recording
+    # that internal connect's open time against this plugin instance would overwrite the owner
+    # connection's recorded open time: the owner would then look like it was opened after the
+    # switchover and would never be invalidated, serving stale reads from retired blue.
+    context 'when an internal connect opens a separate connection after the switchover' do
+      let(:internal_connection) { double('internal_connection') }
+      # Client opened at t=100 (before switchover), switchover at t=200, internal reconnect at t=300.
+      let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: 200, active: true) }
+
+      it 'does not overwrite the client open time, so the client connection is still invalidated' do
+        allow(plugin).to receive(:nano_time).and_return(100)
+        plugin.connect(host_info, props, true, -> { connection })
+
+        # Topology monitor reconnects through this same plugin instance, opening a separate connection.
+        allow(plugin).to receive(:nano_time).and_return(300)
+        plugin.internal_connect(host_info, props, props, false, -> { internal_connection })
+
+        # The client connection (opened at 100 < switchover 200) must still be seen as stale.
+        allow(plugin).to receive(:nano_time).and_return(400)
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        plugin.execute('connection.query', -> { :query_result })
+      end
+    end
+
     context 'with an active marker whose switchover predates the connection' do
       let(:marker) { marker_class.new(blue_hosts: [host_val.downcase], switchover_time_ns: 1, active: true) }
 
