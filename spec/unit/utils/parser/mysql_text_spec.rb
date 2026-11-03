@@ -61,6 +61,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlText do
       expect(code('/*! a /* b? */ ? */ c')).to eq([' a  ?  c', nil])
     end
 
+    # A line comment inside an executable comment runs to the end of the line, past any */ on it, as
+    # it does on the server: the executable comment then closes at the next */ instead.
+    it 'reads a line comment inside an executable comment past a close on the same line' do
+      expect(code("/*!80000 ? -- c? */\n ? */ ?")).to eq([" ? \n ?  ?", nil])
+      expect(code("/*!80000 ? # c? */\n ? */ ?")).to eq([" ? \n ?  ?", nil])
+    end
+
+    it 'reports an executable comment whose only close is inside a line comment' do
+      expect(code('/*!80000 ? -- c */ ?')).to eq([' ? ', '/*'])
+    end
+
     it 'reports an executable comment that never closes' do
       expect(code('/*! ?')).to eq([' ?', '/*'])
     end

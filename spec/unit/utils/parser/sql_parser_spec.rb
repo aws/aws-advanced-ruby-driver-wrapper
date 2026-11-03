@@ -156,6 +156,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
   end
 
   describe '#column_parameter_mapping' do
+    it 'reads a versioned comment for the server version it is given' do
+      sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+
+      expect(mysql_parser.column_parameter_mapping(sql, server_version: 80_039)).to eq({ 3 => 'ssn' })
+      expect(mysql_parser.column_parameter_mapping(sql, server_version: 80_028)).to eq({ 1 => 'name', 2 => 'ssn' })
+    end
+
     it 'maps SET columns only for UPDATE' do
       expect(mysql_parser.column_parameter_mapping('UPDATE users SET ssn = ?, email = ? WHERE id = ?')).to eq({ 1 => 'ssn', 2 => 'email' })
     end

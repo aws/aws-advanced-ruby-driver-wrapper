@@ -215,7 +215,7 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: where_cols.freeze,
             for_update: FOR_UPDATE.match?(sql),
-            parameterized: sql.include?('?')
+            parameterized: placeholder_count(sql).positive?
           )
         end
 
@@ -229,7 +229,7 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: bound.freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: sql.include?('?'),
+            parameterized: placeholder_count(sql).positive?,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: complete
           )
@@ -249,7 +249,7 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: set_cols.freeze,
             where_columns: where_cols.freeze,
             for_update: false,
-            parameterized: sql.include?('?'),
+            parameterized: placeholder_count(sql).positive?,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: complete
           )
@@ -283,7 +283,7 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: extract_where_columns(sql, first_index),
             for_update: false,
-            parameterized: sql.include?('?'),
+            parameterized: placeholder_count(sql).positive?,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: false
           )
@@ -308,7 +308,7 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: where_cols.freeze,
             for_update: false,
-            parameterized: sql.include?('?')
+            parameterized: placeholder_count(sql).positive?
           )
         end
 

@@ -78,9 +78,10 @@ module AwsAdvancedRubyDriverWrapper
         # the callers that must not write a value they cannot place look at the analysis itself.
         #
         # @param sql [String, nil]
+        # @param server_version [Integer, nil] see {#analyze_sql}
         # @return [Hash{Integer => String}]
-        def column_parameter_mapping(sql)
-          analyze_sql(sql).parameter_column_names
+        def column_parameter_mapping(sql, server_version: nil)
+          analyze_sql(sql, server_version: server_version).parameter_column_names
         rescue StandardError
           {}
         end
