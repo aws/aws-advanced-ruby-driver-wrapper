@@ -29,7 +29,8 @@ module AwsAdvancedRubyDriverWrapper
         2006, # CR_SERVER_GONE_ERROR (server has gone away)
         2013, # CR_SERVER_LOST (lost connection during query)
         2026, # CR_SSL_CONNECTION_ERROR
-        2055  # CR_SERVER_LOST_EXTENDED (lost connection with state info)
+        2055, # CR_SERVER_LOST_EXTENDED (lost connection with state info)
+        4031  # ER_CLIENT_INTERACTION_TIMEOUT (MySQL 8.0.24+ closed a connection that exceeded wait_timeout)
       ].freeze
 
       def initialize(driver_dialect)
@@ -68,12 +69,16 @@ module AwsAdvancedRubyDriverWrapper
       private
 
       def connection_error_network?(error)
-        return false unless defined?(Mysql2::Error::ConnectionError) && error.is_a?(Mysql2::Error::ConnectionError)
+        return false unless defined?(Mysql2::Error) && error.is_a?(Mysql2::Error)
 
-        error_number = error.respond_to?(:error_number) ? error.error_number : nil
-        return true if error_number && NETWORK_ERROR_CODES.include?(error_number)
+        NETWORK_ERROR_CODES.include?(error.error_number) || read_timeout?(error)
+      end
 
-        false
+      # mysql2 raises Mysql2::Error::TimeoutError for two unrelated conditions. A client-side read_timeout
+      # carries no error number, and mysql2 invalidates the socket before raising it, so the connection is
+      # unusable. A lock wait timeout (1205) is a server error on a healthy connection and is excluded.
+      def read_timeout?(error)
+        error.is_a?(Mysql2::Error::TimeoutError) && error.error_number.nil?
       end
     end
   end

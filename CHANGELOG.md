@@ -14,6 +14,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### :crab: Changed
 - Simplified the KMS Encryption Plugin's PostgreSQL trigger SQL to read the column's HMAC key from `key_storage` for every row. Re-run the trigger SQL from the [documentation](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption#postgresql-1) to update existing deployments ([PR #216](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/216)).
+- With `mysql2` (`WrapperMysql2Client` and the `aws_mysql2` ActiveRecord adapter), the failover plugin now fails over on a `read_timeout`, when MySQL 8.0.24+ disconnects a connection that exceeded `wait_timeout` (error 4031), and on a lost connection reported as error 2055 (`CR_SERVER_LOST_EXTENDED`), matching `trilogy`. Before, none of these triggered failover: a `read_timeout` raised `Mysql2::Error::TimeoutError` (`ActiveRecord::AdapterTimeout` under `aws_mysql2`), and errors 4031 and 2055 were raised as-is (`ActiveRecord::ConnectionFailed` under `aws_mysql2`, which ActiveRecord answered by reconnecting to the original endpoint and retrying queries it considers retryable). **Behavior change:** these errors now fail over and raise `FailoverSuccessError` (or `TransactionStateUnknownError` inside a transaction), which ActiveRecord does not retry. This includes:
+  - a query that runs longer than `read_timeout`. Set `read_timeout` higher than your slowest expected query.
+  - the first query on a pooled connection that sat idle longer than the server's `wait_timeout`. Raise `wait_timeout`, or have the pool reap idle connections sooner (for example with ActiveRecord's `idle_timeout`).
+
+  Lock wait timeouts (error 1205) still do not trigger failover ([PR #234](https://github.com/aws/aws-advanced-ruby-driver-wrapper/pull/234)).
 
 ## [1.0.1] - 2026-10-07
 
