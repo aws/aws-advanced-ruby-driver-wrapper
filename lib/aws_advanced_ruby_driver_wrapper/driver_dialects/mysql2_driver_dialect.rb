@@ -104,6 +104,17 @@ module AwsAdvancedRubyDriverWrapper
         logger.debug("Failed to abandon MySQL connection: #{e.message}")
       end
 
+      # mysql2 reports the version it learned when it connected, so reading it costs no round trip.
+      def executable_comment_version(connection)
+        return nil if connection.nil?
+
+        info = connection.server_info
+        info.is_a?(Hash) ? info[:id] : nil
+      rescue StandardError => e
+        logger.debug { "The MySQL server version could not be read: #{e.message}" }
+        nil
+      end
+
       def sql_state(exception)
         return nil unless exception.respond_to?(:sql_state)
 

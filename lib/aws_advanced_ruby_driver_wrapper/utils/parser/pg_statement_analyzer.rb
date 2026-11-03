@@ -81,18 +81,19 @@ module AwsAdvancedRubyDriverWrapper
 
         # Dispatches a parsed statement hash to the appropriate extract_* method.
         # @param stmt [Hash] top-level statement hash from pg_query
-        # @param parameterized [Boolean]
+        # @param parameterized [Boolean] whether the statement has bind parameters; a WHERE clause is
+        #   only read for the columns it compares against them when it does
         # @return [QueryAnalysis]
         def extract_from_stmt(stmt, parameterized)
           case stmt
           in { select_stmt: inner_stmt } then extract_select(inner_stmt, parameterized)
-          in { insert_stmt: inner_stmt } then extract_insert(inner_stmt, parameterized)
+          in { insert_stmt: inner_stmt } then extract_insert(inner_stmt)
           in { update_stmt: inner_stmt } then extract_update(inner_stmt, parameterized)
           in { delete_stmt: inner_stmt } then extract_delete(inner_stmt, parameterized)
           in { create_stmt: inner_stmt } then extract_create(inner_stmt)
           in { drop_stmt: inner_stmt }   then extract_drop(inner_stmt)
           in { copy_stmt: inner_stmt }   then extract_copy(inner_stmt, parameterized)
-          in { merge_stmt: inner_stmt }  then extract_merge(inner_stmt, parameterized)
+          in { merge_stmt: inner_stmt }  then extract_merge(inner_stmt)
           in { prepare_stmt: inner_stmt } then extract_prepare(inner_stmt, parameterized)
           else QueryAnalysis.unknown
           end
@@ -121,7 +122,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: analyses.flat_map(&:write_columns).freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: parameterized,
             unbound_write_columns: analyses.flat_map(&:unbound_write_columns).freeze,
             write_columns_complete: analyses.all?(&:write_columns_complete)
           )
@@ -133,7 +133,7 @@ module AwsAdvancedRubyDriverWrapper
         # that only deletes stores nothing. A value written with something other than a bind parameter
         # is reported unbound, and an INSERT clause without a column list is reported as not
         # enumerable, so a write that cannot be read fails closed rather than every MERGE being refused.
-        def extract_merge(stmt, parameterized)
+        def extract_merge(stmt)
           table = stmt.dig(:relation, :relname)
           bound = []
           unbound = []
@@ -166,7 +166,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: bound.freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: parameterized,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: complete
           )
@@ -197,12 +196,11 @@ module AwsAdvancedRubyDriverWrapper
             tables: tables.freeze,
             write_columns: [].freeze,
             where_columns: where_cols.freeze,
-            for_update: for_update,
-            parameterized: parameterized
+            for_update: for_update
           )
         end
 
-        def extract_insert(stmt, parameterized)
+        def extract_insert(stmt)
           table = stmt.dig(:relation, :relname)
           declared = Array(stmt[:cols]).filter_map { |column_entry| column_entry.dig(:res_target, :name) }
           value_rows = Array(stmt.dig(:select_stmt, :select_stmt, :values_lists))
@@ -215,7 +213,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: (bound + upsert_bound).freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: parameterized,
             unbound_write_columns: (unbound + upsert_unbound).freeze,
             write_columns_complete: complete
           )
@@ -232,7 +229,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: set_cols.freeze,
             where_columns: where_cols.freeze,
             for_update: false,
-            parameterized: parameterized,
             unbound_write_columns: unbound.freeze
           )
         end
@@ -305,8 +301,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: table ? [table].freeze : [].freeze,
             write_columns: [].freeze,
             where_columns: where_cols.freeze,
-            for_update: false,
-            parameterized: parameterized
+            for_update: false
           )
         end
 
@@ -317,8 +312,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: table ? [table].freeze : [].freeze,
             write_columns: [].freeze,
             where_columns: [].freeze,
-            for_update: false,
-            parameterized: false
+            for_update: false
           )
         end
 
@@ -332,8 +326,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: tables.freeze,
             write_columns: [].freeze,
             where_columns: [].freeze,
-            for_update: false,
-            parameterized: false
+            for_update: false
           )
         end
 
@@ -355,7 +348,7 @@ module AwsAdvancedRubyDriverWrapper
             return extract_from_stmt(query, parameterized) if query.is_a?(Hash) && !query.empty?
 
             return QueryAnalysis.new(query_type: QueryType::SELECT, tables: tables, write_columns: [].freeze,
-                                     where_columns: [].freeze, for_update: false, parameterized: false)
+                                     where_columns: [].freeze, for_update: false)
           end
 
           declared = Array(stmt[:attlist]).filter_map { |column_entry| column_entry.dig(:string, :sval) }
@@ -365,7 +358,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: false,
             unbound_write_columns: declared.map { |name| ColumnInfo.new(table_name: table, column_name: name) }.freeze,
             write_columns_complete: declared.any?
           )
@@ -492,7 +484,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: sql.match?(/\$\d+/), # fallback only; AST unavailable here
             write_columns_complete: false
           )
         end
