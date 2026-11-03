@@ -4,7 +4,7 @@
 
 The **AWS Advanced Ruby Driver Wrapper** is complementary to an existing Ruby database driver and aims to extend the functionality of the driver to enable applications to take full advantage of the features of clustered databases such as Amazon Aurora. In other words, the AWS Advanced Ruby Driver Wrapper does not connect directly to any database, but enables support of AWS and Aurora functionalities on top of an underlying Ruby driver of the user's choice. This approach enables service-specific enhancements without requiring users to change their workflow with their existing Ruby drivers and tooling.
 
-The wrapper integrates with [ActiveRecord](https://guides.rubyonrails.org/active_record_basics.html) by providing drop-in `aws_mysql2` and `aws_postgresql` adapters that sit on top of the community [`mysql2`](https://rubygems.org/gems/mysql2) and [`pg`](https://rubygems.org/gems/pg) drivers.
+The wrapper integrates with [ActiveRecord](https://guides.rubyonrails.org/active_record_basics.html) by providing drop-in `aws_mysql2`, `aws_trilogy` and `aws_postgresql` adapters that sit on top of the community [`mysql2`](https://rubygems.org/gems/mysql2), [`trilogy`](https://rubygems.org/gems/trilogy) and [`pg`](https://rubygems.org/gems/pg) drivers.
 
 ## About the Wrapper
 
@@ -54,10 +54,12 @@ Add this line to your application's Gemfile:
 gem 'aws_advanced_ruby_driver_wrapper'
 ```
 
-For MySQL users, also install the underlying driver:
+For MySQL users, also install one of the underlying drivers:
 
 ```ruby
 gem 'mysql2'
+# or
+gem 'trilogy'
 ```
 
 For PostgreSQL users, also install the underlying driver:
@@ -74,13 +76,16 @@ bundle install
 
 ## Getting Started
 
-The wrapper registers two ActiveRecord adapters — `aws_mysql2` and `aws_postgresql` — that are drop-in replacements for the standard `mysql2` and `postgresql` adapters.
+The wrapper registers three ActiveRecord adapters — `aws_mysql2`, `aws_trilogy` and `aws_postgresql` — that are drop-in replacements for the standard `mysql2`, `trilogy` and `postgresql` adapters.
 
 Require the appropriate entry point for your database:
 
 ```ruby
-# For MySQL
+# For MySQL with mysql2
 require 'aws_advanced_ruby_driver_wrapper/mysql'
+
+# For MySQL with trilogy
+require 'aws_advanced_ruby_driver_wrapper/trilogy'
 
 # For PostgreSQL
 require 'aws_advanced_ruby_driver_wrapper/postgresql'
@@ -89,7 +94,7 @@ require 'aws_advanced_ruby_driver_wrapper/postgresql'
 Then set the adapter in your database configuration (for example, `config/database.yml` in a Rails application):
 
 ```yaml
-# MySQL
+# MySQL (use aws_trilogy with the trilogy driver)
 production:
   adapter: aws_mysql2
   host: my-cluster.cluster-xxxx.us-east-1.rds.amazonaws.com
@@ -112,7 +117,7 @@ This is a minimal configuration. To add failover tuning, IAM or Secrets Manager 
 
 If you use an AI assistant (Kiro, Cursor, Claude Code, GitHub Copilot, ChatGPT, Amazon Bedrock, etc.), you can give it the wrapper's configuration assistant skill to help build, review, or troubleshoot your wrapper configuration.
 
-The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 50,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
+The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 55,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
 
 - **Tools that support Agent Skills** load only the skill's name and description (about 100 tokens) until a request needs the skill. They then load the full file, and it stays in context for the rest of that conversation.
 - **A system prompt, or a file pasted into a chat,** sends the full file with every message.
@@ -143,7 +148,7 @@ Once the full file is in context, it is sent again with each message, so tools t
    - **Claude Projects**: upload it as a project knowledge document. Claude reads project knowledge in full while it fits in the context window, but when a project's knowledge approaches that limit, Claude switches to searching it for passages that match each question, so the model may miss the instructions and cross-references the skill depends on. Keep the project's other knowledge small, or use a separate project.
    - **ChatGPT custom GPT**: a custom GPT searches its knowledge files and passes the model only the passages that match each question, so the model may miss the instructions and cross-references the skill depends on. Paste the file into a plain chat instead (below).
    - **Amazon Bedrock**: send the file as the system prompt of your `InvokeModel` or `Converse` request. Avoid attaching it to a Bedrock knowledge base: a knowledge base passes the model only the passages that match each question, so the model misses the instructions and cross-references the skill depends on.
-   - **Plain chat (ChatGPT, Claude, Gemini)**: paste it at the start of a new conversation, then ask your question. In ChatGPT, the file is about 30,000 tokens, which is more than the Free plan's context window and leaves little room on the Go and Plus plans' Instant models, so choose a Thinking model in the model picker or use the Pro plan.
+   - **Plain chat (ChatGPT, Claude, Gemini)**: paste it at the start of a new conversation, then ask your question. Start a new conversation for each new question: in a long conversation the pasted skill can be pushed out of the model's context, and ChatGPT drops the oldest messages first. In ChatGPT, the file is about 35,000 tokens, which is more than the Free plan's context window and leaves little room on the Go and Plus plans' Instant models, so choose a Thinking model in the model picker or use the Pro plan.
 3. Ask the AI for help. It will interview you when it needs more details, or give you a configuration straight away if you ask it to skip the interview.
 
 #### Example prompts
@@ -226,6 +231,11 @@ Technical documentation regarding the functionality of the AWS Advanced Ruby Dri
 | Running the integration tests      | [Integration Tests](https://aws.github.io/aws-advanced-wrapper-docs/ruby/development-guide/integration-tests)                        |
 
 ### Known Limitations
+
+#### Trilogy MySQL Driver 
+
+- The KMS Encryption Plugin is not supported with `trilogy`, which has no prepared statements, so a bind parameter could only reach the server in plaintext. The plugin refuses to start on a `trilogy` connection.
+- To authenticate with an IAM token, set `enable_cleartext_plugin: true` (and `ssl_mode`), since `trilogy` only sends the token with `mysql_clear_password` when that option is set.
 
 #### Amazon RDS Blue/Green Deployments
 

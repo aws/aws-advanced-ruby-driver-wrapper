@@ -304,16 +304,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
     end
   end
 
-  describe '.analyze parameterized' do
-    it 'returns true when SQL contains ?' do
-      expect(subject.analyze('SELECT * FROM users WHERE id = ?').parameterized).to be true
-    end
-
-    it 'returns false when SQL has no ?' do
-      expect(subject.analyze('SELECT * FROM users').parameterized).to be false
-    end
-  end
-
   describe 'MySQL-specific syntax' do
     it 'handles LIMIT' do
       result = subject.analyze('SELECT `name` FROM `users` WHERE `active` = ? LIMIT 10')
@@ -476,6 +466,163 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
 
       expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 1]])
       expect(result.unbound_write_columns.map(&:column_name)).to eq(['name'])
+    end
+  end
+
+  # A comment is not part of the statement, so a question mark, comma, parenthesis or keyword inside
+  # one must not change which parameter fills which column.
+  describe '.analyze with comments' do
+    def bound(result) = result.write_columns.map { |c| [c.column_name, c.parameter_index] }
+
+    it 'does not count a question mark inside a block comment in a value' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (/* why? */ ?, ?)')
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+      expect(result.unbound_write_columns).to be_empty
+    end
+
+    it 'does not count a question mark inside a -- comment in a value' do
+      result = subject.analyze("INSERT INTO users (name, ssn) VALUES (? -- why?\n, ?)")
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'does not count a question mark inside a # comment in a value' do
+      result = subject.analyze("INSERT INTO users (name, ssn) VALUES (? # why?\n, ?)")
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'does not split a value on a comma inside a comment' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (? /* a, b */, ?)')
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'does not close a value list at a parenthesis inside a comment' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (? /* ) */, ?)')
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'does not count a question mark inside a comment in a SET clause' do
+      result = subject.analyze('UPDATE users SET note = ? /* who? */, ssn = ? WHERE id = ?')
+
+      expect(bound(result)).to eq([['note', 1], ['ssn', 2]])
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['id', 3]])
+    end
+
+    it 'does not end the SET clause at a WHERE inside a comment' do
+      result = subject.analyze('UPDATE users SET note = ? /* WHERE */, ssn = ? WHERE id = ?')
+
+      expect(bound(result)).to eq([['note', 1], ['ssn', 2]])
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['id', 3]])
+    end
+
+    it 'does not read a predicate inside a comment in a WHERE clause' do
+      result = subject.analyze('SELECT ssn FROM users WHERE /* ssn = ? */ id = ?')
+
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['id', 1]])
+    end
+
+    it 'counts a question mark after a double dash with no space' do
+      result = subject.analyze('INSERT INTO users (n, ssn) VALUES (1--?, ?)')
+
+      expect(bound(result)).to eq([['ssn', 2]])
+    end
+
+    it 'reads the contents of an executable comment as part of the statement' do
+      result = subject.analyze('INSERT INTO users (n, ssn) VALUES (/*! ? */, ?)')
+
+      expect(bound(result)).to eq([['n', 1], ['ssn', 2]])
+    end
+
+    # MySQL runs a versioned executable comment only on a server of that version or later; on an
+    # older one it is an ordinary comment, and a question mark inside it is not a placeholder.
+    context 'with a versioned executable comment' do
+      let(:sql) { 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)' }
+
+      it 'counts its question mark on a server that runs it' do
+        result = subject.analyze(sql, server_version: 80_039)
+
+        expect(bound(result)).to eq([['ssn', 3]])
+      end
+
+      it 'does not count its question mark on a server too old to run it' do
+        result = subject.analyze(sql, server_version: 80_028)
+
+        expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+        expect(result.write_columns_complete).to be(true)
+      end
+
+      it 'counts its question mark when the server version is not known' do
+        expect(bound(subject.analyze(sql))).to eq([['ssn', 3]])
+      end
+
+      # The comment's markers are not part of the statement, so the INSERT is read past them whether
+      # or not the server runs what is between them.
+      it 'reads an INSERT with a versioned modifier between its keyword and INTO' do
+        modifier = 'INSERT /*!50000 IGNORE */ INTO users (name, ssn) VALUES (?, ?)'
+
+        [nil, 40_000, 80_039].each do |server_version|
+          result = subject.analyze(modifier, server_version: server_version)
+
+          expect(result.tables).to eq(['users'])
+          expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+        end
+      end
+    end
+
+    # MySQL does not read -- followed by /* as a comment, so the placeholder after the block comment
+    # is still part of the statement once the block comment is gone.
+    it 'does not start a comment at a double dash in front of a block comment' do
+      result = subject.analyze('UPDATE users SET name = 0--/**/?, ssn = ? WHERE id = 1')
+
+      expect(bound(result)).to eq([['ssn', 2]])
+    end
+
+    it 'reports a value list whose comment never closes as not enumerable' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (?, ? /* )')
+
+      expect(result.write_columns).to be_empty
+      expect(result.write_columns_complete).to be(false)
+    end
+
+    it 'reads an INSERT with an optimizer hint after its keyword' do
+      result = subject.analyze('INSERT /*+ SET_VAR(sort_buffer_size=16M) */ INTO users (name, ssn) VALUES (?, ?)')
+
+      expect(result.tables).to eq(['users'])
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+    end
+
+    it 'reads an UPDATE with a comment between its keyword and its table' do
+      result = subject.analyze('UPDATE /* nightly */ users SET ssn = ? WHERE id = ?')
+
+      expect(result.tables).to eq(['users'])
+      expect(bound(result)).to eq([['ssn', 1]])
+    end
+
+    it 'reads an INSERT with comments around its column list, values and upsert clause' do
+      result = subject.analyze('INSERT INTO users /* t */ (name /* ) */, ssn) /* v */ VALUES (?, ?) ' \
+                               '/* c */ ON DUPLICATE KEY UPDATE ssn = ?')
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2], ['ssn', 3]])
+      expect(result.write_columns_complete).to be(true)
+    end
+
+    it 'reads assignments and predicates with comments inside them' do
+      result = subject.analyze('UPDATE users SET /* c */ ssn /* c */ = ? WHERE ssn = /* c */ ?')
+
+      expect(bound(result)).to eq([['ssn', 1]])
+      expect(result.where_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['ssn', 2]])
+    end
+
+    it 'does not read a trailing comment as more of the statement' do
+      result = subject.analyze('INSERT INTO users (name, ssn) VALUES (?, ?) -- trailing = ?')
+
+      expect(bound(result)).to eq([['name', 1], ['ssn', 2]])
+      expect(result.write_columns_complete).to be(true)
     end
   end
 

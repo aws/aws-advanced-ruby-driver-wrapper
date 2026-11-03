@@ -174,6 +174,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
         result = provider.refresh
         expect(result).to eq(cached_topology)
       end
+
+      it 'publishes a DataAccessEvent so the read keeps the topology monitor alive' do
+        allow(event_publisher).to receive(:publish)
+        provider.refresh
+        expect(event_publisher).to have_received(:publish).with(
+          AwsAdvancedRubyDriverWrapper::Utils::Events::DataAccessEvent.new(data_type: :topology, key: provider.cluster_id)
+        )
+      end
     end
 
     context 'when cache is empty and monitor fails' do

@@ -103,12 +103,12 @@ module AwsAdvancedRubyDriverWrapper
       after { service.shutdown }
 
       it 'returns the stored topology on a get hit and publishes an access event' do
-        expect(service.get(topology_cache, hot_key)).to eq(topology)
+        expect(service.get(topology_cache, hot_key, register_access: true)).to eq(topology)
         expect(publisher).to have_received(:publish).once
       end
 
       it 'returns the stored topology without publishing when access registration is off' do
-        expect(service.get(topology_cache, hot_key, register_access: false)).to eq(topology)
+        expect(service.get(topology_cache, hot_key)).to eq(topology)
         expect(publisher).not_to have_received(:publish)
       end
 
@@ -123,7 +123,7 @@ module AwsAdvancedRubyDriverWrapper
 
       it 'stores a topology on set' do
         service.set(topology_cache, 'key-1', topology)
-        expect(service.get(topology_cache, 'key-1', register_access: false)).to eq(topology)
+        expect(service.get(topology_cache, 'key-1')).to eq(topology)
       end
     end
   end

@@ -15,8 +15,9 @@
 #  limitations under the License.
 
 require_relative '../../spec_helper'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/trilogy_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/plugins/kms_encryption/kms_encryption_plugin'
 require 'aws_advanced_ruby_driver_wrapper/services/plugin_call_context'
 require 'aws_advanced_ruby_driver_wrapper/services/service_container'
@@ -50,10 +51,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
                                                       config: encryption_config)
   end
   let(:plugin_manager) { instance_double(services::PluginManager) }
+  # The driver connection the statement goes out on, which is asked for the MySQL server's version.
+  let(:connection) { nil }
   let(:service_container) do
     instance_double(services::ServiceContainer, plugin_manager: plugin_manager,
                                                 dialect_service: instance_double(services::DialectService,
-                                                                                 driver_dialect: driver_dialect))
+                                                                                 driver_dialect: driver_dialect),
+                                                connection_service: instance_double(services::ConnectionService,
+                                                                                    current_connection: connection))
   end
   subject(:plugin) { described_class.new(service_container, props, encryption_utility: encryption_utility) }
 
@@ -139,12 +144,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
     end
 
     context 'with MySQL' do
-      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
 
       it 'does not need pg_query' do
         allow(AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer).to receive(:require).and_raise(LoadError)
 
         expect { plugin }.not_to raise_error
+      end
+    end
+
+    # Trilogy has no prepared statements, so a parameter could only reach the server written into
+    # the SQL - in plaintext, before the plugin could encrypt it.
+    context 'with trilogy' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialect.new }
+
+      it 'refuses to be set up' do
+        allow(encryption::KmsEncryptionUtility).to receive(:new)
+
+        expect { described_class.new(service_container, props) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::EncryptionPluginError, /trilogy/)
+        expect(encryption::KmsEncryptionUtility).not_to have_received(:new)
       end
     end
   end
@@ -280,6 +299,103 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
       call('connection.exec_params', args: [sql, %w[Jo 123-45-6789]], sql: sql)
 
       expect_encrypted(bound_args[1].last, '123-45-6789')
+    end
+
+    # MySQL numbers its placeholders by counting them, so a question mark that is only part of a
+    # comment must not be counted, or the encrypted column's value is bound in the clear.
+    context 'with MySQL and a question mark inside a comment' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
+
+      it 'encrypts the parameter the parser placed after the comment' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (/* why? */ ?, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts the annotated parameter after the comment' do
+        sql = '/* why? */ INSERT INTO users (name, ssn) SELECT ?, /*@encrypt:users.ssn*/ ?'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts what an UPDATE assigns when a comment sits between the keyword and the table' do
+        sql = 'UPDATE /* nightly */ users SET ssn = ? WHERE id = ?'
+        call('statement.execute', args: %w[123-45-6789 1], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+        expect(bound_args.last).to eq('1')
+      end
+
+      # Taking an annotation out of the statement must not take the line break after it as well, or
+      # the line comment it sits in runs on over the assignment on the next line.
+      it 'encrypts an assignment on the line after an annotation inside a line comment' do
+        sql = "UPDATE users SET name = ? -- by /*@encrypt:users.nick*/\n, ssn = ? WHERE id = ?"
+        call('statement.execute', args: %w[Jo 123-45-6789 1], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args[1], '123-45-6789')
+      end
+    end
+
+    # MySQL runs what a versioned comment holds only on a server of that version or later, so
+    # whether a question mark inside one is a placeholder depends on the server the statement goes to.
+    context 'with MySQL and a question mark inside a versioned comment' do
+      let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
+      let(:server_id) { 80_028 }
+      let(:connection) { double('Mysql2::Client', server_info: { id: server_id, version: '8.0.28' }) }
+
+      it 'encrypts the parameter after a comment the server is too old to run' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+
+        expect(bound_args.first).to eq('Jo')
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'encrypts the annotated parameter after a comment the server is too old to run' do
+        sql = 'INSERT INTO users (ssn) SELECT /*!80030 ?, */ /*@encrypt:users.ssn*/ ?'
+        call('statement.execute', args: %w[123-45-6789], sql: sql)
+
+        expect_encrypted(bound_args.first, '123-45-6789')
+      end
+
+      context 'when the server runs the comment' do
+        let(:server_id) { 80_039 }
+
+        it 'counts the placeholder inside it' do
+          sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+          call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+          expect(bound_args.take(2)).to eq(%w[Jo 1])
+          expect_encrypted(bound_args.last, '123-45-6789')
+        end
+      end
+
+      # A failover or a blue/green switchover can move the connection to a server of another
+      # version, so the version is read for every statement rather than once.
+      it 'reads the statement for the server the connection has moved to' do
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 123-45-6789], sql: sql)
+        expect_encrypted(bound_args.last, '123-45-6789')
+
+        allow(connection).to receive(:server_info).and_return({ id: 80_039, version: '8.0.39' })
+        call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+        expect(bound_args.take(2)).to eq(%w[Jo 1])
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
+
+      it 'reads the comment as part of the statement when the version cannot be read' do
+        allow(connection).to receive(:server_info).and_raise(StandardError, 'closed')
+        sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+        call('statement.execute', args: %w[Jo 1 123-45-6789], sql: sql)
+
+        expect_encrypted(bound_args.last, '123-45-6789')
+      end
     end
 
     it 'does nothing when the call carries no SQL to parse and binds nothing' do
@@ -664,7 +780,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::KmsEncryptionPlugin do
   # mysql2 binds every parameter positionally, writes binary columns as plain binary strings, and
   # reads them back the same way, so both halves of the plugin have to be checked over it too.
   describe 'with the mysql2 driver' do
-    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
 
     it 'encrypts the parameters of a statement bound with question marks' do
       call('statement.execute', args: %w[Jo 123-45-6789], sql: 'INSERT INTO users (name, ssn) VALUES (?, ?)')

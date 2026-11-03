@@ -81,7 +81,8 @@ RSpec.describe 'Public API loading' do
       %w[Services::HostService Services::PluginManager Plugins::Encryption::EncryptionConfig
          Plugins::Encryption::KeyManagementUtility]
         .each { |name| AwsAdvancedRubyDriverWrapper.const_get(name) }
-      puts [defined?(PG::Connection), defined?(Mysql2::Client), defined?(Aws::KMS::Client), defined?(PgQuery)].compact.join(',')
+      puts [defined?(PG::Connection), defined?(Mysql2::Client), defined?(Trilogy), defined?(Aws::KMS::Client),
+            defined?(PgQuery)].compact.join(',')
     RUBY
 
     expect(status).to be_success, output

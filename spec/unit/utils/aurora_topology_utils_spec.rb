@@ -172,6 +172,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::AuroraTopologyUtils do
       end
     end
 
+    context 'when the driver returns its rows as an array of hashes, as the trilogy driver dialect does' do
+      it 'returns the hosts' do
+        rows = [{ 'instance_id' => 'writer-instance', 'is_writer' => 1, 'cpu_utilization' => 0.0,
+                  'instance_lag' => 0.0, 'last_update_time' => now }]
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return(rows)
+
+        expect(subject.query_topology(conn, initial_host_info, instance_template).map(&:id)).to eq(['writer-instance'])
+      end
+
+      it 'returns nil when there are no rows' do
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return([])
+
+        expect(subject.query_topology(conn, initial_host_info, instance_template)).to be_nil
+      end
+    end
+
     context 'when there are multiple writers' do
       it 'selects the writer with the most recent last_update_time' do
         older_time = Time.now - 120

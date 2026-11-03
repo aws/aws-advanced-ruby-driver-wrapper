@@ -16,7 +16,7 @@
 
 require_relative '../../spec_helper'
 require_relative '../../../benchmarks/support/service_fixtures'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 
 # Guards the assumptions the plugin service benchmark relies on: that the real services can be wired
 # with the cheap stubs, and that each benchmarked method still exists and behaves the way the
@@ -69,7 +69,7 @@ module AwsAdvancedRubyDriverWrapper
 
     it 'tracks transaction state and resets it' do
       service = plain.session_state_service
-      dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new
+      dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new
       connection = double('connection')
       expect(service.in_transaction?).to be(false)
 

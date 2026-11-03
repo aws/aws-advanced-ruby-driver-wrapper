@@ -510,4 +510,141 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
       end
     end
   end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    let(:telemetry_factory) { AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props) }
+    let(:service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        connection_service, dialect_service, nil, host_service, plugin_manager, session_state_service, nil, nil,
+        telemetry_factory
+      )
+    end
+
+    def fail_over
+      in_application_span do
+        expect { plugin.send(:failover) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
+      end
+    end
+
+    context 'with a writer failover' do
+      before do
+        props[:failover_timeout_sec] = 5
+        props[:failover_mode] = 'strict_writer'
+        plugin.connect(writer_host, props, true, -> { connection })
+        writer_result = AwsAdvancedRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+        allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
+      end
+
+      it 'records a successful failover as a succeeded span and counts it' do
+        triggered = counter_value('writer_failover.triggered.count')
+        succeeded = counter_value('writer_failover.completed.success.count')
+
+        fail_over
+
+        span = span_named('failover to writer host')
+        expect(span.parent_span_id).to eq(span_named('application').span_id)
+        expect(span.status.code).to eq(OpenTelemetry::Trace::Status::OK)
+        expect(span.attributes).to include('exception_type' => 'AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError')
+        expect(counter_value('writer_failover.triggered.count')).to eq(triggered + 1)
+        expect(counter_value('writer_failover.completed.success.count')).to eq(succeeded + 1)
+      end
+
+      it 'counts a failover that reconnected inside a transaction as succeeded' do
+        allow(session_state_service).to receive(:in_transaction?).and_return(true)
+        succeeded = counter_value('writer_failover.completed.success.count')
+        failed = counter_value('writer_failover.completed.failed.count')
+
+        fail_over
+
+        expect(span_named('failover to writer host').status.code).to eq(OpenTelemetry::Trace::Status::OK)
+        expect(counter_value('writer_failover.completed.success.count')).to eq(succeeded + 1)
+        expect(counter_value('writer_failover.completed.failed.count')).to eq(failed)
+      end
+
+      it 'records a failed failover as a failed span and counts it' do
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(false)
+        failed = counter_value('writer_failover.completed.failed.count')
+
+        fail_over
+
+        span = span_named('failover to writer host')
+        expect(span.status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
+        expect(span.attributes).to include('exception_type' => 'AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError')
+        expect(counter_value('writer_failover.completed.failed.count')).to eq(failed + 1)
+      end
+
+      it 'keeps the failover outcome when submitting its trace copy fails' do
+        props[:telemetry_failover_additional_top_trace] = true
+        failing_plugin = described_class.new(service_container, props)
+        failing_plugin.connect(writer_host, props, true, -> { connection })
+        allow(telemetry_factory).to receive(:post_copy).and_raise(StandardError, 'exporter failure')
+
+        expect { failing_plugin.send(:failover) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError)
+      end
+
+      it 'records a failover that a failed connect triggered' do
+        props[:enable_connect_failover] = true
+        allow(dialect_service).to receive(:network_error?).and_return(true)
+        succeeded = counter_value('writer_failover.completed.success.count')
+
+        in_application_span { plugin.connect(writer_host, props, false, -> { raise IOError, 'connection refused' }) }
+
+        expect(connection_service).to have_received(:update_current_connection).with(new_connection, anything)
+        span = span_named('failover to writer host')
+        expect(span.parent_span_id).to eq(span_named('application').span_id)
+        expect(span.status.code).to eq(OpenTelemetry::Trace::Status::OK)
+        expect(counter_value('writer_failover.completed.success.count')).to eq(succeeded + 1)
+      end
+
+      it 'does not submit the failover as a trace of its own unless asked to' do
+        fail_over
+
+        expect(span_named('copy: failover to writer host')).to be_nil
+      end
+
+      context 'with telemetry_failover_additional_top_trace enabled' do
+        let(:props) { Concurrent::Map.new.tap { |map| map[:telemetry_failover_additional_top_trace] = true } }
+
+        it 'also submits the failover as a trace of its own' do
+          fail_over
+
+          copy = span_named('copy: failover to writer host')
+          expect(copy.parent_span_id).to eq(OpenTelemetry::Trace::INVALID_SPAN_ID)
+          expect(copy.attributes).to include('source_trace_id' => span_named('application').hex_trace_id)
+        end
+      end
+    end
+
+    context 'with a reader failover' do
+      before do
+        props[:failover_timeout_sec] = 5
+        props[:failover_mode] = 'reader_or_writer'
+        allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
+        plugin.connect(writer_host, props, true, -> { connection })
+      end
+
+      it 'records the failover as a reader failover' do
+        triggered = counter_value('reader_failover.triggered.count')
+        succeeded = counter_value('reader_failover.completed.success.count')
+
+        fail_over
+
+        expect(span_named('failover to replica').status.code).to eq(OpenTelemetry::Trace::Status::OK)
+        expect(counter_value('reader_failover.triggered.count')).to eq(triggered + 1)
+        expect(counter_value('reader_failover.completed.success.count')).to eq(succeeded + 1)
+      end
+
+      it 'records a failed reader failover as a failed span and counts it' do
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(false)
+        failed = counter_value('reader_failover.completed.failed.count')
+
+        fail_over
+
+        expect(span_named('failover to replica').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
+        expect(counter_value('reader_failover.completed.failed.count')).to eq(failed + 1)
+      end
+    end
+  end
 end

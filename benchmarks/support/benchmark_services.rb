@@ -54,6 +54,10 @@ module AwsAdvancedRubyDriverWrapper
         def closed?(_connection)
           false
         end
+
+        def executable_comment_version(_connection)
+          nil
+        end
       end
 
       # Reports every connection as a writer, so the failover plugin's writer-cluster verification

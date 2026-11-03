@@ -14,13 +14,13 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/mysql'
 require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 
 require 'concurrent'
 
-RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect do
+RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect do
   subject(:dialect) { described_class.new }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }
@@ -29,6 +29,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     Concurrent::Map.new.tap do |m|
       m[:database] = 'testdb'
       m[:username] = 'user'
+    end
+  end
+
+  describe '#database_engine' do
+    it 'is MySQL' do
+      expect(dialect.database_engine).to eq(:mysql)
     end
   end
 
@@ -104,6 +110,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect 
     it 'returns false on error' do
       allow(connection).to receive(:ping).and_raise(StandardError)
       expect(dialect.ping(connection)).to be false
+    end
+  end
+
+  describe '#executable_comment_version' do
+    it 'returns the version the server reports, as MySQL numbers it' do
+      allow(connection).to receive(:server_info).and_return({ id: 80_039, version: '8.0.39' })
+      expect(dialect.executable_comment_version(connection)).to eq(80_039)
+    end
+
+    it 'returns nil when the version cannot be read' do
+      allow(connection).to receive(:server_info).and_raise(StandardError, 'closed')
+      expect(dialect.executable_comment_version(connection)).to be_nil
+    end
+
+    it 'returns nil without a connection' do
+      expect(dialect.executable_comment_version(nil)).to be_nil
     end
   end
 

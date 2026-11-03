@@ -32,6 +32,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#database_engine' do
+    it 'is PostgreSQL' do
+      expect(dialect.database_engine).to eq(:postgresql)
+    end
+  end
+
   describe '#connect' do
     it 'calls PG::Connection.new with prepared config' do
       expected = { dbname: 'testdb', user: 'pguser', host: 'db.example.com', port: 5432 }
@@ -218,6 +224,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
   describe '#equals_operator' do
     it 'pins equality to pg_catalog so that the search_path cannot supply another operator' do
       expect(dialect.equals_operator).to eq('OPERATOR(pg_catalog.=)')
+    end
+  end
+
+  # PostgreSQL has no executable comments for a version to decide.
+  describe '#executable_comment_version' do
+    it 'returns nil' do
+      expect(dialect.executable_comment_version(connection)).to be_nil
     end
   end
 

@@ -506,6 +506,7 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def stored_hosts
+        # Explicitly unregistered: a monitor reading its own data must not keep itself alive.
         storage_service.get(TOPOLOGY_CACHE_NAME, @cluster_id, register_access: false)
       end
 

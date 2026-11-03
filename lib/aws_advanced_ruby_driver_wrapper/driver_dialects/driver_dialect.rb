@@ -38,6 +38,12 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # The database engine the driver talks to, which decides the database dialects that apply.
+      # @return [Symbol] +:mysql+ or +:postgresql+
+      def database_engine
+        raise NotImplementedError
+      end
+
       def connect(host_info, config)
         raise NotImplementedError
       end
@@ -157,6 +163,15 @@ module AwsAdvancedRubyDriverWrapper
       # @param connection [Object]
       # @return [Boolean, nil]
       def reported_in_transaction(_connection)
+        nil
+      end
+
+      # The server version that decides which versioned /*!80023 ... */ executable comments the server
+      # runs, as MySQL numbers it (8.0.39 is 80039). Only MySQL has executable comments.
+      # @param connection [Object]
+      # @return [Integer, nil] nil when the driver's SQL has no executable comments, or the version
+      #   cannot be read
+      def executable_comment_version(_connection)
         nil
       end
     end

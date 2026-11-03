@@ -118,11 +118,7 @@ RSpec.describe 'GDB Failover', :integration,
   def wait_for_full_topology(cluster_id:, timeout_secs: 60, delay_secs: 0.5)
     expected_count = primary_db_info.instances.size + env.secondary_instances.size
     Integration::RetryHelper.retry_until(timeout_secs: timeout_secs, delay_secs: delay_secs) do
-      hosts = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(
-        :topology,
-        cluster_id,
-        register_access: false
-      )
+      hosts = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service.get(:topology, cluster_id)
       !hosts.nil? && hosts.size >= expected_count
     end
   end

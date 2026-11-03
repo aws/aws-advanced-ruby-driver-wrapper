@@ -27,6 +27,8 @@ module AwsAdvancedRubyDriverWrapper
       # Everything else (STS exchange, token minting, caching, retry) is handled by
       # BaseSamlAuthPlugin.
       class FederatedAuthPlugin < BaseSamlAuthPlugin
+        TELEMETRY_PREFIX = 'federated'
+        TELEMETRY_FETCH_SAML = 'Fetch ADFS SAML Assertion'
         INPUT_TAG_PATTERN = /<input([^<>]*)>/
         FORM_ACTION_PATTERN = /<form[^<>]*?\baction="([^"]+)"/
 

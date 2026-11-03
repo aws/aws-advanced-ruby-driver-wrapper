@@ -18,11 +18,11 @@ require_relative '../../../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/sql_parser'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/query_type'
 require 'aws_advanced_ruby_driver_wrapper/utils/parser/mysql_statement_analyzer'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
-  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
   let(:pg_dialect)    { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:mysql_parser) { described_class.new(mysql_dialect) }
 
@@ -45,6 +45,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
     it 'returns the same analysis on a cache hit' do
       sql = 'UPDATE customers SET email = ? WHERE id = ?'
       expect(mysql_parser.analyze_sql(sql)).to eq(mysql_parser.analyze_sql(sql))
+    end
+
+    # A connection can reach a server of another version after a failover or a blue/green
+    # switchover, and a versioned comment can read differently there.
+    it 'parses a statement again for a server of another version' do
+      sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+
+      expect(mysql_parser.analyze_sql(sql, server_version: 80_039).parameter_column_names).to eq({ 3 => 'ssn' })
+      expect(mysql_parser.analyze_sql(sql, server_version: 80_028).parameter_column_names)
+        .to eq({ 1 => 'name', 2 => 'ssn' })
+    end
+
+    it 'passes no server version to the PostgreSQL analyzer' do
+      pg_analyzer = AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer
+      allow(pg_analyzer).to receive(:analyze).and_call_original
+
+      described_class.new(pg_dialect).analyze_sql('SELECT 1', server_version: 80_039)
+
+      expect(pg_analyzer).to have_received(:analyze).with('SELECT 1')
     end
   end
 
@@ -137,6 +156,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::SqlParser do
   end
 
   describe '#column_parameter_mapping' do
+    it 'reads a versioned comment for the server version it is given' do
+      sql = 'INSERT INTO users (name, ssn) VALUES (? /*!80030 + ? */, ?)'
+
+      expect(mysql_parser.column_parameter_mapping(sql, server_version: 80_039)).to eq({ 3 => 'ssn' })
+      expect(mysql_parser.column_parameter_mapping(sql, server_version: 80_028)).to eq({ 1 => 'name', 2 => 'ssn' })
+    end
+
     it 'maps SET columns only for UPDATE' do
       expect(mysql_parser.column_parameter_mapping('UPDATE users SET ssn = ?, email = ? WHERE id = ?')).to eq({ 1 => 'ssn', 2 => 'email' })
     end

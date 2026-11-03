@@ -38,10 +38,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
   let(:mock_dialect_service) { double('DialectService', driver_dialect: mock_driver_dialect) }
 
   let(:service_container) do
-    double('ServiceContainer',
-           storage_service: mock_storage_service,
-           monitor_service: mock_monitor_service,
-           dialect_service: mock_dialect_service)
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+      storage_service: mock_storage_service,
+      monitor_service: mock_monitor_service,
+      dialect_service: mock_dialect_service
+    )
   end
 
   def build_plugin(extra_props = {})
@@ -235,6 +236,41 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
 
     it 'is frozen' do
       expect(build_plugin.subscribed_methods).to be_frozen
+    end
+  end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    let(:service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        storage_service: mock_storage_service,
+        monitor_service: mock_monitor_service,
+        dialect_service: mock_dialect_service,
+        telemetry_factory: AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props)
+      )
+    end
+
+    it 'counts each time a call has to wait for the endpoint info' do
+      plugin = build_plugin_with_monitor(wait_for_custom_endpoint_info: 'true')
+      allow(mock_monitor).to receive(:endpoint_info?).and_return(false)
+      allow(mock_monitor).to receive(:request_endpoint_info_update)
+      allow(mock_monitor).to receive(:wait_for_info?).and_return(true)
+      waited = counter_value('custom_endpoint.wait_for_info.count')
+
+      plugin.connect(custom_host_info, {}, true, -> { :connected })
+
+      expect(counter_value('custom_endpoint.wait_for_info.count')).to eq(waited + 1)
+    end
+
+    it 'does not count a call that finds the endpoint info already available' do
+      plugin = build_plugin_with_monitor(wait_for_custom_endpoint_info: 'true')
+      allow(mock_monitor).to receive(:endpoint_info?).and_return(true)
+      waited = counter_value('custom_endpoint.wait_for_info.count')
+
+      plugin.connect(custom_host_info, {}, true, -> { :connected })
+
+      expect(counter_value('custom_endpoint.wait_for_info.count')).to eq(waited)
     end
   end
 end

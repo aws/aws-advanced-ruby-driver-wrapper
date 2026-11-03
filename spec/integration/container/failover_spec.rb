@@ -506,7 +506,8 @@ RSpec.describe 'Failover', :integration,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_ID.name => @secret_id,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::SECRET_REGION.name => env.aurora_region,
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::FAILOVER_TIMEOUT_SEC.name => 90,
-        connect_timeout: 10
+        connect_timeout: 10,
+        **Integration::TelemetryHelper.wrapper_props
       }
     end
 

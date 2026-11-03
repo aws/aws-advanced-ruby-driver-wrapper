@@ -38,6 +38,8 @@ module AwsAdvancedRubyDriverWrapper
       # when that endpoint carries a region. When +accessible_regions+ is set, hosts outside those
       # regions are never selected.
       class GdbFailoverPlugin < FailoverPlugin
+        TELEMETRY_FAILOVER = 'global database failover'
+
         def initialize(service_container, props = ::Concurrent::Map.new)
           super
 
@@ -176,6 +178,10 @@ module AwsAdvancedRubyDriverWrapper
             return
           end
 
+          with_failover_telemetry(TELEMETRY_FAILOVER) { failover_with_plan }
+        end
+
+        def failover_with_plan
           failover_start = Time.now
           failover_deadline = failover_start + @failover_timeout
           @regionless_hosts.clear
@@ -189,6 +195,25 @@ module AwsAdvancedRubyDriverWrapper
               "failover_timeout_sec=#{@failover_timeout}"
           end
 
+          writer_candidate, writer_region, mode = failover_plan
+          log_failover_plan(writer_candidate, writer_region, mode)
+          if mode == GdbFailoverMode::STRICT_WRITER
+            count_failover(@writer_failover_counters) { failover_to_writer(writer_candidate, writer_region, failover_deadline) }
+          else
+            count_failover(@reader_failover_counters) { failover_to_allowed_host(mode, failover_deadline) }
+          end
+        ensure
+          duration_ms = ((Time.now - failover_start) * 1000).round if failover_start
+          logger.debug { "Failover duration: #{duration_ms}ms" } if duration_ms
+        end
+
+        # Finds the writer the topology settled on, and the failover mode that applies to its region.
+        #
+        # When this fails, failover cannot start, and so it is not known whether it would have been a
+        # writer or a reader failover. It is counted as a failed writer failover.
+        #
+        # @return [Array(Host::HostInfo, String, Symbol)] the writer, its region, and the mode
+        def failover_plan
           # This is expected to return once the topology has stabilized, i.e. once the cluster
           # control plane has already chosen a new writer.
           unless host_service.force_refresh_host_list?(verify_writer: true, timeout_sec: @failover_timeout)
@@ -210,15 +235,11 @@ module AwsAdvancedRubyDriverWrapper
             mode = current_failover_mode(writer_region)
           end
 
-          log_failover_plan(writer_candidate, writer_region, mode)
-          if mode == GdbFailoverMode::STRICT_WRITER
-            failover_to_writer(writer_candidate, writer_region, failover_deadline)
-          else
-            failover_to_allowed_host(mode, failover_deadline)
-          end
-        ensure
-          duration_ms = ((Time.now - failover_start) * 1000).round if failover_start
-          logger.debug { "Failover duration: #{duration_ms}ms" } if duration_ms
+          [writer_candidate, writer_region, mode]
+        rescue StandardError
+          @writer_failover_counters.triggered.inc
+          @writer_failover_counters.failed.inc
+          raise
         end
 
         # Explains which mode was chosen, and what the plugin will do with it.

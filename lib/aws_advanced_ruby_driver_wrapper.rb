@@ -33,11 +33,12 @@ module AwsAdvancedRubyDriverWrapper
   @config = Configuration.new
 
   # Direct-driver connection classes are autoloaded so requiring this file alone is enough to use them:
-  # referencing either constant loads its driver-specific file on demand. Loading stays lazy - a client
-  # for one driver never loads the other driver's code, and the underlying 'pg'/'mysql2' gem is only
+  # referencing any of them loads its driver-specific file on demand. Loading stays lazy - a client
+  # for one driver never loads another driver's code, and the underlying 'pg'/'mysql2'/'trilogy' gem is only
   # required when a connection is actually opened.
   autoload :WrapperPgConnection, 'aws_advanced_ruby_driver_wrapper/postgresql'
   autoload :WrapperMysql2Client, 'aws_advanced_ruby_driver_wrapper/mysql'
+  autoload :WrapperTrilogyClient, 'aws_advanced_ruby_driver_wrapper/trilogy'
 
   # Other public entry points are autoloaded for the same reason, so they work from code that runs
   # before any connection is opened, such as a Rails initializer or a setup script.
@@ -147,6 +148,12 @@ if defined?(ActiveSupport) && ActiveSupport.respond_to?(:on_load)
       'aws_mysql2',
       'ActiveRecord::ConnectionAdapters::AwsMysql2Adapter',
       'aws_advanced_ruby_driver_wrapper/active_record/aws_mysql2_adapter'
+    )
+
+    ActiveRecord::ConnectionAdapters.register(
+      'aws_trilogy',
+      'ActiveRecord::ConnectionAdapters::AwsTrilogyAdapter',
+      'aws_advanced_ruby_driver_wrapper/active_record/aws_trilogy_adapter'
     )
   end
 end
