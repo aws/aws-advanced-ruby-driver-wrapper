@@ -115,6 +115,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::GlobalAuroraTopologyUtils do
       end
     end
 
+    context 'when the driver returns its rows as an array of hashes, as the trilogy driver dialect does' do
+      it 'returns the hosts' do
+        rows = [{ 'instance_id' => 'writer-instance', 'is_writer' => 1, 'instance_lag' => 0.0, 'aws_region' => 'us-east-1' }]
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return(rows)
+
+        hosts = subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)
+        expect(hosts.map(&:id)).to eq(['writer-instance'])
+      end
+
+      it 'returns nil when there are no rows' do
+        allow(dialect).to receive(:execute).with(conn, topology_query).and_return([])
+
+        expect(subject.query_global_topology(conn, initial_host_info, instance_templates_by_region)).to be_nil
+      end
+    end
+
     context 'when there are no writers' do
       it 'returns nil' do
         results = make_result_set(

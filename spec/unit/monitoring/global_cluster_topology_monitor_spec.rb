@@ -135,7 +135,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::GlobalClusterTopologyMo
       monitor.start
       sleep(0.5)
 
-      cached = storage_service.get(:topology, cluster_id, register_access: false)
+      cached = storage_service.get(:topology, cluster_id)
       expect(cached).not_to be_nil
       expect(cached.size).to eq(3)
 

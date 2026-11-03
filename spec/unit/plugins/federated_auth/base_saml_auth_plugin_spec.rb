@@ -17,6 +17,8 @@
 require_relative '../../../spec_helper'
 require 'aws-sdk-rds'
 require 'aws_advanced_ruby_driver_wrapper/plugins/federated_auth/base_saml_auth_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/federated_auth/federated_auth_plugin'
+require 'aws_advanced_ruby_driver_wrapper/plugins/federated_auth/okta_auth_plugin'
 require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 require 'aws_advanced_ruby_driver_wrapper/utils/rds_url_type'
 require 'aws_advanced_ruby_driver_wrapper/utils/rds_utils'
@@ -28,6 +30,9 @@ require 'aws_advanced_ruby_driver_wrapper/errors'
 # property) so the base flow can be driven and the seam stubbed; it performs no
 # HTTP of its own.
 class TestSamlPlugin < AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAuthPlugin
+  TELEMETRY_PREFIX = 'test_saml'
+  TELEMETRY_FETCH_SAML = 'fetch test SAML assertion'
+
   def self.fetch_saml_assertion(**_opts)
     raise 'fetch_saml_assertion must be stubbed in specs'
   end
@@ -102,9 +107,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
            driver_dialect: mock_driver_dialect)
   end
   let(:mock_service_container) do
-    double('ServiceContainer',
-           storage_service: mock_storage_service,
-           dialect_service: mock_dialect_service)
+    AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service: mock_storage_service,
+                                                                 dialect_service: mock_dialect_service)
   end
 
   let(:mock_credentials) { Aws::Credentials.new('AKID', 'SECRET') }
@@ -526,6 +530,91 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAut
       )
       expect(creds.access_key_id).to eq('AKIASTS')
       expect(creds.session_token).to eq('session')
+    end
+  end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    # Collecting metrics reads the token cache gauge.
+    before { allow(mock_storage_service).to receive(:size).with(SAML_TOKEN_CACHE_NAME).and_return(0) }
+
+    let(:mock_service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        storage_service: mock_storage_service, dialect_service: mock_dialect_service,
+        telemetry_factory: AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props)
+      )
+    end
+
+    it 'counts each token it generates, under the subclass prefix' do
+      fetched = counter_value('test_saml.fetch_token.count')
+
+      connect_and_capture(plugin: build_plugin, host_info: pg_host_info)
+
+      expect(counter_value('test_saml.fetch_token.count')).to eq(fetched + 1)
+    end
+
+    it 'records the SAML assertion fetch and the token generation as spans' do
+      in_application_span { connect_and_capture(plugin: build_plugin, host_info: pg_host_info) }
+
+      application = span_named('application').span_id
+      expect(span_named('fetch test SAML assertion').parent_span_id).to eq(application)
+      expect(span_named('fetch authentication token').parent_span_id).to eq(application)
+    end
+
+    it 'records a failed SAML assertion fetch as a failed span' do
+      allow(described_class).to receive(:fetch_saml_assertion).and_raise(StandardError, 'IdP unreachable')
+
+      in_application_span { connect_and_capture(plugin: build_plugin, host_info: pg_host_info) }
+
+      expect(span_named('fetch test SAML assertion').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
+    end
+
+    it 'does not count a token fetch when the IdP exchange fails before a token is generated' do
+      allow(described_class).to receive(:fetch_saml_assertion).and_raise(StandardError, 'IdP unreachable')
+      fetched = counter_value('test_saml.fetch_token.count')
+
+      connect_and_capture(plugin: build_plugin, host_info: pg_host_info)
+
+      expect(counter_value('test_saml.fetch_token.count')).to eq(fetched)
+    end
+
+    {
+      AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::FederatedAuthPlugin =>
+        ['federated', 'Fetch ADFS SAML Assertion'],
+      AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::OktaAuthPlugin =>
+        ['okta', 'Fetch OKTA SAML Assertion']
+    }.each do |plugin_class, (prefix, saml_span)|
+      it "names #{plugin_class.name.split('::').last}'s metrics and SAML span after its IdP" do
+        factory = mock_service_container.telemetry_factory
+        allow(factory).to receive(:create_counter).and_call_original
+        allow(factory).to receive(:create_gauge).and_call_original
+
+        plugin_class.new(mock_service_container, wrapper_props_map(base_wrapper_props))
+
+        expect(factory).to have_received(:create_counter).with("#{prefix}.fetch_token.count")
+        expect(factory).to have_received(:create_gauge).with("#{prefix}.token_cache.size")
+        expect(plugin_class::TELEMETRY_FETCH_SAML).to eq(saml_span)
+      end
+    end
+
+    it 'builds its token cache gauge callback so that the gauge does not keep the plugin alive' do
+      factory = mock_service_container.telemetry_factory
+      callback = nil
+      allow(factory).to receive(:create_gauge) { |_name, &block| callback = block }
+
+      build_plugin
+
+      expect(callback.binding.receiver).not_to be_a(described_class)
+      expect(callback.binding.local_variables).to eq([:storage_service])
+    end
+
+    it 'reports the size of the token cache as a gauge, under the subclass prefix' do
+      allow(mock_storage_service).to receive(:size).with(SAML_TOKEN_CACHE_NAME).and_return(2)
+      build_plugin
+
+      gauge = collect_metrics.find { |metric| metric.name == 'test_saml.token_cache.size' }
+      expect(gauge.data_points.map(&:value)).to eq([2])
     end
   end
 end

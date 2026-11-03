@@ -32,9 +32,10 @@ module AwsAdvancedRubyDriverWrapper
       module_function
 
       # Main entry point. The driver_name is provided by the wrapper class
-      # (e.g. :postgresql from WrapperPgConnection, :mysql2 from WrapperMysql2Client).
+      # (e.g. :postgresql from WrapperPgConnection, :mysql2 from WrapperMysql2Client, :trilogy from
+      # WrapperTrilogyClient).
       #
-      # @param driver_name [Symbol] :postgresql or :mysql2
+      # @param driver_name [Symbol] :postgresql, :mysql2 or :trilogy
       def parse(driver_name, *args, **kwargs)
         if driver_name == :mysql2 && !args.empty? && !args.first.is_a?(Hash)
           raise ArgumentError,

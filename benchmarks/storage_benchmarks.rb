@@ -113,9 +113,9 @@ report = Benchmark.ips do |x|
   x.report('sliding_cache_compute_if_absent_hit') { sliding_cache.compute_if_absent(HOT_KEY) { 'value' } }
 
   # -- StorageService --
-  x.report('storage_service_get_topology') { storage_service.get(TOPOLOGY_CACHE, next_key.call) }
+  x.report('storage_service_get_topology') { storage_service.get(TOPOLOGY_CACHE, next_key.call, register_access: true) }
   x.report('storage_service_get_topology_no_data_access') do
-    storage_service.get(TOPOLOGY_CACHE, next_key.call, register_access: false)
+    storage_service.get(TOPOLOGY_CACHE, next_key.call)
   end
   x.report('storage_service_get_miss') { storage_service.get(TOPOLOGY_CACHE, 'absent') }
   x.report('storage_service_exists') { storage_service.exists?(TOPOLOGY_CACHE, HOT_KEY) }

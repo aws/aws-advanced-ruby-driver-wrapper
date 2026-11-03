@@ -61,6 +61,10 @@ module Integration
         # add exporters of its own, pointed at localhost.
         ENV['OTEL_TRACES_EXPORTER'] = 'none'
         ENV['OTEL_METRICS_EXPORTER'] = 'none'
+        # Export each counter's increments rather than its running total. The collector's CloudWatch
+        # exporter turns running totals into increments itself, and drops the first value of each
+        # counter in doing so, which loses that counter's first increment in every test run.
+        ENV['OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE'] = 'delta'
 
         OpenTelemetry::SDK.configure do |config|
           config.service_name = SERVICE_NAME

@@ -41,6 +41,17 @@ module AwsAdvancedRubyDriverWrapper
         PropertyDefinition::IAM_EXPIRATION_SEC.validate!(expiration)
         service_container.storage_service.register(IAM_TOKEN_CACHE_NAME, ttl: expiration)
         @subscribed_methods = SUBSCRIBED_METHODS
+
+        @telemetry_factory = service_container.telemetry_factory
+        @fetch_token_counter = @telemetry_factory.create_counter('iam.fetch_token.count')
+        @telemetry_factory.create_gauge('iam.token_cache.size', &self.class.token_cache_size(service_container.storage_service))
+      end
+
+      # The callback of a token cache size gauge. It is built here rather than in an instance, because
+      # a gauge is kept for the whole process and a block built in an instance would keep that
+      # instance, and the connection it belongs to, alive with it.
+      def self.token_cache_size(storage_service)
+        -> { storage_service.size(IAM_TOKEN_CACHE_NAME) }
       end
 
       def connect(host_info, driver_props, _is_initial_connection, pipeline_callable)
@@ -128,8 +139,11 @@ module AwsAdvancedRubyDriverWrapper
       # and, when there is a cache key, caches it. Without a snapshot the provider is passed as is,
       # and signing fails for lack of credentials.
       def fetch_and_cache_token(region, host, port, user, credentials, cache_key, expiration)
-        token = Aws::RDS::AuthTokenGenerator.new(credentials: credentials || @credentials_provider)
-                                            .auth_token(region:, endpoint: "#{host}:#{port}", user_name: user)
+        @fetch_token_counter.inc
+        token = Utils::IamAuthUtils.generate_token(
+          region:, hostname: host, port:, user:, credentials_provider: credentials || @credentials_provider,
+          telemetry_factory: @telemetry_factory
+        )
         if cache_key
           @service_container.storage_service.set(
             IAM_TOKEN_CACHE_NAME, cache_key, Utils::IamAuthUtils.build_token_entry(token, expiration)

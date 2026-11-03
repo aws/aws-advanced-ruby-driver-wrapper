@@ -16,7 +16,7 @@
 
 require_relative '../spec_helper'
 require 'aws_advanced_ruby_driver_wrapper/mysql'
-require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/mysql2_driver_dialect'
 require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
 require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 
@@ -45,7 +45,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
     # Which methods go through the pipeline is the dialect's answer, and it is memoized here, so it is
     # set rather than reached for through a service container that is not connected to anything.
     client.instance_variable_set(
-      :@network_bound_methods, AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect::NETWORK_BOUND_METHODS
+      :@network_bound_methods, AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect::NETWORK_BOUND_METHODS
     )
     client
   end

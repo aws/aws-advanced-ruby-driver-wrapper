@@ -575,6 +575,133 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
     end
   end
 
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    let(:result) { AwsAdvancedRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, home_writer) }
+    let(:service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        connection_service, dialect_service, nil, host_service, plugin_manager, session_state_service, nil, nil,
+        AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props)
+      )
+    end
+
+    def fail_over
+      in_application_span { expect { plugin.send(:failover) }.to raise_error(errors::AwsError) }
+    end
+
+    context 'in strict_writer mode' do
+      before do
+        props[:in_home_failover_mode] = 'strict_writer'
+        props[:out_of_home_failover_mode] = 'strict_writer'
+        init
+      end
+
+      it 'records the failover as a span and counts it as a writer failover' do
+        allow(retry_util).to receive(:connect_to_writer).and_return(result)
+        triggered = counter_value('writer_failover.triggered.count')
+        succeeded = counter_value('writer_failover.completed.success.count')
+
+        fail_over
+
+        expect(span_named('global database failover').status.code).to eq(OpenTelemetry::Trace::Status::OK)
+        expect(counter_value('writer_failover.triggered.count')).to eq(triggered + 1)
+        expect(counter_value('writer_failover.completed.success.count')).to eq(succeeded + 1)
+      end
+
+      it 'counts a failover that reconnects inside a transaction as a successful writer failover' do
+        allow(retry_util).to receive(:connect_to_writer).and_return(result)
+        allow(session_state_service).to receive(:in_transaction?).and_return(true)
+        succeeded = counter_value('writer_failover.completed.success.count')
+
+        fail_over
+
+        expect(span_named('global database failover').status.code).to eq(OpenTelemetry::Trace::Status::OK)
+        expect(counter_value('writer_failover.completed.success.count')).to eq(succeeded + 1)
+      end
+
+      it 'counts a failover that could not find the new writer as a failed writer failover' do
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(false)
+        triggered = counter_value('writer_failover.triggered.count')
+        failed = counter_value('writer_failover.completed.failed.count')
+
+        fail_over
+
+        expect(span_named('global database failover').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
+        expect(counter_value('writer_failover.triggered.count')).to eq(triggered + 1)
+        expect(counter_value('writer_failover.completed.failed.count')).to eq(failed + 1)
+      end
+    end
+
+    context 'in a reader mode' do
+      before do
+        props[:in_home_failover_mode] = 'strict_home_reader'
+        props[:out_of_home_failover_mode] = 'strict_out_of_home_reader'
+        init
+      end
+
+      it 'counts the failover as a reader failover' do
+        allow(retry_util).to receive(:connect_to_allowed_host).and_return(result)
+        triggered = counter_value('reader_failover.triggered.count')
+        writer_triggered = counter_value('writer_failover.triggered.count')
+
+        fail_over
+
+        expect(counter_value('reader_failover.triggered.count')).to eq(triggered + 1)
+        expect(counter_value('writer_failover.triggered.count')).to eq(writer_triggered)
+      end
+
+      it 'counts a failed failover as a failed reader failover' do
+        allow(retry_util).to receive(:connect_to_allowed_host).and_raise(Timeout::Error)
+        failed = counter_value('reader_failover.completed.failed.count')
+
+        fail_over
+
+        expect(counter_value('reader_failover.completed.failed.count')).to eq(failed + 1)
+        expect(span_named('global database failover').status.code).to eq(OpenTelemetry::Trace::Status::ERROR)
+      end
+    end
+
+    context 'when the new writer is in an inaccessible region' do
+      let(:topology) { [remote_writer, home_reader] }
+
+      before do
+        props[:accessible_regions] = 'us-east-1'
+        props[:in_home_failover_mode] = 'strict_writer'
+        props[:out_of_home_failover_mode] = 'strict_writer'
+        init
+      end
+
+      it 'counts the failover as failed exactly once' do
+        triggered = counter_value('writer_failover.triggered.count')
+        failed = counter_value('writer_failover.completed.failed.count')
+
+        fail_over
+
+        expect(counter_value('writer_failover.triggered.count')).to eq(triggered + 1)
+        expect(counter_value('writer_failover.completed.failed.count')).to eq(failed + 1)
+      end
+    end
+
+    context 'with telemetry_failover_additional_top_trace enabled' do
+      let(:props) { Concurrent::Map.new.tap { |map| map[:telemetry_failover_additional_top_trace] = true } }
+
+      before do
+        props[:in_home_failover_mode] = 'strict_writer'
+        props[:out_of_home_failover_mode] = 'strict_writer'
+        init
+      end
+
+      it 'also submits the failover as a trace of its own' do
+        allow(retry_util).to receive(:connect_to_writer).and_return(result)
+
+        fail_over
+
+        expect(span_named('copy: global database failover').parent_span_id).to eq(OpenTelemetry::Trace::INVALID_SPAN_ID)
+      end
+    end
+  end
+
   describe 'unsupported inherited failover paths' do
     it 'raises for failover_reader' do
       expect { plugin.send(:failover_reader) }.to raise_error(NotImplementedError)

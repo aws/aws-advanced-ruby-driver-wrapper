@@ -35,7 +35,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
   let(:host_info)            { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: custom_url) }
   let(:mock_rds_client)      { instance_double(Aws::RDS::Client).as_null_object }
   let(:mock_storage_service) { double('StorageService', register: nil, get: nil, set: nil, remove: nil, clear: nil) }
-  let(:service_container)    { double('ServiceContainer', storage_service: mock_storage_service) }
+  let(:service_container)    { AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(storage_service: mock_storage_service) }
   let(:rds_client_func)      { ->(_host, _region) { mock_rds_client } }
 
   def build_monitor(refresh_rate_sec: 0.05, backoff_factor: 2, max_refresh_rate_sec: 0.5)
@@ -258,6 +258,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::CustomEndpoint::CustomEndp
       monitor.stop
 
       expect(call_count).to be >= 1
+    end
+  end
+
+  describe 'telemetry' do
+    include TelemetryHelper
+
+    let(:service_container) do
+      AwsAdvancedRubyDriverWrapper::Services::ServiceContainer.new(
+        storage_service: mock_storage_service,
+        telemetry_factory: AwsAdvancedRubyDriverWrapper::Utils::Telemetry::TelemetryFactory.new(telemetry_props)
+      )
+    end
+
+    it 'counts each time the endpoint info changes, and not when it stays the same' do
+      stub_rds_response(static_members: %w[member1 member2])
+      cache = {}
+      allow(mock_storage_service).to receive(:set) { |name, _key, value| cache[name] = value }
+      allow(mock_storage_service).to receive(:get) { |name, _key| cache[name] }
+      monitor = build_monitor(refresh_rate_sec: 0.001)
+      changed = counter_value('custom_endpoint.info_changed.count')
+
+      2.times { monitor.send(:run_monitor_iteration) }
+
+      expect(counter_value('custom_endpoint.info_changed.count')).to eq(changed + 1)
     end
   end
 end

@@ -17,7 +17,7 @@
 require 'aws_advanced_ruby_driver_wrapper/db_dialects/aurora_mysql_dialect'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::DbDialects::AuroraMysqlDialect do
-  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
   subject(:dialect) { described_class.new(driver_dialect) }
 
   let(:connection) { instance_double('Mysql2::Client', closed?: false) }

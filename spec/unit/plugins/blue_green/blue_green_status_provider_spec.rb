@@ -280,5 +280,182 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::StatusProvider,
         expect(provider.instance_variable_get(:@summary_status)).to equal(first_summary)
       end
     end
+
+    context 'drop-blue-connections marker' do
+      let(:store)      { {} }
+      let(:marker_key) { bg::BlueGreenPlugin.drop_marker_key(bgd_id) }
+
+      def markers
+        store.values.grep(bg::DropBlueConnectionsMarker)
+      end
+
+      def current_marker
+        store[marker_key]
+      end
+
+      before do
+        # A stateful storage stub so an activation can read back the pending marker it stored.
+        allow(storage_service).to receive(:set) { |_ns, key, value| store[key] = value }
+        allow(storage_service).to receive(:get) { |_ns, key, **| store[key] }
+        allow(storage_service).to receive(:remove) { |_ns, key| store.delete(key) }
+        allow(event_publisher).to receive(:publish)
+
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::CREATED, start_ip_addresses_by_host: blue_ip_map))
+        provider.prepare_status(role::TARGET, target_status(phase: phase::CREATED, start_ip_addresses_by_host: green_ip_map))
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::PREPARATION, start_ip_addresses_by_host: blue_ip_map))
+      end
+
+      it 'creates a pending marker covering the blue hosts and their IPs at IN_PROGRESS' do
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+
+        marker = current_marker
+        expect(marker).to be_a(bg::DropBlueConnectionsMarker)
+        expect(marker.active?).to be(false)
+        expect(marker.blue_hosts).to include(blue_writer_host, blue_reader_host, '10.0.0.1', '10.0.0.2')
+      end
+
+      # The IP map can report endpoints in a different case than the topology; role_by_host is downcased,
+      # so the IPs must be keyed the same way or they would be dropped from the marker.
+      it 'includes blue IPs even when the IP map reports hosts in mixed case' do
+        mixed_case_ip_map = { blue_writer_host.upcase => '10.0.0.1', blue_reader_host.upcase => '10.0.0.2' }
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: mixed_case_ip_map))
+
+        expect(current_marker.blue_hosts).to include('10.0.0.1', '10.0.0.2')
+      end
+
+      it 'activates the marker at POST, keeping its identity' do
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+        pending_id = current_marker.id
+
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(current_marker.active?).to be(true)
+        expect(current_marker.id).to eq(pending_id)
+      end
+
+      it 'keeps the active marker after a completed switchover resets context' do
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+        provider.prepare_status(
+          role::SOURCE,
+          source_status(phase: phase::COMPLETED, start_ip_addresses_by_host: blue_ip_map, all_start_topology_ip_changed: true)
+        )
+        provider.prepare_status(
+          role::TARGET,
+          target_status(phase: phase::COMPLETED, start_ip_addresses_by_host: green_ip_map,
+                        all_start_topology_endpoints_removed: true, all_topology_changed: true)
+        )
+
+        expect(current_marker).to be_a(bg::DropBlueConnectionsMarker)
+        expect(current_marker.active?).to be(true)
+      end
+
+      it 'discards the marker on rollback' do
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+        provider.prepare_status(role::TARGET, target_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: green_ip_map))
+        expect(current_marker).to be_a(bg::DropBlueConnectionsMarker)
+
+        # Target regresses to CREATED -> rollback -> context reset discards the marker.
+        provider.prepare_status(role::TARGET, target_status(phase: phase::CREATED, start_ip_addresses_by_host: green_ip_map))
+
+        expect(current_marker).to be_nil
+      end
+
+      it 'does not create a marker at POST if it never saw IN_PROGRESS (started mid-switchover)' do
+        # Jump straight to POST without an IN_PROGRESS observation, as if the provider began watching
+        # the deployment after it was already past IN_PROGRESS. It has no reliable switchover time, so
+        # it cannot tell which connections predate the switchover and must invalidate nothing.
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(markers).to be_empty
+      end
+
+      it 'does not create a marker at COMPLETED if it never saw IN_PROGRESS (started while already COMPLETED)' do
+        # A deployment stays in SWITCHOVER_COMPLETED until it is deleted, so a process that starts then
+        # sees COMPLETED as its first status. Creating a marker with "now" would invalidate every
+        # connection this process opened before now — including connections opened to green after the
+        # switchover — and would repeat each time the marker's TTL lapses and COMPLETED is re-processed.
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::COMPLETED, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(markers).to be_empty
+      end
+
+      it 'activates the marker before publishing the POST status' do
+        # The held-call re-check in BlueGreenPlugin#execute relies on this ordering: the marker must be
+        # active by the time the POST status is published and wakes calls held in SuspendExecuteRouting,
+        # or a released call could re-check against a still-pending marker and run on retired blue.
+        marker_active_when_post_published = nil
+        allow(storage_service).to receive(:set) do |ns, key, value|
+          if ns == bg::BlueGreenPlugin::BLUE_GREEN_NAME && value.respond_to?(:current_phase) && value.current_phase == phase::POST
+            marker_active_when_post_published = store[marker_key]&.active?
+          end
+          store[key] = value
+        end
+
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(marker_active_when_post_published).to be(true)
+      end
+
+      it 'stores the marker in the long-lived drop-marker partition, not the status partition' do
+        marker_namespaces = []
+        allow(storage_service).to receive(:set) do |ns, key, value|
+          marker_namespaces << ns if value.is_a?(bg::DropBlueConnectionsMarker)
+          store[key] = value
+        end
+
+        provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+
+        expect(marker_namespaces).not_to be_empty
+        expect(marker_namespaces).to all(eq(bg::BlueGreenPlugin::DROP_MARKER_NAME))
+        expect(marker_namespaces).not_to include(bg::BlueGreenPlugin::BLUE_GREEN_NAME)
+      end
+
+      context 'when the switchover timer expires' do
+        it 'does not create a marker when it times out in PREPARATION' do
+          # The before block leaves the provider at PREPARATION. Re-sending the identical status runs
+          # only the timer-expiry check.
+          allow_any_instance_of(bg::SwitchoverTimer).to receive(:expired?).and_return(true)
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::PREPARATION, start_ip_addresses_by_host: blue_ip_map))
+
+          expect(markers).to be_empty
+        end
+
+        it 'discards the pending marker without activating it when it times out in IN_PROGRESS' do
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+          expect(current_marker.active?).to be(false)
+
+          allow_any_instance_of(bg::SwitchoverTimer).to receive(:expired?).and_return(true)
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+
+          # A timeout in IN_PROGRESS could still roll back, so the marker is never activated. It is also
+          # discarded rather than left pending, since no later phase will arrive to activate it.
+          expect(current_marker).to be_nil
+          expect(markers).to be_empty
+        end
+
+        it 'keeps the marker active when it times out in POST' do
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+          expect(current_marker.active?).to be(true)
+
+          allow_any_instance_of(bg::SwitchoverTimer).to receive(:expired?).and_return(true)
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+
+          expect(current_marker.active?).to be(true)
+        end
+      end
+
+      context 'when bg_drop_blue_connections is disabled' do
+        let(:props) { Concurrent::Map.new.tap { |p| p[:bg_drop_blue_connections] = false } }
+
+        it 'never creates a marker' do
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::IN_PROGRESS, start_ip_addresses_by_host: blue_ip_map))
+          provider.prepare_status(role::SOURCE, source_status(phase: phase::POST, start_ip_addresses_by_host: blue_ip_map))
+          expect(markers).to be_empty
+        end
+      end
+    end
   end
 end

@@ -60,9 +60,11 @@ module AwsAdvancedRubyDriverWrapper
           NullTelemetryContext::INSTANCE
         end
 
-        def in_context(_name, _trace_level, record_result: false)
+        def in_context(_name, _trace_level, record_result: false, record_failure: false)
           yield NullTelemetryContext::INSTANCE
         end
+
+        def post_copy(_context, _trace_level); end
 
         def create_counter(_name)
           NullTelemetryCounter::INSTANCE

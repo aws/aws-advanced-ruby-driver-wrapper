@@ -51,7 +51,7 @@ RSpec.describe 'ActiveRecord::ConnectionAdapters::AwsConnectionHandler' do
 
     handler.clear_all_connections!
 
-    expect(storage.get(topology, 'my-cluster', register_access: false)).to be_nil
+    expect(storage.get(topology, 'my-cluster')).to be_nil
   end
 
   it 'clears the cached Blue/Green status so the next connection starts a new provider' do
@@ -61,7 +61,7 @@ RSpec.describe 'ActiveRecord::ConnectionAdapters::AwsConnectionHandler' do
 
     handler.clear_all_connections!
 
-    expect(storage.get(blue_green::BLUE_GREEN_NAME, '1', register_access: false)).to be_nil
+    expect(storage.get(blue_green::BLUE_GREEN_NAME, '1')).to be_nil
   end
 
   it 'does not fail when no wrapper connection has registered the caches' do

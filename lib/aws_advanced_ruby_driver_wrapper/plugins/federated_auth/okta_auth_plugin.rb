@@ -28,6 +28,8 @@ module AwsAdvancedRubyDriverWrapper
       # configuration (it uses app_id, the AWS app configured on Okta) and in the
       # shape of the IdP HTTP flow.
       class OktaAuthPlugin < AwsAdvancedRubyDriverWrapper::Plugins::FederatedAuth::BaseSamlAuthPlugin
+        TELEMETRY_PREFIX = 'okta'
+        TELEMETRY_FETCH_SAML = 'Fetch OKTA SAML Assertion'
         OKTA_AWS_APP_NAME = 'amazon_aws'
         # Extracts the value attribute of the hidden SAMLResponse input regardless
         # of attribute order.

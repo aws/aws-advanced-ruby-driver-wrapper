@@ -32,6 +32,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#database_engine' do
+    it 'is PostgreSQL' do
+      expect(dialect.database_engine).to eq(:postgresql)
+    end
+  end
+
   describe '#connect' do
     it 'calls PG::Connection.new with prepared config' do
       expected = { dbname: 'testdb', user: 'pguser', host: 'db.example.com', port: 5432 }

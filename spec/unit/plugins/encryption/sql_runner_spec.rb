@@ -21,7 +21,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::SqlRunner do
   # The runner picks its behaviour from the dialect class, so these have to be real dialects
   # rather than doubles.
   let(:pg_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
-  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::MysqlDriverDialect.new }
+  let(:mysql_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
   let(:pg_runner) { described_class.new(pg_dialect) }
   let(:mysql_runner) { described_class.new(mysql_dialect) }
   let(:connection) { double('Connection') }

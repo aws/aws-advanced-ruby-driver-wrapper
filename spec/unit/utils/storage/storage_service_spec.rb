@@ -72,6 +72,40 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Storage::StorageService do
     end
   end
 
+  describe 'data access events' do
+    let(:event) { AwsAdvancedRubyDriverWrapper::Utils::Events::DataAccessEvent.new(data_type: :data, key: :a) }
+
+    before do
+      allow(event_publisher).to receive(:publish)
+      service.register(:data, ttl: 60)
+      service.set(:data, :a, 'value')
+    end
+
+    %i[get get_if_registered].each do |method|
+      describe "##{method}" do
+        it 'does not publish by default' do
+          expect(service.public_send(method, :data, :a)).to eq('value')
+          expect(event_publisher).not_to have_received(:publish)
+        end
+
+        it 'publishes a DataAccessEvent when register_access is true' do
+          expect(service.public_send(method, :data, :a, register_access: true)).to eq('value')
+          expect(event_publisher).to have_received(:publish).with(event).once
+        end
+
+        it 'does not publish when the item is missing' do
+          expect(service.public_send(method, :data, :missing, register_access: true)).to be_nil
+          expect(event_publisher).not_to have_received(:publish)
+        end
+      end
+    end
+
+    it 'does not publish from #get_if_registered when the cache is not registered' do
+      expect(service.get_if_registered(:unknown, :a, register_access: true)).to be_nil
+      expect(event_publisher).not_to have_received(:publish)
+    end
+  end
+
   describe '#exists?' do
     before { service.register(:data, ttl: 0.05) }
 

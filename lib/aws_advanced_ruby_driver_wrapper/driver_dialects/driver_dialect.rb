@@ -38,6 +38,12 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # The database engine the driver talks to, which decides the database dialects that apply.
+      # @return [Symbol] +:mysql+ or +:postgresql+
+      def database_engine
+        raise NotImplementedError
+      end
+
       def connect(host_info, config)
         raise NotImplementedError
       end
