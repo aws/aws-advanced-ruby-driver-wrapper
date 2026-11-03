@@ -214,8 +214,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: tables.freeze,
             write_columns: [].freeze,
             where_columns: where_cols.freeze,
-            for_update: FOR_UPDATE.match?(sql),
-            parameterized: placeholder_count(sql).positive?
+            for_update: FOR_UPDATE.match?(sql)
           )
         end
 
@@ -229,7 +228,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: bound.freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: placeholder_count(sql).positive?,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: complete
           )
@@ -249,7 +247,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: set_cols.freeze,
             where_columns: where_cols.freeze,
             for_update: false,
-            parameterized: placeholder_count(sql).positive?,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: complete
           )
@@ -283,7 +280,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: extract_where_columns(sql, first_index),
             for_update: false,
-            parameterized: placeholder_count(sql).positive?,
             unbound_write_columns: unbound.freeze,
             write_columns_complete: false
           )
@@ -307,8 +303,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: table ? [table].freeze : [].freeze,
             write_columns: [].freeze,
             where_columns: where_cols.freeze,
-            for_update: false,
-            parameterized: placeholder_count(sql).positive?
+            for_update: false
           )
         end
 
@@ -319,8 +314,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: table ? [table].freeze : [].freeze,
             write_columns: [].freeze,
             where_columns: [].freeze,
-            for_update: false,
-            parameterized: false
+            for_update: false
           )
         end
 
@@ -331,8 +325,7 @@ module AwsAdvancedRubyDriverWrapper
             tables: table ? [table].freeze : [].freeze,
             write_columns: [].freeze,
             where_columns: [].freeze,
-            for_update: false,
-            parameterized: false
+            for_update: false
           )
         end
 

@@ -304,24 +304,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::MysqlStatementAnalyz
     end
   end
 
-  describe '.analyze parameterized' do
-    it 'returns true when SQL contains ?' do
-      expect(subject.analyze('SELECT * FROM users WHERE id = ?').parameterized).to be true
-    end
-
-    it 'returns false when SQL has no ?' do
-      expect(subject.analyze('SELECT * FROM users').parameterized).to be false
-    end
-
-    it 'returns false when the only ? is inside a string literal or a comment' do
-      expect(subject.analyze("SELECT * FROM users WHERE note = 'what?'").parameterized).to be false
-      expect(subject.analyze('SELECT * FROM users /* why? */').parameterized).to be false
-      expect(subject.analyze("UPDATE users SET note = 'what?' WHERE id = 1").parameterized).to be false
-      expect(subject.analyze("INSERT INTO users (note) VALUES ('what?')").parameterized).to be false
-      expect(subject.analyze("DELETE FROM users WHERE note = 'what?'").parameterized).to be false
-    end
-  end
-
   describe 'MySQL-specific syntax' do
     it 'handles LIMIT' do
       result = subject.analyze('SELECT `name` FROM `users` WHERE `active` = ? LIMIT 10')

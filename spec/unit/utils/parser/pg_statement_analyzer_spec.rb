@@ -134,36 +134,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer 
     end
   end
 
-  describe '.analyze parameterized' do
-    it 'returns true when SQL contains $1-style parameters' do
-      expect(subject.analyze('SELECT * FROM users WHERE id = $1').parameterized).to be true
-    end
-
-    it 'returns true when SQL contains multiple positional parameters' do
-      expect(subject.analyze('SELECT * FROM users WHERE name = $1 AND age = $2').parameterized).to be true
-    end
-
-    it 'returns false when SQL has no parameters' do
-      expect(subject.analyze('SELECT * FROM users').parameterized).to be false
-    end
-
-    it 'returns false when $ appears only inside a string literal' do
-      expect(subject.analyze("SELECT * FROM notes WHERE body = 'Suzy paid $5'").parameterized).to be false
-    end
-
-    it 'returns false when $ appears in a string literal in an INSERT' do
-      expect(subject.analyze("INSERT INTO notes (body) VALUES ('Price is $10')").parameterized).to be false
-    end
-
-    it 'returns false when $ appears in a string literal in an UPDATE' do
-      expect(subject.analyze("UPDATE notes SET body = 'Cost: $20' WHERE id = 1").parameterized).to be false
-    end
-
-    it 'returns true when a real $1 param coexists with a $ in a string literal' do
-      expect(subject.analyze("SELECT * FROM notes WHERE id = $1 AND body != 'free $'").parameterized).to be true
-    end
-  end
-
   describe '.analyze where_columns' do
     it 'extracts column from a plain equality' do
       result = subject.analyze('SELECT * FROM t WHERE id = $1')
@@ -341,7 +311,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::Parser::PgStatementAnalyzer 
       expect(result.tables).to eq(['users'])
       expect(result.write_columns.map { |c| [c.column_name, c.parameter_index] }).to eq([['name', 1], ['ssn', 2]])
       expect(result.write_columns_complete).to be(true)
-      expect(result.parameterized).to be(true)
     end
 
     it 'reads it past the parameter types it declares' do

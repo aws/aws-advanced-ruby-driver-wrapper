@@ -29,8 +29,8 @@ module AwsAdvancedRubyDriverWrapper
       # at all, which is what an INSERT with no column list, an +INSERT ... SELECT+, and a statement
       # that would not parse all look like.
       QueryAnalysis = Data.define(:query_type, :tables, :write_columns, :where_columns, :for_update,
-                                  :parameterized, :unbound_write_columns, :write_columns_complete) do
-        def initialize(query_type:, tables:, write_columns:, where_columns:, for_update:, parameterized:,
+                                  :unbound_write_columns, :write_columns_complete) do
+        def initialize(query_type:, tables:, write_columns:, where_columns:, for_update:,
                        unbound_write_columns: [].freeze, write_columns_complete: true)
           super
         end
@@ -44,7 +44,6 @@ module AwsAdvancedRubyDriverWrapper
             write_columns: [].freeze,
             where_columns: [].freeze,
             for_update: false,
-            parameterized: false,
             write_columns_complete: false
           )
         end
