@@ -10,7 +10,9 @@ Maintainer note (AI: ignore this comment). This file is a snapshot of one wrappe
 - the default plugin list: §4.1 (the single source; other sections reference it);
 - parameters and defaults: §5 and §6;
 - "Known issue" notes: remove or reword any the release fixes;
-- §17 when a listed feature is added.
+- §17 when a listed feature is added;
+- the token counts for this file in README.md ("Configuring the Wrapper with AI Tools", including the ChatGPT figure) -
+  re-measure after any substantial change to this file, and keep them rounded.
 
 skills/ruby-wrapper-troubleshooting-assistant/SKILL.md repeats some of these facts. When you change any of the
 following here, update the matching section there too:
@@ -559,7 +561,7 @@ production:
 
 Without distinct `cluster_id` values (default `'1'`), both clusters' topologies collide in the shared cache → failover can reconnect to the wrong cluster, and the topology monitor mixes stale data. Rule of thumb: same physical cluster (writer and reader entries, several pools) → same `cluster_id`; different clusters → different `cluster_id`.
 
-An Aurora Global Database counts as one cluster: every `gdb_failover` connection to it (§3.9, §3.10) shares one `cluster_id`, whichever region's endpoint it uses, because the global dialects read one topology covering all regions. A connection that treats one region's cluster on its own (`failover` with `aurora-pg` / `aurora-mysql` on a regional endpoint) sees only that region's instances, so give it its own `cluster_id`.
+An Aurora Global Database counts as one cluster: every `gdb_failover` connection to it (§3.9, §3.10) shares one `cluster_id`, whichever region's endpoint it uses, because the global dialects read one topology covering all regions. A connection that treats one region's cluster on its own (`failover` with `wrapper_dialect` explicitly set to `aurora-pg` / `aurora-mysql` on a regional endpoint) sees only that region's instances, so give it its own `cluster_id`. With `wrapper_dialect` unset, a member cluster's endpoint is detected as `global-aurora-*` and reads the global topology.
 
 ### 3.13 Aurora custom endpoint
 
@@ -1377,7 +1379,7 @@ AwsAdvancedRubyDriverWrapper.logger = wrapper_logger
 
 Outside Rails, or when the wrapper still uses its default logger, `AwsAdvancedRubyDriverWrapper.logger.level = Logger::DEBUG` affects only the wrapper. To send wrapper messages to the app log at the app's normal level, `AwsAdvancedRubyDriverWrapper.logger = Rails.logger` is fine - just don't use it for debug.
 
-The wrapper's log lines don't include passwords, tokens, or secret values - they show hostnames, roles, and error messages. Even so, keep `DEBUG` to a diagnosis window in production (volume, and connection metadata such as hostnames).
+The wrapper's log lines don't include passwords, IAM tokens, or secret values - they show hostnames, roles, and error messages. Those error messages come from the driver and can contain SQL fragments and column values (e.g. a unique-violation `DETAIL` line). Even so, keep `DEBUG` to a diagnosis window in production (volume, and connection metadata such as hostnames).
 
 ### 14.2 Error classes to recognize
 
