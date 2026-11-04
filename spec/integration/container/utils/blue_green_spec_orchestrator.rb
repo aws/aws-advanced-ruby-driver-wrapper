@@ -138,7 +138,37 @@ module Integration
       @combo_results.select { |key, _| key.start_with?("#{combo}::") }.values
     end
 
+    # Whether the switchover run includes the extra pg verify-full connection that exercises
+    # hostaddr socket pinning. Only pg can split the socket (hostaddr) from the TLS server name
+    # (host), and verify-full needs a CA bundle that the environment does not provide by default, so
+    # this is gated on pg + an explicitly configured CA (BG_TLS_VERIFY_FULL_CA). The spec skips when
+    # it is false.
+    def tls_verify_enabled?
+      aurora_deployment? && @driver == TestDriver::PG && !tls_verify_ca_path.nil?
+    end
+
+    # Host-verification results collected by the verify-full connection, across all blue hosts.
+    def tls_verify_host_verification_results
+      combo_results_for('bg-tls').flat_map(&:host_verification_results)
+    end
+
     private
+
+    # Path to a CA bundle for a verify-full connection, from BG_TLS_VERIFY_FULL_CA, or nil when it is
+    # unset or not a readable file (in which case the verify-full connection is not added at all).
+    def tls_verify_ca_path
+      return @tls_verify_ca_path if defined?(@tls_verify_ca_path)
+
+      path = ENV.fetch('BG_TLS_VERIFY_FULL_CA', nil)
+      @tls_verify_ca_path = path && File.readable?(path) ? path : nil
+    end
+
+    # Config for the verify-full connection: the plain bg wrapper config plus TLS verify-full against
+    # the resolved CA bundle. Socket pinning to the instance IP during switchover is applied by the
+    # pg driver dialect (hostaddr), so no extra property is needed here.
+    def tls_verify_config_for(host, host_id)
+      wrapper_config_for(host, host_id, combo: 'bg').merge(sslmode: 'verify-full', sslrootcert: tls_verify_ca_path)
+    end
 
     def rds_utils
       AwsAdvancedRubyDriverWrapper::Utils::RdsUtils
@@ -304,6 +334,8 @@ module Integration
                    blue_hosts.size * 2 # Execute, NewConn (no HostVerification on RDS Multi-AZ)
                  end
       end
+      # Per blue host: the extra verify-full connection (pg + CA bundle only)
+      count += blue_hosts.size if tls_verify_enabled?
       # Per green host: connectivity + DNS
       count += green_hosts.size * 2
       # Control: switchover trigger + rollback detection + readiness
@@ -459,6 +491,20 @@ module Integration
             end
           end
         end
+
+        # One extra verify-full connection (pg only, when a CA bundle is configured). Its switchover-
+        # window reconnections exercise the pg hostaddr socket-pinning path: the socket is pinned to
+        # the instance IP while the certificate still verifies against the hostname. Non-fatal, so a
+        # misconfigured CA cannot fail unrelated examples.
+        next unless tls_verify_enabled?
+
+        tls_result = PluginComboResults.new(combo: 'bg-tls', host_id: host_id)
+        @combo_results["bg-tls::#{host_id}"] = tls_result
+        @threads << build_wrapper_tls_host_verification_thread(
+          host_id: "bg-tls-#{host_id}", driver: @driver, config: tls_verify_config_for(host, host_id),
+          start_latch: start_latch, stop: @stop, finish_latch: finish_latch,
+          results: tls_result, global: @global_results
+        )
       end
     end
 

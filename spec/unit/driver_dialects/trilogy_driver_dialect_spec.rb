@@ -188,12 +188,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialec
     end
   end
 
-  describe '#sql_state' do
-    it 'is nil, as trilogy errors carry only an error code' do
-      expect(dialect.sql_state(Trilogy::ProtocolError.from_code('read only', 1290))).to be_nil
-    end
-  end
-
   describe '#network_bound_methods' do
     it 'includes the trilogy calls that reach the server' do
       expect(dialect.network_bound_methods).to include(
@@ -218,6 +212,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialec
       props = { read_timeout: 30 }
       dialect.apply_monitoring_defaults(props)
       expect(props).to eq(read_timeout: 30, write_timeout: 5, connect_timeout: 5)
+    end
+  end
+
+  describe '#tls_ca_property_key' do
+    # trilogy names the TLS CA option ssl_ca, not sslca as mysql2 does, so Blue/Green substitute
+    # routing must look under the trilogy key to tell that TLS is active.
+    it 'is :ssl_ca' do
+      expect(dialect.tls_ca_property_key).to eq(:ssl_ca)
+    end
+  end
+
+  describe '#sql_state' do
+    # trilogy errors carry no SQLSTATE, only a numeric error code. Error classification is therefore
+    # done from the code in TrilogyErrorHandler, not here; sql_state stays nil (see the handler spec).
+    it 'is nil, as trilogy errors carry only an error code' do
+      expect(dialect.sql_state(Trilogy::ProtocolError.from_code('no such table', 1146))).to be_nil
     end
   end
 end

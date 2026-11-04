@@ -164,6 +164,21 @@ module AwsAdvancedRubyDriverWrapper
         @error_handler.read_only_error?(error)
       end
 
+      # Whether the driver reported the error as a database error (it carries a SQLSTATE, or for
+      # trilogy a MySQL error code). Not a strict server-vs-client split; see ErrorHandler#database_error?.
+      # @param error [Exception]
+      # @return [Boolean]
+      def database_error?(error)
+        @error_handler.database_error?(error)
+      end
+
+      # Whether the error is a schema/syntax error (SQLSTATE class '42' or its per-driver equivalent).
+      # @param error [Exception]
+      # @return [Boolean]
+      def schema_error?(error)
+        @error_handler.schema_error?(error)
+      end
+
       private
 
       # Resolves the initial database dialect from the initial connection info.

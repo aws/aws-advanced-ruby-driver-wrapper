@@ -52,57 +52,37 @@ module AwsAdvancedRubyDriverWrapper
                     bg_plugin: nil)
             plugin_manager = service_container.plugin_manager
             dialect_service = service_container.dialect_service
+            driver_dialect = dialect_service.driver_dialect
 
             unless Utils::RdsUtils.ip?(@substitute_host.host)
               return open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal,
                                      bg_plugin)
             end
 
-            # mysql2 uses :host for both socket connection and TLS CN verification.
-            # Connecting to a raw IP with TLS active causes a CN mismatch.
-            # Fall back to connecting via hostname (DNS will resolve to the correct IP post-switchover),
-            # matching the effective behaviour of the Java/Go MySQL drivers which use the original
-            # hostname for TLS regardless of the socket address.
-            if driver_props[:sslca] && !plugin_manager.iam_token_plugin_in_use?
+            # The substitute host is a raw IP, so a connection made by hostname could resolve (via DNS)
+            # to the old instance during the switchover window. Connect to the IP directly instead.
+            if plugin_manager.iam_token_plugin_in_use?
+              return apply_iam(service_container, driver_props, wrapper_props, is_initial_connection, bg_plugin)
+            end
+
+            # pg can pin the socket to the IP (hostaddr) while keeping the original hostname for TLS
+            # verification, so the pinned connection reaches the right instance and still passes
+            # verify-full whatever the CA source.
+            pinned_props = driver_dialect.props_pinned_to_ip(driver_props, @substitute_host.host)
+            if pinned_props
               hostname_host = @substitute_host.deep_dup(host: @host)
-              return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal,
+              return open_connection(plugin_manager, hostname_host, pinned_props, wrapper_props, is_initial_connection, is_internal,
                                      bg_plugin)
             end
 
-            if plugin_manager.iam_token_plugin_in_use?
-              if @iam_hosts.nil? || @iam_hosts.empty?
-                raise StandardError,
-                      'Connecting with IP address when IAM authentication is enabled requires an \'iam_host\' parameter.'
-              end
-
-              @iam_hosts.each do |iam_host|
-                rerouted_host = @substitute_host.deep_dup
-                rerouted_host.id = iam_host.id
-                rerouted_host.availability = Host::HostAvailability::AVAILABLE
-
-                rerouted_wrapper_props = wrapper_props.dup
-                PropertyDefinition::IAM_HOST.set(rerouted_wrapper_props, iam_host.host)
-                PropertyDefinition::IAM_PORT.set(rerouted_wrapper_props, iam_host.port.to_s) if iam_host.port_specified?
-
-                begin
-                  conn = plugin_manager.internal_connect(
-                    rerouted_host,
-                    driver_props,
-                    rerouted_wrapper_props,
-                    is_initial_connection,
-                    plugin_to_skip: bg_plugin
-                  )
-                  begin
-                    @iam_successful_connect_notify&.call(iam_host.host)
-                  rescue StandardError
-                    nil
-                  end
-                  return conn
-                rescue StandardError => e
-                  raise unless dialect_service.login_error?(e)
-                end
-              end
-              return nil
+            # mysql2/trilogy use :host for both the socket and TLS CN verification, so connecting to a
+            # raw IP with TLS active causes a CN mismatch. When TLS is active, fall back to the hostname
+            # (DNS resolves to the correct IP post-switchover), matching the effective behaviour of the
+            # Java/Go drivers which use the original hostname for TLS regardless of the socket address.
+            if driver_props[driver_dialect.tls_ca_property_key]
+              hostname_host = @substitute_host.deep_dup(host: @host)
+              return open_connection(plugin_manager, hostname_host, driver_props, wrapper_props, is_initial_connection, is_internal,
+                                     bg_plugin)
             end
 
             open_connection(plugin_manager, @substitute_host, driver_props, wrapper_props, is_initial_connection, is_internal, bg_plugin)
@@ -113,6 +93,53 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           private
+
+          # Connects to the substitute IP with IAM auth active, trying each configured IAM host in turn
+          # so the IAM plugin can resolve the correct token hostname. pg pins the socket to the IP
+          # (hostaddr) while presenting the IAM host name for TLS verification; the IAM token is still
+          # generated for the IAM host via the IAM_HOST property. Other drivers connect to the IP as-is.
+          def apply_iam(service_container, driver_props, wrapper_props, is_initial_connection, bg_plugin)
+            plugin_manager = service_container.plugin_manager
+            dialect_service = service_container.dialect_service
+            driver_dialect = dialect_service.driver_dialect
+
+            if @iam_hosts.nil? || @iam_hosts.empty?
+              raise StandardError,
+                    'Connecting with IP address when IAM authentication is enabled requires an \'iam_host\' parameter.'
+            end
+
+            @iam_hosts.each do |iam_host|
+              rerouted_host = @substitute_host.deep_dup
+              rerouted_host.id = iam_host.id
+              rerouted_host.availability = Host::HostAvailability::AVAILABLE
+
+              rerouted_wrapper_props = wrapper_props.dup
+              PropertyDefinition::IAM_HOST.set(rerouted_wrapper_props, iam_host.host)
+              PropertyDefinition::IAM_PORT.set(rerouted_wrapper_props, iam_host.port.to_s) if iam_host.port_specified?
+
+              connect_props = driver_props
+              pinned_props = driver_dialect.props_pinned_to_ip(driver_props, @substitute_host.host)
+              if pinned_props
+                connect_props = pinned_props
+                rerouted_host = rerouted_host.deep_dup(host: iam_host.host)
+              end
+
+              begin
+                conn = plugin_manager.internal_connect(
+                  rerouted_host, connect_props, rerouted_wrapper_props, is_initial_connection, plugin_to_skip: bg_plugin
+                )
+                begin
+                  @iam_successful_connect_notify&.call(iam_host.host)
+                rescue StandardError
+                  nil
+                end
+                return conn
+              rescue StandardError => e
+                raise unless dialect_service.login_error?(e)
+              end
+            end
+            nil
+          end
 
           # Opens a connection through the plugin pipeline. Monitoring connections (is_internal: true)
           # must use internal_connect so they do NOT mutate the shared current connection — otherwise

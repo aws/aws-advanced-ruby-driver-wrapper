@@ -163,7 +163,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
   describe 'SubstituteConnectRouting' do
     let(:connection)      { double('connection') }
     let(:plugin_manager)  { double('plugin_manager') }
-    let(:dialect_service) { double('dialect_service', login_error?: false) }
+    # Defaults to the mysql2 key and no socket pinning so existing cases behave as before; trilogy
+    # overrides the key to :ssl_ca and pg overrides props_pinned_to_ip (see the pg pinning contexts).
+    let(:driver_dialect)  { double('driver_dialect', tls_ca_property_key: :sslca, props_pinned_to_ip: nil) }
+    let(:dialect_service) { double('dialect_service', login_error?: false, driver_dialect: driver_dialect) }
     let(:service_container) do
       double('service_container', plugin_manager: plugin_manager, dialect_service: dialect_service)
     end
@@ -182,6 +185,84 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::Routing do
       it 'connects to the IP host directly' do
         expect(plugin_manager).to receive(:connect).with(ip_host, props, true, plugin_to_skip: nil).and_return(connection)
         subject.apply(host_info, props, props, true, service_container)
+      end
+    end
+
+    context 'when substitute host is an IP address with TLS active (trilogy ssl_ca key)' do
+      let(:ip_host) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 3306) }
+      let(:driver_dialect) { double('driver_dialect', tls_ca_property_key: :ssl_ca, props_pinned_to_ip: nil) }
+      let(:driver_props) { Concurrent::Map.new.tap { |m| m[:ssl_ca] = '/etc/ca.pem' } }
+
+      before do
+        allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(false)
+      end
+
+      subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [], nil) }
+
+      # Under the trilogy key the TLS CA is detected, so routing connects by the original hostname
+      # (not the raw IP) to keep the certificate CN verifying.
+      it 'falls back to the hostname rather than the raw IP' do
+        expect(plugin_manager).to receive(:connect) do |connect_host, *_|
+          expect(connect_host.host).to eq(host_val)
+          connection
+        end
+        subject.apply(host_info, driver_props, props, true, service_container)
+      end
+    end
+
+    context 'when substitute host is an IP address with pg (socket pinned via hostaddr)' do
+      let(:ip_host) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 5432) }
+      let(:driver_props) { { sslmode: 'verify-full' } }
+      let(:pinned_props) { { sslmode: 'verify-full', hostaddr: '10.0.1.1' } }
+      # pg reports it can pin the socket to the IP, so tls_ca_property_key is never consulted here.
+      let(:driver_dialect) { double('driver_dialect', tls_ca_property_key: :sslrootcert) }
+
+      before do
+        allow(driver_dialect).to receive(:props_pinned_to_ip).with(driver_props, '10.0.1.1').and_return(pinned_props)
+        allow(plugin_manager).to receive(:plugin_in_use?).and_return(false)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(false)
+      end
+
+      subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [], nil) }
+
+      # The socket is pinned to the IP (hostaddr) so a switchover-window DNS lookup cannot land on the
+      # old instance, while the original hostname is kept as :host so the certificate still verifies.
+      it 'connects via hostaddr to the IP while presenting the original hostname for TLS' do
+        expect(plugin_manager).to receive(:connect) do |connect_host, passed_props, *_|
+          expect(connect_host.host).to eq(host_val)
+          expect(passed_props).to eq(pinned_props)
+          connection
+        end
+        subject.apply(host_info, driver_props, props, true, service_container)
+      end
+    end
+
+    context 'when substitute host is an IP address with pg and IAM enabled (socket pinned via hostaddr)' do
+      let(:ip_host)   { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.1.1', port: 5432) }
+      let(:iam_host1) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'green-instance.cluster-abc.us-east-1.rds.amazonaws.com', port: 5432) }
+      let(:driver_props) { { sslmode: 'verify-full' } }
+      let(:pinned_props) { { sslmode: 'verify-full', hostaddr: '10.0.1.1' } }
+      let(:driver_dialect) { double('driver_dialect', tls_ca_property_key: :sslrootcert) }
+      let(:connection_service) { double('connection_service', driver_props: driver_props) }
+
+      before do
+        allow(driver_dialect).to receive(:props_pinned_to_ip).with(driver_props, '10.0.1.1').and_return(pinned_props)
+        allow(plugin_manager).to receive(:plugin_in_use?).and_return(true)
+        allow(plugin_manager).to receive(:iam_token_plugin_in_use?).and_return(true)
+        allow(service_container).to receive(:connection_service).and_return(connection_service)
+      end
+
+      subject { routing::SubstituteConnectRouting.new(host_val, nil, role::SOURCE, ip_host, [iam_host1], nil) }
+
+      # Socket pinned to the IP; TLS verified against (and IAM token generated for) the IAM host name.
+      it 'pins the socket to the IP and verifies TLS against the IAM host name' do
+        expect(plugin_manager).to receive(:internal_connect) do |connect_host, passed_props, _wrapper_props, _is_initial, **_kwargs|
+          expect(connect_host.host).to eq(iam_host1.host)
+          expect(passed_props).to eq(pinned_props)
+          connection
+        end
+        expect(subject.apply(host_info, driver_props, props, true, service_container)).to eq(connection)
       end
     end
 

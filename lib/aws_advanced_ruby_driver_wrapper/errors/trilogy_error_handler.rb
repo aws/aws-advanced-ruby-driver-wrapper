@@ -29,6 +29,20 @@ module AwsAdvancedRubyDriverWrapper
       READ_ONLY_ERROR_CODES = Set[1290, 1836].freeze
       LOCK_WAIT_TIMEOUT_ERROR_CODE = 1205
 
+      # MySQL error codes whose SQLSTATE is class '42' (schema/syntax). trilogy carries no SQLSTATE,
+      # so the Blue/Green monitor's "is the status table/function gone?" question is answered from
+      # the code instead - the same codes libmysql would map to a '42xxx' state for mysql2.
+      SCHEMA_ERROR_CODES = Set[
+        1051, # ER_BAD_TABLE_ERROR
+        1054, # ER_BAD_FIELD_ERROR
+        1064, # ER_PARSE_ERROR
+        1109, # ER_UNKNOWN_TABLE
+        1142, # ER_TABLEACCESS_DENIED_ERROR
+        1146, # ER_NO_SUCH_TABLE
+        1305, # ER_SP_DOES_NOT_EXIST
+        1370  # ER_PROCACCESS_DENIED_ERROR
+      ].freeze
+
       # A protocol violation raised while receiving the authentication response. Unlike a clean
       # ER_ACCESS_DENIED_ERROR (1045), trilogy raises this from its C extension as a codeless
       # Trilogy::QueryError (error_code nil, not a ConnectionError), so it is matched by its message
@@ -69,6 +83,18 @@ module AwsAdvancedRubyDriverWrapper
 
       def read_only_error_by_sql_state?(_sql_state, error_code = nil)
         READ_ONLY_ERROR_CODES.include?(error_code)
+      end
+
+      # Whether the driver reported +error+ as a database error. trilogy carries no SQLSTATE, so this
+      # classifies by the presence of the server's numeric error code: a code is present for a server
+      # error and absent for a client/transport failure (a Trilogy::BaseConnectionError, a read/write
+      # timeout, the codeless auth protocol violation).
+      def database_error?(error)
+        !error_code(error).nil?
+      end
+
+      def schema_error?(error)
+        SCHEMA_ERROR_CODES.include?(error_code(error))
       end
 
       private
