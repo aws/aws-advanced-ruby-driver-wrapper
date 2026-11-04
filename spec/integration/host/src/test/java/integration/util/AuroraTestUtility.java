@@ -817,9 +817,11 @@ public class AuroraTestUtility {
       }
     }
 
-    // Tear down cluster
-    int remainingAttempts = 5;
-    while (--remainingAttempts > 0) {
+    // Tear down cluster. After a Blue/Green switchover a cluster can briefly sit in a transient state
+    // (e.g. "modifying") in which it cannot be deleted yet, so retry until it settles rather than
+    // failing teardown on the first attempt.
+    final Instant deleteDeadline = Instant.now().plus(Duration.ofMinutes(15));
+    while (true) {
       try {
         DeleteDbClusterResponse response = rdsClient.deleteDBCluster(
             (builder -> builder.skipFinalSnapshot(true).dbClusterIdentifier(identifier)));
@@ -829,29 +831,35 @@ public class AuroraTestUtility {
         TimeUnit.SECONDS.sleep(30);
 
       } catch (DbClusterNotFoundException ex) {
-        // ignore
+        // already gone
         return;
       } catch (InvalidDbClusterStateException ex) {
-        throw new RuntimeException("Error deleting db cluster " + identifier, ex);
+        if (Instant.now().isAfter(deleteDeadline)) {
+          throw new RuntimeException(
+              "Error deleting db cluster " + identifier + " — still not in a deletable state after 15 minutes", ex);
+        }
+        LOGGER.finest("Cluster " + identifier + " not yet in a deletable state, retrying in 30s: " + ex.getMessage());
+        try {
+          TimeUnit.SECONDS.sleep(30);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          return;
+        }
+      } catch (InterruptedException ex) {
+        Thread.currentThread().interrupt();
+        return;
       } catch (Exception ex) {
         LOGGER.warning("Error deleting db cluster " + identifier + ": " + ex);
         return;
       }
     }
 
+    // Wait for the cluster to disappear using a status-tolerant poll. The SDK's built-in
+    // DBClusterDeleted waiter treats transient states such as "modifying" as terminal failures,
+    // which breaks teardown right after a Blue/Green switchover; this poll only cares that the
+    // cluster is ultimately gone.
     if (waitForCompletion) {
-      final RdsWaiter waiter = rdsClient.waiter();
-      WaiterResponse<DescribeDbClustersResponse> waiterResponse =
-          waiter.waitUntilDBClusterDeleted(
-              (requestBuilder) ->
-                  requestBuilder.filters(
-                      Filter.builder().name("db-cluster-id").values(identifier).build()),
-              (configurationBuilder) -> configurationBuilder.waitTimeout(Duration.ofMinutes(60)));
-
-      if (waiterResponse.matched().exception().isPresent()) {
-        throw new RuntimeException(
-            "Unable to delete AWS Aurora Cluster after waiting for 60 minutes");
-      }
+      waitUntilClusterDeleted(rdsClient, identifier, 60);
     }
   }
 
@@ -862,9 +870,11 @@ public class AuroraTestUtility {
    * @param waitForCompletion if true, wait for cluster completely deleted
    */
   public void deleteMultiAzCluster(String identifier, boolean waitForCompletion) {
-    // Tear down cluster
-    int remainingAttempts = 5;
-    while (--remainingAttempts > 0) {
+    // Tear down cluster. A cluster can briefly sit in a transient state (e.g. "modifying") in which
+    // it cannot be deleted yet, so retry until it settles rather than failing teardown on the first
+    // attempt.
+    final Instant deleteDeadline = Instant.now().plus(Duration.ofMinutes(15));
+    while (true) {
       try {
         DeleteDbClusterResponse response = rdsClient.deleteDBCluster(
             (builder -> builder.skipFinalSnapshot(true).dbClusterIdentifier(identifier)));
@@ -874,7 +884,22 @@ public class AuroraTestUtility {
         TimeUnit.SECONDS.sleep(30);
 
       } catch (DbClusterNotFoundException ex) {
-        // ignore
+        // already gone
+        return;
+      } catch (InvalidDbClusterStateException ex) {
+        if (Instant.now().isAfter(deleteDeadline)) {
+          throw new RuntimeException(
+              "Error deleting db cluster " + identifier + " — still not in a deletable state after 15 minutes", ex);
+        }
+        LOGGER.finest("Cluster " + identifier + " not yet in a deletable state, retrying in 30s: " + ex.getMessage());
+        try {
+          TimeUnit.SECONDS.sleep(30);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          return;
+        }
+      } catch (InterruptedException ex) {
+        Thread.currentThread().interrupt();
         return;
       } catch (Exception ex) {
         LOGGER.warning("Error deleting db cluster " + identifier + ": " + ex);
@@ -882,19 +907,11 @@ public class AuroraTestUtility {
       }
     }
 
+    // Wait for the cluster to disappear using a status-tolerant poll. The SDK's built-in
+    // DBClusterDeleted waiter treats transient states such as "modifying" as terminal failures,
+    // which breaks teardown; this poll only cares that the cluster is ultimately gone.
     if (waitForCompletion) {
-      final RdsWaiter waiter = rdsClient.waiter();
-      WaiterResponse<DescribeDbClustersResponse> waiterResponse =
-          waiter.waitUntilDBClusterDeleted(
-              (requestBuilder) ->
-                  requestBuilder.filters(
-                      Filter.builder().name("db-cluster-id").values(identifier).build()),
-              (configurationBuilder) -> configurationBuilder.waitTimeout(Duration.ofMinutes(60)));
-
-      if (waiterResponse.matched().exception().isPresent()) {
-        throw new RuntimeException(
-            "Unable to delete RDS MultiAz Cluster after waiting for 60 minutes");
-      }
+      waitUntilClusterDeleted(rdsClient, identifier, 60);
     }
   }
 
@@ -925,19 +942,11 @@ public class AuroraTestUtility {
       }
     }
 
+    // Wait for the instance to disappear using a status-tolerant poll. The SDK's built-in
+    // DBInstanceDeleted waiter treats transient states as terminal failures, which breaks teardown;
+    // this poll only cares that the instance is ultimately gone.
     if (waitForCompletion) {
-      final RdsWaiter waiter = rdsClient.waiter();
-      WaiterResponse<DescribeDbInstancesResponse> waiterResponse =
-          waiter.waitUntilDBInstanceDeleted(
-              (requestBuilder) ->
-                  requestBuilder.filters(
-                      Filter.builder().name("db-instance-id").values(identifier).build()),
-              (configurationBuilder) -> configurationBuilder.waitTimeout(Duration.ofMinutes(60)));
-
-      if (waiterResponse.matched().exception().isPresent()) {
-        throw new RuntimeException(
-            "Unable to delete RDS MultiAz Instance after waiting for 60 minutes");
-      }
+      waitUntilInstanceDeleted(rdsClient, identifier, 60);
     }
   }
 
