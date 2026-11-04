@@ -189,6 +189,30 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RetryUtil do
     end
   end
 
+  describe 'on_connect_error' do
+    let(:connect_error) { StandardError.new("Unknown MySQL server host 'writer-instance' (8)") }
+
+    before { allow(plugin_manager).to receive(:connect).and_raise(connect_error) }
+
+    it 'passes each failed attempt to the hook, which can stop retrying by raising' do
+      hook = lambda do |host, error|
+        raise ArgumentError, "#{host.host}: #{error.message}"
+      end
+
+      expect { retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: Time.now + 5, on_connect_error: hook) }
+        .to raise_error(ArgumentError, /writer-instance.*Unknown MySQL server host/)
+    end
+
+    it 'keeps retrying until the deadline when the hook returns' do
+      calls = 0
+      hook = ->(*) { calls += 1 }
+
+      expect { retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: Time.now + 0.2, on_connect_error: hook) }
+        .to raise_error(Timeout::Error)
+      expect(calls).to be >= 1
+    end
+  end
+
   describe '#connect_to_allowed_host' do
     before do
       allow(plugin_manager).to receive(:connect).and_return(connection)

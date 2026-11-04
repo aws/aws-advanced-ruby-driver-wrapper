@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require_relative '../failover_plugin'
+require_relative '../../db_dialects/dialect_codes'
 require_relative '../../errors'
 require_relative '../../host/host_role'
 require_relative '../../property_definition'
@@ -39,6 +40,7 @@ module AwsAdvancedRubyDriverWrapper
       # regions are never selected.
       class GdbFailoverPlugin < FailoverPlugin
         TELEMETRY_FAILOVER = 'global database failover'
+        PLUGIN_CODE = 'gdb_failover'
 
         def initialize(service_container, props = ::Concurrent::Map.new)
           super
@@ -417,6 +419,26 @@ module AwsAdvancedRubyDriverWrapper
         # @raise [NotImplementedError] always; see {#failover} for this plugin's implementation
         def failover_writer
           raise NotImplementedError, "#{self.class} performs failover via #failover"
+        end
+
+        # The instance host pattern can only be missing when the database was identified as a regional cluster:
+        # for a Global Database, instance hosts come from global_cluster_instance_host_patterns, which is
+        # required. On a regional cluster that setting is not read, so the message explains how to have the
+        # database treated as a Global Database, or how to configure the regional cluster instead.
+        def missing_instance_host_pattern_message(host, **)
+          pattern_name = PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name
+          "The connection host '#{host}' is not a recognized RDS endpoint, #{pattern_name} is not set, and the " \
+            'database was identified as a regional cluster rather than an Aurora Global Database, so ' \
+            "#{PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name} does not apply and the #{PLUGIN_CODE} " \
+            'plugin cannot build DB instance hosts from the cluster topology. If the cluster is a member of a Global ' \
+            "Database, set #{PropertyDefinition::DIALECT.name} to '#{global_dialect_code}' (without it, a Global " \
+            'Database is only detected when it spans more than one region). For a standalone cluster, use the ' \
+            "failover plugin instead, and set #{pattern_name} to a DNS pattern that resolves to the cluster's " \
+            "instances (for example, '?.XXX.us-east-1.rds.amazonaws.com')."
+        end
+
+        def global_dialect_code
+          driver_dialect.database_engine == :mysql ? DialectCodes::GLOBAL_AURORA_MYSQL : DialectCodes::GLOBAL_AURORA_PG
         end
       end
     end

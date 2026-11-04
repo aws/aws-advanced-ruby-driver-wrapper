@@ -74,8 +74,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
            hosts: topology,
            refresh_host_list: nil,
            force_refresh_host_list?: true,
-           set_availability: nil)
+           set_availability: nil,
+           host_list_provider: host_list_provider)
   end
+
+  let(:host_list_provider) { nil }
 
   let(:initial_host) { home_writer }
 
@@ -115,6 +118,51 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Gdb::GdbFailoverPlugin do
   # Runs the (private) mode initialization that normally happens on the first connect.
   def init
     plugin.send(:init_failover_mode)
+  end
+
+  describe 'missing instance host pattern' do
+    let(:initial_host) { host_info('10.0.0.12', host_role::WRITER) }
+    let(:pattern_missing) { true }
+    let(:host_list_provider) { double('host_list_provider', instance_host_pattern_missing?: pattern_missing) }
+
+    before do
+      props[:wrapper_plugins] = 'gdb_failover'
+      props[:failover_home_region] = 'us-east-1'
+      allow(driver_dialect).to receive(:database_engine).and_return(:postgresql)
+    end
+
+    context 'when the database was identified as a regional cluster' do
+      it 'raises explaining that global_cluster_instance_host_patterns does not apply, and how to fix it' do
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        expect { plugin.connect(initial_host, props, true, -> { connection }) }
+          .to raise_error(errors::AwsError) { |error|
+            expect(error.message).to include("'10.0.0.12' is not a recognized RDS endpoint, cluster_instance_host_pattern is not set")
+            expect(error.message).to include('regional cluster rather than an Aurora Global Database')
+            expect(error.message).to include('global_cluster_instance_host_patterns does not apply')
+            expect(error.message).to include("set wrapper_dialect to 'global-aurora-pg'")
+            expect(error.message).to include('only detected when it spans more than one region')
+            expect(error.message).to include('use the failover plugin instead, and set cluster_instance_host_pattern')
+          }
+      end
+    end
+
+    context 'when the driver is a MySQL driver' do
+      before { allow(driver_dialect).to receive(:database_engine).and_return(:mysql) }
+
+      it 'names the MySQL Global Database dialect' do
+        expect { plugin.connect(initial_host, props, true, -> { connection }) }
+          .to raise_error(errors::AwsError, /set wrapper_dialect to 'global-aurora-mysql'/)
+      end
+    end
+
+    context 'when the database was identified as a Global Database' do
+      # GlobalAuroraHostListProvider builds instance hosts from global_cluster_instance_host_patterns.
+      let(:pattern_missing) { false }
+
+      it 'returns the connection' do
+        expect(plugin.connect(initial_host, props, true, -> { connection })).to eq(connection)
+      end
+    end
   end
 
   describe 'mode initialization' do

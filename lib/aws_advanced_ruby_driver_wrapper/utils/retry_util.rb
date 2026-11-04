@@ -40,10 +40,13 @@ module AwsAdvancedRubyDriverWrapper
       # @param plugin_to_skip [Object] the plugin that should be skipped in the connect pipeline
       # @param plugin_manager [Services::PluginManager]
       # @param deadline [Time] the point in time at which to give up
+      # @param on_connect_error [#call, nil] called with the candidate host and the error when a connection
+      #   attempt fails; it may raise to stop retrying
       # @return [Result] the new connection and the host it was opened to
       # @raise [Timeout::Error] if no connection could be established before the deadline
-      def connect_to_writer(plugin_to_skip, plugin_manager, deadline:)
-        connect_to_allowed_host(plugin_to_skip, plugin_manager, verify_role: Host::HostRole::WRITER, deadline: deadline) do |allowed_hosts|
+      def connect_to_writer(plugin_to_skip, plugin_manager, deadline:, on_connect_error: nil)
+        connect_to_allowed_host(plugin_to_skip, plugin_manager, verify_role: Host::HostRole::WRITER, deadline: deadline,
+                                                                on_connect_error: on_connect_error) do |allowed_hosts|
           writer_candidate = @host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
 
           if writer_candidate.nil?
@@ -70,11 +73,14 @@ module AwsAdvancedRubyDriverWrapper
       # @param deadline [Time] the point in time at which to give up
       # @param verify_role [Symbol, nil] the role the new connection must report, or nil to accept any host
       # @param strategy [String] the host selection strategy used to order the candidates
+      # @param on_connect_error [#call, nil] called with the candidate host and the error when a connection
+      #   attempt fails; it may raise to stop retrying
       # @yieldparam allowed_hosts [Array<Host::HostInfo>] the current allowed hosts
       # @yieldreturn [Array<Host::HostInfo>, nil] the hosts to attempt, or nil/empty to refresh and retry
       # @return [Result] the new connection and the host it was opened to
       # @raise [Timeout::Error] if no connection could be established before the deadline
-      def connect_to_allowed_host(plugin_to_skip, plugin_manager, deadline:, verify_role: nil, strategy: DEFAULT_STRATEGY)
+      def connect_to_allowed_host(plugin_to_skip, plugin_manager, deadline:, verify_role: nil, strategy: DEFAULT_STRATEGY,
+                                  on_connect_error: nil)
         strategy = DEFAULT_STRATEGY if strategy.nil? || strategy.to_s.empty?
 
         loop do
@@ -102,7 +108,7 @@ module AwsAdvancedRubyDriverWrapper
               break # Give up on this candidate list and refresh the topology.
             end
 
-            result = attempt_connection(candidate, verify_role, plugin_to_skip, plugin_manager)
+            result = attempt_connection(candidate, verify_role, plugin_to_skip, plugin_manager, on_connect_error)
             return result if result
 
             remaining.delete(candidate)
@@ -115,7 +121,7 @@ module AwsAdvancedRubyDriverWrapper
       private
 
       # @return [Result, nil] the result, or nil if the connection failed or reported the wrong role
-      def attempt_connection(candidate, verify_role, plugin_to_skip, plugin_manager)
+      def attempt_connection(candidate, verify_role, plugin_to_skip, plugin_manager, on_connect_error = nil)
         conn = plugin_manager.connect(candidate, @connection_service.driver_props, false, plugin_to_skip: plugin_to_skip)
 
         # Since the roles in the host list might not be accurate, we execute a query to check the instance's role.
@@ -132,6 +138,7 @@ module AwsAdvancedRubyDriverWrapper
       rescue StandardError => e
         logger.debug { "Exception connecting to #{candidate.host}: #{e.message}" }
         close_quietly(conn)
+        on_connect_error&.call(candidate, e)
         nil
       end
 

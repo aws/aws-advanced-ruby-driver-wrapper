@@ -41,6 +41,12 @@ module AwsAdvancedRubyDriverWrapper
       TELEMETRY_WRITER_FAILOVER = 'failover to writer host'
       TELEMETRY_READER_FAILOVER = 'failover to replica'
 
+      PLUGIN_CODE = 'failover'
+
+      # Connection hosts already warned about a missing cluster_instance_host_pattern, so that the warning is
+      # logged once per host rather than once per connection.
+      MISSING_PATTERN_WARNED_HOSTS = Concurrent::Set.new
+
       def initialize(service_container, props = ::Concurrent::Map.new)
         @service_container = service_container
         @wrapper_props = props
@@ -65,28 +71,9 @@ module AwsAdvancedRubyDriverWrapper
 
       def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
         init_failover_mode
-
-        unless PropertyDefinition::ENABLE_CONNECT_FAILOVER.get_bool(@wrapper_props)
-          return verified_connection(is_initial_connection, host_info, driver_props, pipeline_callable)
-        end
-
-        topology_host = host_service.hosts.find { |h| h.host_and_port == host_info&.host_and_port }
-
-        if !topology_host.nil? && topology_host.availability == Host::HostAvailability::UNAVAILABLE
-          host_service.refresh_host_list
-          return connect_via_failover(is_initial_connection)
-        end
-
-        begin
-          conn = verified_connection(is_initial_connection, host_info, driver_props, pipeline_callable)
-          host_service.refresh_host_list if is_initial_connection
-          conn
-        rescue StandardError => e
-          raise unless trigger_failover?(e)
-
-          host_service.set_availability(host_info, Host::HostAvailability::UNAVAILABLE)
-          connect_via_failover(is_initial_connection)
-        end
+        conn = connect_with_failover(host_info, driver_props, is_initial_connection, pipeline_callable)
+        check_instance_host_pattern(conn) if is_initial_connection
+        conn
       end
 
       def execute(method_name, pipeline_callable, *, **, &)
@@ -116,6 +103,89 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       private
+
+      def connect_with_failover(host_info, driver_props, is_initial_connection, pipeline_callable)
+        unless PropertyDefinition::ENABLE_CONNECT_FAILOVER.get_bool(@wrapper_props)
+          return verified_connection(is_initial_connection, host_info, driver_props, pipeline_callable)
+        end
+
+        topology_host = host_service.hosts.find { |h| h.host_and_port == host_info&.host_and_port }
+
+        if !topology_host.nil? && topology_host.availability == Host::HostAvailability::UNAVAILABLE
+          host_service.refresh_host_list
+          return connect_via_failover(is_initial_connection)
+        end
+
+        begin
+          conn = verified_connection(is_initial_connection, host_info, driver_props, pipeline_callable)
+          host_service.refresh_host_list if is_initial_connection
+          conn
+        rescue StandardError => e
+          raise unless trigger_failover?(e)
+
+          host_service.set_availability(host_info, Host::HostAvailability::UNAVAILABLE)
+          connect_via_failover(is_initial_connection)
+        end
+      end
+
+      # Failover needs DB instance hosts it can resolve. Whether it has them is only known once the initial
+      # connection has settled the dialect: cluster dialects (Aurora, RDS Multi-AZ DB cluster) then use an
+      # RdsHostListProvider, which reports whether the instance host pattern is missing. A single instance or a
+      # community database never has one, so it isn't affected. When the plugin was listed explicitly in
+      # wrapper_plugins the missing pattern is a configuration error; when it comes from the default plugin
+      # list, a warning is logged instead.
+      #
+      # @param conn [Object] the initial connection, closed if the check fails
+      # @raise [Errors::AwsError] if the plugin was requested explicitly and the instance host pattern is missing
+      def check_instance_host_pattern(conn)
+        return unless instance_host_pattern_missing?
+
+        host = connection_service.initial_host_info&.host
+        if plugin_requested_explicitly?
+          close_quietly(conn)
+          raise Errors::AwsError, missing_instance_host_pattern_message(host, explicit: true)
+        end
+
+        logger.warn(missing_instance_host_pattern_message(host, explicit: false)) if MISSING_PATTERN_WARNED_HOSTS.add?(host)
+      end
+
+      def instance_host_pattern_missing?
+        provider = host_service.host_list_provider
+        provider.respond_to?(:instance_host_pattern_missing?) && provider.instance_host_pattern_missing?
+      end
+
+      # @return [Boolean] whether wrapper_plugins was set by the user. This plugin is loaded, so it is in the list.
+      def plugin_requested_explicitly?
+        @wrapper_props.key?(PropertyDefinition::PLUGINS.name)
+      end
+
+      def missing_instance_host_pattern_message(host, explicit:)
+        plugin_code = self.class::PLUGIN_CODE
+        remedy = if explicit
+                   "remove #{plugin_code} from #{PropertyDefinition::PLUGINS.name}"
+                 else
+                   "set #{PropertyDefinition::PLUGINS.name} to a list without #{plugin_code} (it is enabled by default)"
+                 end
+
+        "The connection host '#{host}' is not a recognized RDS endpoint and " \
+          "#{PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name} is not set, so the #{plugin_code} plugin cannot " \
+          'build DB instance hosts from the cluster topology and failover will not work. ' \
+          "Set #{PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name} to a DNS pattern that resolves to the " \
+          "cluster's instances (for example, '?.XXX.us-east-1.rds.amazonaws.com'), or #{remedy}."
+      end
+
+      # Raises when a topology host can't be resolved because the instance host pattern is missing. Failover
+      # can reach a topology host without the topology monitor having probed it first (reader failover always,
+      # writer failover when the monitor verified the writer through the connection host), so it needs its own
+      # check to avoid retrying such hosts until failover_timeout_sec.
+      #
+      # @raise [Errors::FailoverFailedError]
+      def raise_if_instance_host_unresolvable(host_info, error)
+        return unless instance_host_pattern_missing? && dialect_service.unknown_host_error?(error)
+
+        error = Errors::UnresolvableInstanceHostError.new(host_info.host, connection_service.initial_host_info&.host)
+        raise Errors::FailoverFailedError, error.message
+      end
 
       def connect_via_failover(is_initial_connection)
         begin
@@ -311,8 +381,12 @@ module AwsAdvancedRubyDriverWrapper
 
         logger.info { 'Starting reader failover' }
 
-        unless host_service.force_refresh_host_list?(verify_writer: false, timeout_sec: 0)
-          raise Errors::FailoverFailedError, 'The request to discover the new topology was unsuccessful'
+        begin
+          unless host_service.force_refresh_host_list?(verify_writer: false, timeout_sec: 0)
+            raise Errors::FailoverFailedError, 'The request to discover the new topology was unsuccessful'
+          end
+        rescue Errors::UnresolvableInstanceHostError => e
+          raise Errors::FailoverFailedError, e.message
         end
 
         begin
@@ -344,10 +418,14 @@ module AwsAdvancedRubyDriverWrapper
           end
 
           was_in_transaction = @service_container.session_state_service.in_transaction?
-          result = @retry_util.connect_to_writer(self, @service_container.plugin_manager, deadline: failover_deadline)
+          result = @retry_util.connect_to_writer(self, @service_container.plugin_manager,
+                                                 deadline: failover_deadline,
+                                                 on_connect_error: method(:raise_if_instance_host_unresolvable))
           raise Errors::FailoverFailedError, 'Unable to connect to a writer instance' unless result&.connection && result.host_info
 
           connection_service.update_current_connection(result.connection, result.host_info)
+        rescue Errors::UnresolvableInstanceHostError => e
+          raise Errors::FailoverFailedError, e.message
         rescue Timeout::Error
           close_quietly(result&.connection)
           raise Errors::FailoverFailedError,
@@ -467,8 +545,9 @@ module AwsAdvancedRubyDriverWrapper
           end
           [:unknown, nil]
         end
-      rescue StandardError
+      rescue StandardError => e
         close_quietly(conn)
+        raise_if_instance_host_unresolvable(host_info, e)
         [:failed, nil]
       end
 

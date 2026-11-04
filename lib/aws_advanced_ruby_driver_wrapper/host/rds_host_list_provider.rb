@@ -46,6 +46,8 @@ module AwsAdvancedRubyDriverWrapper
         props = @service_container.connection_service.wrapper_props
         @cluster_id = PropertyDefinition::CLUSTER_ID.get_string(props)
         @instance_template = build_instance_template(props)
+        @instance_host_pattern_missing = PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.get(props).nil? &&
+                                         @instance_template.host == Utils::RdsUtils::BARE_INSTANCE_HOST_PATTERN
         validate_host_pattern!(@instance_template.host)
         @rds_url_type = Utils::RdsUtils.identify_rds_type(initial_host_info.host)
 
@@ -92,6 +94,7 @@ module AwsAdvancedRubyDriverWrapper
             service_container: @service_container,
             cluster_id: @cluster_id,
             instance_template: @instance_template,
+            instance_host_pattern_missing: instance_host_pattern_missing?,
             topology_utils: @topology_utils,
             monitoring_driver_props: @monitoring_driver_props,
             monitoring_wrapper_props: @monitoring_wrapper_props
@@ -105,6 +108,16 @@ module AwsAdvancedRubyDriverWrapper
       # Stops the topology monitor for this cluster.
       def stop_monitor
         @service_container.monitor_service.stop_and_remove(:cluster_topology, @cluster_id)
+      end
+
+      # Whether DB instance hosts can't be derived from the topology. This is the case when the connection
+      # host isn't a recognized RDS endpoint and cluster_instance_host_pattern isn't set: the instance template
+      # is then a bare '?', so instance hosts are bare instance identifiers that usually don't resolve. An
+      # explicitly set '?' pattern doesn't count, since bare identifiers may resolve in the user's environment.
+      #
+      # @return [Boolean]
+      def instance_host_pattern_missing?
+        @instance_host_pattern_missing
       end
 
       private

@@ -25,6 +25,7 @@ module AwsAdvancedRubyDriverWrapper
       ACCESS_ERROR_SQL_STATES = Set['08004', '28P01', '28000'].freeze
       READ_ONLY_SQL_STATE = '25006'
       LOGIN_ERROR_MESSAGE = 'authentication failed'
+      UNKNOWN_HOST_MESSAGE = 'could not translate host name'
       NETWORK_ERROR_MESSAGES = [
         'unexpected eof',
         'closed the connection unexpectedly',
@@ -47,7 +48,7 @@ module AwsAdvancedRubyDriverWrapper
       CONNECT_FAILURE_MESSAGES = [
         'connection refused',
         'timeout expired',
-        'could not translate host name',
+        UNKNOWN_HOST_MESSAGE,
         'no route to host',
         'network is unreachable',
         'host is unreachable',
@@ -106,6 +107,11 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       private
+
+      def unknown_host?(error)
+        defined?(PG::ConnectionBad) && error.is_a?(PG::ConnectionBad) &&
+          error.message.to_s.downcase.include?(UNKNOWN_HOST_MESSAGE)
+      end
 
       def connection_bad_network_error?(error)
         return false unless defined?(PG::ConnectionBad) && error.is_a?(PG::ConnectionBad)

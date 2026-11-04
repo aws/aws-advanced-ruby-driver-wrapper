@@ -21,6 +21,36 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
   let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
+  describe '#unknown_host_error?' do
+    it 'is true when the host name cannot be translated' do
+      error = PG::ConnectionBad.new('could not translate host name "instance-1" to address: nodename nor servname provided')
+      expect(handler.unknown_host_error?(error)).to be(true)
+    end
+
+    it 'is true when the error is a cause' do
+      error = begin
+        begin
+          raise PG::ConnectionBad, 'could not translate host name "instance-1" to address: Name or service not known'
+        rescue PG::ConnectionBad
+          raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'wrapped'
+        end
+      rescue AwsAdvancedRubyDriverWrapper::Errors::AwsError => e
+        e
+      end
+      expect(handler.unknown_host_error?(error)).to be(true)
+    end
+
+    it 'is false for a temporary resolver failure' do
+      error = PG::ConnectionBad.new('could not translate host name "instance-1" to address: Temporary failure in name resolution')
+      expect(handler.unknown_host_error?(error)).to be(false)
+    end
+
+    it 'is false for other connection errors' do
+      error = PG::ConnectionBad.new('connection to server at "10.0.0.12", port 5432 failed: Connection refused')
+      expect(handler.unknown_host_error?(error)).to be(false)
+    end
+  end
+
   describe '#network_error_by_sql_state?' do
     it 'returns true for admin shutdown (57P01)' do
       expect(handler.network_error_by_sql_state?('57P01')).to be true

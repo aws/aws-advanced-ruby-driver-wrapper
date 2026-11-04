@@ -22,6 +22,47 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::TrilogyErrorHandler do
   let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::TrilogyDriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
+  describe '#unknown_host_error?' do
+    it 'is true when the connection error is caused by a failed host lookup' do
+      error = begin
+        begin
+          raise SocketError, 'getaddrinfo: nodename nor servname provided, or not known'
+        rescue SocketError
+          raise Trilogy::BaseConnectionError, 'unable to connect to "instance-1:3306"'
+        end
+      rescue Trilogy::BaseConnectionError => e
+        e
+      end
+      expect(handler.unknown_host_error?(error)).to be(true)
+    end
+
+    it 'is false when the failed host lookup is temporary' do
+      error = begin
+        begin
+          raise SocketError, 'getaddrinfo: Temporary failure in name resolution'
+        rescue SocketError
+          raise Trilogy::BaseConnectionError, 'unable to connect to "instance-1:3306"'
+        end
+      rescue Trilogy::BaseConnectionError => e
+        e
+      end
+      expect(handler.unknown_host_error?(error)).to be(false)
+    end
+
+    it 'is false for a SocketError that is not from the driver' do
+      expect(handler.unknown_host_error?(SocketError.new('getaddrinfo: nodename nor servname provided'))).to be(false)
+    end
+
+    it 'is true for a DNS error raised by the C extension' do
+      error = Trilogy::BaseConnectionError.new('trilogy_connect: TRILOGY_DNS_ERROR')
+      expect(handler.unknown_host_error?(error)).to be(true)
+    end
+
+    it 'is false for other connection errors' do
+      expect(handler.unknown_host_error?(Trilogy::SyscallError::ECONNREFUSED.new('connect'))).to be(false)
+    end
+  end
+
   describe '#network_error?' do
     {
       'a read or write timeout' => -> { Trilogy::TimeoutError.new('trilogy_query_recv') },
