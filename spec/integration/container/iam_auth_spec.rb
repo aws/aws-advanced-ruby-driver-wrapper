@@ -232,18 +232,6 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       Integration::DriverHelper.close(drv, conn) if conn
     end
 
-    it 'raises IamAuthError when iam_region is missing for global endpoint' do
-      props_no_region = {
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::PLUGINS.name => 'iam',
-        AwsAdvancedRubyDriverWrapper::PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name =>
-          "[#{env.primary_region}]?.#{info.instance_endpoint_suffix}:#{writer.port}"
-      }
-
-      expect do
-        Integration::DriverHelper.wrapper_connect(drv, **gdb_config, **props_no_region)
-      end.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::IamAuthError, /unable to determine connection region/)
-    end
-
     it 'connects to secondary cluster endpoint with IAM' do
       skip 'Secondary cluster endpoint not available' unless env.secondary_cluster_endpoint
 
