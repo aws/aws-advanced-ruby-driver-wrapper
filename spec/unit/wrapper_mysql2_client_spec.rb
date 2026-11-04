@@ -341,4 +341,33 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
       expect(plugin.sql_for('connection.ping')).to eq([nil])
     end
   end
+
+  # During a Blue/Green switchover the current connection is momentarily nil. A call in that window
+  # must fail as a connection error the adapter can translate to a retryable ConnectionNotEstablished,
+  # not a bare NoMethodError. AR keys that translation off Mysql2::Error::ConnectionError plus the
+  # exact "MySQL client is not connected" message.
+  describe 'when the current connection is nil' do
+    let(:connection) { nil }
+
+    it 'raises a Mysql2::Error::ConnectionError the adapter recognizes, rather than NoMethodError' do
+      # select_db reaches the client through method_missing, where the nil guard lives.
+      expect { client.select_db('other') }
+        .to raise_error(Mysql2::Error::ConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'guards the main query path, which reaches the connection directly rather than through method_missing' do
+      expect { client.query('SELECT 1') }
+        .to raise_error(Mysql2::Error::ConnectionError, /MySQL client is not connected/)
+    end
+
+    # ping/close mirror what the real mysql2 client does on a closed connection, so AR's active?/
+    # disconnect handling keeps working rather than hitting a NoMethodError on nil.
+    it 'returns false from ping instead of raising' do
+      expect(client.ping).to be(false)
+    end
+
+    it 'treats close as a no-op instead of raising' do
+      expect { client.close }.not_to raise_error
+    end
+  end
 end
