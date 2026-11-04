@@ -126,13 +126,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::TrilogyErrorHandler do
     end
   end
 
-  describe '#server_error?' do
+  describe '#database_error?' do
     it 'is true for a server error carrying an error code' do
-      expect(handler.server_error?(Trilogy::ProtocolError.from_code('signalled', 1644))).to be true
+      expect(handler.database_error?(Trilogy::ProtocolError.from_code('signalled', 1644))).to be true
     end
 
     it 'is false for a codeless client/connection error' do
-      expect(handler.server_error?(Trilogy::BaseConnectionError.new('connection is not initialized'))).to be false
+      expect(handler.database_error?(Trilogy::BaseConnectionError.new('connection is not initialized'))).to be false
     end
   end
 

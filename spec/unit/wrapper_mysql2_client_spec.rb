@@ -354,5 +354,10 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
       expect { client.select_db('other') }
         .to raise_error(Mysql2::Error::ConnectionError, /MySQL client is not connected/)
     end
+
+    it 'guards the main query path, which reaches the connection directly rather than through method_missing' do
+      expect { client.query('SELECT 1') }
+        .to raise_error(Mysql2::Error::ConnectionError, /MySQL client is not connected/)
+    end
   end
 end

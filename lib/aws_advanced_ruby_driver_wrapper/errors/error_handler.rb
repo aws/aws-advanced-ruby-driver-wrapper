@@ -41,12 +41,12 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
-      # Whether +error+ is a server-side error (the server received the request and answered with an
-      # error), as opposed to a client/transport failure. Used by the Blue/Green status monitor to
-      # decide whether to settle the status at NOT_CREATED or tear the monitoring connection down.
-      # The default reads the normalized SQLSTATE, which mysql2 and pg report natively; a driver whose
-      # errors carry no SQLSTATE (trilogy) overrides this to classify by its numeric error code.
-      def server_error?(error)
+      # Whether the driver reported +error+ as a database error, i.e. it carries a SQLSTATE (or, for
+      # trilogy, a MySQL error code). This is not a strict server-vs-client split: mysql2 also reports
+      # SQLSTATE HY000 for client-side failures such as a lost connection. Used by the Blue/Green status
+      # monitor to tell database errors from other exceptions. A driver whose errors carry no SQLSTATE
+      # (trilogy) overrides this to classify by its numeric error code.
+      def database_error?(error)
         !@driver_dialect.sql_state(error).nil?
       end
 

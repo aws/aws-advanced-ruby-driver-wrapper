@@ -67,7 +67,7 @@ module ActiveRecord
       # password, PAM failure, pg_hba.conf rejection). A failed *connect* usually carries no result, so
       # the message text is the reliable signal and the SQLSTATE is only a bonus when one is present.
       AUTH_REJECTION_SQLSTATES = %w[28P01 28000].freeze
-      AUTH_REJECTION_MESSAGE = /password authentication failed|PAM authentication failed|pg_hba\.conf rejects/
+      AUTH_REJECTION_MESSAGE = /password authentication failed|PAM authentication failed|pg_hba\.conf/
 
       # Note that this config includes wrapper properties.
       #
@@ -89,8 +89,8 @@ module ActiveRecord
       # @return [Boolean] whether the PG error is an authentication/authorization rejection, by SQLSTATE
       #   when the error carries a result and otherwise by its canonical FATAL text.
       def self.auth_rejection?(error)
-        sqlstate = error.respond_to?(:result) ? error.result&.error_field(PG::PG_DIAG_SQLSTATE) : nil
-        AUTH_REJECTION_SQLSTATES.include?(sqlstate) || error.message.to_s.match?(AUTH_REJECTION_MESSAGE)
+        sqlstate = error.result&.error_field(PG::PG_DIAG_SQLSTATE)
+        AUTH_REJECTION_SQLSTATES.include?(sqlstate) || error.message.match?(AUTH_REJECTION_MESSAGE)
       end
       private_class_method :auth_rejection?
 

@@ -185,13 +185,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::MysqlErrorHandler do
     e
   end
 
-  describe '#server_error?' do
+  describe '#database_error?' do
     it 'is true when the error reports a SQLSTATE' do
-      expect(handler.server_error?(double(sql_state: '42S02'))).to be true
+      expect(handler.database_error?(double(sql_state: '42S02'))).to be true
     end
 
     it 'is false when the error reports no SQLSTATE' do
-      expect(handler.server_error?(StandardError.new)).to be false
+      expect(handler.database_error?(StandardError.new)).to be false
     end
   end
 

@@ -205,13 +205,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
     end
   end
 
-  describe '#server_error?' do
+  describe '#database_error?' do
     it 'is true when the error reports a SQLSTATE' do
-      expect(handler.server_error?(build_pg_error('42P01'))).to be true
+      expect(handler.database_error?(build_pg_error('42P01'))).to be true
     end
 
     it 'is false when the error reports no SQLSTATE' do
-      expect(handler.server_error?(StandardError.new)).to be false
+      expect(handler.database_error?(StandardError.new)).to be false
     end
   end
 

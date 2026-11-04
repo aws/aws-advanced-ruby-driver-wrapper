@@ -190,12 +190,14 @@ module AwsAdvancedRubyDriverWrapper
         NETWORK_BOUND_METHODS
       end
 
-      # libpq names the TLS CA certificate option +sslrootcert+, where mysql2 names it +sslca+. pg
-      # also connects by +host+ (there is no +hostaddr+ in prepare_connect_config), so it has the same
-      # raw-IP/certificate-CN mismatch mysql2 does, and Blue/Green substitute routing must find the CA
-      # under the pg key to fall back to the hostname.
-      def tls_ca_property_key
-        :sslrootcert
+      # libpq separates the socket target (+hostaddr+) from the TLS/IAM server name (+host+), so a pg
+      # connection can be pinned to a specific instance IP while still verifying the certificate
+      # against - and generating an IAM token for - the original hostname. Blue/Green substitute
+      # routing uses this so a pinned connection reaches the intended instance regardless of what DNS
+      # resolves to mid-switchover, and still passes +verify-full+ whatever the CA source - instead of
+      # connecting to a raw IP (certificate-name mismatch) or falling back to the hostname (DNS risk).
+      def props_pinned_to_ip(driver_props, ip)
+        driver_props.dup.tap { |props| props[:hostaddr] = ip }
       end
 
       def prepare_connect_config(host_info, config)

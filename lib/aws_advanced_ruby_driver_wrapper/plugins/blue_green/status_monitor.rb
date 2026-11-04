@@ -503,8 +503,8 @@ module AwsAdvancedRubyDriverWrapper
           if @service_container.dialect_service.schema_error?(err)
             @current_phase = Phase::NOT_CREATED
             logger.warn { "[#{@role}] current_phase: #{@current_phase}, exception while querying for blue/green status." }
-          elsif @service_container.dialect_service.server_error?(err)
-            if err.message.include?('An error occurred while retrieving the blue/green fast switchover metadata')
+          elsif @service_container.dialect_service.database_error?(err)
+            if err.message.include?('while retrieving the blue/green fast switchover metadata')
               @current_phase = Phase::NOT_CREATED
               return
             end

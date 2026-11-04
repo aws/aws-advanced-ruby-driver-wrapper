@@ -214,8 +214,17 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient do
     let(:connection) { nil }
 
     it 'raises a Trilogy connection error rather than NoMethodError' do
-      # change_db reaches the client through method_missing, where the nil guard lives.
-      expect { client.change_db('other') }.to raise_error(Trilogy::BaseConnectionError, /not initialized/)
+      # change_db reaches the client through method_missing, where the nil guard lives. AR keys its
+      # translation off the exact "MySQL client is not connected" message, as it does for mysql2.
+      expect { client.change_db('other') }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'guards the main query path, which reaches the connection directly rather than through method_missing' do
+      expect { client.query('SELECT 1') }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'guards query_with_flags, which reads query_flags off the connection directly' do
+      expect { client.query_with_flags('SELECT 1', 4) }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
     end
   end
 

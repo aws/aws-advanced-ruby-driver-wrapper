@@ -85,11 +85,11 @@ module AwsAdvancedRubyDriverWrapper
         READ_ONLY_ERROR_CODES.include?(error_code)
       end
 
-      # A trilogy server error carries the server's numeric error code; a client/transport failure
-      # (a Trilogy::BaseConnectionError, a read/write timeout, the codeless auth protocol violation)
-      # does not. So the presence of an error code is what distinguishes "the server answered with an
-      # error" from "we never got an answer".
-      def server_error?(error)
+      # Whether the driver reported +error+ as a database error. trilogy carries no SQLSTATE, so this
+      # classifies by the presence of the server's numeric error code: a code is present for a server
+      # error and absent for a client/transport failure (a Trilogy::BaseConnectionError, a read/write
+      # timeout, the codeless auth protocol violation).
+      def database_error?(error)
         !error_code(error).nil?
       end
 

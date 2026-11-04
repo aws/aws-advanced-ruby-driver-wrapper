@@ -99,7 +99,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
     end
 
     it 'does not misclassify a PAM authentication failure as NoDatabaseError' do
-      expect { connect_failing_with('FATAL:  PAM authentication failed for user "myuser"') }
+      expect { connect_failing_with('FATAL:  PAM authentication failed for user "myuser" (database "mydb")') }
         .to raise_error(ActiveRecord::DatabaseConnectionError)
     end
 

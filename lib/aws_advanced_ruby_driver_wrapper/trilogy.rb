@@ -53,6 +53,7 @@ module AwsAdvancedRubyDriverWrapper
     # What is remembered is the copy of the SQL that plugins inspect. The driver is sent the SQL as
     # the application wrote it.
     def query(sql)
+      ensure_connected!
       inspected = Utils::SqlEncoding.inspectable(sql)
       result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql,
                           sql: inspected)
@@ -77,6 +78,7 @@ module AwsAdvancedRubyDriverWrapper
     # Trilogy's own query_with_flags calls query on the driver connection directly, so it is defined
     # here to send the statement through the plugin pipeline instead.
     def query_with_flags(sql, flags)
+      ensure_connected!
       old_flags = current_conn.query_flags
       current_conn.query_flags = flags
       query(sql)
@@ -99,8 +101,7 @@ module AwsAdvancedRubyDriverWrapper
     BOUNDED_TO_QUERY = Set[:abandon_results!].freeze
 
     def method_missing(method_name, *, **, &)
-      conn = current_conn
-      raise Trilogy::BaseConnectionError, 'connection is not initialized' if conn.nil?
+      conn = ensure_connected!
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"
@@ -140,6 +141,16 @@ module AwsAdvancedRubyDriverWrapper
 
     def current_conn
       @service_container.connection_service.current_connection
+    end
+
+    # Guards the entry points that reach for the current connection directly (the query paths and
+    # method_missing). Without a live connection AR expects the driver's own "not connected" error,
+    # which it translates to a connection error; a bare NoMethodError on nil would not be recognized.
+    def ensure_connected!
+      conn = current_conn
+      raise Trilogy::BaseConnectionError, 'MySQL client is not connected' if conn.nil?
+
+      conn
     end
 
     def pm
