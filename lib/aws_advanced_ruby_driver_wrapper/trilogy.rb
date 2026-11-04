@@ -63,10 +63,13 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     def ping
+      ensure_connected!
       pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
     end
 
     def close
+      return if current_conn.nil?
+
       pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
     end
 

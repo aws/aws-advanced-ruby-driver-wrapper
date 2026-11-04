@@ -226,6 +226,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient do
     it 'guards query_with_flags, which reads query_flags off the connection directly' do
       expect { client.query_with_flags('SELECT 1', 4) }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
     end
+
+    # ping raises a Trilogy::Error, which AR's active? rescues into false; close is a no-op like the
+    # real driver on a closed connection.
+    it 'raises a Trilogy connection error from ping (which active? turns into false)' do
+      expect { client.ping }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'treats close as a no-op instead of raising' do
+      expect { client.close }.not_to raise_error
+    end
   end
 
   describe '#inspect' do

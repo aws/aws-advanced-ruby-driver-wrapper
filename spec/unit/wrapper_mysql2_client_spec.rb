@@ -359,5 +359,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperMysql2Client do
       expect { client.query('SELECT 1') }
         .to raise_error(Mysql2::Error::ConnectionError, /MySQL client is not connected/)
     end
+
+    # ping/close mirror what the real mysql2 client does on a closed connection, so AR's active?/
+    # disconnect handling keeps working rather than hitting a NoMethodError on nil.
+    it 'returns false from ping instead of raising' do
+      expect(client.ping).to be(false)
+    end
+
+    it 'treats close as a no-op instead of raising' do
+      expect { client.close }.not_to raise_error
+    end
   end
 end
