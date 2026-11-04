@@ -79,8 +79,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
            refresh_host_list: nil,
            force_refresh_host_list?: true,
            set_availability: nil,
-           select_host: reader_host)
+           select_host: reader_host,
+           host_list_provider: host_list_provider)
   end
+
+  let(:host_list_provider) { nil }
 
   let(:connection_service) do
     double('connection_service',
@@ -317,6 +320,154 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
         expect(host_service).to receive(:set_availability).with(non_cluster_host, host_availability::UNAVAILABLE)
         result = plugin.connect(non_cluster_host, props, false, failing_callable)
         expect(result).to eq(new_connection)
+      end
+    end
+  end
+
+  describe 'missing cluster_instance_host_pattern' do
+    let(:non_rds_host) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.0.12', port: '5432') }
+    let(:pipeline_callable) { -> { connection } }
+    let(:pattern_missing) { true }
+    let(:host_list_provider) { double('rds_host_list_provider', instance_host_pattern_missing?: pattern_missing) }
+    let(:log_output) { StringIO.new }
+    let(:original_logger) { AwsAdvancedRubyDriverWrapper.logger }
+
+    before do
+      allow(connection_service).to receive(:initial_host_info).and_return(non_rds_host)
+      described_class::MISSING_PATTERN_WARNED_HOSTS.clear
+      original_logger
+      # A logger at the default level, so the test also shows the warning is visible without debug logging.
+      AwsAdvancedRubyDriverWrapper.logger = Logger.new(log_output, level: Logger::INFO)
+    end
+
+    after do
+      AwsAdvancedRubyDriverWrapper.logger = original_logger
+      described_class::MISSING_PATTERN_WARNED_HOSTS.clear
+    end
+
+    context 'when failover is listed explicitly in wrapper_plugins' do
+      before { props[:wrapper_plugins] = 'failover,initial_connection' }
+
+      it 'raises a configuration error naming the host and both fixes' do
+        expect { plugin.connect(non_rds_host, props, true, pipeline_callable) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError) { |error|
+            expect(error.message).to include("'10.0.0.12' is not a recognized RDS endpoint")
+            expect(error.message).to include('Set cluster_instance_host_pattern')
+            expect(error.message).to include('?.XXX.us-east-1.rds.amazonaws.com')
+            expect(error.message).to include('remove failover from wrapper_plugins')
+          }
+      end
+
+      it 'closes the initial connection' do
+        expect(driver_dialect).to receive(:close_connection).with(connection)
+        expect { plugin.connect(non_rds_host, props, true, pipeline_callable) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
+      end
+
+      it 'does not check connections other than the initial one' do
+        expect(plugin.connect(non_rds_host, props, false, pipeline_callable)).to eq(connection)
+      end
+
+      context 'when the dialect is not a cluster dialect' do
+        # Single RDS instances and community databases use a host list provider without instance templates.
+        let(:host_list_provider) { double('connection_string_host_list_provider') }
+
+        it 'returns the connection' do
+          expect(plugin.connect(non_rds_host, props, true, pipeline_callable)).to eq(connection)
+        end
+      end
+
+      context 'when the host is a recognized RDS endpoint or cluster_instance_host_pattern is set' do
+        let(:pattern_missing) { false }
+
+        it 'returns the connection without logging a warning' do
+          expect(plugin.connect(non_rds_host, props, true, pipeline_callable)).to eq(connection)
+          expect(log_output.string).to be_empty
+        end
+      end
+    end
+
+    context 'when failover comes from the default plugin list' do
+      it 'returns the connection and logs a warning naming the host and both fixes' do
+        expect(plugin.connect(non_rds_host, props, true, pipeline_callable)).to eq(connection)
+        expect(log_output.string).to include('WARN')
+        expect(log_output.string).to include("'10.0.0.12' is not a recognized RDS endpoint")
+        expect(log_output.string).to include('Set cluster_instance_host_pattern')
+        expect(log_output.string).to include('set wrapper_plugins to a list without failover')
+      end
+
+      it 'logs the warning once per host' do
+        plugin.connect(non_rds_host, props, true, pipeline_callable)
+        described_class.new(service_container, props).connect(non_rds_host, props, true, pipeline_callable)
+
+        expect(log_output.string.scan('is not a recognized RDS endpoint').size).to eq(1)
+      end
+
+      context 'when the host is a recognized RDS endpoint or cluster_instance_host_pattern is set' do
+        let(:pattern_missing) { false }
+
+        it 'does not log a warning' do
+          plugin.connect(non_rds_host, props, true, pipeline_callable)
+          expect(log_output.string).to be_empty
+        end
+      end
+    end
+
+    describe 'during failover' do
+      let(:bare_reader) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'instance-2', port: '5432', role: host_role::READER) }
+      let(:bare_writer) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'instance-1', port: '5432', role: host_role::WRITER) }
+      let(:dns_error) { StandardError.new("Unknown MySQL server host 'instance-2' (8)") }
+
+      before do
+        props[:failover_timeout_sec] = 2
+        plugin.connect(non_rds_host, props, true, pipeline_callable)
+        allow(host_service).to receive_messages(hosts: [bare_writer, bare_reader], all_hosts: [bare_writer, bare_reader],
+                                                select_host: bare_reader)
+        allow(plugin_manager).to receive(:connect).and_raise(dns_error)
+      end
+
+      it 'fails writer failover when the verified writer host cannot be resolved' do
+        allow(dialect_service).to receive(:unknown_host_error?).with(dns_error).and_return(true)
+        allow(retry_util).to receive(:connect_to_writer) do |*, on_connect_error:, **|
+          on_connect_error.call(bare_writer, dns_error)
+        end
+
+        expect { plugin.send(:failover) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError,
+                          /Unable to resolve the DB instance host 'instance-1'.*cluster_instance_host_pattern/m)
+      end
+
+      it 'fails writer failover with the monitor error instead of waiting out failover_timeout_sec' do
+        monitor_error = AwsAdvancedRubyDriverWrapper::Errors::UnresolvableInstanceHostError.new('instance-2', '10.0.0.12')
+        allow(host_service).to receive(:force_refresh_host_list?).and_raise(monitor_error)
+
+        expect { plugin.send(:failover) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError, /cluster_instance_host_pattern/)
+      end
+
+      context 'with a reader failover mode' do
+        before { plugin.instance_variable_set(:@failover_mode, failover_mode::READER_OR_WRITER) }
+
+        it 'fails promptly when a topology host cannot be resolved' do
+          allow(dialect_service).to receive(:unknown_host_error?).with(dns_error).and_return(true)
+
+          started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          expect { plugin.send(:failover) }
+            .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError,
+                            /Unable to resolve the DB instance host 'instance-2'.*cluster_instance_host_pattern/m)
+          expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+        end
+
+        it 'keeps retrying other connection errors until failover_timeout_sec' do
+          allow(dialect_service).to receive(:unknown_host_error?).with(dns_error).and_return(false)
+          props[:failover_timeout_sec] = 0.3
+          timed_plugin = described_class.new(service_container, props)
+          timed_plugin.connect(non_rds_host, props, true, pipeline_callable)
+          timed_plugin.instance_variable_set(:@failover_mode, failover_mode::READER_OR_WRITER)
+
+          expect { timed_plugin.send(:failover) }
+            .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError, 'Unable to connect to a reader instance')
+        end
       end
     end
   end

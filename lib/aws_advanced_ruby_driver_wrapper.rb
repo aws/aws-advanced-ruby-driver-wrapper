@@ -72,6 +72,7 @@ module AwsAdvancedRubyDriverWrapper
     Utils::RdsUtils.clear_cache
     Services::DialectService.known_endpoint_dialects.clear
     Services::HostService.clear_id_cache
+    Plugins::FailoverPlugin::MISSING_PATTERN_WARNED_HOSTS.clear if defined?(Plugins::FailoverPlugin)
   end
 
   # Runs in a forked child (see ForkHook). Only the forking thread survives a fork, so every background

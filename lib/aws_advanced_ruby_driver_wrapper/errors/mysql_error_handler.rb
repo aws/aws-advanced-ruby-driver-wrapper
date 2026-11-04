@@ -31,6 +31,7 @@ module AwsAdvancedRubyDriverWrapper
         2026, # CR_SSL_CONNECTION_ERROR
         2055  # CR_SERVER_LOST_EXTENDED (lost connection with state info)
       ].freeze
+      UNKNOWN_HOST_ERROR_CODE = 2005 # CR_UNKNOWN_HOST
 
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
@@ -66,6 +67,11 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       private
+
+      def unknown_host?(error)
+        defined?(Mysql2::Error) && error.is_a?(Mysql2::Error) &&
+          error.respond_to?(:error_number) && error.error_number == UNKNOWN_HOST_ERROR_CODE
+      end
 
       def connection_error_network?(error)
         return false unless defined?(Mysql2::Error::ConnectionError) && error.is_a?(Mysql2::Error::ConnectionError)

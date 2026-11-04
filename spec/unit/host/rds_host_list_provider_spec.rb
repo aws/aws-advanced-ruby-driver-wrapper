@@ -157,6 +157,48 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::RdsHostListProvider do
     end
   end
 
+  describe '#instance_host_pattern_missing?' do
+    it 'is false for a recognized RDS endpoint' do
+      expect(provider.instance_host_pattern_missing?).to be(false)
+    end
+
+    context 'when connecting with an IP address and no cluster_instance_host_pattern' do
+      let(:initial_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.0.12', port: 5432) }
+
+      it 'is true' do
+        expect(provider.instance_template.host).to eq('?')
+        expect(provider.instance_host_pattern_missing?).to be(true)
+      end
+    end
+
+    context 'when connecting with a custom domain and no cluster_instance_host_pattern' do
+      let(:initial_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+
+      it 'is true' do
+        expect(provider.instance_host_pattern_missing?).to be(true)
+      end
+    end
+
+    context 'when connecting with an IP address and cluster_instance_host_pattern explicitly set to ?' do
+      # Bare instance identifiers may resolve in the user's environment, e.g. through a DNS search domain.
+      let(:initial_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.0.12', port: 5432) }
+      let(:wrapper_props) { { cluster_instance_host_pattern: '?' } }
+
+      it 'is false' do
+        expect(provider.instance_host_pattern_missing?).to be(false)
+      end
+    end
+
+    context 'when connecting with a custom domain and cluster_instance_host_pattern set' do
+      let(:initial_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+      let(:wrapper_props) { { cluster_instance_host_pattern: '?.abc123.us-east-2.rds.amazonaws.com' } }
+
+      it 'is false' do
+        expect(provider.instance_host_pattern_missing?).to be(false)
+      end
+    end
+  end
+
   describe '#refresh' do
     context 'when topology is cached' do
       let(:cached_topology) do

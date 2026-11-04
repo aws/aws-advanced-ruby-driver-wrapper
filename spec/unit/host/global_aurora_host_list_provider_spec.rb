@@ -134,6 +134,18 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Host::GlobalAuroraHostListProvider 
     end
   end
 
+  describe '#instance_host_pattern_missing?' do
+    context 'when connecting with a custom domain and no cluster_instance_host_pattern' do
+      let(:initial_host_info) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'db.example.com', port: 5432) }
+      let(:wrapper_props) { { global_cluster_instance_host_patterns: instance_templates_str } }
+
+      it 'is false because instance hosts come from global_cluster_instance_host_patterns' do
+        expect(provider.instance_template.host).to eq('?')
+        expect(provider.instance_host_pattern_missing?).to be(false)
+      end
+    end
+  end
+
   describe '#force_refresh' do
     it 'returns nil on timeout' do
       result = provider.force_refresh(false, 0.1)

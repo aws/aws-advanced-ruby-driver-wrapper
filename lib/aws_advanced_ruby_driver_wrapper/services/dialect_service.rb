@@ -164,6 +164,13 @@ module AwsAdvancedRubyDriverWrapper
         @error_handler.read_only_error?(error)
       end
 
+      # @param error [Exception]
+      # @return [Boolean] whether the error means the host name could not be resolved. Custom error
+      #   handlers that don't implement #unknown_host_error? never report one.
+      def unknown_host_error?(error)
+        @error_handler.respond_to?(:unknown_host_error?) && @error_handler.unknown_host_error?(error)
+      end
+
       private
 
       # Resolves the initial database dialect from the initial connection info.

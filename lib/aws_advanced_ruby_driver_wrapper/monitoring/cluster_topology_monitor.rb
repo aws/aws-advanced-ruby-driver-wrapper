@@ -16,11 +16,13 @@
 
 require_relative 'monitor'
 require_relative 'monitor_connection'
+require_relative '../errors'
 require_relative '../host/host_role'
 require_relative '../host/host_availability'
 require_relative '../utils/events/monitor_reset_event'
 require_relative '../utils/rds_utils'
 require_relative '../property_definition'
+require 'concurrent'
 require 'timeout'
 
 module AwsAdvancedRubyDriverWrapper
@@ -39,6 +41,8 @@ module AwsAdvancedRubyDriverWrapper
       # @param service_container [Services::ServiceContainer]
       # @param cluster_id [String]
       # @param instance_template [Host::HostInfo]
+      # @param instance_host_pattern_missing [Boolean] whether instance hosts are bare instance identifiers
+      #   because the connection host isn't an RDS endpoint and cluster_instance_host_pattern isn't set
       # @param topology_utils [Object] responds to #query_topology, #writer_instance?
       # @param monitoring_driver_props [Hash] driver props with prefixed driver overrides merged in
       # @param monitoring_wrapper_props [Hash] wrapper prop overrides extracted from prefixed props
@@ -48,13 +52,15 @@ module AwsAdvancedRubyDriverWrapper
         instance_template:,
         topology_utils:,
         monitoring_driver_props:,
-        monitoring_wrapper_props: {}
+        monitoring_wrapper_props: {},
+        instance_host_pattern_missing: false
       )
         super(termination_timeout_sec: TERMINATION_TIMEOUT_SEC)
 
         @service_container = service_container
         @cluster_id = cluster_id
         @instance_template = instance_template
+        @instance_host_pattern_missing = instance_host_pattern_missing
         @topology_utils = topology_utils
         @monitoring_driver_props = monitoring_driver_props
         @monitoring_wrapper_props = monitoring_wrapper_props
@@ -89,6 +95,9 @@ module AwsAdvancedRubyDriverWrapper
         @completed_one_cycle = {}
         @latest_topology = nil
         @stable_start_time = 0
+        # A non-recoverable configuration error found by an instance monitor. Once set, threads waiting to
+        # verify the writer raise it instead of waiting out their timeout. Cleared when the monitor is reset.
+        @fatal_error = Concurrent::AtomicReference.new
       end
 
       # Forces a topology refresh, ignoring any cached topology. Blocks until updated or raises on timeout.
@@ -389,9 +398,43 @@ module AwsAdvancedRubyDriverWrapper
       rescue StandardError => e
         raise if @service_container.dialect_service.login_error?(e)
 
+        if unresolvable_due_to_misconfiguration?(e)
+          # Retrying can't help, since the host is a bare instance identifier that will never resolve.
+          record_fatal_error(Errors::UnresolvableInstanceHostError.new(host_info.host, initial_host_info&.host))
+          return nil
+        end
+
         logger.debug("[#{@cluster_id}] Connection to #{host_info.host} failed: #{e.message}")
         sleep(calculate_backoff(attempts))
         nil
+      end
+
+      # Whether a connection failure means the host can never be resolved because of the configuration:
+      # the connection host isn't a recognized RDS endpoint and cluster_instance_host_pattern isn't set,
+      # so instance hosts were built from a bare '?' template. Other unresolved hosts, such as a real
+      # instance endpoint during a failover, are retried as usual.
+      #
+      # @param error [StandardError]
+      # @return [Boolean]
+      def unresolvable_due_to_misconfiguration?(error)
+        @instance_host_pattern_missing && @service_container.dialect_service.unknown_host_error?(error)
+      end
+
+      # Records a non-recoverable configuration error, stops the instance monitors, and wakes threads
+      # waiting to verify the writer so they raise it right away.
+      #
+      # @param error [Errors::AwsError]
+      def record_fatal_error(error)
+        logger.error("[#{@cluster_id}] #{error.message}") if @fatal_error.compare_and_set(nil, error)
+        @stop_instance_monitors = true
+        @topology_mutex.synchronize { @topology_cv.broadcast }
+      end
+
+      # @raise [Errors::AwsError] the recorded fatal error, if any. A copy is raised so that each waiting
+      #   thread gets its own backtrace.
+      def raise_if_fatal_error
+        fatal = @fatal_error.get
+        raise fatal.dup if fatal
       end
 
       def check_host_role(conn)
@@ -537,7 +580,11 @@ module AwsAdvancedRubyDriverWrapper
 
       # --- force_refresh support ---
 
+      # A recorded fatal error is only raised to callers verifying the writer, which is what failover does.
+      # Other topology reads, such as the host list refresh behind every new connection, keep getting the
+      # cached topology or a timeout as before, so the misconfiguration doesn't stop new connections.
       def wait_for_topology_update(timeout_sec, verify_writer = false)
+        raise_if_fatal_error if verify_writer
         current_hosts = stored_hosts
 
         @topology_mutex.synchronize do
@@ -557,12 +604,15 @@ module AwsAdvancedRubyDriverWrapper
           # consistent), so we keep waiting until the cached writer matches the writer this monitor has independently
           # verified by probing instances directly, or the timeout is hit.
           while wait_for_topology?(current_hosts, verify_writer) && monotonic_time < deadline && !stopped?
+            raise_if_fatal_error if verify_writer
             remaining = deadline - monotonic_time
             break if remaining <= 0
 
             @topology_cv.wait(@topology_mutex, remaining)
           end
         end
+
+        raise_if_fatal_error if verify_writer
 
         latest = stored_hosts
         if latest.equal?(current_hosts)
@@ -624,6 +674,7 @@ module AwsAdvancedRubyDriverWrapper
         @verified_writer = false
         @writer_info = nil
         @high_refresh_end_time = 0
+        @fatal_error.set(nil)
         clear_topology_cache
 
         @topology_mutex.synchronize do

@@ -294,6 +294,130 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
     end
   end
 
+  describe 'unresolvable instance hosts' do
+    let(:initial_host) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '10.0.0.12', port: 5432) }
+    let(:bare_template) { AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '?', port: 5432) }
+    let(:bare_hosts) do
+      [
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'instance-1', port: 5432, id: 'instance-1',
+                                                         role: AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER),
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'instance-2', port: 5432, id: 'instance-2',
+                                                         role: AwsAdvancedRubyDriverWrapper::Host::HostRole::READER)
+      ]
+    end
+    let(:dns_error) { StandardError.new("Unknown MySQL server host 'instance-1' (8)") }
+    let(:unknown_host) { true }
+    let(:pattern_missing) { true }
+
+    subject(:monitor) do
+      described_class.new(
+        service_container: service_container,
+        cluster_id: cluster_id,
+        instance_template: bare_template,
+        instance_host_pattern_missing: pattern_missing,
+        topology_utils: topology_utils,
+        monitoring_driver_props: { host: 'localhost', port: 5432 },
+        monitoring_wrapper_props: {}
+      )
+    end
+
+    def wait_for_fatal_error
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+      sleep(0.05) until monitor.instance_variable_get(:@fatal_error).get ||
+                        Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+    end
+
+    before do
+      allow(connection_service).to receive(:initial_host_info).and_return(initial_host)
+      allow(topology_utils).to receive(:query_topology).and_return(bare_hosts)
+      # The initial host is reachable but isn't the writer, so the monitor probes the instance hosts.
+      allow(db_dialect).to receive(:host_role).and_return(AwsAdvancedRubyDriverWrapper::Host::HostRole::READER)
+      allow(plugin_manager).to receive(:internal_connect) do |host_info, *|
+        raise dns_error unless host_info.equal?(initial_host)
+
+        mock_connection
+      end
+      allow(dialect_service).to receive(:login_error?).and_return(false)
+      allow(dialect_service).to receive(:unknown_host_error?).with(dns_error).and_return(unknown_host)
+    end
+
+    context 'when the bare template comes from a non-RDS connection host without cluster_instance_host_pattern' do
+      it 'raises a configuration error promptly instead of waiting out the timeout' do
+        monitor.start
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+        expect { monitor.force_refresh(true, 30.0) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::UnresolvableInstanceHostError) { |error|
+            expect(error.message).to match(/Unable to resolve the DB instance host 'instance-\d'/)
+            expect(error.message).to include("connection host '10.0.0.12'")
+            expect(error.message).to include('Set cluster_instance_host_pattern')
+          }
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 5
+      end
+
+      it 'raises the recorded error on later writer verifications without waiting' do
+        monitor.start
+        wait_for_fatal_error
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+        expect { monitor.force_refresh(true, 30.0) }.to raise_error(AwsAdvancedRubyDriverWrapper::Errors::UnresolvableInstanceHostError)
+        expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 1
+      end
+
+      it 'keeps serving topology reads that do not verify the writer' do
+        monitor.start
+        wait_for_fatal_error
+        # Simulates the topology cache expiring after the error was recorded.
+        storage_service.remove(:topology, cluster_id)
+
+        expect(monitor.force_refresh(false, 0)).to be_nil
+        expect { monitor.force_refresh(false, 0.2) }.to raise_error(Timeout::Error)
+      end
+
+      it 'clears the recorded error when the monitor is reset' do
+        monitor.send(:record_fatal_error,
+                     AwsAdvancedRubyDriverWrapper::Errors::UnresolvableInstanceHostError.new('instance-1', '10.0.0.12'))
+
+        monitor.send(:reset!)
+
+        expect(monitor.instance_variable_get(:@fatal_error).get).to be_nil
+      end
+    end
+
+    context 'when the connection fails with a login error' do
+      before { allow(dialect_service).to receive(:login_error?).with(dns_error).and_return(true) }
+
+      it 'does not record a configuration error' do
+        monitor.start
+        sleep(0.3)
+
+        expect(monitor.instance_variable_get(:@fatal_error).get).to be_nil
+      end
+    end
+
+    context 'when the connection error is not an unresolved host' do
+      let(:unknown_host) { false }
+
+      it 'keeps retrying until the timeout' do
+        monitor.start
+
+        expect { monitor.force_refresh(true, 0.5) }.to raise_error(Timeout::Error)
+      end
+    end
+
+    context 'when the instance host pattern is not missing' do
+      # For example a connection host that is an RDS endpoint, or an explicitly set pattern. An instance host
+      # that doesn't resolve, e.g. during a failover, is retried as usual.
+      let(:pattern_missing) { false }
+
+      it 'keeps retrying until the timeout' do
+        monitor.start
+
+        expect { monitor.force_refresh(true, 0.5) }.to raise_error(Timeout::Error)
+      end
+    end
+  end
+
   describe '#process_event' do
     it 'resets state when receiving MonitorResetEvent for this cluster' do
       monitor.instance_variable_get(:@monitoring_connection).set(mock_connection, close_old: false)

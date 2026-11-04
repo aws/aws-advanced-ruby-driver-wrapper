@@ -46,6 +46,10 @@ module AwsAdvancedRubyDriverWrapper
     module RdsUtils
       extend self
 
+      # The instance host pattern derived for a host that isn't a recognized RDS endpoint. It has no domain,
+      # so hosts built from it are bare instance identifiers.
+      BARE_INSTANCE_HOST_PATTERN = '?'
+
       # Authoritative allow-list of AWS regions that can host an RDS/Aurora endpoint.
       KNOWN_REGIONS = %w[
         af-south-1
@@ -394,11 +398,11 @@ module AwsAdvancedRubyDriverWrapper
 
       def rds_instance_host_pattern(host)
         prepared = prepared_host(host)
-        return '?' if blank?(prepared)
+        return BARE_INSTANCE_HOST_PATTERN if blank?(prepared)
 
         groups = cache_match(prepared, *DNS_PATTERNS)
         domain = groups&.[]('domain')
-        domain ? "?.#{domain}" : '?'
+        domain ? "?.#{domain}" : BARE_INSTANCE_HOST_PATTERN
       end
 
       def rds_region(host)

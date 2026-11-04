@@ -17,6 +17,8 @@
 module AwsAdvancedRubyDriverWrapper
   module Errors
     module ErrorHandler
+      TEMPORARY_RESOLUTION_FAILURE = 'temporary failure'
+
       def network_error?(error)
         check_cause_chain(error) { |sql_state, _| network_error_by_sql_state?(sql_state) }
       end
@@ -41,7 +43,26 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # Whether the error, or any error in its cause chain, is a driver error meaning the host name does not
+      # exist. Temporary resolver failures ("Temporary failure in name resolution") don't count, since the
+      # same host may resolve on the next attempt.
+      #
+      # @param error [Exception]
+      # @return [Boolean]
+      def unknown_host_error?(error)
+        check_cause_chain(error) { |_, current| unknown_host?(current) && !temporary_resolution_failure?(current) }
+      end
+
       private
+
+      # Driver-specific check for an error raised when the host name could not be resolved.
+      def unknown_host?(_error)
+        false
+      end
+
+      def temporary_resolution_failure?(error)
+        [error, error.cause].compact.any? { |e| e.message.to_s.downcase.include?(TEMPORARY_RESOLUTION_FAILURE) }
+      end
 
       def extract_sql_state(error)
         @driver_dialect.sql_state(error)

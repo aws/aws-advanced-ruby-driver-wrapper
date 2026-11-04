@@ -36,6 +36,9 @@ module AwsAdvancedRubyDriverWrapper
       # credential was not accepted, so for login-retry purposes it is a login error.
       AUTH_PROTOCOL_VIOLATION = 'trilogy_auth_recv'
       PROTOCOL_VIOLATION_MARKER = 'TRILOGY_PROTOCOL_VIOLATION'
+      # Raised by trilogy's C extension when it resolves the host itself. Newer versions resolve the host in
+      # Ruby instead and raise a connection error caused by a SocketError.
+      DNS_ERROR_MARKER = 'TRILOGY_DNS_ERROR'
 
       def initialize(driver_dialect)
         @driver_dialect = driver_dialect
@@ -79,6 +82,12 @@ module AwsAdvancedRubyDriverWrapper
 
         code = error_code(error)
         !LOGIN_ERROR_CODES.include?(code) && code != LOCK_WAIT_TIMEOUT_ERROR_CODE
+      end
+
+      def unknown_host?(error)
+        return false unless defined?(::Trilogy::ConnectionError) && error.is_a?(::Trilogy::ConnectionError)
+
+        error.cause.is_a?(SocketError) || error.message.to_s.include?(DNS_ERROR_MARKER)
       end
 
       def error_code(error)

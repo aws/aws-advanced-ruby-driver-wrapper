@@ -48,6 +48,12 @@ module AwsAdvancedRubyDriverWrapper
         nil
       end
 
+      # Instance hosts come from the region templates in global_cluster_instance_host_patterns, which is
+      # required, so they never depend on the bare instance template built for a non-RDS connection host.
+      def instance_host_pattern_missing?
+        false
+      end
+
       private
 
       def build_instance_templates_by_region

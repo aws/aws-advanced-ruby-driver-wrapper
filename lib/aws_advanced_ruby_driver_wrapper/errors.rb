@@ -56,5 +56,22 @@ module AwsAdvancedRubyDriverWrapper
     class PluginConflictError < AwsError; end
     class BlueGreenTimeoutError < AwsError; end
     class BlueGreenSwitchoverError < AwsError; end
+
+    # Raised when a DB instance host can't be resolved because the connection host isn't a recognized RDS
+    # endpoint and cluster_instance_host_pattern isn't set, so instance hosts were built as bare instance
+    # identifiers. This is a configuration error, so retrying won't help.
+    class UnresolvableInstanceHostError < AwsError
+      # @param instance_host [String] the DB instance host that could not be resolved
+      # @param connection_host [String] the host the application connected with
+      def initialize(instance_host, connection_host)
+        super(
+          "Unable to resolve the DB instance host '#{instance_host}' while discovering the cluster topology. " \
+          "The connection host '#{connection_host}' is not a recognized RDS endpoint and cluster_instance_host_pattern " \
+          'is not set, so the wrapper built a DB instance host that cannot be resolved. This is a configuration error ' \
+          'rather than a transient failover condition. Set cluster_instance_host_pattern to a DNS pattern that resolves ' \
+          "to the cluster's instances (for example, '?.XXX.us-east-1.rds.amazonaws.com')."
+        )
+      end
+    end
   end
 end

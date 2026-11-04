@@ -21,6 +21,31 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::MysqlErrorHandler do
   let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect.new }
   subject(:handler) { described_class.new(driver_dialect) }
 
+  describe '#unknown_host_error?' do
+    it 'is true for an unknown host error' do
+      error = Mysql2::Error::ConnectionError.new("Unknown MySQL server host 'instance-1' (8)", nil, 2005)
+      expect(handler.unknown_host_error?(error)).to be(true)
+    end
+
+    it 'is true when the unknown host error is a cause' do
+      error = begin
+        begin
+          raise Mysql2::Error::ConnectionError.new("Unknown MySQL server host 'instance-1' (8)", nil, 2005)
+        rescue Mysql2::Error
+          raise AwsAdvancedRubyDriverWrapper::Errors::AwsError, 'wrapped'
+        end
+      rescue AwsAdvancedRubyDriverWrapper::Errors::AwsError => e
+        e
+      end
+      expect(handler.unknown_host_error?(error)).to be(true)
+    end
+
+    it 'is false for other connection errors' do
+      error = Mysql2::Error::ConnectionError.new("Can't connect to MySQL server on 'instance-1' (61)", nil, 2003)
+      expect(handler.unknown_host_error?(error)).to be(false)
+    end
+  end
+
   describe '#network_error_by_sql_state?' do
     it 'returns true for 08 prefix states (except 08004)' do
       expect(handler.network_error_by_sql_state?('08001')).to be true

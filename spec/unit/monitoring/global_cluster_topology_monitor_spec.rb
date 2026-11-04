@@ -116,6 +116,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::GlobalClusterTopologyMo
     storage_service.shutdown
   end
 
+  describe '#unresolvable_due_to_misconfiguration?' do
+    it 'is false even with a bare instance template, since hosts come from the region templates' do
+      monitor.instance_variable_set(:@instance_template, AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: '?', port: 5432))
+
+      expect(monitor.send(:unresolvable_due_to_misconfiguration?, SocketError.new('getaddrinfo'))).to be(false)
+    end
+  end
+
   describe '#query_topology override' do
     it 'calls query_global_topology with instance_templates_by_region' do
       monitor.instance_variable_get(:@monitoring_connection).set(mock_connection, close_old: false)
