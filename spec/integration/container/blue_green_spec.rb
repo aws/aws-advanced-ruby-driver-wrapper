@@ -257,6 +257,31 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
                                      "Sampled #{post_switchover_verifications.size} connections, " \
                                      'all matched original blue identity.'
     end
+
+    # pg separates the socket target (hostaddr) from the TLS server name (host), so Blue/Green
+    # substitute routing pins a switchover-window connection to the instance IP while still verifying
+    # the certificate against the hostname. This reuses the same orchestrated switchover (not a new
+    # one) with one extra verify-full connection added. It only runs for pg with a verify-full CA
+    # bundle configured (BG_TLS_VERIFY_FULL_CA) and skips otherwise; mysql2/trilogy cannot split the
+    # socket from the TLS name, so this is pg-only.
+    it 'keeps a pg verify-full connection valid and routed to green across switchover (socket pinned to IP)' do
+      skip 'Switchover rolled back' if @global.rollback?
+      skip 'requires pg and a verify-full CA bundle (set BG_TLS_VERIFY_FULL_CA)' unless @orchestrator.tls_verify_enabled?
+
+      post_switchover = @orchestrator.tls_verify_host_verification_results.select do |r|
+        r.success? && time_offset_ms(r.timestamp) > switchover_post_offset_ms
+      end
+
+      expect(post_switchover).not_to be_empty,
+                                     'No successful verify-full connection after switchover completed. A connection ' \
+                                     'pinned to the instance IP (hostaddr) should still pass verify-full against the hostname.'
+
+      routed_to_green = post_switchover.reject(&:connected_to_blue)
+      expect(routed_to_green).not_to be_empty,
+                                     'All post-switchover verify-full connections still landed on the original blue host. ' \
+                                     'The BG plugin should route the pinned verify-full connection to green. ' \
+                                     "Sampled #{post_switchover.size} connections, all matched original blue identity."
+    end
   end
 
   # =========================================================================

@@ -284,6 +284,62 @@ module Integration
       end
     end
 
+    # Variant of build_wrapper_blue_host_verification_thread for a pg verify-full connection whose
+    # socket is pinned to the instance IP (hostaddr) during switchover while the certificate is still
+    # verified against the hostname. Deliberately non-fatal: an initial or steady-state TLS failure is
+    # recorded as a failed HostVerificationResult and never propagated to global.unhandled_exceptions,
+    # so a misconfigured CA bundle cannot fail unrelated examples. The orchestrator gates this on pg +
+    # a configured CA bundle.
+    def build_wrapper_tls_host_verification_thread(host_id:, driver:, config:, start_latch:, stop:, finish_latch:, results:, global:)
+      Thread.new do
+        Thread.current.name = "WrapperTlsHostVerify@#{host_id}"
+        conn = nil
+        original_identity = nil
+        begin
+          begin
+            conn = DriverHelper.wrapper_connect(driver, **config)
+            original_identity = query_server_identity(driver, conn)
+          rescue StandardError => e
+            LOGGER.warn { "[WrapperTlsHostVerify@#{host_id}] Initial verify-full connection failed: #{e.class}: #{e.message}" }
+          ensure
+            safe_close(driver, conn)
+            conn = nil
+          end
+
+          start_latch.count_down
+          start_latch.wait(300)
+
+          until stop.true?
+            begin
+              conn = DriverHelper.wrapper_connect(driver, **config)
+              connected_identity = query_server_identity(driver, conn)
+              results.host_verification_results << HostVerificationResult.new(
+                timestamp: nano_time,
+                connected_host: connected_identity,
+                original_blue_ip: original_identity,
+                connected_to_blue: !original_identity.nil? && connected_identity == original_identity,
+                error: nil
+              )
+            rescue StandardError => e
+              results.host_verification_results << HostVerificationResult.new(
+                timestamp: nano_time,
+                connected_host: nil,
+                original_blue_ip: original_identity,
+                connected_to_blue: false,
+                error: e.message
+              )
+            end
+            safe_close(driver, conn)
+            conn = nil
+            sleep(1)
+          end
+        ensure
+          safe_close(driver, conn)
+          finish_latch.count_down
+        end
+      end
+    end
+
     # Blue DNS monitoring: polls Resolv.getaddress, records when IP changes.
     def build_blue_dns_thread(host_id:, host:, start_latch:, stop:, finish_latch:, results:, global:)
       Thread.new do
