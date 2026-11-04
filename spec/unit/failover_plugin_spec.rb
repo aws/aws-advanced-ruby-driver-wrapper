@@ -348,32 +348,33 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
     context 'when failover is listed explicitly in wrapper_plugins' do
       before { props[:wrapper_plugins] = 'failover,initial_connection' }
 
-      it 'raises a configuration error naming the host and both fixes' do
-        expect { plugin.connect(non_rds_host, props, true, pipeline_callable) }
-          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError) { |error|
-            expect(error.message).to include("'10.0.0.12' is not a recognized RDS endpoint")
-            expect(error.message).to include('Set cluster_instance_host_pattern')
-            expect(error.message).to include('?.XXX.us-east-1.rds.amazonaws.com')
-            expect(error.message).to include('remove failover from wrapper_plugins')
-          }
+      it 'returns the connection and logs a warning naming the host and both fixes' do
+        expect(plugin.connect(non_rds_host, props, true, pipeline_callable)).to eq(connection)
+        expect(log_output.string).to include('WARN')
+        expect(log_output.string).to include("'10.0.0.12' is not a recognized RDS endpoint")
+        expect(log_output.string).to include('failover will fail with FailoverFailedError')
+        expect(log_output.string).to include('Set cluster_instance_host_pattern')
+        expect(log_output.string).to include('?.XXX.us-east-1.rds.amazonaws.com')
+        expect(log_output.string).to include('remove failover from wrapper_plugins')
       end
 
-      it 'closes the initial connection' do
-        expect(driver_dialect).to receive(:close_connection).with(connection)
-        expect { plugin.connect(non_rds_host, props, true, pipeline_callable) }
-          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError)
+      it 'keeps the initial connection open' do
+        expect(driver_dialect).not_to receive(:close_connection)
+        plugin.connect(non_rds_host, props, true, pipeline_callable)
       end
 
       it 'does not check connections other than the initial one' do
         expect(plugin.connect(non_rds_host, props, false, pipeline_callable)).to eq(connection)
+        expect(log_output.string).to be_empty
       end
 
       context 'when the dialect is not a cluster dialect' do
         # Single RDS instances and community databases use a host list provider without instance templates.
         let(:host_list_provider) { double('connection_string_host_list_provider') }
 
-        it 'returns the connection' do
+        it 'returns the connection without logging a warning' do
           expect(plugin.connect(non_rds_host, props, true, pipeline_callable)).to eq(connection)
+          expect(log_output.string).to be_empty
         end
       end
 

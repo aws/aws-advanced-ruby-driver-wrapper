@@ -72,7 +72,7 @@ module AwsAdvancedRubyDriverWrapper
       def connect(host_info, driver_props, is_initial_connection, pipeline_callable)
         init_failover_mode
         conn = connect_with_failover(host_info, driver_props, is_initial_connection, pipeline_callable)
-        check_instance_host_pattern(conn) if is_initial_connection
+        warn_if_instance_host_pattern_missing if is_initial_connection
         conn
       end
 
@@ -131,22 +131,16 @@ module AwsAdvancedRubyDriverWrapper
       # Failover needs DB instance hosts it can resolve. Whether it has them is only known once the initial
       # connection has settled the dialect: cluster dialects (Aurora, RDS Multi-AZ DB cluster) then use an
       # RdsHostListProvider, which reports whether the instance host pattern is missing. A single instance or a
-      # community database never has one, so it isn't affected. When the plugin was listed explicitly in
-      # wrapper_plugins the missing pattern is a configuration error; when it comes from the default plugin
-      # list, a warning is logged instead.
-      #
-      # @param conn [Object] the initial connection, closed if the check fails
-      # @raise [Errors::AwsError] if the plugin was requested explicitly and the instance host pattern is missing
-      def check_instance_host_pattern(conn)
+      # community database never has one, so it isn't affected. A missing pattern is logged as a warning, once
+      # per host, and the connection is still returned; failover then fails fast instead of retrying hosts that
+      # can't be resolved.
+      def warn_if_instance_host_pattern_missing
         return unless instance_host_pattern_missing?
 
         host = connection_service.initial_host_info&.host
-        if plugin_requested_explicitly?
-          close_quietly(conn)
-          raise Errors::AwsError, missing_instance_host_pattern_message(host, explicit: true)
-        end
+        return unless MISSING_PATTERN_WARNED_HOSTS.add?(host)
 
-        logger.warn(missing_instance_host_pattern_message(host, explicit: false)) if MISSING_PATTERN_WARNED_HOSTS.add?(host)
+        logger.warn(missing_instance_host_pattern_message(host, explicit: plugin_requested_explicitly?))
       end
 
       def instance_host_pattern_missing?
@@ -169,7 +163,7 @@ module AwsAdvancedRubyDriverWrapper
 
         "The connection host '#{host}' is not a recognized RDS endpoint and " \
           "#{PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name} is not set, so the #{plugin_code} plugin cannot " \
-          'build DB instance hosts from the cluster topology and failover will not work. ' \
+          'build DB instance hosts from the cluster topology, and failover will fail with FailoverFailedError. ' \
           "Set #{PropertyDefinition::CLUSTER_INSTANCE_HOST_PATTERN.name} to a DNS pattern that resolves to the " \
           "cluster's instances (for example, '?.XXX.us-east-1.rds.amazonaws.com'), or #{remedy}."
       end

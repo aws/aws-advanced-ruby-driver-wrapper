@@ -218,8 +218,12 @@ module AwsAdvancedRubyDriverWrapper
         def failover_plan
           # This is expected to return once the topology has stabilized, i.e. once the cluster
           # control plane has already chosen a new writer.
-          unless host_service.force_refresh_host_list?(verify_writer: true, timeout_sec: @failover_timeout)
-            raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
+          begin
+            unless host_service.force_refresh_host_list?(verify_writer: true, timeout_sec: @failover_timeout)
+              raise Errors::FailoverFailedError, 'The request to discover the new topology timed out or was unsuccessful'
+            end
+          rescue Errors::UnresolvableInstanceHostError => e
+            raise Errors::FailoverFailedError, e.message
           end
 
           writer_candidate = host_service.all_hosts.find { |h| h.role == Host::HostRole::WRITER }
@@ -306,7 +310,9 @@ module AwsAdvancedRubyDriverWrapper
           success = false
 
           begin
-            result = @retry_util.connect_to_writer(self, @service_container.plugin_manager, deadline: deadline)
+            result = @retry_util.connect_to_writer(self, @service_container.plugin_manager,
+                                                   deadline: deadline,
+                                                   on_connect_error: method(:raise_if_instance_host_unresolvable))
             if result&.connection && result.host_info
               success = true
               connection_service.update_current_connection(result.connection, result.host_info)
@@ -332,7 +338,8 @@ module AwsAdvancedRubyDriverWrapper
               @service_container.plugin_manager,
               verify_role: verify_role_for(mode),
               strategy: @reader_selector_strategy,
-              deadline: deadline
+              deadline: deadline,
+              on_connect_error: method(:raise_if_instance_host_unresolvable)
             ) { |allowed_hosts| allowed_hosts_for(mode, allowed_hosts) }
             if result&.connection && result.host_info
               success = true
@@ -430,7 +437,8 @@ module AwsAdvancedRubyDriverWrapper
           "The connection host '#{host}' is not a recognized RDS endpoint, #{pattern_name} is not set, and the " \
             'database was identified as a regional cluster rather than an Aurora Global Database, so ' \
             "#{PropertyDefinition::GLOBAL_CLUSTER_INSTANCE_HOST_PATTERNS.name} does not apply and the #{PLUGIN_CODE} " \
-            'plugin cannot build DB instance hosts from the cluster topology. If the cluster is a member of a Global ' \
+            'plugin cannot build DB instance hosts from the cluster topology, and failover will fail with ' \
+            'FailoverFailedError. If the cluster is a member of a Global ' \
             "Database, set #{PropertyDefinition::DIALECT.name} to '#{global_dialect_code}' (without it, a Global " \
             'Database is only detected when it spans more than one region). For a standalone cluster, use the ' \
             "failover plugin instead, and set #{pattern_name} to a DNS pattern that resolves to the cluster's " \
