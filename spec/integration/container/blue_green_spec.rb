@@ -302,10 +302,10 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
   # =========================================================================
 
   context 'stale blue connection invalidation (bg_drop_blue_connections)' do
-    it 'invalidates a pre-switchover blue connection on its first use, then recovers on reconnect' do
+    it 'invalidates a pre-switchover blue connection on its first use, then recovers on green' do
       skip 'Switchover rolled back — stale blue connections are only invalidated on a confirmed switchover' if @global.rollback?
 
-      exercised = @orchestrator.invalidation_probe_results.select(&:probed?)
+      exercised = @orchestrator.invalidation_probe_results.select { |p| p.combo == 'bg' && p.probed? }
       expect(exercised).not_to be_empty,
                                'No invalidation probe was exercised after the switchover — the idle pre-switchover blue ' \
                                'connections never reached their post-switchover query (switchover may not have completed).'
@@ -318,8 +318,15 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
 
       not_recovered = exercised.reject(&:recovered?)
       expect(not_recovered).to be_empty,
-                               'Expected a reconnect after invalidation to succeed (routed to green) so the application ' \
-                               "keeps running, but recovery failed for: #{not_recovered.map(&:host_id).join(', ')}."
+                               'Expected a reconnect after invalidation to succeed so the application keeps running, ' \
+                               "but recovery failed for: #{not_recovered.map(&:host_id).join(', ')}."
+
+      # The reconnect must land on green, not old blue: its server identity must differ from the one
+      # captured on the original blue connection before the switchover.
+      landed_on_blue = exercised.reject { |p| p.landed_on_green?(p.recovery_identity.get) }
+      expect(landed_on_blue).to be_empty,
+                                'Expected the reconnect after invalidation to land on green, but it reported the same ' \
+                                "server identity as the original blue connection for: #{landed_on_blue.map(&:host_id).join(', ')}."
     end
 
     it 'actively invalidates at least one stale blue connection (plugin, not just a network drop)' do
@@ -342,6 +349,57 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
                        "The BG plugin invalidated connection(s) to green host(s): #{green.join(', ')}. " \
                        'Only connections opened to the retired blue environment should be invalidated; a connection to ' \
                        'green must never be treated as stale.'
+    end
+  end
+
+  # =========================================================================
+  # Stale blue connection invalidation with failover (bg,failover) — Aurora only
+  #
+  # When the failover plugin is enabled, invalidating a stale blue connection should surface as a
+  # FailoverSuccessError and the failover plugin should reconnect the SAME connection in place (no
+  # manual reconnect) on green — so the application recovers transparently after one explicit error.
+  # =========================================================================
+
+  context 'stale blue connection invalidation with failover (bg,failover)' do
+    before(:each) do
+      skip 'bg,failover only tested on Aurora deployments' unless aurora_deployment?
+    end
+
+    it 'raises FailoverSuccessError on first use, reconnects in place, and lands on green' do
+      skip 'Switchover rolled back' if @global.rollback?
+
+      exercised = @orchestrator.invalidation_probe_results.select { |p| p.combo == 'bg,failover' && p.probed? }
+      expect(exercised).not_to be_empty,
+                               'No bg,failover invalidation probe was exercised after the switchover — the idle ' \
+                               'pre-switchover blue connections never reached their post-switchover query.'
+
+      # First use raised FailoverSuccessError (the plugin invalidated the stale connection and the
+      # failover plugin took over), not a plain driver error or a silent read.
+      not_failed_over = exercised.reject(&:failover_reconnected?)
+      expect(not_failed_over).to be_empty,
+                                 'Expected the first use of each stale blue connection to raise FailoverSuccessError, ' \
+                                 "but it did not for: #{not_failed_over.map(&:host_id).join(', ')}."
+
+      # The failover plugin reconnected the same connection in place — a follow-up query on it (with no
+      # manual reconnect) succeeded.
+      no_in_place_query = exercised.select { |p| p.post_failover_identity.get.nil? }
+      expect(no_in_place_query).to be_empty,
+                                   'Expected the failed-over connection to run a query in place without a manual ' \
+                                   "reconnect, but it did not for: #{no_in_place_query.map(&:host_id).join(', ')}."
+
+      # That in-place reconnect must be on green, not old blue.
+      landed_on_blue = exercised.reject { |p| p.landed_on_green?(p.post_failover_identity.get) }
+      expect(landed_on_blue).to be_empty,
+                                'Expected the in-place failover reconnect to land on green, but it reported the same ' \
+                                "server identity as the original blue connection for: #{landed_on_blue.map(&:host_id).join(', ')}."
+
+      # Attribution: the plugin logged the invalidation for each probe's blue host, confirming the
+      # FailoverSuccessError came from the feature retiring the connection rather than a raw network drop.
+      logged_host_ids = invalidation_log_entries(@captured_log).map { |e| e[:host].split('.').first.downcase }.uniq
+      missing_log = exercised.reject { |p| logged_host_ids.include?(p.host_id.downcase) }
+      expect(missing_log).to be_empty,
+                             'Expected a plugin "Invalidating a connection ... retired by a Blue/Green switchover" log ' \
+                             "line for each failover probe's blue host, but none was found for: #{missing_log.map(&:host_id).join(', ')}."
     end
   end
 

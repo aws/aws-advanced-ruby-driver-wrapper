@@ -2686,7 +2686,9 @@ public class AuroraTestUtility {
         try { Thread.sleep(15000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
       }
     }
-    LOGGER.warning("Cluster " + clusterId + " was not deleted within " + timeoutMinutes + " minutes");
+    // Timed out while the cluster still exists: fail teardown so the leaked resource is surfaced
+    // rather than silently reported as a successful cleanup.
+    throw new RuntimeException("Cluster " + clusterId + " was not deleted within " + timeoutMinutes + " minutes");
   }
 
   public void waitUntilInstanceDeleted(RdsClient client, String instanceId, int timeoutMinutes) {
@@ -2713,6 +2715,8 @@ public class AuroraTestUtility {
         try { Thread.sleep(15000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
       }
     }
-    LOGGER.warning("Instance " + instanceId + " was not deleted within " + timeoutMinutes + " minutes");
+    // Timed out while the instance still exists: fail teardown so the leaked resource is surfaced
+    // rather than silently reported as a successful cleanup.
+    throw new RuntimeException("Instance " + instanceId + " was not deleted within " + timeoutMinutes + " minutes");
   }
 }
