@@ -3,10 +3,10 @@ following third-party software. The applicable licenses and notices are
 reproduced below. Each dependency remains under its own license; nothing in
 this file modifies those terms.
 
-The underlying database drivers (pg, mysql2), ActiveRecord, pg_query, and the
-AWS SDK gems are optional dependencies that are installed by the user as needed;
-they are listed here because the wrapper is designed to load and run on top of
-them.
+The underlying database drivers (pg, mysql2, trilogy), ActiveRecord, pg_query,
+the OpenTelemetry gems, and the AWS SDK gems are optional dependencies that are
+installed by the user as needed; they are listed here because the wrapper is
+designed to load and run on top of them.
 
 ===============================================================================
 
@@ -37,6 +37,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+-----------
+
+The following Ruby gems are required runtime dependencies of this product.
+Ruby no longer installs them by default from Ruby 3.4 (bigdecimal) and 4.0
+(logger) on, so the wrapper declares them explicitly:
+
+ - bigdecimal@4.1.3
+ - logger@1.7.0
+
+These packages are each distributed under the same Ruby license reproduced
+below for the `pg` gem (the Ruby license or, at your option, the 2-clause
+BSDL).
 
 -----------
 
@@ -131,9 +144,41 @@ SOFTWARE.
 
 -----------
 
+The following Ruby gem may be used with this product (alternative MySQL driver;
+the KMS Encryption plugin is not supported with trilogy):
+
+ - trilogy@2.13.2
+
+This package contains the following license and notice below:
+
+Copyright (c) 2012-2021 GitHub, Inc.
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+-----------
+
 The following Ruby gem may be used with this product (PostgreSQL driver):
 
- - pg@1.6.3
+ - pg@1.7.0
 
 This package contains the following license and notice below:
 
@@ -224,7 +269,7 @@ SUCH DAMAGE.
 The following Ruby gem may be used with this product (SQL statement parsing
 for the KMS Encryption plugin):
 
- - pg_query@6.2.3
+ - pg_query@6.2.5
 
 This package contains the following license and notice below:
 
@@ -259,13 +304,27 @@ POSSIBILITY OF SUCH DAMAGE.
 
 -----------
 
-The following AWS SDK for Ruby gems may be used with this product (AWS IAM
-Authentication, AWS Secrets Manager, Custom Endpoint, and KMS Encryption
-plugins):
+The following OpenTelemetry for Ruby gems may be used with this product
+(telemetry, when `enable_telemetry` is set). The wrapper loads these API gems;
+the OpenTelemetry SDK and exporters that actually emit the traces and metrics
+are supplied by the application:
 
- - aws-sdk-kms@1.132.0
- - aws-sdk-rds@1.323.0
- - aws-sdk-secretsmanager@1.136.0
+ - opentelemetry-api@1.11.1
+ - opentelemetry-metrics-api@0.10.0
+
+These packages are each licensed under the Apache License, Version 2.0,
+reproduced below (following the AWS SDK gems).
+
+-----------
+
+The following AWS SDK for Ruby gems may be used with this product (AWS IAM
+Authentication, AWS Secrets Manager, Custom Endpoint, Federated Authentication,
+Okta Authentication, and KMS Encryption plugins):
+
+ - aws-sdk-core@3.263.0
+ - aws-sdk-kms@1.138.0
+ - aws-sdk-rds@1.329.0
+ - aws-sdk-secretsmanager@1.141.0
 
 These packages are each licensed under the Apache License, Version 2.0,
 reproduced below:
