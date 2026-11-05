@@ -208,6 +208,36 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient do
     end
   end
 
+  # During a Blue/Green switchover the current connection is momentarily nil. A call in that window
+  # must fail as a connection error the adapter can translate, not a bare NoMethodError.
+  describe 'when the current connection is nil' do
+    let(:connection) { nil }
+
+    it 'raises a Trilogy connection error rather than NoMethodError' do
+      # change_db reaches the client through method_missing, where the nil guard lives. AR keys its
+      # translation off the exact "MySQL client is not connected" message, as it does for mysql2.
+      expect { client.change_db('other') }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'guards the main query path, which reaches the connection directly rather than through method_missing' do
+      expect { client.query('SELECT 1') }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'guards query_with_flags, which reads query_flags off the connection directly' do
+      expect { client.query_with_flags('SELECT 1', 4) }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    # ping raises a Trilogy::Error, which AR's active? rescues into false; close is a no-op like the
+    # real driver on a closed connection.
+    it 'raises a Trilogy connection error from ping (which active? turns into false)' do
+      expect { client.ping }.to raise_error(Trilogy::BaseConnectionError, /MySQL client is not connected/)
+    end
+
+    it 'treats close as a no-op instead of raising' do
+      expect { client.close }.not_to raise_error
+    end
+  end
+
   describe '#inspect' do
     it 'does not expose the connection config' do
       expect(client.inspect).to match(/\A#<AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient:0x\h+>\z/)

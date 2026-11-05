@@ -117,7 +117,7 @@ This is a minimal configuration. To add failover tuning, IAM or Secrets Manager 
 
 If you use an AI assistant (Kiro, Cursor, Claude Code, GitHub Copilot, ChatGPT, Amazon Bedrock, etc.), you can give it the wrapper's configuration assistant skill to help build, review, or troubleshoot your wrapper configuration.
 
-The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 55,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
+The skill is a single self-contained markdown file, [`skills/ruby-wrapper-configuration-assistant/SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md). It covers every plugin, parameter, default value, dialect, failover mode, and compatibility constraint, so the AI can answer configuration questions without access to the wrapper source. It follows the [Agent Skills](https://agentskills.io) format. It is about 65,000 tokens on Claude Opus 5.5 and Sonnet 5.5 (other models count tokens differently). How much of that you pay for depends on how you add it:
 
 - **Tools that support Agent Skills** load only the skill's name and description (about 100 tokens) until a request needs the skill. They then load the full file, and it stays in context for the rest of that conversation.
 - **A system prompt, or a file pasted into a chat,** sends the full file with every message.
@@ -126,7 +126,7 @@ Once the full file is in context, it is sent again with each message, so tools t
 
 #### Quick start
 
-1. Download or copy [`SKILL.md`](./skills/ruby-wrapper-configuration-assistant/SKILL.md), or the whole `skills/ruby-wrapper-configuration-assistant` folder.
+1. Download or copy [`SKILL.md`](https://github.com/aws/aws-advanced-ruby-driver-wrapper/blob/v1.1.0/skills/ruby-wrapper-configuration-assistant/SKILL.md) from the latest release, or the whole `skills/ruby-wrapper-configuration-assistant` folder. The copy on `main` can describe changes that aren't released yet; it marks them `[Unreleased]`, and the AI won't recommend them for a released gem version.
 2. Add it to your AI tool:
    - **Tools that support Agent Skills** (Kiro, Cursor, Claude Code, GitHub Copilot in VS Code, and others): copy the `ruby-wrapper-configuration-assistant` folder (or create a folder with that name and save `SKILL.md` in it) into one of the tool's skills directories. The folder name must match the `name` field at the top of the file (`ruby-wrapper-configuration-assistant`), as the Agent Skills format requires; a tool may not load the skill if they differ.
 
@@ -142,7 +142,7 @@ Once the full file is in context, it is sent again with each message, so tools t
      ```bash
      mkdir -p .claude/skills/ruby-wrapper-configuration-assistant
      curl -fsSL -o .claude/skills/ruby-wrapper-configuration-assistant/SKILL.md \
-       https://raw.githubusercontent.com/aws/aws-advanced-ruby-driver-wrapper/main/skills/ruby-wrapper-configuration-assistant/SKILL.md
+       https://raw.githubusercontent.com/aws/aws-advanced-ruby-driver-wrapper/v1.1.0/skills/ruby-wrapper-configuration-assistant/SKILL.md
      ```
 
    - **Claude Projects**: upload it as a project knowledge document. Claude reads project knowledge in full while it fits in the context window, but when a project's knowledge approaches that limit, Claude switches to searching it for passages that match each question, so the model may miss the instructions and cross-references the skill depends on. Keep the project's other knowledge small, or use a separate project.

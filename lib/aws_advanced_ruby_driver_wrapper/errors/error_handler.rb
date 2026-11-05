@@ -41,6 +41,22 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # Whether the driver reported +error+ as a database error, i.e. it carries a SQLSTATE (or, for
+      # trilogy, a MySQL error code). This is not a strict server-vs-client split: mysql2 also reports
+      # SQLSTATE HY000 for client-side failures such as a lost connection. Used by the Blue/Green status
+      # monitor to tell database errors from other exceptions. A driver whose errors carry no SQLSTATE
+      # (trilogy) overrides this to classify by its numeric error code.
+      def database_error?(error)
+        !@driver_dialect.sql_state(error).nil?
+      end
+
+      # Whether +error+ is a schema/syntax error (SQLSTATE class '42': missing table, unknown column,
+      # parse error, missing routine). The Blue/Green status monitor reads this as "the status
+      # table/function is not there", i.e. NOT_CREATED. Default is SQLSTATE-based; trilogy overrides.
+      def schema_error?(error)
+        @driver_dialect.sql_state(error)&.start_with?('42') || false
+      end
+
       private
 
       def extract_sql_state(error)

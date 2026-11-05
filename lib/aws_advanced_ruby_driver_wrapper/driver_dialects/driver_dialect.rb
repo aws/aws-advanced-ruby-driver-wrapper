@@ -149,6 +149,29 @@ module AwsAdvancedRubyDriverWrapper
         :user
       end
 
+      # Returns the property key the underlying driver expects for the TLS CA certificate file.
+      # Used by Blue/Green substitute routing for drivers that overload the host for both the socket
+      # address and the TLS server name (mysql2, trilogy): it tells whether TLS is active before
+      # deciding to connect by hostname rather than raw IP, avoiding a certificate-name mismatch.
+      # Drivers that can pin the socket separately (see #props_pinned_to_ip) do not use this.
+      # mysql2 names it +:sslca+ (the default); override where it differs (trilogy uses +:ssl_ca+).
+      def tls_ca_property_key
+        :sslca
+      end
+
+      # Blue/Green substitute routing must connect to a specific instance IP — so a DNS lookup during
+      # the switchover window cannot resolve to the old instance — while still presenting the original
+      # hostname for TLS certificate verification and IAM token generation. A driver that can pin the
+      # socket address separately from the TLS/auth server name returns a copy of +driver_props+ that
+      # connects to +ip+ but keeps the hostname for verification; a driver that overloads the host for
+      # both returns +nil+, and the routing falls back to the #tls_ca_property_key hostname check.
+      # @param driver_props [Hash]
+      # @param ip [String] the instance IP to pin the socket to
+      # @return [Hash, nil] props pinned to +ip+, or +nil+ when the driver cannot split socket from TLS name
+      def props_pinned_to_ip(_driver_props, _ip)
+        nil
+      end
+
       # Applies default socket/connect timeouts to monitoring connection driver props.
       # These ensure that a query or close on a dead connection raises a timeout error
       # rather than hanging indefinitely or segfaulting.

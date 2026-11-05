@@ -57,6 +57,7 @@ module AwsAdvancedRubyDriverWrapper
     # What is remembered is the copy of the SQL that plugins inspect, made once here rather than on
     # every call that is handed it later. The driver is sent the SQL as the application wrote it.
     def query(sql, options = {})
+      ensure_connected!
       inspected = Utils::SqlEncoding.inspectable(sql)
       result = pm.execute(RubyMethod::CONNECTION_QUERY, current_conn, ->(*a) { current_conn.query(*a) }, sql, options,
                           sql: inspected)
@@ -80,10 +81,14 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     def ping
+      return false if current_conn.nil?
+
       pm.execute(RubyMethod::CONNECTION_PING, current_conn, -> { current_conn.ping })
     end
 
     def close
+      return if current_conn.nil?
+
       pm.execute(RubyMethod::CONNECTION_CLOSE, current_conn, -> { current_conn.close })
     end
 
@@ -147,8 +152,7 @@ module AwsAdvancedRubyDriverWrapper
     BOUNDED_TO_ASYNC = Set[:abandon_results!].freeze
 
     def method_missing(method_name, *args, **kwargs, &)
-      conn = current_conn
-      raise NoMethodError, 'Connection not initialized' if conn.nil?
+      conn = ensure_connected!
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       method_key = "connection.#{method_name}"
@@ -199,6 +203,16 @@ module AwsAdvancedRubyDriverWrapper
 
     def current_conn
       @service_container.connection_service.current_connection
+    end
+
+    # Guards the entry points that reach for the current connection directly (the query path and
+    # method_missing). Without a live connection AR expects the driver's own "not connected" error,
+    # which it translates to a connection error; a bare NoMethodError on nil would not be recognized.
+    def ensure_connected!
+      conn = current_conn
+      raise Mysql2::Error::ConnectionError, 'MySQL client is not connected' if conn.nil?
+
+      conn
     end
 
     def pm

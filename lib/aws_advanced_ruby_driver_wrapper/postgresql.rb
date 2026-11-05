@@ -320,7 +320,7 @@ module AwsAdvancedRubyDriverWrapper
 
     def method_missing(method_name, *args, **kwargs, &)
       conn = current_conn
-      raise NoMethodError, 'Connection not initialized' if conn.nil?
+      raise PG::ConnectionBad, 'connection is not initialized' if conn.nil?
       raise NoMethodError, "undefined method `#{method_name}' for #{self.class}" unless conn.respond_to?(method_name)
 
       operation = operation_for(method_name)
@@ -359,7 +359,7 @@ module AwsAdvancedRubyDriverWrapper
       spec = OPERATIONS[operation] || { method: "connection.#{operation}" }
       conn = current_conn
       # Guard against a missing connection. Fail loudly instead.
-      raise NoMethodError, 'Connection not initialized' if conn.nil?
+      raise PG::ConnectionBad, 'connection is not initialized' if conn.nil?
 
       # Only forward keyword arguments when there are any.
       sql = sql_for(spec, args)

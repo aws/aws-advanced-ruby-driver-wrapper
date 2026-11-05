@@ -2,6 +2,9 @@
   "ignorePatterns": [
     {
       "pattern": "^https://marketplace.visualstudio.com/"
+    },
+    {
+      "pattern": "^https://github\\.com/aws/aws-advanced-ruby-driver-wrapper/blob/v[0-9]"
     }
   ]
 }

@@ -94,23 +94,54 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::MysqlErrorHandler do
     end
 
     it 'returns true for ConnectionError with CR_SERVER_GONE_ERROR (2006)' do
-      error = build_connection_error('MySQL server has gone away', error_number: 2006)
+      error = build_mysql2_error('MySQL server has gone away', error_number: 2006)
       expect(handler.network_error?(error)).to be true
     end
 
     it 'returns true for ConnectionError with CR_SERVER_LOST (2013)' do
-      error = build_connection_error('Lost connection to MySQL server during query', error_number: 2013)
+      error = build_mysql2_error('Lost connection to MySQL server during query', error_number: 2013)
       expect(handler.network_error?(error)).to be true
     end
 
     it 'returns true for ConnectionError with CR_SSL_CONNECTION_ERROR (2026)' do
-      error = build_connection_error('TLS/SSL error: unexpected eof while reading', error_number: 2026)
+      error = build_mysql2_error('TLS/SSL error: unexpected eof while reading', error_number: 2026)
       expect(handler.network_error?(error)).to be true
     end
 
     it 'returns false for ConnectionError with unrecognized error number' do
-      error = build_connection_error('some error', error_number: 9999)
+      error = build_mysql2_error('some error', error_number: 9999)
       expect(handler.network_error?(error)).to be false
+    end
+
+    it 'returns true for a read_timeout, which mysql2 raises as a TimeoutError with no error number' do
+      error = Mysql2::Error::TimeoutError.new('Timeout waiting for a response from the last query. (waited 1 seconds)')
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns true for a read_timeout wrapped by another error' do
+      cause = Mysql2::Error::TimeoutError.new('Timeout waiting for a response from the last query. (waited 1 seconds)')
+      expect(handler.network_error?(build_error_with_cause(cause))).to be true
+    end
+
+    it 'returns false for a lock wait timeout (1205), which mysql2 also raises as a TimeoutError' do
+      error = build_mysql2_error('Lock wait timeout exceeded; try restarting transaction', error_number: 1205,
+                                                                                           sql_state: 'HY000')
+      expect(error).to be_a(Mysql2::Error::TimeoutError)
+      expect(handler.network_error?(error)).to be false
+    end
+
+    it 'returns true for a wait_timeout disconnect by the server (4031)' do
+      error = build_mysql2_error('The client was disconnected by the server because of inactivity.',
+                                 error_number: 4031, sql_state: 'HY000')
+      expect(error).not_to be_a(Mysql2::Error::ConnectionError)
+      expect(handler.network_error?(error)).to be true
+    end
+
+    it 'returns true for CR_SERVER_LOST_EXTENDED (2055), which mysql2 raises as a plain Mysql2::Error' do
+      error = build_mysql2_error("Lost connection to MySQL server at 'reading initial communication packet'",
+                                 error_number: 2055, sql_state: 'HY000')
+      expect(error).not_to be_a(Mysql2::Error::ConnectionError)
+      expect(handler.network_error?(error)).to be true
     end
   end
 
@@ -161,18 +192,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::MysqlErrorHandler do
     klass.new('test error', sql_state, error_number)
   end
 
-  def build_connection_error(message, error_number: nil)
-    klass = Class.new(StandardError) do
-      attr_reader :sql_state, :error_number
-
-      def initialize(msg, error_number)
-        super(msg)
-        @sql_state = nil
-        @error_number = error_number
-      end
-    end
-    stub_const('Mysql2::Error::ConnectionError', klass)
-    klass.new(message, error_number)
+  # Builds a real Mysql2 error the way the C extension does, so the class mysql2 picks for the code is used.
+  def build_mysql2_error(message, error_number: nil, sql_state: nil)
+    Mysql2::Error.new_with_args(message, nil, error_number, sql_state)
   end
 
   def build_error_with_cause(cause)
@@ -183,5 +205,29 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::MysqlErrorHandler do
     end
   rescue StandardError => e
     e
+  end
+
+  describe '#database_error?' do
+    it 'is true when the error reports a SQLSTATE' do
+      expect(handler.database_error?(double(sql_state: '42S02'))).to be true
+    end
+
+    it 'is false when the error reports no SQLSTATE' do
+      expect(handler.database_error?(StandardError.new)).to be false
+    end
+  end
+
+  describe '#schema_error?' do
+    it 'is true for a class-42 SQLSTATE' do
+      expect(handler.schema_error?(double(sql_state: '42S02'))).to be true
+    end
+
+    it 'is false for a non-42 SQLSTATE' do
+      expect(handler.schema_error?(double(sql_state: 'HY000'))).to be false
+    end
+
+    it 'is false when the error reports no SQLSTATE' do
+      expect(handler.schema_error?(StandardError.new)).to be false
+    end
   end
 end

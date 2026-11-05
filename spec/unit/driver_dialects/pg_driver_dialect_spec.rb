@@ -103,7 +103,31 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#props_pinned_to_ip' do
+    # libpq separates the socket target (hostaddr) from the TLS/IAM server name (host), so pg pins
+    # the socket to the IP and keeps :host for certificate verification - unlike mysql2/trilogy, which
+    # cannot split the two and return nil.
+    it 'returns a copy with :hostaddr set to the IP, leaving the original props unchanged' do
+      driver_props = { sslmode: 'verify-full', host: 'my-cluster.rds.amazonaws.com' }
+
+      pinned = dialect.props_pinned_to_ip(driver_props, '10.0.1.1')
+
+      expect(pinned).to eq(sslmode: 'verify-full', host: 'my-cluster.rds.amazonaws.com', hostaddr: '10.0.1.1')
+      expect(driver_props).not_to have_key(:hostaddr)
+    end
+  end
+
   describe '#prepare_connect_config' do
+    # A pinned socket (hostaddr) must survive to libpq alongside the hostname :host used for TLS.
+    it 'carries :hostaddr through so a pinned socket survives to the driver' do
+      cfg = dialect.prepare_connect_config(
+        AwsAdvancedRubyDriverWrapper::Host::HostInfo.new(host: 'my-cluster.rds.amazonaws.com', port: 5432),
+        { hostaddr: '10.0.1.1', sslmode: 'verify-full' }
+      )
+
+      expect(cfg).to include(host: 'my-cluster.rds.amazonaws.com', hostaddr: '10.0.1.1', sslmode: 'verify-full')
+    end
+
     it 'remaps :database to :dbname' do
       result = dialect.prepare_connect_config(host_info, config)
       expect(result[:dbname]).to eq('testdb')

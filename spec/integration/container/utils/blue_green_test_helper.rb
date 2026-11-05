@@ -101,6 +101,56 @@ module Integration
     end
   end
 
+  # Thread-safe result for a stale-blue-connection invalidation probe (one per blue host, per combo).
+  # A single probe thread writes these; the spec reads them after the run. The 'bg' probe records a
+  # manual reconnect (recovery / recovery_identity); the 'bg,failover' probe records the in-place
+  # failover reconnect (failover_reconnected / post_failover_identity). original_identity is captured
+  # on the probe connection before the switchover so recovery can be confirmed to land on green.
+  class InvalidationProbeResult
+    attr_reader :host_id, :combo, :first_use, :recovery, :post_failover_query,
+                :original_identity, :recovery_identity, :post_failover_identity, :failover_reconnected
+
+    def initialize(host_id:, combo: 'bg')
+      @host_id = host_id
+      @combo = combo
+      @first_use = Concurrent::AtomicReference.new(nil)  # first query on the stale connection after switchover
+      @recovery  = Concurrent::AtomicReference.new(nil)  # query on a fresh connection after invalidation (bg)
+      @post_failover_query    = Concurrent::AtomicReference.new(nil) # in-place query after the failover reconnect (bg,failover)
+      @original_identity      = Concurrent::AtomicReference.new(nil) # server identity before the switchover
+      @recovery_identity      = Concurrent::AtomicReference.new(nil) # server identity after the manual reconnect (bg)
+      @post_failover_identity = Concurrent::AtomicReference.new(nil) # server identity after the in-place failover reconnect
+      @failover_reconnected   = Concurrent::AtomicBoolean.new(false) # first use raised FailoverSuccessError (bg,failover)
+    end
+
+    # True once the probe issued its first post-switchover query.
+    def probed?
+      !@first_use.get.nil?
+    end
+
+    # True if that first query raised — i.e. the stale connection was invalidated instead of serving a read.
+    def invalidated?
+      holder = @first_use.get
+      !holder.nil? && !holder.error.nil?
+    end
+
+    # True if the reconnect after invalidation ran a query successfully (bg probe).
+    def recovered?
+      holder = @recovery.get
+      !holder.nil? && holder.error.nil?
+    end
+
+    # True if the first use raised FailoverSuccessError and the failover plugin reconnected in place.
+    def failover_reconnected?
+      @failover_reconnected.true?
+    end
+
+    # True if the in-place query after the failover reconnect ran successfully (bg,failover probe).
+    def in_place_query_succeeded?
+      holder = @post_failover_query.get
+      !holder.nil? && holder.error.nil?
+    end
+  end
+
   # Thread-safe global results not tied to a specific instance.
   class BlueGreenGlobalResults
     def initialize
