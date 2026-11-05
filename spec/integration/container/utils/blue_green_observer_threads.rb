@@ -91,7 +91,8 @@ module Integration
       return nil if row.nil?
 
       row.values.first&.to_s
-    rescue StandardError
+    rescue StandardError => e
+      LOGGER.debug { "query_probe_identity failed: #{e.class}: #{e.message}" }
       nil
     end
 
@@ -208,10 +209,35 @@ module Integration
       end
     end
 
-    # Number of nanoseconds a probe will keep retrying its first post-switchover use while the stale
-    # connection is still (unexpectedly) serving reads, giving the drop marker — stored just before
-    # the COMPLETED status is published — time to become active before we record a non-invalidation.
+    # Maximum time a probe waits for the drop-blue-connections marker to become active before issuing
+    # its single first-use query. The status provider activates the marker before it stores the
+    # POST/COMPLETED status (and switchover_done is only set after that), so the marker is normally
+    # already active; this is just a bounded safety margin, not a per-query retry window.
     INVALIDATION_SETTLE_NS = 15 * 1_000_000_000
+
+    # Waits until the drop-blue-connections marker for this deployment is active (or the deadline),
+    # reading the shared storage the BG plugin writes it to. This makes the probe's first-use query
+    # deterministic: it runs once, after the marker is confirmed active, rather than polling the
+    # connection and hoping to catch the invalidation.
+    def wait_for_drop_marker_active(config, stop)
+      bgd_id = config[:bgd_id].to_s.strip.downcase
+      return if bgd_id.empty?
+
+      bg = AwsAdvancedRubyDriverWrapper::Plugins::BlueGreen::BlueGreenPlugin
+      storage = AwsAdvancedRubyDriverWrapper::Services::CoreServices.storage_service
+      marker_key = bg.drop_marker_key(bgd_id)
+      deadline = nano_time + INVALIDATION_SETTLE_NS
+
+      until stop.true? || nano_time > deadline
+        begin
+          marker = storage.get(bg::DROP_MARKER_NAME, marker_key, register_access: false)
+          break if marker.respond_to?(:active?) && marker.active?
+        rescue ArgumentError
+          # Marker partition not registered yet — keep waiting.
+        end
+        sleep(0.2)
+      end
+    end
 
     # Stale-connection invalidation probe. Opens a wrapper connection to blue BEFORE the switchover and
     # holds it idle (no queries) across the whole switchover — the closest analogue to a connection left
@@ -243,22 +269,16 @@ module Integration
           sleep(0.5) until stop.true? || global.switchover_done? || global.rollback?
           next unless global.switchover_done? && !global.rollback?
 
-          # First use of the idle, pre-switchover blue connection: expect an explicit error
-          # (invalidation), never a silently-served result. Retry while it still serves reads, up to
-          # INVALIDATION_SETTLE_NS, to absorb the brief window between COMPLETED and marker activation.
-          first_use_deadline = nano_time + INVALIDATION_SETTLE_NS
-          loop do
-            start_t = nano_time
-            begin
-              DriverHelper.execute(driver, conn, 'SELECT 1')
-              results.first_use.set(TimeHolder.new(start_t, nano_time, nil))
-              break if stop.true? || nano_time > first_use_deadline
-
-              sleep(1)
-            rescue StandardError => e
-              results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
-              break
-            end
+          # Wait for the drop marker to be active, then issue exactly one query. The first use of the
+          # idle, pre-switchover blue connection must raise an explicit error (invalidation), never
+          # serve a (possibly stale) read.
+          wait_for_drop_marker_active(config, stop)
+          start_t = nano_time
+          begin
+            DriverHelper.execute(driver, conn, 'SELECT 1')
+            results.first_use.set(TimeHolder.new(start_t, nano_time, nil))
+          rescue StandardError => e
+            results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
           end
 
           # Recovery: a fresh connection must be routed to green and succeed, so the app keeps running.
@@ -306,35 +326,33 @@ module Integration
           sleep(0.5) until stop.true? || global.switchover_done? || global.rollback?
           next unless global.switchover_done? && !global.rollback?
 
-          # First use of the idle, pre-switchover blue connection: with the failover plugin enabled the
-          # invalidation surfaces as FailoverSuccessError and the plugin reconnects `conn` in place.
-          first_use_deadline = nano_time + INVALIDATION_SETTLE_NS
-          loop do
-            start_t = nano_time
-            begin
-              DriverHelper.execute(driver, conn, 'SELECT 1')
-              results.first_use.set(TimeHolder.new(start_t, nano_time, nil))
-              break if stop.true? || nano_time > first_use_deadline
-
-              sleep(1)
-            rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError => e
-              results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
-              results.failover_reconnected.make_true
-              break
-            rescue StandardError => e
-              results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
-              break
-            end
+          # Wait for the drop marker to be active, then issue exactly one query. With the failover
+          # plugin enabled the invalidation surfaces as FailoverSuccessError and the plugin reconnects
+          # `conn` in place.
+          wait_for_drop_marker_active(config, stop)
+          start_t = nano_time
+          begin
+            DriverHelper.execute(driver, conn, 'SELECT 1')
+            results.first_use.set(TimeHolder.new(start_t, nano_time, nil))
+          rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError => e
+            results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
+            results.failover_reconnected.make_true
+          rescue StandardError => e
+            results.first_use.set(TimeHolder.new(start_t, nano_time, e.message))
           end
 
           # No manual reconnect: the failover plugin should have reconnected `conn` in place. The next
-          # query must succeed on that same connection, and it must land on green.
+          # query must succeed on that same connection, and it must land on green. Record the query
+          # outcome and the identity separately so a failed identity read is not mistaken for a failed
+          # in-place query (or for landing on blue).
           if results.failover_reconnected.true?
+            start_t = nano_time
             begin
               DriverHelper.execute(driver, conn, 'SELECT 1')
+              results.post_failover_query.set(TimeHolder.new(start_t, nano_time, nil))
               results.post_failover_identity.set(query_probe_identity(driver, conn))
             rescue StandardError => e
-              LOGGER.debug { "[InvalidationFailoverProbe@#{host_id}] post-failover query failed: #{e.class}: #{e.message}" }
+              results.post_failover_query.set(TimeHolder.new(start_t, nano_time, e.message))
             end
           end
         rescue StandardError => e

@@ -321,9 +321,16 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
                                'Expected a reconnect after invalidation to succeed so the application keeps running, ' \
                                "but recovery failed for: #{not_recovered.map(&:host_id).join(', ')}."
 
+      # Both identities must be readable to judge where the reconnect landed; a failed identity read is
+      # a distinct problem from landing on blue, so report it separately.
+      missing_identity = exercised.select { |p| p.original_identity.get.nil? || p.recovery_identity.get.nil? }
+      expect(missing_identity).to be_empty,
+                                  'Could not read the server identity on the probe connection or its reconnect for: ' \
+                                  "#{missing_identity.map(&:host_id).join(', ')}."
+
       # The reconnect must land on green, not old blue: its server identity must differ from the one
       # captured on the original blue connection before the switchover.
-      landed_on_blue = exercised.reject { |p| p.landed_on_green?(p.recovery_identity.get) }
+      landed_on_blue = exercised.select { |p| p.recovery_identity.get == p.original_identity.get }
       expect(landed_on_blue).to be_empty,
                                 'Expected the reconnect after invalidation to land on green, but it reported the same ' \
                                 "server identity as the original blue connection for: #{landed_on_blue.map(&:host_id).join(', ')}."
@@ -382,13 +389,20 @@ RSpec.describe 'BlueGreenDeployment', :integration, :blue_green,
 
       # The failover plugin reconnected the same connection in place — a follow-up query on it (with no
       # manual reconnect) succeeded.
-      no_in_place_query = exercised.select { |p| p.post_failover_identity.get.nil? }
+      no_in_place_query = exercised.reject(&:in_place_query_succeeded?)
       expect(no_in_place_query).to be_empty,
                                    'Expected the failed-over connection to run a query in place without a manual ' \
                                    "reconnect, but it did not for: #{no_in_place_query.map(&:host_id).join(', ')}."
 
+      # Both identities must be readable to judge where the in-place reconnect landed; a failed
+      # identity read is a distinct problem from landing on blue, so report it separately.
+      missing_identity = exercised.select { |p| p.original_identity.get.nil? || p.post_failover_identity.get.nil? }
+      expect(missing_identity).to be_empty,
+                                  'Could not read the server identity on the probe connection or its in-place ' \
+                                  "reconnect for: #{missing_identity.map(&:host_id).join(', ')}."
+
       # That in-place reconnect must be on green, not old blue.
-      landed_on_blue = exercised.reject { |p| p.landed_on_green?(p.post_failover_identity.get) }
+      landed_on_blue = exercised.select { |p| p.post_failover_identity.get == p.original_identity.get }
       expect(landed_on_blue).to be_empty,
                                 'Expected the in-place failover reconnect to land on green, but it reported the same ' \
                                 "server identity as the original blue connection for: #{landed_on_blue.map(&:host_id).join(', ')}."

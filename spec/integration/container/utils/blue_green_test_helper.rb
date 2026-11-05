@@ -107,7 +107,7 @@ module Integration
   # failover reconnect (failover_reconnected / post_failover_identity). original_identity is captured
   # on the probe connection before the switchover so recovery can be confirmed to land on green.
   class InvalidationProbeResult
-    attr_reader :host_id, :combo, :first_use, :recovery,
+    attr_reader :host_id, :combo, :first_use, :recovery, :post_failover_query,
                 :original_identity, :recovery_identity, :post_failover_identity, :failover_reconnected
 
     def initialize(host_id:, combo: 'bg')
@@ -115,6 +115,7 @@ module Integration
       @combo = combo
       @first_use = Concurrent::AtomicReference.new(nil)  # first query on the stale connection after switchover
       @recovery  = Concurrent::AtomicReference.new(nil)  # query on a fresh connection after invalidation (bg)
+      @post_failover_query    = Concurrent::AtomicReference.new(nil) # in-place query after the failover reconnect (bg,failover)
       @original_identity      = Concurrent::AtomicReference.new(nil) # server identity before the switchover
       @recovery_identity      = Concurrent::AtomicReference.new(nil) # server identity after the manual reconnect (bg)
       @post_failover_identity = Concurrent::AtomicReference.new(nil) # server identity after the in-place failover reconnect
@@ -143,11 +144,10 @@ module Integration
       @failover_reconnected.true?
     end
 
-    # True if a probe landed on green after recovery — i.e. the given post-recovery identity differs
-    # from the identity captured on the original blue connection (both must be present to decide).
-    def landed_on_green?(recovered_identity)
-      original = @original_identity.get
-      !original.nil? && !recovered_identity.nil? && recovered_identity != original
+    # True if the in-place query after the failover reconnect ran successfully (bg,failover probe).
+    def in_place_query_succeeded?
+      holder = @post_failover_query.get
+      !holder.nil? && holder.error.nil?
     end
   end
 
