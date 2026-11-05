@@ -63,6 +63,6 @@ The Amazon Web Services (AWS) Advanced Ruby Driver Wrapper allows an application
 - [Initial Connection Strategy Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/initial-connection-strategy).
 - [KMS Encryption Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption).
 
-[1.1.0]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/compare/tag/v1.1.0
+[1.1.0]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/v1.1.0
 [1.0.1]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/v1.0.1
 [1.0.0]: https://github.com/aws/aws-advanced-ruby-driver-wrapper/releases/tag/v1.0.0

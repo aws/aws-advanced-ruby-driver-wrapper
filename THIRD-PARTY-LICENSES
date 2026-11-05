@@ -318,9 +318,10 @@ reproduced below (following the AWS SDK gems).
 -----------
 
 The following AWS SDK for Ruby gems may be used with this product (AWS IAM
-Authentication, AWS Secrets Manager, Custom Endpoint, and KMS Encryption
-plugins):
+Authentication, AWS Secrets Manager, Custom Endpoint, Federated Authentication,
+Okta Authentication, and KMS Encryption plugins):
 
+ - aws-sdk-core@3.263.0
  - aws-sdk-kms@1.138.0
  - aws-sdk-rds@1.329.0
  - aws-sdk-secretsmanager@1.141.0
