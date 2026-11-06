@@ -129,7 +129,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
 
   context 'on MySQL' do
     before do
-      skip 'MySQL only' unless drv == Integration::TestDriver::MYSQL
+      skip 'MySQL only' unless drv == Integration::TestDriver::MYSQL2
       require_kms!
 
       create_metadata_tables(admin_conn)
@@ -213,7 +213,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     when Integration::TestDriver::PG
       run(conn, 'DROP TRIGGER IF EXISTS users_ssn_hmac_check ON users')
       run(conn, 'DROP FUNCTION IF EXISTS enforce_encrypted_column() CASCADE')
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       run(conn, 'DROP TRIGGER IF EXISTS users_ssn_hmac_check')
       run(conn, 'DROP TRIGGER IF EXISTS users_ssn_hmac_check_update')
       run(conn, 'DROP PROCEDURE IF EXISTS validate_encrypted_data_hmac_before_update')
@@ -230,7 +230,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)",
                        ['Jo', { value: bytes.b, format: 1 }])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("INSERT INTO #{table} (name, ssn) VALUES ('Jo', X'#{hex(bytes)}')")
     end
   end
@@ -239,7 +239,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("UPDATE #{table} SET name = $1", [name])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("UPDATE #{table} SET name = '#{conn.escape(name)}'")
     end
   end
@@ -248,7 +248,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("UPDATE #{table} SET ssn = $1", [{ value: bytes.b, format: 1 }])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("UPDATE #{table} SET ssn = X'#{hex(bytes)}'")
     end
   end
@@ -263,7 +263,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec("SELECT name FROM #{table}").map { |row| row['name'] }
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("SELECT name FROM #{table}").map { |row| row['name'] }
     end
   end
@@ -283,7 +283,7 @@ RSpec.describe 'KmsEncryption server-side triggers', :integration, :kms_encrypti
     case drv
     when Integration::TestDriver::PG
       conn.exec("SELECT COUNT(*) AS c FROM #{table}").first['c'].to_i
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.query("SELECT COUNT(*) AS c FROM #{table}").first['c'].to_i
     end
   end

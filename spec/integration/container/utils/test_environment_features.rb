@@ -24,6 +24,7 @@ module Integration
     PERFORMANCE = :performance
     SKIP_MYSQL_DRIVER_TESTS = :skip_mysql_driver_tests
     SKIP_PG_DRIVER_TESTS = :skip_pg_driver_tests
+    SKIP_TRILOGY_DRIVER_TESTS = :skip_trilogy_driver_tests
     TELEMETRY_TRACES_ENABLED = :telemetry_traces_enabled
     TELEMETRY_METRICS_ENABLED = :telemetry_metrics_enabled
     BLUE_GREEN_DEPLOYMENT = :blue_green_deployment

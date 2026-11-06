@@ -81,6 +81,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::TrilogyErrorHandler do
       expect(handler.login_error?(Trilogy::EOFError.new('eof'))).to be false
     end
 
+    # trilogy raises a codeless Trilogy::QueryError from its C extension when the auth handshake is
+    # rejected/aborted ("TRILOGY_PROTOCOL_VIOLATION (trilogy_auth_recv)"), rather than a clean 1045.
+    # It must count as a login error so the Secrets Manager / IAM retry refetches credentials.
+    it 'is true for a protocol violation during the auth handshake' do
+      err = Trilogy::QueryError.new('trilogy_auth_recv: TRILOGY_PROTOCOL_VIOLATION')
+      expect(handler.login_error?(err)).to be true
+    end
+
+    it 'is false for a protocol violation outside the auth handshake' do
+      err = Trilogy::QueryError.new('trilogy_query_recv: TRILOGY_PROTOCOL_VIOLATION')
+      expect(handler.login_error?(err)).to be false
+    end
+
+    it 'does not treat an auth-phase protocol violation as a network error' do
+      err = Trilogy::QueryError.new('trilogy_auth_recv: TRILOGY_PROTOCOL_VIOLATION')
+      expect(handler.network_error?(err)).to be false
+    end
+
     it 'walks the cause chain' do
       cause = Trilogy::ProtocolError.from_code('access denied', 1045)
       expect(handler.login_error?(error_with_cause(cause))).to be true

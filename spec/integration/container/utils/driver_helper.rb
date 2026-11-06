@@ -24,9 +24,12 @@ module Integration
       when TestDriver::PG
         require 'pg'
         PG.connect(**params)
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         require 'mysql2'
         Mysql2::Client.new(**params)
+      when TestDriver::TRILOGY
+        require 'trilogy'
+        Trilogy.new(**params)
       else
         raise "native_connect not implemented for driver: #{driver}"
       end
@@ -37,9 +40,12 @@ module Integration
       when TestDriver::PG
         require 'pg'
         AwsAdvancedRubyDriverWrapper::WrapperPgConnection.connect(**params)
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         require 'mysql2'
         AwsAdvancedRubyDriverWrapper::WrapperMysql2Client.new(**params)
+      when TestDriver::TRILOGY
+        require 'trilogy'
+        AwsAdvancedRubyDriverWrapper::WrapperTrilogyClient.new(**params)
       else
         raise "wrapper_connect not implemented for driver: #{driver}"
       end
@@ -47,16 +53,17 @@ module Integration
 
     def self.execute(driver, conn, sql)
       case driver
-      when TestDriver::PG    then conn.exec(sql)
-      when TestDriver::MYSQL then conn.query(sql)
+      when TestDriver::PG     then conn.exec(sql)
+      when TestDriver::MYSQL2 then conn.query(sql)
+      when TestDriver::TRILOGY then conn.query(sql).each_hash.to_a
       else raise "execute not implemented for driver: #{driver}"
       end
     end
 
     def self.close(driver, conn)
       case driver
-      when TestDriver::PG    then conn.finish
-      when TestDriver::MYSQL then conn.close
+      when TestDriver::PG                          then conn.finish
+      when TestDriver::MYSQL2, TestDriver::TRILOGY then conn.close
       else raise "close not implemented for driver: #{driver}"
       end
     end
@@ -67,8 +74,17 @@ module Integration
         params = { host: host, dbname: dbname, user: user, password: password }
         params[:port] = port if port
         params
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2
         params = { host: host, database: dbname, username: user, password: password, ssl_mode: :required }
+        params[:port] = port.to_i if port
+        params
+      when TestDriver::TRILOGY
+        # trilogy expects ssl_mode as an integer constant, not the :required symbol mysql2 accepts.
+        # 3 is TRILOGY_SSL_REQUIRED_NOVERIFY (encrypt, don't verify the server cert) - the same mode
+        # the aws_trilogy ActiveRecord adapter maps :required to, and the noverify equivalent of the
+        # mysql2/pg :required used elsewhere in the suite. Hard-coded to avoid loading trilogy here.
+        params = { host: host, database: dbname, username: user, password: password,
+                   ssl: true, ssl_mode: 3 }
         params[:port] = port.to_i if port
         params
       else
@@ -83,12 +99,34 @@ module Integration
         overrides[:user] = user unless user == :__unset__
         overrides[:password] = password unless password == :__unset__
         overrides[:dbname] = dbname unless dbname == :__unset__
-      when TestDriver::MYSQL
+      when TestDriver::MYSQL2, TestDriver::TRILOGY
         overrides[:username] = user     unless user == :__unset__
         overrides[:password] = password unless password == :__unset__
         overrides[:database] = dbname   unless dbname == :__unset__
       end
       config.merge(overrides)
+    end
+
+    # TLS options for an IAM (over-the-wire auth) connection, per driver. Centralised so the IAM
+    # specs do not each repeat a `case drv` ssl block. Both MySQL-protocol drivers must enable the
+    # cleartext plugin so the generated IAM token is sent via mysql_clear_password; trilogy only
+    # sends it at all when the plugin is enabled, and mysql2 needs it for the same reason.
+    #
+    # Note native_config already sets a baseline ssl_mode per driver; these are the IAM-specific
+    # additions callers merge on top of a native_config hash.
+    def self.iam_tls_props(driver)
+      case driver
+      when TestDriver::PG
+        { sslmode: 'require' }
+      when TestDriver::MYSQL2
+        { ssl_mode: :required, enable_cleartext_plugin: true }
+      when TestDriver::TRILOGY
+        # ssl_mode 3 is TRILOGY_SSL_REQUIRED_NOVERIFY (see native_config). Hard-coded so this helper
+        # does not need to require 'trilogy' just to read the constant.
+        { ssl: true, ssl_mode: 3, enable_cleartext_plugin: true }
+      else
+        {}
+      end
     end
   end
 end
