@@ -395,7 +395,7 @@ RSpec.describe 'Failover', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      config.merge(Integration::DriverHelper.iam_tls_props(drv))
+      config.merge(Integration::DriverHelper.auth_tls_props(drv))
     end
 
     before do

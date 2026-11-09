@@ -195,11 +195,11 @@ module Integration
     def self.query_host_role(conn, engine, deployment: nil)
       deployment ||= TestEnvironment.current&.deployment
       sql = reader_check_query(engine, deployment)
-      driver  = Integration::RdsTestUtility.driver_for_engine(engine)
+      driver  = Integration::RdsTestUtility.active_test_driver(engine)
       dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       row = dialect.execute(conn, sql).first
-      value = row.is_a?(Hash) ? row.values.first : row[0]
+      value = row&.values&.first
       TRUE_VALUES.include?(value) ? :reader : :writer
     end
 
@@ -285,7 +285,7 @@ module Integration
             when DatabaseEngine::PG    then "CREATE USER #{username} WITH PASSWORD '#{escaped_password}'"
             when DatabaseEngine::MYSQL then "CREATE USER #{username} IDENTIFIED BY '#{escaped_password}'"
             end
-      driver  = Integration::RdsTestUtility.driver_for_engine(engine)
+      driver  = Integration::RdsTestUtility.active_test_driver(engine)
       dialect = AwsAdvancedRubyDriverWrapper::DriverDialects::DriverDialectManager
                 .get_dialect(Integration::RdsTestUtility.dialect_for_driver(driver))
       dialect.execute(conn, sql)
@@ -445,11 +445,34 @@ module Integration
       end
     end
 
+    # The driver to use for the utility's own native connections (open_connection). Maps each engine to
+    # a single native driver; MySQL always uses mysql2 here regardless of the active test driver.
     def self.driver_for_engine(engine)
       case engine
       when DatabaseEngine::MYSQL then Integration::TestDriver::MYSQL2
       when DatabaseEngine::PG then Integration::TestDriver::PG
       else raise "Unsupported engine: #{engine}"
+      end
+    end
+
+    # The driver whose dialect should run against a connection handed in by the test. That connection was
+    # opened by the active test driver (mysql2 or trilogy for MySQL), so its dialect must match: running a
+    # trilogy connection through the mysql2 dialect returns raw array rows and raises mysql2-specific
+    # errors. Falls back to driver_for_engine when no compatible active driver is known. Mirrors how specs
+    # compute +drv+ (current_driver || allowed_test_drivers.first).
+    def self.active_test_driver(engine)
+      env = TestEnvironment.current
+      candidate = env&.current_driver || env&.allowed_test_drivers&.first
+      return candidate if candidate && driver_compatible_with_engine?(candidate, engine)
+
+      driver_for_engine(engine)
+    end
+
+    def self.driver_compatible_with_engine?(driver, engine)
+      case engine
+      when DatabaseEngine::MYSQL then [Integration::TestDriver::MYSQL2, Integration::TestDriver::TRILOGY].include?(driver)
+      when DatabaseEngine::PG then driver == Integration::TestDriver::PG
+      else false
       end
     end
 
@@ -829,11 +852,10 @@ module Integration
 
     def query_aurora_instance_id(conn, engine)
       sql = self.class.instance_id_query(engine)
-      row = execute(conn, sql, self.class.driver_for_engine(engine)).first
-      # A Hash row (mysql2/pg, and the trilogy dialect's each_hash output) yields its first value; an
-      # array-shaped row yields its first element. Returning +row+ itself for the array case would leak
-      # the whole [value] array to callers like verify_writer, which expect a scalar id.
-      row.is_a?(Hash) ? row.values.first : row&.first
+      row = execute(conn, sql, self.class.active_test_driver(engine)).first
+      # Every driver dialect's #execute yields Hash rows (mysql2/pg and the trilogy dialect's each_hash
+      # output), so take the first value. Callers like verify_writer expect a scalar id, not the row.
+      row&.values&.first
     end
 
     def query_multi_az_instance_id(conn, engine)
@@ -844,10 +866,10 @@ module Integration
                        'SELECT endpoint FROM rds_tools.show_topology() WHERE id=(SELECT dbi_resource_id FROM rds_tools.dbi_resource_id())'
                      else raise "Unsupported engine: #{engine}"
                      end
-      driver = self.class.driver_for_engine(engine)
+      driver = self.class.active_test_driver(engine)
       row = execute(conn, endpoint_sql, driver).first
-      # See query_aurora_instance_id: the array-row case must yield the element, not the row.
-      endpoint = row.is_a?(Hash) ? row.values.first : row&.first
+      # See query_aurora_instance_id: dialect rows are Hashes, so take the first value.
+      endpoint = row&.values&.first
       endpoint.split('.').first
     end
 

@@ -79,12 +79,12 @@ module Integration
         params[:port] = port.to_i if port
         params
       when TestDriver::TRILOGY
-        # trilogy expects ssl_mode as an integer constant, not the :required symbol mysql2 accepts.
-        # 3 is TRILOGY_SSL_REQUIRED_NOVERIFY (encrypt, don't verify the server cert) - the same mode
-        # the aws_trilogy ActiveRecord adapter maps :required to, and the noverify equivalent of the
-        # mysql2/pg :required used elsewhere in the suite. Hard-coded to avoid loading trilogy here.
+        require 'trilogy'
+        # SSL_REQUIRED_NOVERIFY (encrypt, don't verify the server cert) mirrors the mysql2/pg :required
+        # (noverify) mode used elsewhere in the suite, and is what the aws_trilogy ActiveRecord adapter
+        # maps :required to.
         params = { host: host, database: dbname, username: user, password: password,
-                   ssl: true, ssl_mode: 3 }
+                   ssl: true, ssl_mode: Trilogy::SSL_REQUIRED_NOVERIFY }
         params[:port] = port.to_i if port
         params
       else
@@ -107,23 +107,23 @@ module Integration
       config.merge(overrides)
     end
 
-    # TLS options for an IAM (over-the-wire auth) connection, per driver. Centralised so the IAM
-    # specs do not each repeat a `case drv` ssl block. Both MySQL-protocol drivers must enable the
-    # cleartext plugin so the generated IAM token is sent via mysql_clear_password; trilogy only
-    # sends it at all when the plugin is enabled, and mysql2 needs it for the same reason.
+    # TLS options for an over-the-wire auth connection (IAM and Secrets Manager), per driver.
+    # Centralised so the auth specs do not each repeat a `case drv` ssl block. Both MySQL-protocol
+    # drivers must enable the cleartext plugin so the generated auth token/password is sent via
+    # mysql_clear_password; trilogy only sends it at all when the plugin is enabled, and mysql2 needs
+    # it for the same reason.
     #
-    # Note native_config already sets a baseline ssl_mode per driver; these are the IAM-specific
+    # Note native_config already sets a baseline ssl_mode per driver; these are the auth-specific
     # additions callers merge on top of a native_config hash.
-    def self.iam_tls_props(driver)
+    def self.auth_tls_props(driver)
       case driver
       when TestDriver::PG
         { sslmode: 'require' }
       when TestDriver::MYSQL2
         { ssl_mode: :required, enable_cleartext_plugin: true }
       when TestDriver::TRILOGY
-        # ssl_mode 3 is TRILOGY_SSL_REQUIRED_NOVERIFY (see native_config). Hard-coded so this helper
-        # does not need to require 'trilogy' just to read the constant.
-        { ssl: true, ssl_mode: 3, enable_cleartext_plugin: true }
+        require 'trilogy'
+        { ssl: true, ssl_mode: Trilogy::SSL_REQUIRED_NOVERIFY, enable_cleartext_plugin: true }
       else
         {}
       end

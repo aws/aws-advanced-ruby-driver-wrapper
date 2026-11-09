@@ -408,7 +408,7 @@ module Integration
         user_key = @driver == TestDriver::PG ? :user : :username
         config[user_key] = @env.iam_user_name
         config.delete(:password)
-        config.merge!(DriverHelper.iam_tls_props(@driver))
+        config.merge!(DriverHelper.auth_tls_props(@driver))
       end
 
       # Failover-specific props

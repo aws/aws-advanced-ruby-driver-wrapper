@@ -40,7 +40,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       password: 'anything',
       dbname: info.default_dbname
     )
-    config.merge(Integration::DriverHelper.iam_tls_props(drv))
+    config.merge(Integration::DriverHelper.auth_tls_props(drv))
   end
 
   before do
@@ -98,7 +98,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
       password: 'anything',
       dbname: info.default_dbname
     )
-    ip_config = ip_config.merge(Integration::DriverHelper.iam_tls_props(drv))
+    ip_config = ip_config.merge(Integration::DriverHelper.auth_tls_props(drv))
 
     props_with_iam_host = iam_props.merge(
       AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_HOST.name => instance_host
@@ -202,7 +202,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      config.merge(Integration::DriverHelper.iam_tls_props(drv))
+      config.merge(Integration::DriverHelper.auth_tls_props(drv))
     end
 
     it 'connects via global cluster endpoint with IAM' do
@@ -236,7 +236,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      secondary_config = secondary_config.merge(Integration::DriverHelper.iam_tls_props(drv))
+      secondary_config = secondary_config.merge(Integration::DriverHelper.auth_tls_props(drv))
 
       secondary_props = iam_props.merge(
         AwsAdvancedRubyDriverWrapper::PropertyDefinition::IAM_REGION.name => env.secondary_region
@@ -281,7 +281,7 @@ RSpec.describe 'AwsIamAuthentication', :integration,
         password: 'anything',
         dbname: info.default_dbname
       )
-      config.merge(Integration::DriverHelper.iam_tls_props(drv))
+      config.merge(Integration::DriverHelper.auth_tls_props(drv))
     end
 
     let(:iam_initial_connection_props) do

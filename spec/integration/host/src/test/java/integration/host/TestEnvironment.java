@@ -457,6 +457,9 @@ public class TestEnvironment implements AutoCloseable {
       // the blue cluster's SGs (see the cluster-SG authorization after authorizeRunnerIpAddress); the
       // green clone can carry a different SG membership, so without this the runner's connection to the
       // green endpoint is dropped (TCP connect timeout) when the test enumerates green instances.
+      // Not revoked on teardown: the blue cluster-SG authorizations are not revoked either, and IP
+      // de-authorization is currently disabled wholesale (see deAuthorizeIP's TODO: TEMPORARY), so this
+      // stays symmetric with blue. When IP de-authorization is re-enabled, revoke the green SGs here too.
       try {
         String runnerIP = env.auroraUtil.getPublicIPAddress();
         if (greenClusterInfo.vpcSecurityGroups() != null) {

@@ -186,7 +186,7 @@ RSpec.describe 'Failover (ActiveRecord)', :integration,
 
     it 'runs queries ActiveRecord prepared before failover again on the new writer',
        features: [Integration::TestEnvironmentFeatures::NETWORK_OUTAGES_ENABLED] do
-      skip 'mysql2 driver only (trilogy has no prepared statements)' unless drv == Integration::TestDriver::MYSQL2
+      skip 'trilogy has no prepared statements' if drv == Integration::TestDriver::TRILOGY
       enable_on_num_instances(min_instances: 2)
 
       establish_failover_connection(
