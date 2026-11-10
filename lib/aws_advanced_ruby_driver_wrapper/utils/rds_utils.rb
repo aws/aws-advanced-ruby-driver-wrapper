@@ -63,9 +63,9 @@ module AwsAdvancedRubyDriverWrapper
         eu-west-1 eu-west-2 eu-west-3
         eusc-de-east-1
         il-central-1
-        me-central-1 me-south-1
+        me-central-1 me-south-1 me-west-1
         mx-central-1
-        sa-east-1
+        sa-east-1 sa-west-1
         us-east-1 us-east-2
         us-gov-east-1 us-gov-west-1
         us-iso-east-1 us-iso-west-1

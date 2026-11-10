@@ -452,6 +452,25 @@ public class TestEnvironment implements AutoCloseable {
         Thread.currentThread().interrupt();
         throw new RuntimeException(ex);
       }
+
+      // Authorize the runner IP in the GREEN cluster's security groups. Initial setup only authorizes
+      // the blue cluster's SGs (see the cluster-SG authorization after authorizeRunnerIpAddress); the
+      // green clone can carry a different SG membership, so without this the runner's connection to the
+      // green endpoint is dropped (TCP connect timeout) when the test enumerates green instances.
+      // Not revoked on teardown: the blue cluster-SG authorizations are not revoked either, and IP
+      // de-authorization is currently disabled wholesale (see deAuthorizeIP's TODO: TEMPORARY), so this
+      // stays symmetric with blue. When IP de-authorization is re-enabled, revoke the green SGs here too.
+      try {
+        String runnerIP = env.auroraUtil.getPublicIPAddress();
+        if (greenClusterInfo.vpcSecurityGroups() != null) {
+          for (software.amazon.awssdk.services.rds.model.VpcSecurityGroupMembership sg
+              : greenClusterInfo.vpcSecurityGroups()) {
+            env.auroraUtil.ec2AuthorizeIPByGroupId(sg.vpcSecurityGroupId(), runnerIP);
+          }
+        }
+      } catch (Exception ex) {
+        LOGGER.warning("Failed to authorize runner IP in green cluster security group: " + ex.getMessage());
+      }
     }
   }
 

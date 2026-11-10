@@ -66,7 +66,7 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
     when Integration::TestDriver::PG
       conn.prepare('ins_stmt', "INSERT INTO #{table} (name, ssn) VALUES ($1, $2)")
       conn.exec_prepared('ins_stmt', %w[Prepared 333-33-3333])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute('Prepared', '333-33-3333')
     end
     expect(read_ssn(conn, 'Prepared')).to eq('333-33-3333')
@@ -77,7 +77,7 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2), ($3, $4)",
                        %w[MultiA 444-44-4444 MultiB 555-55-5555])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?), (?, ?)")
           .execute('MultiA', '444-44-4444', 'MultiB', '555-55-5555')
     end
@@ -97,7 +97,7 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
         'ON CONFLICT (name) DO UPDATE SET ssn = $3',
         %w[Upsert 000-00-0000 666-66-6666]
       )
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare(
         "INSERT INTO #{table} (name, ssn) VALUES (?, ?) ON DUPLICATE KEY UPDATE ssn = ?"
       ).execute('Upsert', '000-00-0000', '666-66-6666')
@@ -137,7 +137,7 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("INSERT INTO #{table} (name, ssn) VALUES ($1, $2)", [name, ssn])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("INSERT INTO #{table} (name, ssn) VALUES (?, ?)").execute(name, ssn)
     end
   end
@@ -146,7 +146,7 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("UPDATE #{table} SET ssn = $1 WHERE name = $2", [ssn, name])
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("UPDATE #{table} SET ssn = ? WHERE name = ?").execute(ssn, name)
     end
   end
@@ -155,7 +155,7 @@ RSpec.describe 'KmsEncryption write shapes', :integration, :kms_encryption,
     case drv
     when Integration::TestDriver::PG
       conn.exec_params("SELECT ssn FROM #{table} WHERE name = $1", [name]).first['ssn']
-    when Integration::TestDriver::MYSQL
+    when Integration::TestDriver::MYSQL2
       conn.prepare("SELECT ssn FROM #{table} WHERE name = ?").execute(name).first['ssn']
     end
   end
