@@ -201,6 +201,7 @@ module Integration
       row = dialect.execute(conn, sql).first
       value = row&.values&.first
       raise "Host role query returned no rows: #{sql}" if row.nil?
+
       TRUE_VALUES.include?(value) ? :reader : :writer
     end
 
