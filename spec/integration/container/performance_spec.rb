@@ -157,15 +157,25 @@ RSpec.describe 'Failover Performance', :integration,
         start_latch.count_down
         start_latch.wait(60)
 
-        Integration::DriverHelper.execute(@driver, conn, sleep_query)
-      rescue StandardError => e
-        down_at = downtime_at.get
-        if down_at.positive?
-          elapsed_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - down_at) * 1000
-          elapsed_times << elapsed_ms
-        else
-          @unhandled_exceptions << e
+        begin
+          Integration::DriverHelper.execute(@driver, conn, sleep_query)
+        rescue StandardError => e
+          down_at = downtime_at.get
+          if down_at.positive?
+            elapsed_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - down_at) * 1000
+            elapsed_times << elapsed_ms
+          else
+            # The driver's own socket timeout can fire before the proxy outage registers, which is
+            # expected when the outage delay is at or beyond the socket timeout. There is no
+            # detection time to measure, so drop the iteration instead of failing the run. The JDBC
+            # harness does the same ("Network outages start time is undefined!").
+            Integration::IntegrationHelper::LOGGER.warn(
+              "Discarding iteration: #{e.class} raised before the outage registered"
+            )
+          end
         end
+      rescue StandardError => e
+        @unhandled_exceptions << e
       ensure
         Thread.current[:perf_conn] = nil
         safe_close(conn)
