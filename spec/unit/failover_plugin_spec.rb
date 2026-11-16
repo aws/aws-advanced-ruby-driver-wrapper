@@ -170,6 +170,25 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
       end
     end
 
+    # ActiveRecord's liveness check (#active?) calls ping outside its error translation. A failover started
+    # from there would raise out of #active? without the adapter forgetting its prepared statements, so ping
+    # must stay a plain pass-through even when the connection is already closed.
+    context 'when the method is connection.ping' do
+      before { allow(driver_dialect).to receive(:closed?).and_return(true) }
+
+      it 'passes through without failover logic, even on a closed connection' do
+        expect(host_service).not_to receive(:force_refresh_host_list?)
+
+        result = plugin.execute(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_PING.name, pipeline_callable)
+
+        expect(result).to eq(:result)
+      end
+
+      it 'is not subscribed to, so that no plugin runs for it' do
+        expect(plugin.subscribed_methods).not_to include(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_PING.name)
+      end
+    end
+
     context 'when the current connection is closed unexpectedly' do
       before do
         allow(db_dialect).to receive(:host_role).and_return(host_role::READER)
