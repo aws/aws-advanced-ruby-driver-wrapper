@@ -30,8 +30,8 @@ GEM
       uri (>= 0.13.1)
     ast (2.4.3)
     aws-eventstream (1.4.1)
-    aws-partitions (1.1304.0)
-    aws-sdk-core (3.266.0)
+    aws-partitions (1.1305.0)
+    aws-sdk-core (3.268.0)
       aws-eventstream (~> 1, >= 1.4.1)
       aws-partitions (~> 1, >= 1.992.0)
       aws-sigv4 (~> 1.9)
@@ -40,14 +40,14 @@ GEM
       jmespath (~> 1, >= 1.6.1)
       logger
       rexml (~> 3.4, >= 3.4.2)
-    aws-sdk-kms (1.140.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-kms (1.143.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-rds (1.331.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-rds (1.334.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
-    aws-sdk-secretsmanager (1.143.0)
-      aws-sdk-core (~> 3, >= 3.265.0)
+    aws-sdk-secretsmanager (1.147.0)
+      aws-sdk-core (~> 3, >= 3.268.0)
       aws-sigv4 (~> 1.5)
     aws-sigv4 (1.12.1)
       aws-eventstream (~> 1, >= 1.0.2)
@@ -229,7 +229,7 @@ PLATFORMS
 DEPENDENCIES
   activerecord (>= 7.2)
   aws-sdk-kms
-  aws-sdk-rds (~> 1.331.0)
+  aws-sdk-rds (~> 1.334.0)
   aws-sdk-secretsmanager
   aws_advanced_ruby_driver_wrapper!
   benchmark-ips (~> 2.14)
@@ -260,11 +260,11 @@ CHECKSUMS
   activesupport (8.1.4.1) sha256=16ac4f341ca65c85a1fcdb8ac73f68891aae9e3c4a6f9c3a27daed8b00017ed7
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
   aws-eventstream (1.4.1) sha256=ceb6a99c61df4bb00344e54aed0351574beca24f87a0d1487d1d2ed80929ce96
-  aws-partitions (1.1304.0) sha256=50c8a097bba7da525c19b021420456d50c3652ff2a80ff0cc8e6a978a2452ff1
-  aws-sdk-core (3.266.0) sha256=a7358fd7dc4a2f51777d61842990c8379f826e1205caab3625ab3ffa4f7ca05b
-  aws-sdk-kms (1.140.0) sha256=1ba7cf795e5680fe5041a10d636aca01f1d2b6fa18e7b5d60ec6197319bce1c9
-  aws-sdk-rds (1.331.0) sha256=e90cae819051185fbc51e845d1ba8385de215ff819a4d5b867896afc102f5667
-  aws-sdk-secretsmanager (1.143.0) sha256=2be6a330fea1676f098e9475ef479c0225c2aa1558f74c18b3f42af32ebb0fca
+  aws-partitions (1.1305.0) sha256=dbcf06fd557d111f8bba82180b8f32317f756516c40f3df72bdf94851ffbfa96
+  aws-sdk-core (3.268.0) sha256=471950504724daa017711705647245ed2dcb44afc658dda88ca38176fe0f4612
+  aws-sdk-kms (1.143.0) sha256=0f1286c8abf2b91817acffc0cd58580f7de703706c2b55e5be1cfc5cc7740dac
+  aws-sdk-rds (1.334.0) sha256=8b6feb3fc42645d3c3076f268c90777f4f30529e897294115e8b271bfedc3fdd
+  aws-sdk-secretsmanager (1.147.0) sha256=b60b3386f3a4ddf9205c7052092dce025ab4a3d9b07e8383aad0c3e173aeca6f
   aws-sigv4 (1.12.1) sha256=6973ff95cb0fd0dc58ba26e90e9510a2219525d07620c8babeb70ef831826c00
   aws_advanced_ruby_driver_wrapper (1.1.0)
   base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
