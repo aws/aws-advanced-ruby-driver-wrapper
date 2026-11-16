@@ -78,6 +78,29 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsMysql2Adapter do
     end
   end
 
+  # Unlike PostgreSQL, a failover cannot escape these: ping is not run through the failover plugin, so a
+  # dead connection makes ActiveRecord's own #active? false, and it reconnects with an empty statement cache.
+  describe '#active?' do
+    it 'is false, so ActiveRecord reconnects, when ping fails on a dead connection' do
+      adapter = described_class.allocate
+      adapter.instance_variable_set(:@lock, Monitor.new)
+      adapter.instance_variable_set(:@raw_connection, double('raw_connection', closed?: false, ping: false))
+
+      expect(adapter.active?).to be false
+    end
+  end
+
+  # reset! is ActiveRecord's reconnect!, which builds a new connection and statement cache instead of
+  # running statements on the old one, so it needs no failover handling here, unlike PostgreSQL's.
+  describe '#reset!' do
+    it 'is the inherited reconnect!, not a probe of the raw connection' do
+      reset = described_class.instance_method(:reset!)
+
+      expect(reset.original_name).to eq(:reconnect!)
+      expect(reset.owner).not_to eq(described_class)
+    end
+  end
+
   describe '#translate_exception' do
     let(:adapter) { described_class.allocate }
     let(:sql) { 'SELECT 1' }

@@ -236,6 +236,141 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
     end
   end
 
+  # ActiveRecord probes (#active?) and resets (#reset!) the raw connection directly, outside
+  # with_raw_connection, so a failover the wrapper raises there never reaches translate_exception and the
+  # statements prepared on the replaced physical connection stay cached. The adapter translates it itself and,
+  # as with_raw_connection does, still raises the failover error to the application.
+  # These run ActiveRecord's own #active? and #reset! against a raw connection that raises as the wrapper does.
+  describe 'failover raised outside with_raw_connection' do
+    let(:errors) { AwsAdvancedRubyDriverWrapper::Errors }
+    let(:adapter) { described_class.allocate }
+    let(:raw_connection) { double('raw_connection', transaction_status: PG::PQTRANS_IDLE) }
+    let(:calls) { [] }
+
+    before do
+      adapter.instance_variable_set(:@lock, Monitor.new)
+      adapter.instance_variable_set(:@raw_connection, raw_connection)
+      adapter.instance_variable_set(:@pool, double('pool'))
+      allow(adapter).to receive(:clear_cache!) { |**kwargs| calls << [:clear_cache!, kwargs] }
+      allow(adapter).to receive(:configure_connection) { calls << [:configure_connection] }
+    end
+
+    describe '#active?' do
+      def probe_raises(error)
+        allow(raw_connection).to receive(:query).with(';').and_raise(error)
+      end
+
+      it 'is true, and forgets nothing, when the probe succeeds' do
+        allow(raw_connection).to receive(:query).with(';').and_return(double('result'))
+
+        expect(adapter.active?).to be true
+        expect(calls).to be_empty
+      end
+
+      it 'is false without probing once the connection is known to be broken' do
+        adapter.instance_variable_set(:@connection_broken, true)
+        expect(raw_connection).not_to receive(:query)
+
+        expect(adapter.active?).to be false
+      end
+
+      [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
+       AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError].each do |error_class|
+        it "forgets prepared statements, reconfigures, and re-raises a #{error_class.name.split('::').last} unchanged" do
+          error = error_class.new
+          probe_raises(error)
+
+          expect { adapter.active? }.to(raise_error { |raised| expect(raised).to equal(error) })
+          expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
+        end
+      end
+
+      it 'marks the connection broken, without reconfiguring it, and reports it unusable when failover failed' do
+        probe_raises(errors::FailoverFailedError.new(''))
+
+        expect(adapter.active?).to be false
+        expect(adapter.instance_variable_get(:@connection_broken)).to be true
+        expect(calls).to be_empty
+      end
+
+      it 'does not swallow any other wrapper error, and does not reconfigure' do
+        error = errors::AwsError.new('boom')
+        probe_raises(error)
+
+        expect { adapter.active? }.to raise_error(error)
+        expect(calls).to be_empty
+      end
+
+      it 'is false for a driver error, which ActiveRecord already handles, without reconfiguring' do
+        probe_raises(PG::ConnectionBad.new('gone'))
+
+        expect(adapter.active?).to be false
+        expect(calls).to be_empty
+      end
+
+      it 'does not swallow an error that is not a driver or wrapper error' do
+        probe_raises(RuntimeError.new('unrelated'))
+
+        expect { adapter.active? }.to raise_error(RuntimeError, 'unrelated')
+        expect(calls).to be_empty
+      end
+    end
+
+    describe '#reset!' do
+      # Raises on the first DISCARD ALL, as the wrapper does when it fails over, and succeeds on the second.
+      def discard_all_fails_once_with(error)
+        attempts = 0
+        allow(raw_connection).to receive(:query).with('DISCARD ALL') do
+          attempts += 1
+          calls << [:discard_all]
+          raise error if error && attempts == 1
+        end
+      end
+
+      it 'resets once when nothing is raised' do
+        discard_all_fails_once_with(nil)
+
+        adapter.reset!
+
+        expect(calls.count([:discard_all])).to eq(1)
+      end
+
+      [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
+       AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError].each do |error_class|
+        it "forgets prepared statements, reconfigures, and re-raises a #{error_class.name.split('::').last} unchanged" do
+          error = error_class.new
+          discard_all_fails_once_with(error)
+
+          expect { adapter.reset! }.to(raise_error { |raised| expect(raised).to equal(error) })
+          expect(calls).to eq([[:discard_all], [:clear_cache!, { new_connection: true }], [:configure_connection]])
+        end
+      end
+
+      it 'raises the translated connection error, not the wrapper error, when failover failed' do
+        discard_all_fails_once_with(errors::FailoverFailedError.new(''))
+
+        expect { adapter.reset! }.to raise_error(ActiveRecord::ConnectionFailed)
+        expect(adapter.instance_variable_get(:@connection_broken)).to be true
+        expect(calls).to eq([[:discard_all]])
+      end
+
+      it 'raises any other wrapper error unchanged, without reconfiguring' do
+        error = errors::AwsError.new('boom')
+        discard_all_fails_once_with(error)
+
+        expect { adapter.reset! }.to raise_error(error)
+        expect(calls).to eq([[:discard_all]])
+      end
+
+      it 'does not swallow an error that is not a wrapper error' do
+        discard_all_fails_once_with(RuntimeError.new('unrelated'))
+
+        expect { adapter.reset! }.to raise_error(RuntimeError, 'unrelated')
+        expect(calls).to eq([[:discard_all]])
+      end
+    end
+  end
+
   describe '#adapter_name' do
     it 'reports the underlying PostgreSQL adapter name' do
       # Migration compatibility shims and other Rails internals gate PostgreSQL behavior on

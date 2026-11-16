@@ -3,6 +3,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
 
+## [Unreleased]
+
+### :bug: Fixed
+- Fixed the `aws_postgresql` ActiveRecord adapter keeping ActiveRecord's prepared statement cache when a failover happened while ActiveRecord checked a connection (`active?`) or reset it (`reset!`). Those calls bypass the adapter's error translation, so after the failover every query prepared before it failed with `Method invoked against old connection` until ActiveRecord discarded the connection. The adapter now clears the cache and re-applies the connection's settings there too, and raises `FailoverSuccessError` or `TransactionStateUnknownError` unchanged, as it does for a failover during a query.
+  - **Behavior change:** a failover during the connection check at checkout now reaches the application as `FailoverSuccessError`, where it used to escape without the cache being cleared. `active?` returns `false` for `FailoverFailedError`, and other wrapper errors from `active?` or `reset!` are raised as they are rather than treated as an inactive connection. `aws_mysql2` and `aws_trilogy` are unchanged.
+
 ## [1.1.0] - 2026-11-05
 
 ### :magic_wand: Added
