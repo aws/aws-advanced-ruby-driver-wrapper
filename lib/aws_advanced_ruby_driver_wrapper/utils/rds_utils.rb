@@ -89,6 +89,20 @@ module AwsAdvancedRubyDriverWrapper
         \.(?:rds|rds-fips)\.amazonaws\.(?:com|au|eu|uk)\.?)$
       /ix
 
+      AURORA_CLUSTER_GROUP_DNS_PATTERN = /
+        ^(?<instance>.+)\.
+        (?<dns>rw-|ro-)
+        (?<domain>[a-zA-Z0-9]+\.db-cluster-group\.(?<region>[a-zA-Z0-9-]+)
+        \.(?:rds|rds-fips)\.amazonaws\.(?:com|au|eu|uk)\.?)$
+      /ix
+
+      AURORA_DATA_GROUP_DNS_PATTERN = /
+        ^(?<instance>.+)\.
+        (?<dns>ro-|)
+        (?<domain>[a-zA-Z0-9]+\.data-group\.(?<region>[a-zA-Z0-9-]+)
+        \.(?:rds|rds-fips)\.amazonaws\.(?:com|au|eu|uk)\.?)$
+      /ix
+
       # -- Limitless (covers all TLD variants) --
       AURORA_LIMITLESS_CLUSTER_PATTERN = /
         (?<instance>.+)\.
@@ -199,6 +213,8 @@ module AwsAdvancedRubyDriverWrapper
       /ix
 
       DNS_PATTERNS = [
+        AURORA_CLUSTER_GROUP_DNS_PATTERN,
+        AURORA_DATA_GROUP_DNS_PATTERN,
         AURORA_DNS_PATTERN,
         AURORA_CHINA_DNS_PATTERN,
         AURORA_OLD_CHINA_DNS_PATTERN,
@@ -206,6 +222,8 @@ module AwsAdvancedRubyDriverWrapper
       ].freeze
 
       DNS_GROUP_PATTERNS = [
+        AURORA_CLUSTER_GROUP_DNS_PATTERN,
+        AURORA_DATA_GROUP_DNS_PATTERN,
         AURORA_DNS_PATTERN,
         AURORA_CHINA_DNS_PATTERN,
         AURORA_OLD_CHINA_DNS_PATTERN,
@@ -323,6 +341,26 @@ module AwsAdvancedRubyDriverWrapper
         !dns.nil? && dns.casecmp('global-').zero?
       end
 
+      def cluster_group_writer_dns?(host)
+        dns = pattern_dns_group(prepared_host(host), AURORA_CLUSTER_GROUP_DNS_PATTERN)
+        !dns.nil? && dns.casecmp('rw-').zero?
+      end
+
+      def cluster_group_reader_dns?(host)
+        dns = pattern_dns_group(prepared_host(host), AURORA_CLUSTER_GROUP_DNS_PATTERN)
+        !dns.nil? && dns.casecmp('ro-').zero?
+      end
+
+      def data_group_writer_dns?(host)
+        dns = pattern_dns_group(prepared_host(host), AURORA_DATA_GROUP_DNS_PATTERN)
+        !dns.nil? && dns.empty?
+      end
+
+      def data_group_reader_dns?(host)
+        dns = pattern_dns_group(prepared_host(host), AURORA_DATA_GROUP_DNS_PATTERN)
+        !dns.nil? && dns.casecmp('ro-').zero?
+      end
+
       def ip?(host)
         ipv4?(host) || ipv6?(host)
       end
@@ -343,6 +381,10 @@ module AwsAdvancedRubyDriverWrapper
         [:reader_cluster_dns?,            RdsUrlType::RDS_READER_CLUSTER],
         [:rds_custom_cluster_dns?,        RdsUrlType::RDS_CUSTOM_CLUSTER],
         [:limitless_db_shard_group_dns?,  RdsUrlType::RDS_AURORA_LIMITLESS_DB_SHARD_GROUP],
+        [:cluster_group_writer_dns?,      RdsUrlType::RDS_CLUSTER_GROUP_WRITER],
+        [:cluster_group_reader_dns?,      RdsUrlType::RDS_CLUSTER_GROUP_READER],
+        [:data_group_writer_dns?,         RdsUrlType::RDS_DATA_GROUP_WRITER],
+        [:data_group_reader_dns?,         RdsUrlType::RDS_DATA_GROUP_READER],
         [:rds_proxy_endpoint_dns?,        RdsUrlType::RDS_PROXY_ENDPOINT],
         [:rds_proxy_dns?,                 RdsUrlType::RDS_PROXY],
         [:rds_dns?,                       RdsUrlType::RDS_INSTANCE]
@@ -561,6 +603,12 @@ module AwsAdvancedRubyDriverWrapper
         dns = groups&.[]('dns')
         @mutex.synchronize { @cached_dns_groups[host] = dns }
         dns
+      end
+
+      def pattern_dns_group(host, pattern)
+        return nil if blank?(host)
+
+        pattern.match(host)&.[](:dns)
       end
 
       def match_first(host, *patterns)
