@@ -285,6 +285,19 @@ module AwsAdvancedRubyDriverWrapper
       default_value: nil, type: String
     )
 
+    # -- Connection Lifetime --
+    CONNECTION_LIFETIME_SEC = WrapperProperty.new(
+      :connection_lifetime_sec,
+      'Maximum lifetime of a connection, in seconds. Required by the connection_lifetime plugin.',
+      default_value: nil, type: Float, validator: POSITIVE_FLOAT
+    )
+    CONNECTION_LIFETIME_ACTION = WrapperProperty.new(
+      :connection_lifetime_action,
+      'What the connection_lifetime plugin does with a connection that reached its maximum lifetime: ' \
+      'reconnect or close.',
+      default_value: 'reconnect', type: String
+    )
+
     # -- Custom Endpoint --
     CUSTOM_ENDPOINT_INFO_REFRESH_RATE_SEC = WrapperProperty.new(
       :custom_endpoint_info_refresh_rate_sec,

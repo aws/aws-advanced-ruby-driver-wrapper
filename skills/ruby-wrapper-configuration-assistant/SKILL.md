@@ -698,6 +698,7 @@ This table is the complete list of built-in plugin codes as of the version basel
 
 | Weight | Plugin code |
 |---|---|
+| 50 | `connection_lifetime` [Unreleased] |
 | 200 | `bg` |
 | 250 | `custom_endpoint` |
 | 300 | `initial_connection` |
@@ -725,6 +726,7 @@ Not rejected, but meaningless (see §10.1):
 ### 4.5 Universally compatible plugins
 
 - `kms_encryption` - records no database-type, endpoint, or cross-plugin constraints (1.1.0+: but not supported with the `trilogy` driver).
+- `connection_lifetime` [Unreleased] - records no database-type, endpoint, driver, or cross-plugin constraints.
 
 ### 4.6 Custom plugins
 
@@ -1031,6 +1033,45 @@ production:
 - Tokens share the process-wide token cache with `iam`. STS credentials aren't cached, so each new token means a full IdP sign-in and STS exchange (at most once per ~14 minutes per user and host). A login failure with a cached token triggers one refresh and retry.
 - Errors are `AwsAdvancedRubyDriverWrapper::Errors::SamlAuthError` (§14.2): a missing parameter (`<plugin class>: idp_endpoint is required`), a rejected AD FS sign-in (`FederatedAuthPlugin: no SAML assertion in the AD FS response - check idp_username, idp_password, and idp_endpoint`), an Okta failure (`OktaAuthPlugin: ...`), or anything else during sign-in or STS (`<plugin class>: failed to obtain credentials via SAML: <reason>`). A rejected database login surfaces as the driver's error, as with `iam`.
 
+### 5.10 `connection_lifetime` - Maximum connection lifetime [Unreleased]
+
+Limits how long the wrapper uses one database connection. Once a connection has been open for `connection_lifetime_sec`, the plugin either replaces it with a new connection to the configured host (`reconnect`) or closes it (`close`). The age is checked only when the application makes a call that reaches the database; there is no background timer, and an idle connection is untouched until it is used again.
+
+- **Compatible with:** every database type, endpoint type, driver, and plugin. It always runs first in the chain (weight 50).
+- The lifetime starts when the connection is opened, including connections that failover opens. A connection that becomes current without being opened through the plugin chain starts when this plugin first sees it.
+- A connection is expired when its age is **equal to or greater than** `connection_lifetime_sec`.
+- **Inside a transaction, nothing happens:** the call runs on the expired connection, and the action is taken on the first call after the transaction ends. The lifetime is not restarted by the wait.
+- Calls that only release resources (`close`, closing a statement, freeing a result) are never refused. Neither is `pg`'s `reset` (and `reset_start` / `reset_poll`), which reopens the connection in place: a connection that is open again afterwards starts a new lifetime, even after `close`. Monitoring connections opened by the wrapper itself are not affected.
+
+**Parameters:**
+
+| Name | Type | Default | Description |
+|---|---|---|---|
+| `connection_lifetime_sec` | Float | none | **Required.** Maximum age of a connection in seconds. Must be a positive number. At connection setup, a non-numeric value raises `TypeError` (`connection_lifetime_sec: expected Float, got String`), zero or a negative number raises `ArgumentError` (`connection_lifetime_sec must be a positive number, got: 0`), and a missing value raises `AwsError` (`connection_lifetime_sec is required and must be a positive number of seconds. Received: nil`). |
+| `connection_lifetime_action` | String | `reconnect` | `reconnect` or `close`, case-insensitive. Anything else raises `AwsError` (`connection_lifetime_action must be one of reconnect, close. Received: ...`). |
+
+**Actions and errors** (all under `AwsAdvancedRubyDriverWrapper::Errors`):
+
+| Outcome | Error class | Connection valid? | What to do |
+|---|---|:---:|---|
+| `reconnect` succeeded | `ConnectionLifetimeSuccessError` | Yes | The wrapper opened a new connection to the **host in the original configuration** (not the instance the old connection ended up on, so the endpoint's DNS or `initial_connection` picks the instance again), made it current on the same object, and closed the old one. The call that found the connection expired **was not run**. Re-apply session state and retry it. |
+| `reconnect` failed | `ConnectionLifetimeFailedError` (subclass of `ConnectionLifetimeError`; `cause` is the connect error) | Usually | The old connection is still current and still expired, so the next call tries again. If the new connection was made current but its setup then failed (for example `connection_init_func` raised), both connections are closed and the object behaves as after `close`. |
+| `close` | `ConnectionLifetimeError` | No | The connection was closed, and every later call that reaches the database raises the same error. Discard the object and open a new connection. |
+
+`ConnectionLifetimeFailedError` is a subclass of `ConnectionLifetimeError`, so `rescue ConnectionLifetimeError` catches both errors that leave the connection unusable. `ConnectionLifetimeSuccessError` is a direct subclass of `AwsError`, like `FailoverSuccessError`, but it is not a `FailoverSuccessError`, so a handler that retries only `FailoverSuccessError` does not retry it.
+
+**Under Active Record** (`aws_postgresql` / `aws_mysql2` / `aws_trilogy`): `ConnectionLifetimeSuccessError` is handled like `FailoverSuccessError` (prepared statement cache cleared, `configure_connection` re-run, error re-raised unchanged). `ConnectionLifetimeError` and `ConnectionLifetimeFailedError` are translated to `ActiveRecord::ConnectionFailed` and the connection is marked broken, so Active Record reconnects it on next use. With `close`, that means a new connection in its place: `aws_mysql2` and `aws_trilogy` open a new one, and `aws_postgresql` resets the closed one, which raises `PG::ConnectionBad` and makes Active Record open a new one, or, with `failover` enabled, fails over to a new connection and raises `FailoverSuccessError` once.
+
+```yaml
+# config/database.yml
+production:
+  adapter: aws_postgresql
+  host: my-cluster.cluster-ro-xyz.us-east-1.rds.amazonaws.com
+  wrapper_plugins: connection_lifetime,failover,initial_connection
+  connection_lifetime_sec: 3600
+  connection_lifetime_action: reconnect
+```
+
 ---
 
 ## 6. Wrapper-Wide Parameters Reference
@@ -1308,6 +1349,7 @@ Legend: ✅ compatible · ❌ not compatible · blank = no constraint recorded.
 | `initial_connection` | ✅                      | ✅                  | ✅                           | ❌                            | ❌             | ❌         |
 | `bg`                 | ❌                      | ✅                  | ❌                           | ✅                            | ✅             | ❌         |
 | `kms_encryption`     | ✅                      | ✅                  | ✅                           | ✅                            | ✅             | ✅         |
+| `connection_lifetime` [Unreleased] | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 10.3 Endpoint type compatibility
 
@@ -1507,6 +1549,7 @@ All under `AwsAdvancedRubyDriverWrapper::Errors`, subclasses of `AwsError`:
 | `IamAuthError`                                                                  | IAM token generation/authentication failure.                                                                          |
 | `SecretsManagerAuthError`                                                       | Secrets Manager retrieval/authentication failure.                                                                     |
 | `SamlAuthError` 1.1.0+ | `federated_auth` / `okta` sign-in or STS failure (§5.9). |
+| `ConnectionLifetimeSuccessError` / `ConnectionLifetimeError` / `ConnectionLifetimeFailedError` [Unreleased] | `connection_lifetime` replaced the connection / closed it / could not replace it (§5.10). |
 | `BlueGreenTimeoutError` / `BlueGreenSwitchoverError`                            | Blue/Green switchover handling.                                                                                       |
 | `EncryptionError` / `MetadataError` / `KeyManagementError`                      | `kms_encryption` read verification failure / refused plaintext write or metadata problem / KMS key operation failure. |
 

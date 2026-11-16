@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
 
+## [Unreleased]
+
+### :magic_wand: Added
+- Connection Lifetime Plugin, enabled with the `connection_lifetime` plugin code, which limits how long a connection is used. Once a connection has been open for `connection_lifetime_sec`, the next call that reaches the database either replaces it with a new connection to the configured host and raises `ConnectionLifetimeSuccessError` (`connection_lifetime_action: reconnect`, the default), or closes it and raises `ConnectionLifetimeError` (`close`). The call is not run in either case, and no action is taken inside a transaction.
+
 ## [1.1.0] - 2026-11-05
 
 ### :magic_wand: Added

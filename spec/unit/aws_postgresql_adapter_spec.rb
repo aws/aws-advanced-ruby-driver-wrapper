@@ -194,7 +194,8 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
     # The wrapper reconnects the same connection object to a new physical connection, so statements
     # ActiveRecord prepared on the old one no longer exist and must be forgotten before reuse.
     reconfiguring_errors = [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
-                            AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError]
+                            AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError,
+                            AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeSuccessError]
     reconfiguring_errors.each do |error_class|
       context "when exception is a #{error_class.name.split('::').last} and statements were prepared" do
         it 'forgets the prepared statements before reconfiguring the connection' do
@@ -221,6 +222,22 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
         expect(adapter.instance_variable_get(:@connection_broken)).to be true
         # There is no usable connection to reconfigure when failover failed.
         expect(adapter).not_to have_received(:configure_connection)
+      end
+    end
+
+    # The connection_lifetime plugin closed the connection, or could not replace it.
+    [AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeError,
+     AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeFailedError].each do |error_class|
+      context "when exception is a #{error_class.name.split('::').last}" do
+        it 'returns a connection error and sets connection_broken' do
+          adapter.instance_variable_set(:@pool, double('pool'))
+          allow(adapter).to receive(:configure_connection)
+
+          result = adapter.translate_exception(error_class.new, message: message, sql: sql, binds: binds)
+          expect(result).to be_a(ActiveRecord::ConnectionFailed)
+          expect(adapter.instance_variable_get(:@connection_broken)).to be true
+          expect(adapter).not_to have_received(:configure_connection)
+        end
       end
     end
 

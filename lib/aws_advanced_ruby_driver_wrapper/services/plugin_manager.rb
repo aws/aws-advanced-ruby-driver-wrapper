@@ -20,6 +20,7 @@ require_relative '../property_definition'
 require_relative '../ruby_method'
 require_relative '../utils/sql_encoding'
 require_relative '../utils/telemetry/telemetry_const'
+require_relative '../plugins/connection_lifetime_plugin'
 require_relative '../plugins/default_plugin'
 require_relative '../plugins/failover_plugin'
 require_relative '../plugins/gdb/gdb_failover_plugin'
@@ -43,6 +44,7 @@ module AwsAdvancedRubyDriverWrapper
 
       @plugin_classes = {
         'bg' => Plugins::BlueGreen::BlueGreenPlugin,
+        'connection_lifetime' => Plugins::ConnectionLifetimePlugin,
         'custom_endpoint' => Plugins::CustomEndpoint::CustomEndpointPlugin,
         'failover' => Plugins::FailoverPlugin,
         'gdb_failover' => Plugins::Gdb::GdbFailoverPlugin,
@@ -58,6 +60,7 @@ module AwsAdvancedRubyDriverWrapper
       # the highest values. The first plugin of the list will have the lowest weight, and the
       # last one will have the highest weight.
       @plugin_weights = {
+        Plugins::ConnectionLifetimePlugin => 50,
         Plugins::BlueGreen::BlueGreenPlugin => 200,
         Plugins::CustomEndpoint::CustomEndpointPlugin => 250,
         Plugins::InitialConnectionStrategyPlugin => 300,
