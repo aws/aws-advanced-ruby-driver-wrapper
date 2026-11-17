@@ -111,6 +111,27 @@ module ActiveRecord
         return false if @connection_broken
 
         super
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
+        # ActiveRecord probes the raw connection here, outside with_raw_connection, so the wrapper's error
+        # would skip translate_exception. Translating marks the connection broken; false makes ActiveRecord
+        # replace it, as documented.
+        translate_exception(e, message: e.message, sql: nil, binds: [])
+        false
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
+             AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError => e
+        # As with_raw_connection would: forget the statements prepared on the replaced physical connection,
+        # reconfigure, and raise the wrapper's error unchanged so the application learns of the failover.
+        raise translate_exception(e, message: e.message, sql: nil, binds: [])
+      end
+
+      # ActiveRecord resets the raw connection directly, outside with_raw_connection, so a failover raised
+      # by the wrapper would skip translate_exception here, as in active?.
+      def reset!
+        super
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError,
+             AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
+             AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError => e
+        raise translate_exception(e, message: e.message, sql: nil, binds: [])
       end
 
       # Used by db:drop, db:reset, db:test:prepare and db:purge. ActiveRecord disconnects its own

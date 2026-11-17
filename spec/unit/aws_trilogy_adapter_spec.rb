@@ -91,6 +91,30 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsTrilogyAdapter do
 
       expect(adapter.active?).to be false
     end
+
+    # Unlike PostgreSQL, a failover cannot escape this probe: ping is not run through the failover plugin, so
+    # a dead connection is a trilogy error, which ActiveRecord reads as "not active" and answers by
+    # reconnecting with an empty statement cache.
+    it 'is false, so ActiveRecord reconnects, when ping fails on a dead connection' do
+      adapter = described_class.allocate
+      adapter.instance_variable_set(:@lock, Monitor.new)
+      adapter.instance_variable_set(:@raw_connection, double('raw_connection', closed?: false))
+      allow(adapter.instance_variable_get(:@raw_connection)).to receive(:ping).and_raise(Trilogy::BaseConnectionError)
+
+      expect(adapter.active?).to be false
+    end
+  end
+
+  # reset! is ActiveRecord's reconnect!, which builds a new connection and statement cache instead of
+  # running statements on the old one. That is why #reset! needs no failover handling here, unlike
+  # PostgreSQL's, which runs ROLLBACK and DISCARD ALL on the existing raw connection.
+  describe '#reset!' do
+    it 'is the inherited reconnect!, not a probe of the raw connection' do
+      reset = described_class.instance_method(:reset!)
+
+      expect(reset.original_name).to eq(:reconnect!)
+      expect(reset.owner).not_to eq(described_class)
+    end
   end
 
   describe '#translate_exception' do
