@@ -64,6 +64,14 @@ module AwsAdvancedRubyDriverWrapper
         new(:rds_aurora_limitless_db_shard_group, rds: true, rds_cluster: false, has_region: true)
       RDS_GLOBAL_WRITER_CLUSTER =
         new(:rds_global_writer_cluster, rds: true, rds_cluster: true, has_region: false)
+      RDS_CLUSTER_GROUP_WRITER =
+        new(:rds_cluster_group_writer, rds: true, rds_cluster: false, has_region: true)
+      RDS_CLUSTER_GROUP_READER =
+        new(:rds_cluster_group_reader, rds: true, rds_cluster: false, has_region: true)
+      RDS_DATA_GROUP_WRITER =
+        new(:rds_data_group_writer, rds: true, rds_cluster: false, has_region: true)
+      RDS_DATA_GROUP_READER =
+        new(:rds_data_group_reader, rds: true, rds_cluster: false, has_region: true)
       OTHER =
         new(:other, rds: false, rds_cluster: false, has_region: false)
     end
