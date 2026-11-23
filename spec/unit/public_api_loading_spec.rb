@@ -30,6 +30,9 @@ RSpec.describe 'Public API loading' do
     Errors::FailoverFailedError
     Errors::FailoverSuccessError
     Errors::TransactionStateUnknownError
+    Errors::ConnectionLifetimeError
+    Errors::ConnectionLifetimeFailedError
+    Errors::ConnectionLifetimeSuccessError
     Errors::IamAuthError
     Errors::SecretsManagerAuthError
     Errors::PluginConflictError

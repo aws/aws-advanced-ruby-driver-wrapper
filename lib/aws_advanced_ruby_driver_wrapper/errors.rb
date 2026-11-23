@@ -50,6 +50,38 @@ module AwsAdvancedRubyDriverWrapper
       end
     end
 
+    # Raised by the connection_lifetime plugin when the connection reached its maximum lifetime and
+    # is not usable. After the close action, every later call that reaches the database raises this
+    # error too, until the connection is discarded or reset.
+    class ConnectionLifetimeError < AwsError
+      def initialize(message = 'The connection has reached its maximum lifetime and is closed.',
+                     connection_broken: true, needs_reconfiguration: false)
+        super
+      end
+    end
+
+    # Raised by the connection_lifetime plugin when the connection reached its maximum lifetime and a
+    # replacement connection could not be opened. The error that stopped the replacement is the cause.
+    class ConnectionLifetimeFailedError < ConnectionLifetimeError
+      def initialize
+        super('Unable to open a replacement connection after the connection reached its maximum lifetime.')
+      end
+    end
+
+    # Raised by the connection_lifetime plugin after it replaced a connection that reached its
+    # maximum lifetime. The call that raised it was not run; session state set on the old connection
+    # is gone, so set it again before retrying the call.
+    class ConnectionLifetimeSuccessError < AwsError
+      def initialize
+        super(
+          'The active SQL connection has changed because it reached its maximum lifetime. ' \
+          'Please re-configure session state if required and retry the operation.',
+          connection_broken: false,
+          needs_reconfiguration: true
+        )
+      end
+    end
+
     class IamAuthError < AwsError; end
     class SamlAuthError < AwsError; end
     class SecretsManagerAuthError < AwsError; end

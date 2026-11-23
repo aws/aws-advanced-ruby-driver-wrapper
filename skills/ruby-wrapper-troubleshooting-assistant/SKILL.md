@@ -442,6 +442,9 @@ All under `AwsAdvancedRubyDriverWrapper::Errors`, subclasses of `AwsError`. Most
 | `FailoverSuccessError` | Failover succeeded outside a transaction; the interrupted statement may or may not have taken effect | Yes - retry reads; replay writes only if idempotent |
 | `TransactionStateUnknownError` | Failover happened inside a transaction: rolled back if it dropped on a statement inside it, unknown if it dropped on the commit | Yes - restart the transaction; after a failed commit, check its changes first (§4.4) |
 | `FailoverFailedError` | No new instance reached within `failover_timeout_sec` | No |
+| `ConnectionLifetimeSuccessError` ([Unreleased]) | `connection_lifetime` replaced a connection that reached `connection_lifetime_sec`; the call that raised it was not run | Yes - re-apply session state and retry the call |
+| `ConnectionLifetimeError` ([Unreleased]) | `connection_lifetime` with `close` closed a connection that reached `connection_lifetime_sec`; every later call raises it too, until the connection is discarded or reset | No - open a new connection |
+| `ConnectionLifetimeFailedError` ([Unreleased]) | `connection_lifetime` could not open the replacement; `cause` holds the connect error | Usually - the next call tries again, unless both connections were closed |
 | `PluginConflictError` | Two failover plugins or two auth plugins | - |
 | `IamAuthError` / `SecretsManagerAuthError` | Auth plugin failure (§4.3) | - |
 | `SamlAuthError` (1.1.0+) | `federated_auth` / `okta` sign-in or STS failure (§4.3) | - |
@@ -449,7 +452,7 @@ All under `AwsAdvancedRubyDriverWrapper::Errors`, subclasses of `AwsError`. Most
 | `BlueGreenTimeoutError` / `BlueGreenSwitchoverError` | Blue/Green switchover handling (§4.6) | - |
 | `EncryptionError` / `MetadataError` / `KeyManagementError` | `kms_encryption` (§4.7) | - |
 
-Under Active Record: `FailoverSuccessError` and `TransactionStateUnknownError` are re-raised unchanged after the adapter clears its statement cache and re-applies its session settings - they are **not** wrapped in `ActiveRecord::ConnectionFailed`. Only `FailoverFailedError` becomes `ActiveRecord::ConnectionFailed`. Connect-time errors are translated like the stock adapters' (`ActiveRecord::NoDatabaseError`, `ActiveRecord::DatabaseConnectionError`, `ActiveRecord::ConnectionNotEstablished`). Without `failover` / `gdb_failover`, a lost connection is an ordinary driver or Active Record error.
+Under Active Record: `FailoverSuccessError` and `TransactionStateUnknownError` are re-raised unchanged after the adapter clears its statement cache and re-applies its session settings - they are **not** wrapped in `ActiveRecord::ConnectionFailed`. Only `FailoverFailedError` becomes `ActiveRecord::ConnectionFailed` ([Unreleased]: so do `ConnectionLifetimeError` and `ConnectionLifetimeFailedError`, while `ConnectionLifetimeSuccessError` is handled like `FailoverSuccessError`). Connect-time errors are translated like the stock adapters' (`ActiveRecord::NoDatabaseError`, `ActiveRecord::DatabaseConnectionError`, `ActiveRecord::ConnectionNotEstablished`). Without `failover` / `gdb_failover`, a lost connection is an ordinary driver or Active Record error.
 
 ### 6.2 Plugin codes and defaults
 
@@ -457,6 +460,7 @@ Default when `wrapper_plugins` is not set: `failover,initial_connection`. Settin
 
 | Code | Purpose | Needs |
 |---|---|---|
+| `connection_lifetime` ([Unreleased]) | Replace or close connections older than `connection_lifetime_sec`; always runs first | - |
 | `bg` | Blue/Green switchover handling | - |
 | `custom_endpoint` | Restrict connections to an Aurora custom endpoint's members | `aws-sdk-rds` |
 | `initial_connection` | Resolve cluster endpoints to an instance at connect time | - |
@@ -491,6 +495,7 @@ Per plugin, with defaults in parentheses ("parsed" = taken from the host or ARN 
 - **`gdb_failover`:** `failover_home_region` (parsed; set it for the global endpoint, an IP address, or an own domain), `global_cluster_instance_host_patterns` (required), `in_home_failover_mode` / `out_of_home_failover_mode` (`strict_writer` on writer and global endpoints, `home_reader_or_writer` elsewhere; values `strict_writer`, `strict_home_reader`, `strict_out_of_home_reader`, `strict_any_reader`, `home_reader_or_writer`, `out_of_home_reader_or_writer`, `any_reader_or_writer`), `accessible_regions` (all regions).
 - **`iam`:** `iam_host` (the connection host), `iam_port` (the connection port, else the engine default), `iam_region` (parsed), `iam_expiration_sec` (`870.0`).
 - **`secrets_manager`:** `secret_id` (required), `secret_region` (parsed from an ARN; required for a secret name), `secret_endpoint` (none), `secret_username_key` (`username`), `secret_password_key` (`password`), `secret_expiration_sec` (`870.0`), `secret_rotation_retry_timeout_sec` (`0.0`).
+- **`connection_lifetime` ([Unreleased]):** `connection_lifetime_sec` (required; seconds, not milliseconds; a positive number), `connection_lifetime_action` (`reconnect`; or `close`). Checked only before a call that reaches the database and not inside a transaction, so an idle or in-transaction connection can be older than the limit.
 - **`bg`:** `bgd_id` (`'1'`), `bg_connect_timeout_sec` (`30.0`), `bg_switchover_timeout_sec` (`180.0`), 1.1.0+ `bg_drop_blue_connections` (`true`).
 - **`federated_auth` / `okta` (1.1.0+):** `db_user`, `idp_endpoint`, `iam_role_arn`, `iam_idp_arn` (all required), `app_id` (required for `okta`), `idp_username` / `idp_password` (the connection's username / password), `idp_port` (`443`, AD FS only), `rp_identifier` (`urn:amazon:webservices`, AD FS only), `ssl_insecure` (`false`), `http_client_connect_timeout_sec` / `http_client_socket_timeout_sec` (`60.0`), plus `iam_host`, `iam_port`, `iam_region`, `iam_expiration_sec` as for `iam`.
 - **Telemetry (1.1.0+):** `enable_telemetry` (`false`), `telemetry_traces_backend` / `telemetry_metrics_backend` (none - required when telemetry is on; `otlp` or `none`), `telemetry_submit_top_level` (`false`), `telemetry_failover_additional_top_trace` (`false`).

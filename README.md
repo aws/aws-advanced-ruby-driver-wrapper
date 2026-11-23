@@ -38,6 +38,7 @@ The plugin-based design ensures applications only load the functionality they ne
 | Blue/Green Deployment          | Adds awareness of Amazon RDS/Aurora Blue/Green deployments to minimize downtime during switchover. See [Blue/Green Deployment Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/blue-green).   |
 | Initial Connection Strategy    | Controls how the initial connection to a cluster is established and verified. See [Initial Connection Strategy Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/initial-connection-strategy). |
 | KMS Encryption                 | Transparently encrypts and decrypts individual table columns using data keys held in AWS KMS. See [KMS Encryption Plugin](https://aws.github.io/aws-advanced-wrapper-docs/ruby/using-plugins/kms-encryption).           |
+| Connection Lifetime            | Replaces or closes a connection once it has been open for `connection_lifetime_sec`, checked before the next call that reaches the database. |
 
 > [!IMPORTANT]
 > **`iam` and `secrets_manager` are mutually exclusive.** Only one authentication plugin may be active at a time. Configuring both will raise a `PluginConflictError` at connection initialization.

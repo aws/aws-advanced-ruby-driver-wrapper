@@ -549,6 +549,24 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
         .to be > plugin_classes.index(AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin)
     end
 
+    # connection_lifetime has to decide whether a call runs at all before any other plugin acts on it,
+    # and its replacement connection has to pass through every other plugin's connect.
+    it 'orders the connection_lifetime plugin before every other plugin' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'kms_encryption,failover,initial_connection,connection_lifetime',
+                                                       connection_lifetime_sec: 3600, encryption_kms_region: 'us-east-1',
+                                                       encryption_allowed_master_key_arns: 'arn:aws:kms:us-east-1:123456789012:key/test')
+      manager = described_class.new(container)
+
+      expect(manager.instance_variable_get(:@plugins).first).to be_a(AwsAdvancedRubyDriverWrapper::Plugins::ConnectionLifetimePlugin)
+    end
+
+    it 'loads the connection_lifetime plugin for the connection_lifetime code' do
+      container = service_container_with_wrapper_props(wrapper_plugins: 'connection_lifetime', connection_lifetime_sec: 3600)
+      manager = described_class.new(container)
+
+      expect(manager.plugin_in_use?(AwsAdvancedRubyDriverWrapper::Plugins::ConnectionLifetimePlugin)).to be true
+    end
+
     it 'does not raise an error when all plugin codes are unique' do
       container = service_container_with_wrapper_props(wrapper_plugins: 'failover')
       expect { described_class.new(container) }.not_to raise_error

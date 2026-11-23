@@ -112,7 +112,8 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsTrilogyAdapter do
     # ActiveRecord configured on the old one has to be configured again, and anything it cached about
     # that connection forgotten.
     [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
-     AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError].each do |error_class|
+     AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError,
+     AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeSuccessError].each do |error_class|
       it "returns a #{error_class.name.split('::').last} unchanged, after reconfiguring the connection" do
         calls = []
         allow(adapter).to receive(:clear_cache!) { |**kwargs| calls << [:clear_cache!, kwargs] }
@@ -136,6 +137,21 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsTrilogyAdapter do
       expect(result).to be_a(ActiveRecord::ConnectionFailed)
       expect(adapter.instance_variable_get(:@connection_broken)).to be true
       expect(adapter).not_to have_received(:configure_connection)
+    end
+
+    # The connection_lifetime plugin closed the connection, or could not replace it.
+    [AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeError,
+     AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeFailedError].each do |error_class|
+      it "turns a #{error_class.name.split('::').last} into a connection error and marks the connection broken" do
+        adapter.instance_variable_set(:@pool, double('pool'))
+        allow(adapter).to receive(:configure_connection)
+
+        result = adapter.translate_exception(error_class.new, message: message, sql: sql, binds: binds)
+
+        expect(result).to be_a(ActiveRecord::ConnectionFailed)
+        expect(adapter.instance_variable_get(:@connection_broken)).to be true
+        expect(adapter).not_to have_received(:configure_connection)
+      end
     end
 
     it 'returns any other wrapper error unchanged' do

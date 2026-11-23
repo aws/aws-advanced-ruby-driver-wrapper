@@ -62,7 +62,8 @@ module ActiveRecord
           clear_cache!(new_connection: true)
           configure_connection
           exception
-        elsif exception.is_a?(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError)
+        elsif exception.is_a?(AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError) ||
+              exception.is_a?(AwsAdvancedRubyDriverWrapper::Errors::ConnectionLifetimeError)
           @connection_broken = true
           ActiveRecord::ConnectionFailed.new(message, sql:, binds:, connection_pool: @pool)
         else
