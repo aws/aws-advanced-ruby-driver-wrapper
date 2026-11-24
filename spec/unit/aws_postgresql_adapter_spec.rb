@@ -363,7 +363,7 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
         expect(result).to eq(:ran)
         expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
-        expect(adapter.verified?).to be true
+        expect(adapter.instance_variable_get(:@verified)).to be true
       end
     end
 
