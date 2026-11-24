@@ -36,7 +36,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::KmsEncryptionU
                                                                                      driver_props: { host: 'db' },
                                                                                      wrapper_props: props),
                     plugin_manager: plugin_manager,
-                    dialect_service: instance_double(services::DialectService, driver_dialect: driver_dialect))
+                    dialect_service: dialect_service)
+  end
+  let(:dialect_service) do
+    instance_double(services::DialectService, driver_dialect: driver_dialect).tap do |service|
+      allow(service).to receive(:with_query_timeout) { |_conn, **_opts, &block| block.call }
+    end
   end
   # Both caches are off, so that building the database backed components neither queries the
   # metadata tables nor leaves a cleanup thread behind.

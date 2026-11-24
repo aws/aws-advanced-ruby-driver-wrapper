@@ -18,6 +18,20 @@ require 'rspec'
 require 'aws_advanced_ruby_driver_wrapper/property_definition'
 
 RSpec.describe AwsAdvancedRubyDriverWrapper::PropertyDefinition do
+  describe 'PG_QUERY_TIMEOUT_SEC validation' do
+    let(:prop) { described_class::PG_QUERY_TIMEOUT_SEC }
+
+    it 'accepts 0, the 900 second maximum, numeric strings and nil' do
+      [0, 0.5, '2.5', 900, nil].each { |v| expect { prop.validate!(v) }.not_to raise_error }
+    end
+
+    it 'rejects negative, non-finite, non-numeric and over-maximum values' do
+      [-1, Float::INFINITY, Float::NAN, 'abc', 900.1].each do |v|
+        expect { prop.validate!(v) }.to raise_error(ArgumentError, /pg_query_timeout_sec must be a number from 0 to 900/)
+      end
+    end
+  end
+
   describe '.wrapper_property?' do
     it 'returns true for known wrapper properties' do
       expect(described_class.wrapper_property?(:wrapper_plugins)).to be true

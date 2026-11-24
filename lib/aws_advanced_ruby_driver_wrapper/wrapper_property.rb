@@ -27,8 +27,9 @@ module AwsAdvancedRubyDriverWrapper
     end
 
     # @return [String, Boolean, Integer, nil] the value from props, or the property's default
-    def get(props, override = nil)
-      override&.key?(@name) ? override.fetch(@name, @default_value) : props.fetch(@name, @default_value)
+    # @param default [Object] used instead of the property's default when the key is in neither +props+ nor +override+
+    def get(props, override = nil, default: @default_value)
+      override&.key?(@name) ? override.fetch(@name, default) : props.fetch(@name, default)
     end
 
     def get_bool(props, override = nil)
@@ -43,8 +44,8 @@ module AwsAdvancedRubyDriverWrapper
       val.is_a?(Integer) ? val : val.to_i
     end
 
-    def get_float(props, override = nil)
-      val = get(props, override)
+    def get_float(props, override = nil, default: @default_value)
+      val = get(props, override, default: default)
       val.is_a?(Float) ? val : val.to_f
     end
 

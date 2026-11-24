@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### :magic_wand: Added
+- The `pg_query_timeout_sec` property for PostgreSQL (`pg`): a client-side timeout, in seconds, for the wrapper's own queries.
+  - **Queries covered:** topology, host role checks, dialect detection, Blue/Green status, the failover `ROLLBACK`, and the KMS Encryption Plugin's key store. It never applies to application queries.
+  - **On expiry:** the query fails with a `PgDriverDialect::QueryTimeoutError` (a `PG::ConnectionBad`) that the wrapper treats as a network error (`ActiveRecord::ConnectionFailed` under `aws_postgresql`). A connection the wrapper opened itself is closed. The application's own connection, which the failover `ROLLBACK` can run on, is left open for its owner to close, or swapped under a successful failover.
+  - **Default:** `0` (no timeout), except for the topology and Blue/Green monitors, which use `5` seconds unless the property is set and can be overridden by `topology_monitoring_pg_query_timeout_sec` and `bg_monitoring_pg_query_timeout_sec` respectively, setting these to `0` disables the timeout.
+
 ### :bug: Fixed
 - Fixed the `aws_postgresql` ActiveRecord adapter keeping ActiveRecord's prepared statement cache when a failover happened while ActiveRecord checked a connection (`active?`) or reset it (`reset!`). Those calls bypass the adapter's error translation, so after the failover every query prepared before it failed with `Method invoked against old connection` until ActiveRecord discarded the connection. The adapter now clears the cache and re-applies the connection's settings there too.
   - **Behavior change:** a successful failover during ActiveRecord's connection check (`active?`) no longer raises `FailoverSuccessError`: no statement of the application's was in flight, so the adapter reconnects silently, as ActiveRecord does for a dead connection, and the next statement runs on the new writer. `TransactionStateUnknownError` is still raised when an ActiveRecord transaction was open, because that transaction was lost; otherwise `active?` returns `false`. A failover during `reset!` completes the reset on the new writer instead of raising. `active?` returns `false`, and `reset!` raises `ActiveRecord::ConnectionFailed`, when failover fails. `aws_mysql2` and `aws_trilogy` are unchanged by these `active?`/`reset!` changes.

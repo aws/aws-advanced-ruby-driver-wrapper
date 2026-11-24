@@ -68,6 +68,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
            read_only_error?: false)
   end
 
+  before { allow(dialect_service).to receive(:with_query_timeout) { |_conn, **_opts, &block| block.call } }
+
   let(:session_state_service) do
     double('session_state_service', in_transaction?: false, 'in_transaction=': nil)
   end
@@ -237,6 +239,40 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
       end
     end
 
+    context 'when a network error occurs inside a transaction' do
+      let(:network_error) { StandardError.new('connection lost') }
+      let(:pipeline_callable) { -> { raise network_error } }
+
+      before do
+        allow(db_dialect).to receive(:host_role).and_return(host_role::WRITER)
+        plugin.connect(writer_host, props, true, -> { connection })
+
+        allow(session_state_service).to receive(:in_transaction?).and_return(true)
+        allow(dialect_service).to receive(:network_error?).with(network_error).and_return(true)
+        allow(host_service).to receive(:force_refresh_host_list?).and_return(true)
+        allow(host_service).to receive(:set_availability)
+        allow(connection_service).to receive(:update_current_connection)
+        allow(driver_dialect).to receive(:close_connection)
+        writer_result = AwsAdvancedRubyDriverWrapper::Utils::RetryUtil::Result.new(new_connection, writer_host)
+        allow(retry_util).to receive(:connect_to_writer).and_return(writer_result)
+      end
+
+      it 'bounds the ROLLBACK on the application connection and leaves it open if it times out' do
+        expect(dialect_service).to receive(:with_query_timeout).with(connection, close_on_timeout: false)
+                                                               .and_yield
+        expect(driver_dialect).to receive(:execute).with(connection, 'ROLLBACK')
+        expect { plugin.execute('connection.exec', pipeline_callable) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError)
+      end
+
+      it 'does not fail the failover when the ROLLBACK times out' do
+        allow(driver_dialect).to receive(:execute).with(connection, 'ROLLBACK').and_raise(PG::ConnectionBad)
+        expect(driver_dialect).not_to receive(:close_connection).with(connection)
+        expect { plugin.execute('connection.exec', pipeline_callable) }
+          .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError)
+      end
+    end
+
     context 'when a non-network error occurs' do
       let(:app_error) { StandardError.new('syntax error') }
       let(:pipeline_callable) { -> { raise app_error } }
@@ -368,6 +404,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
         expect(host_service).to receive(:refresh_host_list)
         result = plugin.connect(writer_cluster_host, props, true, pipeline_callable)
         expect(result).to eq(connection)
+      end
+
+      it 'bounds the role check on a connection the wrapper has not handed out, closing it on timeout' do
+        allow(host_service).to receive(:refresh_host_list)
+        expect(dialect_service).to receive(:with_query_timeout).with(connection, close_on_timeout: true)
+                                                               .and_yield
+        plugin.connect(writer_cluster_host, props, true, pipeline_callable)
       end
     end
 

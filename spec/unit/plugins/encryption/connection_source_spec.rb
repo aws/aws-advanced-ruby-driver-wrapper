@@ -27,6 +27,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ConnectionSour
   end
   let(:plugin_manager) { double('PluginManager') }
   let(:dialect_service) { double('DialectService', driver_dialect: dialect) }
+
+  before { allow(dialect_service).to receive(:with_query_timeout) { |_conn, **_opts, &block| block.call } }
   let(:service_container) do
     double('ServiceContainer', connection_service: connection_service, plugin_manager: plugin_manager,
                                dialect_service: dialect_service)
@@ -67,6 +69,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ConnectionSour
       expect(source.with_connection { |_c| 42 }).to eq(42)
     end
 
+    it 'does not bound a caller-owned connection' do
+      allow(dialect_service).to receive(:with_query_timeout)
+      source.with_connection { |c| c }
+      expect(dialect_service).not_to have_received(:with_query_timeout)
+    end
+
     it 'never closes it (a plain double would raise if #close were called)' do
       expect(connection).not_to receive(:close)
       2.times { expect(source.with_connection { |c| c }).to be(connection) }
@@ -85,6 +93,11 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::Encryption::ConnectionSour
     it 'opens a short-lived connection through the connect pipeline and yields it' do
       expect { |b| source.with_connection(operation: 'X', &b) }.to yield_with_args(opened)
       expect(plugin_manager).to have_received(:internal_connect).with(host, driver_props, wrapper_props, false)
+    end
+
+    it 'bounds the wrapper-owned connection, which it may close on timeout' do
+      source.with_connection(operation: 'X') { |c| c }
+      expect(dialect_service).to have_received(:with_query_timeout).with(opened, close_on_timeout: true)
     end
 
     it 'closes the opened connection afterward' do

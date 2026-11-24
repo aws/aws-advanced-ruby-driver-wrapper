@@ -297,10 +297,13 @@ module AwsAdvancedRubyDriverWrapper
             conn = @connection.get
             return if conn.nil? || connection_closed?(conn)
 
-            return unless status_available?(conn)
+            dialect_service = @service_container.dialect_service
+            return unless dialect_service.with_monitoring_query_timeout(conn, @status_monitor_wrapper_props) { status_available?(conn) }
 
-            dialect = @service_container.dialect_service.db_dialect
-            status_entries = parse_status_entries(conn, dialect)
+            dialect = dialect_service.db_dialect
+            status_entries = dialect_service.with_monitoring_query_timeout(conn, @status_monitor_wrapper_props) do
+              parse_status_entries(conn, dialect)
+            end
             status_info = resolve_status_info(status_entries)
             apply_status_info(status_info, status_entries)
             verify_connection_host(status_info)

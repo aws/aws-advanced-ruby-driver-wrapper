@@ -58,6 +58,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::InitialConnectionStrategyP
            network_error?: false,
            read_only_error?: false)
   end
+
+  before { allow(mock_dialect_service).to receive(:with_query_timeout) { |_conn, **_opts, &block| block.call } }
   let(:mock_host_service) do
     double('HostService',
            all_hosts: [writer_host_info, reader_host_info],

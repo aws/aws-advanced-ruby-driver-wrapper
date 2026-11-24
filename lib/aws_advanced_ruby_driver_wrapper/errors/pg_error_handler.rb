@@ -109,6 +109,8 @@ module AwsAdvancedRubyDriverWrapper
 
       def connection_bad_network_error?(error)
         return false unless defined?(PG::ConnectionBad) && error.is_a?(PG::ConnectionBad)
+        # A timed-out wrapper query is a connection failure by class, whatever its message says.
+        return true if query_timeout_error?(error)
 
         msg = error.message&.downcase
         return false if msg.nil?
@@ -116,6 +118,12 @@ module AwsAdvancedRubyDriverWrapper
 
         NETWORK_ERROR_MESSAGES.any? { |pattern| msg.include?(pattern) } ||
           CONNECT_FAILURE_MESSAGES.any? { |pattern| msg.include?(pattern) }
+      end
+
+      # The error class is only defined once pg has loaded it, on the first timeout, so nothing else can be one.
+      def query_timeout_error?(error)
+        defined?(DriverDialects::PgDriverDialect::QueryTimeoutError) &&
+          error.is_a?(DriverDialects::PgDriverDialect::QueryTimeoutError)
       end
 
       def server_rejection?(msg)

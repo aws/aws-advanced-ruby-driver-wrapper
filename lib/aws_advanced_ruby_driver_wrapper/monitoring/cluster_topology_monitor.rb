@@ -107,7 +107,7 @@ module AwsAdvancedRubyDriverWrapper
             end
           else
             # Monitoring thread is mid-query. Detach without closing — the monitoring thread will close the
-            # connection after its query completes (via read_timeout for MySQL or keepalives for PG).
+            # connection after its query completes (via read_timeout for MySQL or pg_query_timeout_sec for PG).
             @monitoring_connection.set(nil, close_old: false)
           end
           @verified_writer = false
@@ -395,7 +395,8 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def check_host_role(conn)
-        @service_container.dialect_service.db_dialect.host_role(conn)
+        dialect_service = @service_container.dialect_service
+        dialect_service.with_monitoring_query_timeout(conn, @monitoring_wrapper_props) { dialect_service.db_dialect.host_role(conn) }
       rescue StandardError => e
         logger.debug("[#{@cluster_id}] host_role check failed: #{e.message}")
         nil
@@ -502,7 +503,9 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def query_topology(conn)
-        @topology_utils.query_topology(conn, @initial_host_info, @instance_template)
+        @service_container.dialect_service.with_monitoring_query_timeout(conn, @monitoring_wrapper_props) do
+          @topology_utils.query_topology(conn, @initial_host_info, @instance_template)
+        end
       end
 
       def stored_hosts

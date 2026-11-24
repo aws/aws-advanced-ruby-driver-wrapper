@@ -108,7 +108,10 @@ module AwsAdvancedRubyDriverWrapper
                 return conn
               end
 
-              conn_role = dialect_service.db_dialect.host_role(conn)
+              # A candidate the wrapper opened and has not handed out, so it may be closed on timeout.
+              conn_role = dialect_service.with_query_timeout(conn, close_on_timeout: true) do
+                dialect_service.db_dialect.host_role(conn)
+              end
               if conn_role == role_to_verify
                 success = true
                 return conn

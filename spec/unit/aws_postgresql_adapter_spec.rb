@@ -169,6 +169,24 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
       end
     end
 
+    context 'when exception is a PG query timeout from the wrapper' do
+      let(:pool) { instance_double(ActiveRecord::ConnectionAdapters::ConnectionPool) }
+
+      before do
+        require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error'
+        adapter.instance_variable_set(:@pool, pool)
+      end
+
+      # Stock ActiveRecord decides, with no wrapper-specific configuration: a PG::ConnectionBad whose message
+      # ends in a newline is a failure after the query was sent, not "never sent".
+      it 'is translated by ActiveRecord to ConnectionFailed, not ConnectionNotEstablished' do
+        exception = AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5)
+
+        result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
+        expect(result).to be_a(ActiveRecord::ConnectionFailed)
+      end
+    end
+
     context 'when exception is a FailoverSuccessError' do
       it 'returns the original exception and reconfigures the connection' do
         exception = AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError.new

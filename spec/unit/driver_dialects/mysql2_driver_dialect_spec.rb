@@ -150,6 +150,12 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect
     end
   end
 
+  describe '#with_query_timeout' do
+    it 'yields unchanged, since mysql2 bounds reads with read_timeout' do
+      expect(dialect.with_query_timeout(double('Connection'), close_on_timeout: true, timeout_sec: 5) { :result }).to eq(:result)
+    end
+  end
+
   describe '#abandon_connection' do
     it 'turns off automatic_close instead of closing the connection' do
       allow(connection).to receive(:closed?).and_return(false)

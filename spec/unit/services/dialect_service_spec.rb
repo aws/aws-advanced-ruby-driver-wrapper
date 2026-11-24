@@ -265,6 +265,74 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
     end
   end
 
+  describe '#with_query_timeout' do
+    let(:connection) { double('Connection') }
+    let(:driver_dialect) { double('DriverDialect') }
+
+    def service_with(wrapper_props)
+      service = build_service(:postgresql, wrapper_props: wrapper_props)
+      allow(service).to receive(:driver_dialect).and_return(driver_dialect)
+      service
+    end
+
+    it 'bounds by the pg_query_timeout_sec property when no timeout is given' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: false, timeout_sec: 7.0).and_yield
+      service_with(pg_query_timeout_sec: 7.0).with_query_timeout(connection, close_on_timeout: false) { :ignored }
+    end
+
+    it 'is unbounded (0) by default' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 0.0).and_yield
+      service_with({}).with_query_timeout(connection, close_on_timeout: true) { :ignored }
+    end
+
+    it 'prefers an explicit timeout, including 0, over the property' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 0.0).and_yield
+      service_with(pg_query_timeout_sec: 7.0)
+        .with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.0) { :ignored }
+    end
+
+    it 'returns the block result' do
+      allow(driver_dialect).to receive(:with_query_timeout) { |*_args, **_opts, &block| block.call }
+      expect(service_with({}).with_query_timeout(connection, close_on_timeout: true) { :result }).to eq(:result)
+    end
+  end
+
+  describe '#with_monitoring_query_timeout' do
+    let(:connection) { double('Connection') }
+    let(:driver_dialect) { double('DriverDialect') }
+
+    let(:service) do
+      build_service(:postgresql).tap { |svc| allow(svc).to receive(:driver_dialect).and_return(driver_dialect) }
+    end
+
+    it 'defaults to a bound so a monitor never blocks indefinitely, closing the monitor-owned connection' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 5).and_yield
+      service.with_monitoring_query_timeout(connection, {}) { :ignored }
+    end
+
+    it 'uses pg_query_timeout_sec from the monitor props when set' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 2.5).and_yield
+      service.with_monitoring_query_timeout(connection, { pg_query_timeout_sec: 2.5 }) { :ignored }
+    end
+
+    it 'lets an explicit 0 disable the bound' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 0.0).and_yield
+      service.with_monitoring_query_timeout(connection, { pg_query_timeout_sec: 0.0 }) { :ignored }
+    end
+
+    it 'ignores the connection-level property in favor of the monitor props' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 5).and_yield
+      svc = build_service(:postgresql, wrapper_props: { pg_query_timeout_sec: 30.0 })
+      allow(svc).to receive(:driver_dialect).and_return(driver_dialect)
+      svc.with_monitoring_query_timeout(connection, {}) { :ignored }
+    end
+
+    it 'returns the block result' do
+      allow(driver_dialect).to receive(:with_query_timeout) { |*_args, **_opts, &block| block.call }
+      expect(service.with_monitoring_query_timeout(connection, {}) { :result }).to eq(:result)
+    end
+  end
+
   describe '#update_dialect' do
     context 'PostgreSQL driver' do
       let(:connection) { instance_double('PG::Connection') }

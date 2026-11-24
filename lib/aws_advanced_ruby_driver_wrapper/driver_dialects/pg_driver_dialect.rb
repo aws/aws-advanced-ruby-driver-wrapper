@@ -21,6 +21,9 @@ module AwsAdvancedRubyDriverWrapper
     class PgDriverDialect
       include DriverDialect
 
+      QUERY_TIMEOUT_SCOPE_KEY = :aws_advanced_ruby_driver_wrapper_pg_query_timeouts
+      private_constant :QUERY_TIMEOUT_SCOPE_KEY
+
       # Every pg call that talks to the server. A call that is not listed here is handed straight
       # to the driver, bypassing the plugin pipeline.
       #
@@ -97,12 +100,51 @@ module AwsAdvancedRubyDriverWrapper
         ::PG::Connection.new(**prepare_connect_config(host_info, config))
       end
 
+      # Bounds the wrapper-internal queries (#execute, #execute_with_params) run on +connection+ inside the
+      # block to +timeout_sec+ seconds in total (one deadline per query, not reset as data arrives).
+      # libpq has no client-side query timeout, and TCP keepalives or tcp_user_timeout only see the next hop,
+      # so a database that stops answering behind a proxy would otherwise block a query indefinitely. The wait
+      # is on the socket, so it holds behind such a proxy.
+      #
+      # The scope is the calling fiber and only +connection+; queries on other connections, and every
+      # application query, are unaffected. A +nil+ or non-positive timeout leaves the block unbounded.
+      # Nested scopes on the same connection: the innermost wins.
+      #
+      # @param close_on_timeout [Boolean] true if the wrapper owns +connection+ (a monitor's, or one it has
+      #   not handed out yet): on timeout it is abandoned and closed. false if the application owns it:
+      #   the error is raised and the connection is left for its owner to close.
+      # @raise [PgDriverDialect::QueryTimeoutError] from a bounded query that gets no reply in time
+      def with_query_timeout(connection, close_on_timeout:, timeout_sec: nil)
+        timeout = timeout_sec.to_f
+        return yield unless timeout.positive?
+
+        scopes = (Thread.current[QUERY_TIMEOUT_SCOPE_KEY] ||= {}.compare_by_identity)
+        had_previous = scopes.key?(connection)
+        previous = scopes[connection]
+        scopes[connection] = [timeout, close_on_timeout]
+        begin
+          yield
+        ensure
+          if had_previous
+            scopes[connection] = previous
+          else
+            scopes.delete(connection)
+          end
+        end
+      end
+
       def execute(connection, sql)
-        connection.exec(sql)
+        timeout, close_on_timeout = query_timeout_for(connection)
+        return connection.exec(sql) unless timeout
+
+        await_result(connection, timeout, close_on_timeout) { connection.send_query(sql) }
       end
 
       def execute_with_params(connection, sql, params)
-        connection.exec_params(sql, params)
+        timeout, close_on_timeout = query_timeout_for(connection)
+        return connection.exec_params(sql, params) unless timeout
+
+        await_result(connection, timeout, close_on_timeout) { connection.send_query_params(sql, params) }
       end
 
       # pg uses numbered +$1+, +$2+ ... placeholders.
@@ -211,6 +253,54 @@ module AwsAdvancedRubyDriverWrapper
 
       def apply_monitoring_defaults(driver_props)
         driver_props[:connect_timeout] ||= DEFAULT_MONITORING_TIMEOUT_SEC
+      end
+
+      # The [timeout_sec, close_on_timeout] in force for +connection+ on this fiber, or nil.
+      def query_timeout_for(connection)
+        Thread.current[QUERY_TIMEOUT_SCOPE_KEY]&.[](connection)
+      end
+
+      # Sends a query and waits for its results, giving up when the whole result has not arrived within +timeout+ seconds.
+      # On timeout a query is still pending on the connection, so it cannot be reused; it is abandoned and
+      # closed when +close_on_timeout+, and left alone otherwise.
+      # @raise [PgDriverDialect::QueryTimeoutError] on timeout
+      def await_result(connection, timeout, close_on_timeout)
+        yield
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+        last = nil
+        loop do
+          while connection.is_busy
+            remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+            unless remaining.positive? && connection.socket_io.wait_readable(remaining)
+              last&.clear
+              logger.info(
+                "Wrapper query timed out after #{timeout}s on #{describe_connection(connection)}; " \
+                "#{close_on_timeout ? 'closing the connection' : 'leaving the connection open for its owner'}."
+              )
+              if close_on_timeout
+                abandon_connection(connection)
+                close_connection(connection)
+              end
+              # A no-op once loaded; kept for callers that use the dialect without the postgresql entry point.
+              require_relative 'pg_query_timeout_error'
+              raise QueryTimeoutError, timeout
+            end
+            connection.consume_input
+          end
+          result = connection.get_result
+          break if result.nil?
+
+          last&.clear
+          last = result
+        end
+        last&.check
+        last
+      end
+
+      def describe_connection(connection)
+        "#{connection.host}:#{connection.port}"
+      rescue StandardError
+        'an unknown host'
       end
 
       # PG reads transaction state directly from the connection.

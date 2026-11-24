@@ -52,7 +52,9 @@ module AwsAdvancedRubyDriverWrapper
       private
 
       def query_topology(conn)
-        @topology_utils.query_global_topology(conn, initial_host_info, @instance_templates_by_region)
+        @service_container.dialect_service.with_monitoring_query_timeout(conn, @monitoring_wrapper_props) do
+          @topology_utils.query_global_topology(conn, initial_host_info, @instance_templates_by_region)
+        end
       end
 
       def resolve_instance_template(instance_id, conn)

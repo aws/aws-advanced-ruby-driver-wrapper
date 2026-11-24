@@ -56,6 +56,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
   let(:db_dialect) { instance_double('DbDialect') }
   let(:driver_dialect) { instance_double('DriverDialect', close_connection: nil, apply_monitoring_defaults: nil, closed?: false) }
   let(:dialect_service) { instance_double('DialectService', db_dialect: db_dialect, driver_dialect: driver_dialect) }
+
+  before { allow(dialect_service).to receive(:with_monitoring_query_timeout) { |_conn, _props, &block| block.call } }
   let(:connection_config) do
     instance_double('ConnectionConfig', wrapper_props: {
                       cluster_topology_refresh_rate_sec: 0.1,
@@ -222,6 +224,26 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::ClusterTopologyMonitor 
         expect(result.find { |h| h.role == AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER }.host)
           .to eq(writer_host.host)
       end
+    end
+  end
+
+  describe 'query timeout' do
+    def build_monitor(wrapper_props)
+      described_class.new(
+        service_container: service_container, cluster_id: cluster_id, instance_template: instance_template,
+        topology_utils: topology_utils, monitoring_driver_props: { host: 'localhost', port: 5432 },
+        monitoring_wrapper_props: wrapper_props
+      )
+    end
+
+    it 'bounds the topology query with the monitor props' do
+      build_monitor(pg_query_timeout_sec: 1.5).send(:query_topology, mock_connection)
+      expect(dialect_service).to have_received(:with_monitoring_query_timeout).with(mock_connection, { pg_query_timeout_sec: 1.5 })
+    end
+
+    it 'bounds the host role check the same way' do
+      build_monitor(pg_query_timeout_sec: 1.5).send(:check_host_role, mock_connection)
+      expect(dialect_service).to have_received(:with_monitoring_query_timeout).with(mock_connection, { pg_query_timeout_sec: 1.5 })
     end
   end
 
