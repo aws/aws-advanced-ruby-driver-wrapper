@@ -111,26 +111,38 @@ module ActiveRecord
         return false if @connection_broken
 
         super
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError => e
         # ActiveRecord probes the raw connection here, outside with_raw_connection, so the wrapper's error
-        # would skip translate_exception. Translating marks the connection broken; false makes ActiveRecord
-        # replace it, as documented.
+        # would skip translate_exception. No statement of the caller's was in flight, so after forgetting the
+        # statements prepared on the replaced connection and reconfiguring, the connection is usable on the
+        # new instance. Callers such as the pool reaper expect a boolean, not an error.
+        translate_exception(e, message: e.message, sql: nil, binds: [])
+        true
+      rescue AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError => e
+        translated = translate_exception(e, message: e.message, sql: nil, binds: [])
+        # An ActiveRecord transaction lost with the old connection must reach the caller's transaction block,
+        # or the rest of the block would run in autocommit. Without one (the pool reaper and keepalive only
+        # see connections whose transactions have ended), answer false so the connection is replaced.
+        raise translated if transaction_open?
+
+        false
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
+        # Translating marks the connection broken; false makes ActiveRecord replace it.
         translate_exception(e, message: e.message, sql: nil, binds: [])
         false
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
-             AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError => e
-        # As with_raw_connection would: forget the statements prepared on the replaced physical connection,
-        # reconfigure, and raise the wrapper's error unchanged so the application learns of the failover.
-        raise translate_exception(e, message: e.message, sql: nil, binds: [])
       end
 
       # ActiveRecord resets the raw connection directly, outside with_raw_connection, so a failover raised
       # by the wrapper would skip translate_exception here, as in active?.
       def reset!
         super
-      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError,
-             AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
-             AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError => e
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
+             AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError
+        # The wrapper is now connected to the new writer; finish the reset there, which also forgets the
+        # statements prepared on the replaced connection and resets the transaction state. Nothing is lost:
+        # a reset discards the session and rolls back any open transaction anyway.
+        super
+      rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
         raise translate_exception(e, message: e.message, sql: nil, binds: [])
       end
 

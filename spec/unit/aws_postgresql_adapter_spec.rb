@@ -191,6 +191,26 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
       end
     end
 
+    # Raised by the wrapper when something still bound to the replaced physical connection is used. It is
+    # flagged so a path that skipped the failover translation still forgets the stale prepared statements.
+    context 'when exception is a stale-connection error from the wrapper' do
+      let(:exception) do
+        AwsAdvancedRubyDriverWrapper::Errors::AwsError.new('Method invoked against old connection: x',
+                                                           needs_reconfiguration: true)
+      end
+
+      it 'forgets the prepared statements, reconfigures, and returns the original exception' do
+        calls = []
+        allow(adapter).to receive(:clear_cache!) { |**kwargs| calls << [:clear_cache!, kwargs] }
+        allow(adapter).to receive(:configure_connection) { calls << [:configure_connection] }
+
+        result = adapter.translate_exception(exception, message: message, sql: sql, binds: binds)
+
+        expect(result).to equal(exception)
+        expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
+      end
+    end
+
     # The wrapper reconnects the same connection object to a new physical connection, so statements
     # ActiveRecord prepared on the old one no longer exist and must be forgotten before reuse.
     reconfiguring_errors = [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
@@ -238,8 +258,8 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
   # ActiveRecord probes (#active?) and resets (#reset!) the raw connection directly, outside
   # with_raw_connection, so a failover the wrapper raises there never reaches translate_exception and the
-  # statements prepared on the replaced physical connection stay cached. The adapter translates it itself and,
-  # as with_raw_connection does, still raises the failover error to the application.
+  # statements prepared on the replaced physical connection stay cached. The adapter translates it itself:
+  # #active? answers true after a successful failover, and #reset! finishes the reset on the new connection.
   # These run ActiveRecord's own #active? and #reset! against a raw connection that raises as the wrapper does.
   describe 'failover raised outside with_raw_connection' do
     let(:errors) { AwsAdvancedRubyDriverWrapper::Errors }
@@ -274,13 +294,29 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
         expect(adapter.active?).to be false
       end
 
-      [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
-       AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError].each do |error_class|
-        it "forgets prepared statements, reconfigures, and re-raises a #{error_class.name.split('::').last} unchanged" do
-          error = error_class.new
-          probe_raises(error)
+      it 'forgets prepared statements, reconfigures, and is true when a failover succeeded' do
+        probe_raises(errors::FailoverSuccessError.new)
+
+        expect(adapter.active?).to be true
+        expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
+      end
+
+      context 'when a TransactionStateUnknownError is raised' do
+        before { probe_raises(error) }
+
+        let(:error) { errors::TransactionStateUnknownError.new }
+
+        it 're-raises it unchanged, after reconfiguring, when an ActiveRecord transaction is open' do
+          allow(adapter).to receive(:transaction_open?).and_return(true)
 
           expect { adapter.active? }.to(raise_error { |raised| expect(raised).to equal(error) })
+          expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
+        end
+
+        it 'is false, after reconfiguring, when no transaction is open' do
+          allow(adapter).to receive(:transaction_open?).and_return(false)
+
+          expect(adapter.active?).to be false
           expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
         end
       end
@@ -316,6 +352,21 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
       end
     end
 
+    describe 'the checkout path (with_raw_connection -> verify! -> active?)' do
+      it 'clears the cache once and then runs a non-retryable statement on the new connection' do
+        adapter.instance_variable_set(:@verified, nil)
+        allow(adapter).to receive_messages(reconnect_can_restore_state?: true, seconds_since_last_activity: nil,
+                                           connection_retries: 0, retry_deadline: nil)
+        allow(raw_connection).to receive(:query).with(';').and_raise(errors::FailoverSuccessError.new)
+
+        result = adapter.send(:with_raw_connection, allow_retry: false, materialize_transactions: false) { :ran }
+
+        expect(result).to eq(:ran)
+        expect(calls).to eq([[:clear_cache!, { new_connection: true }], [:configure_connection]])
+        expect(adapter.verified?).to be true
+      end
+    end
+
     describe '#reset!' do
       # Raises on the first DISCARD ALL, as the wrapper does when it fails over, and succeeds on the second.
       def discard_all_fails_once_with(error)
@@ -337,12 +388,12 @@ RSpec.describe ActiveRecord::ConnectionAdapters::AwsPostgreSQLAdapter do
 
       [AwsAdvancedRubyDriverWrapper::Errors::FailoverSuccessError,
        AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError].each do |error_class|
-        it "forgets prepared statements, reconfigures, and re-raises a #{error_class.name.split('::').last} unchanged" do
-          error = error_class.new
-          discard_all_fails_once_with(error)
+        it "finishes the reset on the new connection instead of raising a #{error_class.name.split('::').last}" do
+          discard_all_fails_once_with(error_class.new)
 
-          expect { adapter.reset! }.to(raise_error { |raised| expect(raised).to equal(error) })
-          expect(calls).to eq([[:discard_all], [:clear_cache!, { new_connection: true }], [:configure_connection]])
+          expect { adapter.reset! }.not_to raise_error
+          expect(calls.count([:discard_all])).to eq(2)
+          expect(calls.last).to eq([:configure_connection])
         end
       end
 
