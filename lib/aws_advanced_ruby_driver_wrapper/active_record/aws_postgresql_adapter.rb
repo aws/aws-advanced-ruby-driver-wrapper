@@ -141,7 +141,11 @@ module ActiveRecord
         # The wrapper is now connected to the new writer; finish the reset there, which also forgets the
         # statements prepared on the replaced connection and resets the transaction state. Nothing is lost:
         # a reset discards the session and rolls back any open transaction anyway.
-        super
+        begin
+          super
+        rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
+          raise translate_exception(e, message: e.message, sql: nil, binds: [])
+        end
       rescue AwsAdvancedRubyDriverWrapper::Errors::FailoverFailedError => e
         raise translate_exception(e, message: e.message, sql: nil, binds: [])
       end
