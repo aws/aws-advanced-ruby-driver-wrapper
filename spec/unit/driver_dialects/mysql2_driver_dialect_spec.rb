@@ -295,6 +295,13 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::Mysql2DriverDialect
       expect(dialect.network_bound_methods).not_to include(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_ESCAPE.name)
     end
 
+    # ActiveRecord checks a connection is alive with ping and reconnects when it returns false. If ping were
+    # network-bound, failover inside that check would raise a wrapper error out of #active? instead, past the
+    # adapter's error translation, and leave the statement cache pointing at the replaced connection.
+    it 'excludes CONNECTION_PING, so that a liveness check does not fail over' do
+      expect(dialect.network_bound_methods).not_to include(AwsAdvancedRubyDriverWrapper::RubyMethod::CONNECTION_PING.name)
+    end
+
     # A call that is not listed here is handed straight to the driver, which takes it past every
     # plugin. The calls that run a statement or move its results are the ones that must never be
     # missed, so they are checked against the driver itself rather than against a list written out by

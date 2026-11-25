@@ -147,7 +147,9 @@ module AwsAdvancedRubyDriverWrapper
           method_name = ruby_method.name
 
           if ruby_method.check_bounded_connection && !bounded_conn.nil? && !current_conn.nil? && (bounded_conn != current_conn)
-            raise Errors::AwsError, "Method invoked against old connection: #{bounded_conn}"
+            # The wrapper is already on a new physical connection, so adapters must forget what they cached for
+            # the old one; needs_reconfiguration routes this through their exception translation.
+            raise Errors::AwsError.new("Method invoked against old connection: #{bounded_conn}", needs_reconfiguration: true)
           end
         else
           # Fallback for dynamic method names (method_missing with string)

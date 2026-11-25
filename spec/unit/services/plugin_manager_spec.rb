@@ -19,6 +19,7 @@ require 'aws_advanced_ruby_driver_wrapper/services/plugin_manager'
 require 'aws_advanced_ruby_driver_wrapper/services/service_container'
 require 'aws_advanced_ruby_driver_wrapper/plugins/default_plugin'
 require 'aws_advanced_ruby_driver_wrapper/utils/telemetry/telemetry_factory'
+require 'aws_advanced_ruby_driver_wrapper/ruby_method'
 
 RSpec.describe 'Telemetry in the plugin pipeline' do
   include TelemetryHelper
@@ -239,6 +240,24 @@ RSpec.describe 'Telemetry in the plugin pipeline' do
       plugin.execute('connection.exec', -> { :rows })
 
       expect(dialect_service).not_to have_received(:driver_dialect)
+    end
+  end
+end
+
+RSpec.describe AwsAdvancedRubyDriverWrapper::Services::PluginManager do
+  describe '#execute on a connection other than the one the call is bound to' do
+    let(:manager) { described_class.allocate }
+    let(:method_info) { AwsAdvancedRubyDriverWrapper::RubyMethod.define('connection.exec', check_bounded_connection: true) }
+    let(:target) { -> { raise 'the target must not be called' } }
+
+    # needs_reconfiguration makes an ActiveRecord adapter forget what it cached for the replaced connection,
+    # so a missed path costs one failed call rather than a connection that stays broken.
+    it 'raises a wrapper error that asks for reconfiguration' do
+      expect { manager.execute(method_info, :current, target, bounded_conn: :old) }
+        .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::AwsError, /old connection/) do |error|
+          expect(error.needs_reconfiguration).to be true
+          expect(error.connection_broken).to be false
+        end
     end
   end
 end

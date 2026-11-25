@@ -3,6 +3,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/#semantic-versioning-200).
 
+## [Unreleased]
+
+### :bug: Fixed
+- Fixed the `aws_postgresql` ActiveRecord adapter keeping ActiveRecord's prepared statement cache when a failover happened while ActiveRecord checked a connection (`active?`) or reset it (`reset!`). Those calls bypass the adapter's error translation, so after the failover every query prepared before it failed with `Method invoked against old connection` until ActiveRecord discarded the connection. The adapter now clears the cache and re-applies the connection's settings there too.
+  - **Behavior change:** a successful failover during ActiveRecord's connection check (`active?`) no longer raises `FailoverSuccessError`: no statement of the application's was in flight, so the adapter reconnects silently, as ActiveRecord does for a dead connection, and the next statement runs on the new writer. `TransactionStateUnknownError` is still raised when an ActiveRecord transaction was open, because that transaction was lost; otherwise `active?` returns `false`. A failover during `reset!` completes the reset on the new writer instead of raising. `active?` returns `false`, and `reset!` raises `ActiveRecord::ConnectionFailed`, when failover fails. `aws_mysql2` and `aws_trilogy` are unchanged by these `active?`/`reset!` changes.
+- Hardened every ActiveRecord adapter (`aws_postgresql`, `aws_mysql2`, `aws_trilogy`) against any other code path that touches the raw connection outside `with_raw_connection` after a failover. The wrapper's `Method invoked against old connection` error is now flagged `needs_reconfiguration`, so the adapter's exception translation clears ActiveRecord's prepared statement cache and re-applies the connection's settings on the first such failure, instead of every statement prepared before the failover failing until the connection is discarded.
+  - **Behavior change:** that error is still an `AwsError` with the same message, but `needs_reconfiguration` is now `true` (`connection_broken` stays `false`). Code that inspects `needs_reconfiguration` on wrapper errors will now see it set.
+
 ## [1.1.0] - 2026-11-05
 
 ### :magic_wand: Added
