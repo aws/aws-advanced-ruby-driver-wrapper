@@ -74,13 +74,17 @@ module AwsAdvancedRubyDriverWrapper
           result = @driver_dialect.execute(connection, AURORA_UTILS_EXIST_QUERY)
           return false unless result.any?
           return false unless result.first['aurora_stat_utils'] == 't'
-        rescue StandardError
+        rescue StandardError => e
+          raise if DialectUtils.query_timeout_error?(e)
+
           return false
         end
 
         result = @driver_dialect.execute(connection, TOPOLOGY_EXISTS_QUERY)
         !result.nil? && result.any?
-      rescue StandardError
+      rescue StandardError => e
+        raise if DialectUtils.query_timeout_error?(e)
+
         false
       end
 

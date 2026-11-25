@@ -49,7 +49,9 @@ module AwsAdvancedRubyDriverWrapper
 
         row = result.first
         !row['multi_az_db_cluster_source_dbi_resource_id'].nil?
-      rescue StandardError
+      rescue StandardError => e
+        raise if DialectUtils.query_timeout_error?(e)
+
         false
       end
 

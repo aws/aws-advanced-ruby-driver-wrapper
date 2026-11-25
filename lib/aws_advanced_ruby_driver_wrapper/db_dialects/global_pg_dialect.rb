@@ -53,13 +53,15 @@ module AwsAdvancedRubyDriverWrapper
         return false unless
           check_existence_queries(@driver_dialect, connection, GLOBAL_STATUS_FUNC_EXISTS_QUERY, GLOBAL_INSTANCE_STATUS_FUNC_EXISTS_QUERY)
 
-        result = connection.exec(REGION_COUNT_QUERY)
+        result = @driver_dialect.execute(connection, REGION_COUNT_QUERY)
         return false unless result.any?
 
         row = result.first
         aws_region_count = row.is_a?(Hash) ? row.values.first.to_i : row[0].to_i
         aws_region_count > 1
-      rescue StandardError
+      rescue StandardError => e
+        raise if DialectUtils.query_timeout_error?(e)
+
         false
       end
 

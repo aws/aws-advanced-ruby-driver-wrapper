@@ -356,6 +356,16 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
         expect(result).to eq(original_dialect)
       end
 
+      it 'propagates a query timeout and does not cache the endpoint dialect' do
+        require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error'
+        timeout_error = AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5)
+        allow(connection).to receive(:exec).and_raise(timeout_error)
+        described_class.known_endpoint_dialects.remove(host)
+
+        expect { service.update_dialect(connection) }.to raise_error(timeout_error.class)
+        expect(described_class.known_endpoint_dialects.get(host)).to be_nil
+      end
+
       it 'updates to GlobalPgDialect when global functions exist' do
         aurora_utils_result = [{ 'aurora_stat_utils' => 't' }]
         global_status_result = [{ 'regproc' => 'aurora_global_db_status' }]
