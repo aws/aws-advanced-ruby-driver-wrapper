@@ -56,6 +56,34 @@ ENDPOINTS = [
     type: URL_TYPE::RDS_AURORA_LIMITLESS_DB_SHARD_GROUP, region: 'us-east-2', cluster_id: 'database-test-name',
     instance_identity: nil, host_pattern: '?.XYZ.us-east-2.rds.amazonaws.com',
     rds_dns: true, cluster_url: nil },
+  { host: 'group-test-name.rw-XYZ.db-cluster-group.us-east-2.rds.amazonaws.com',
+    type: URL_TYPE::RDS_CLUSTER_GROUP_WRITER, region: 'us-east-2', cluster_id: 'group-test-name',
+    instance_identity: nil, host_pattern: '?.XYZ.db-cluster-group.us-east-2.rds.amazonaws.com',
+    rds_dns: true, cluster_url: nil },
+  { host: 'group-test-name.ro-XYZ.db-cluster-group.us-east-2.rds.amazonaws.com',
+    type: URL_TYPE::RDS_CLUSTER_GROUP_READER, region: 'us-east-2', cluster_id: 'group-test-name',
+    instance_identity: nil, host_pattern: '?.XYZ.db-cluster-group.us-east-2.rds.amazonaws.com',
+    rds_dns: true, cluster_url: nil },
+  { host: 'GROUP-TEST-NAME.RW-XYZ.DB-CLUSTER-GROUP.US-EAST-2.RDS.AMAZONAWS.COM',
+    type: URL_TYPE::RDS_CLUSTER_GROUP_WRITER, region: 'US-EAST-2', cluster_id: 'GROUP-TEST-NAME',
+    instance_identity: nil, host_pattern: '?.XYZ.DB-CLUSTER-GROUP.US-EAST-2.RDS.AMAZONAWS.COM',
+    rds_dns: true, cluster_url: nil },
+  { host: 'database-test-name.XYZ.data-group.us-east-2.rds.amazonaws.com',
+    type: URL_TYPE::RDS_DATA_GROUP_WRITER, region: 'us-east-2', cluster_id: 'database-test-name',
+    instance_identity: nil, host_pattern: '?.XYZ.data-group.us-east-2.rds.amazonaws.com',
+    rds_dns: true, cluster_url: nil },
+  { host: 'database-test-name.ro-XYZ.data-group.us-east-2.rds.amazonaws.com',
+    type: URL_TYPE::RDS_DATA_GROUP_READER, region: 'us-east-2', cluster_id: 'database-test-name',
+    instance_identity: nil, host_pattern: '?.XYZ.data-group.us-east-2.rds.amazonaws.com',
+    rds_dns: true, cluster_url: nil },
+  { host: 'DATABASE-TEST-NAME.XYZ.DATA-GROUP.US-EAST-2.RDS.AMAZONAWS.COM',
+    type: URL_TYPE::RDS_DATA_GROUP_WRITER, region: 'US-EAST-2', cluster_id: 'DATABASE-TEST-NAME',
+    instance_identity: nil, host_pattern: '?.XYZ.DATA-GROUP.US-EAST-2.RDS.AMAZONAWS.COM',
+    rds_dns: true, cluster_url: nil },
+  { host: 'DATABASE-TEST-NAME.RO-XYZ.DATA-GROUP.US-EAST-2.RDS.AMAZONAWS.COM',
+    type: URL_TYPE::RDS_DATA_GROUP_READER, region: 'US-EAST-2', cluster_id: 'DATABASE-TEST-NAME',
+    instance_identity: nil, host_pattern: '?.XYZ.DATA-GROUP.US-EAST-2.RDS.AMAZONAWS.COM',
+    rds_dns: true, cluster_url: nil },
 
   # -- EU Redshift --
   { host: 'redshift-test-name.XYZ.eusc-de-east-1.rds.amazonaws.eu',
@@ -225,7 +253,11 @@ PREDICATES = {
   rds_cluster_dns?: [URL_TYPE::RDS_WRITER_CLUSTER, URL_TYPE::RDS_READER_CLUSTER],
   writer_cluster_dns?: [URL_TYPE::RDS_WRITER_CLUSTER],
   reader_cluster_dns?: [URL_TYPE::RDS_READER_CLUSTER],
-  limitless_db_shard_group_dns?: [URL_TYPE::RDS_AURORA_LIMITLESS_DB_SHARD_GROUP]
+  limitless_db_shard_group_dns?: [URL_TYPE::RDS_AURORA_LIMITLESS_DB_SHARD_GROUP],
+  cluster_group_writer_dns?: [URL_TYPE::RDS_CLUSTER_GROUP_WRITER],
+  cluster_group_reader_dns?: [URL_TYPE::RDS_CLUSTER_GROUP_READER],
+  data_group_writer_dns?: [URL_TYPE::RDS_DATA_GROUP_WRITER],
+  data_group_reader_dns?: [URL_TYPE::RDS_DATA_GROUP_READER]
 }.freeze
 
 METADATA_METHODS = {
@@ -274,6 +306,52 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RdsUtils do
     it 'returns false for regular clusters' do
       ep = ENDPOINTS.find { |ep| ep[:type] == URL_TYPE::RDS_WRITER_CLUSTER }
       expect(utils.global_db_writer_cluster_dns?(ep[:host])).to be false
+    end
+  end
+
+  describe 'cluster group and data group endpoints' do
+    let(:data_group_writer) { 'database-test-name.XYZ.data-group.us-east-2.rds.amazonaws.com' }
+    let(:data_group_reader) { 'database-test-name.ro-XYZ.data-group.us-east-2.rds.amazonaws.com' }
+    let(:cluster_group_writer) { 'group-test-name.rw-XYZ.db-cluster-group.us-east-2.rds.amazonaws.com' }
+    let(:cluster_group_reader) { 'group-test-name.ro-XYZ.db-cluster-group.us-east-2.rds.amazonaws.com' }
+    let(:instance) { 'test-instance.XYZ.us-east-2.rds.amazonaws.com' }
+
+    it 'classifies cluster group endpoints as cluster group' do
+      expect(utils.identify_rds_type(cluster_group_writer)).to eq url_type::RDS_CLUSTER_GROUP_WRITER
+      expect(utils.identify_rds_type(cluster_group_reader)).to eq url_type::RDS_CLUSTER_GROUP_READER
+      expect(utils.data_group_writer_dns?(cluster_group_writer)).to be false
+      expect(utils.data_group_reader_dns?(cluster_group_reader)).to be false
+    end
+
+    it 'does not classify data group endpoints as cluster group' do
+      expect(utils.cluster_group_writer_dns?(data_group_writer)).to be false
+      expect(utils.cluster_group_reader_dns?(data_group_reader)).to be false
+    end
+
+    it 'does not classify an instance endpoint as a data group writer' do
+      expect(utils.data_group_writer_dns?(instance)).to be false
+      expect(utils.data_group_reader_dns?(instance)).to be false
+      expect(utils.identify_rds_type(instance)).to eq url_type::RDS_INSTANCE
+    end
+
+    it 'does not treat data group endpoints as instance or cluster endpoints' do
+      [data_group_writer, data_group_reader].each do |host|
+        expect(utils.rds_instance?(host)).to be false
+        expect(utils.rds_cluster_dns?(host)).to be false
+        expect(utils.writer_cluster_dns?(host)).to be false
+        expect(utils.reader_cluster_dns?(host)).to be false
+      end
+    end
+
+    it 'returns the data group id as the cluster id' do
+      expect(utils.rds_cluster_id(data_group_writer)).to eq 'database-test-name'
+      expect(utils.rds_cluster_id(data_group_reader)).to eq 'database-test-name'
+      expect(utils.rds_cluster_id(cluster_group_writer)).to eq 'group-test-name'
+    end
+
+    it 'does not match the preview domain' do
+      expect(utils.identify_rds_type('database-test-name.XYZ.data-group.us-east-2.rds-preview.amazonaws.com'))
+        .to eq url_type::OTHER
     end
   end
 
@@ -630,6 +708,22 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RdsUrlType do
     expect(url_type::RDS_GLOBAL_WRITER_CLUSTER.rds?).to be true
     expect(url_type::RDS_GLOBAL_WRITER_CLUSTER.rds_cluster?).to be true
     expect(url_type::RDS_GLOBAL_WRITER_CLUSTER.region?).to be false
+
+    expect(url_type::RDS_CLUSTER_GROUP_WRITER.rds?).to be true
+    expect(url_type::RDS_CLUSTER_GROUP_WRITER.rds_cluster?).to be false
+    expect(url_type::RDS_CLUSTER_GROUP_WRITER.region?).to be true
+
+    expect(url_type::RDS_CLUSTER_GROUP_READER.rds?).to be true
+    expect(url_type::RDS_CLUSTER_GROUP_READER.rds_cluster?).to be false
+    expect(url_type::RDS_CLUSTER_GROUP_READER.region?).to be true
+
+    expect(url_type::RDS_DATA_GROUP_WRITER.rds?).to be true
+    expect(url_type::RDS_DATA_GROUP_WRITER.rds_cluster?).to be false
+    expect(url_type::RDS_DATA_GROUP_WRITER.region?).to be true
+
+    expect(url_type::RDS_DATA_GROUP_READER.rds?).to be true
+    expect(url_type::RDS_DATA_GROUP_READER.rds_cluster?).to be false
+    expect(url_type::RDS_DATA_GROUP_READER.region?).to be true
 
     expect(url_type::OTHER.rds?).to be false
     expect(url_type::OTHER.rds_cluster?).to be false
