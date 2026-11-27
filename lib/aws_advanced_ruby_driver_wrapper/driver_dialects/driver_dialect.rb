@@ -56,6 +56,18 @@ module AwsAdvancedRubyDriverWrapper
         raise NotImplementedError
       end
 
+      # Bounds the wrapper-internal queries (#execute, #execute_with_params) that run on +connection+ inside
+      # the block to +timeout_sec+ seconds in total. Application queries are never bounded.
+      # Only the PostgreSQL dialect can bound a query itself (the other drivers have +read_timeout+), so this
+      # yields unchanged by default.
+      #
+      # @param close_on_timeout [Boolean] true if the wrapper owns +connection+ and may close it on timeout,
+      #   false if the application owns it and it must be left open
+      # @param timeout_sec [Numeric, nil] the bound; nil or non-positive leaves the block unbounded
+      def with_query_timeout(_connection, close_on_timeout:, timeout_sec: nil)
+        yield
+      end
+
       # Rewrites +?+ placeholders into the driver's native placeholder syntax.
       # @param sql [String] SQL written with +?+ placeholders
       # @return [String]
@@ -133,6 +145,12 @@ module AwsAdvancedRubyDriverWrapper
 
       def sql_state(_exception)
         nil
+      end
+
+      # Whether +error+ is this driver's timeout for a wrapper-internal query (see #with_query_timeout).
+      # Dialect detection must not read a timeout as "not this dialect": the answer is unknown, so it has to propagate.
+      def query_timeout_error?(_error)
+        false
       end
 
       def network_bound_methods

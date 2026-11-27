@@ -63,7 +63,9 @@ module AwsAdvancedRubyDriverWrapper
           return false if result.nil? || result.none?
         end
         true
-      rescue StandardError
+      rescue StandardError => e
+        raise if driver_dialect.query_timeout_error?(e)
+
         false
       end
     end

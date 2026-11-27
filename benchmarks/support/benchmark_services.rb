@@ -78,6 +78,10 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         def update_dialect(_connection); end
+
+        def with_query_timeout(_connection, close_on_timeout:, timeout_sec: nil)
+          yield
+        end
       end
 
       class StubConnectionService

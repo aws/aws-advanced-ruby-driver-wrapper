@@ -108,6 +108,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::GlobalClusterTopologyMo
     allow(topology_utils).to receive(:query_global_topology) { [writer_host, reader_east, reader_west] }
     allow(db_dialect).to receive(:host_role).and_return(AwsAdvancedRubyDriverWrapper::Host::HostRole::WRITER)
     allow(plugin_manager).to receive(:internal_connect).and_return(mock_connection)
+    allow(dialect_service).to receive(:with_monitoring_query_timeout) { |_conn, _props, &block| block.call }
   end
 
   after do
@@ -127,6 +128,15 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Monitoring::GlobalClusterTopologyMo
       expect(topology_utils).to have_received(:query_global_topology).with(
         mock_connection, initial_host_info, instance_templates_by_region
       ).at_least(:once)
+    end
+  end
+
+  describe 'query timeout' do
+    it 'bounds the global topology query like the base monitor does' do
+      monitor.send(:query_topology, mock_connection)
+
+      expect(dialect_service).to have_received(:with_monitoring_query_timeout).with(mock_connection, {})
+      expect(topology_utils).to have_received(:query_global_topology)
     end
   end
 

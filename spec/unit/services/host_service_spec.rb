@@ -31,6 +31,8 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::HostService do
   let(:dialect) { instance_double('Dialect') }
   let(:dialect_service) { instance_double('DialectService', db_dialect: dialect) }
 
+  before { allow(dialect_service).to receive(:with_query_timeout) { |_conn, **_opts, &block| block.call } }
+
   let(:connection_service) { instance_double('ConnectionService') }
 
   let(:service_container) do
@@ -279,6 +281,14 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::HostService do
 
       result = service.identify_host(connection)
       expect(result).to eq(reader)
+    end
+
+    it 'bounds the identity query without closing the connection on timeout' do
+      expect(dialect_service).to receive(:with_query_timeout).with(connection, close_on_timeout: false).and_yield
+      allow(dialect).to receive(:instance_identity).with(connection).and_return(['reader-id', nil])
+      allow(host_list_provider).to receive(:refresh).and_return(hosts)
+
+      expect(service.identify_host(connection)).to eq(reader)
     end
 
     it 'returns nil when instance_identity returns nil' do

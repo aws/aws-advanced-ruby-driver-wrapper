@@ -52,7 +52,11 @@ module AwsAdvancedRubyDriverWrapper
 
           connection = open_runtime_connection(operation)
           begin
-            yield connection
+            # The wrapper owns this connection, so a query that gets no reply in time (when
+            # pg_query_timeout_sec is set) closes it.
+            @service_container.dialect_service.with_query_timeout(connection, close_on_timeout: true) do
+              yield connection
+            end
           ensure
             close_runtime_connection(connection)
           end

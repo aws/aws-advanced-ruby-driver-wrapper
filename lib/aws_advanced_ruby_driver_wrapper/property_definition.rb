@@ -48,6 +48,17 @@ module AwsAdvancedRubyDriverWrapper
       end
     end
 
+    PG_QUERY_TIMEOUT_MAX_SEC = 900.0
+
+    PG_QUERY_TIMEOUT_SEC_VALIDATOR = lambda do |val, name|
+      next if val.nil?
+
+      number = Float(val, exception: false)
+      unless number&.finite? && number >= 0 && number <= PG_QUERY_TIMEOUT_MAX_SEC
+        raise ArgumentError, "#{name} must be a number from 0 to #{PG_QUERY_TIMEOUT_MAX_SEC.to_i} seconds, got: #{val.inspect}"
+      end
+    end
+
     # -- General --
     CLUSTER_ID = WrapperProperty.new(:cluster_id, 'Unique identifier for the database cluster', default_value: '1', type: String)
     PLUGINS = WrapperProperty.new(:wrapper_plugins, 'Comma-separated list of plugin codes', default_value: 'failover,initial_connection',
@@ -175,6 +186,19 @@ module AwsAdvancedRubyDriverWrapper
       'Maximum number of parallel instance monitors during topology updates',
       default_value: 16,
       type: Integer
+    )
+
+    PG_QUERY_TIMEOUT_SEC = WrapperProperty.new(
+      :pg_query_timeout_sec,
+      'PostgreSQL only: client-side timeout in seconds for the wrapper\'s own queries (topology, host role, ' \
+      'dialect detection, Blue/Green status, failover ROLLBACK, KMS key store). It never applies to application ' \
+      'queries. The wait is on the socket, so it detects a database that stops answering even behind a TCP proxy. ' \
+      'On expiry the query fails as a connection error; a connection the wrapper opened itself is closed, while the ' \
+      'application\'s connection is left open for its owner. The timeout is one deadline for the whole query, not ' \
+      'reset as data arrives. Must be between 0 and 900 (15 minutes); 0 disables it. The topology monitor and the ' \
+      'Blue/Green monitors use this value when it is set and otherwise 5 seconds; override them with ' \
+      'topology_monitoring_pg_query_timeout_sec and bg_monitoring_pg_query_timeout_sec.',
+      default_value: 0.0, type: Float, validator: PG_QUERY_TIMEOUT_SEC_VALIDATOR
     )
 
     # -- Blue/Green --

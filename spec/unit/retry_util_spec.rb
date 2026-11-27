@@ -62,6 +62,7 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RetryUtil do
   end
 
   before do
+    allow(dialect_service).to receive(:with_query_timeout) { |_conn, **_opts, &block| block.call }
     allow(host_service).to receive(:select_host) do |hosts, role, _strategy|
       host_selector.select_host(hosts, role)
     end
@@ -99,6 +100,28 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Utils::RetryUtil do
         deadline = Time.now + 5
         expect(plugin_manager).to receive(:connect).with(writer_host, props, false, plugin_to_skip: plugin_to_skip)
         retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: deadline)
+      end
+    end
+
+    context 'when checking the role of a candidate' do
+      before do
+        allow(plugin_manager).to receive(:connect).and_return(connection)
+        allow(db_dialect).to receive(:host_role).with(connection).and_return(host_role::WRITER)
+      end
+
+      it 'bounds the role check and allows closing the connection on timeout' do
+        expect(dialect_service).to receive(:with_query_timeout).with(connection, close_on_timeout: true).and_yield
+        retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: Time.now + 5)
+      end
+
+      it 'closes the connection and retries when the role check times out' do
+        require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error'
+        timeout_error = AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5)
+        allow(db_dialect).to receive(:host_role).with(connection).and_raise(timeout_error)
+        expect(driver_dialect).to receive(:close_connection).with(connection).at_least(:once)
+        expect do
+          retry_util.connect_to_writer(plugin_to_skip, plugin_manager, deadline: Time.now + 0.15)
+        end.to raise_error(Timeout::Error)
       end
     end
 

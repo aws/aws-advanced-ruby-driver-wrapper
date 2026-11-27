@@ -209,7 +209,10 @@ module AwsAdvancedRubyDriverWrapper
       end
 
       def query_id_and_name(connection)
-        @service_container.dialect_service.db_dialect.instance_identity(connection)
+        dialect_service = @service_container.dialect_service
+        dialect_service.with_query_timeout(connection, close_on_timeout: false) do
+          dialect_service.db_dialect.instance_identity(connection)
+        end
       rescue StandardError
         [nil, nil]
       end

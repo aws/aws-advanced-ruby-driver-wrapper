@@ -88,6 +88,33 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Errors::PgErrorHandler do
     end
   end
 
+  describe '#network_error? for a wrapper query timeout' do
+    before { require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error' }
+
+    let(:timeout_error) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5) }
+
+    it 'is a network error by class' do
+      expect(handler.network_error?(timeout_error)).to be true
+    end
+
+    it 'is a network error when wrapped in a cause chain' do
+      wrapper = begin
+        begin
+          raise timeout_error
+        rescue PG::ConnectionBad
+          raise StandardError, 'outer'
+        end
+      rescue StandardError => e
+        e
+      end
+      expect(handler.network_error?(wrapper)).to be true
+    end
+
+    it 'does not make a plain ConnectionBad with the same message a network error' do
+      expect(handler.network_error?(PG::ConnectionBad.new(timeout_error.message))).to be false
+    end
+  end
+
   describe '#network_error?' do
     it 'detects network error from exception' do
       error = build_pg_error('57P01')

@@ -92,6 +92,27 @@ module AwsAdvancedRubyDriverWrapper
         end
       end
 
+      # Runs the block with the wrapper's own queries on +connection+ bounded by +timeout_sec+, or by the
+      # +pg_query_timeout_sec+ property when none is given (0 by default, so unbounded). Application queries
+      # are never bounded. See DriverDialects::DriverDialect#with_query_timeout.
+      #
+      # @param close_on_timeout [Boolean] true if the wrapper owns +connection+, false if the application does
+      def with_query_timeout(connection, close_on_timeout:, timeout_sec: nil, &)
+        timeout_sec ||= PropertyDefinition::PG_QUERY_TIMEOUT_SEC.get_float(@connection_service.wrapper_props)
+        driver_dialect.with_query_timeout(connection, close_on_timeout: close_on_timeout, timeout_sec: timeout_sec, &)
+      end
+
+      # Bounds a monitor's own queries on +connection+, which the monitor owns, so it is closed on timeout.
+      # +monitoring_wrapper_props+ is the monitor's props with its prefixed overrides merged in, so an explicit
+      # +pg_query_timeout_sec+, including 0, wins. Unset gives DriverDialect::DEFAULT_MONITORING_TIMEOUT_SEC (the
+      # bound monitors already use for connect_timeout), so a monitor never blocks indefinitely on a silent database.
+      def with_monitoring_query_timeout(connection, monitoring_wrapper_props, &)
+        timeout_sec = PropertyDefinition::PG_QUERY_TIMEOUT_SEC.get_float(
+          monitoring_wrapper_props, default: DriverDialects::DriverDialect::DEFAULT_MONITORING_TIMEOUT_SEC
+        )
+        with_query_timeout(connection, close_on_timeout: true, timeout_sec: timeout_sec, &)
+      end
+
       # Refines the dialect after a connection is established by querying the server
       # (e.g. checking for Aurora-specific functions/tables).
       #
@@ -109,7 +130,8 @@ module AwsAdvancedRubyDriverWrapper
             candidate = dialect_for_code(candidate_code)
             raise Errors::AwsError, "Unknown dialect code: #{candidate_code}" unless candidate
 
-            next unless candidate.dialect?(connection)
+            # The connection has not been handed to the application yet, so the wrapper may close it.
+            next unless with_query_timeout(connection, close_on_timeout: true) { candidate.dialect?(connection) }
 
             @can_update = false
             @dialect_code = candidate_code

@@ -119,7 +119,7 @@ module AwsAdvancedRubyDriverWrapper
         conn = plugin_manager.connect(candidate, @connection_service.driver_props, false, plugin_to_skip: plugin_to_skip)
 
         # Since the roles in the host list might not be accurate, we execute a query to check the instance's role.
-        role = verify_role.nil? ? nil : @dialect_service.db_dialect.host_role(conn)
+        role = verify_role.nil? ? nil : check_role(conn)
         if verify_role.nil?
           return Result.new(conn, candidate)
         elsif verify_role == role
@@ -133,6 +133,13 @@ module AwsAdvancedRubyDriverWrapper
         logger.debug { "Exception connecting to #{candidate.host}: #{e.message}" }
         close_quietly(conn)
         nil
+      end
+
+      def check_role(conn)
+        # A candidate the wrapper opened and has not handed out, so it may be closed on timeout.
+        @dialect_service.with_query_timeout(conn, close_on_timeout: true) do
+          @dialect_service.db_dialect.host_role(conn)
+        end
       end
 
       def select_candidate(hosts, role, strategy)

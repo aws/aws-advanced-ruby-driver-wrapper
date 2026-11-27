@@ -265,6 +265,74 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
     end
   end
 
+  describe '#with_query_timeout' do
+    let(:connection) { double('Connection') }
+    let(:driver_dialect) { double('DriverDialect') }
+
+    def service_with(wrapper_props)
+      service = build_service(:postgresql, wrapper_props: wrapper_props)
+      allow(service).to receive(:driver_dialect).and_return(driver_dialect)
+      service
+    end
+
+    it 'bounds by the pg_query_timeout_sec property when no timeout is given' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: false, timeout_sec: 7.0).and_yield
+      service_with(pg_query_timeout_sec: 7.0).with_query_timeout(connection, close_on_timeout: false) { :ignored }
+    end
+
+    it 'is unbounded (0) by default' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 0.0).and_yield
+      service_with({}).with_query_timeout(connection, close_on_timeout: true) { :ignored }
+    end
+
+    it 'prefers an explicit timeout, including 0, over the property' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 0.0).and_yield
+      service_with(pg_query_timeout_sec: 7.0)
+        .with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.0) { :ignored }
+    end
+
+    it 'returns the block result' do
+      allow(driver_dialect).to receive(:with_query_timeout) { |*_args, **_opts, &block| block.call }
+      expect(service_with({}).with_query_timeout(connection, close_on_timeout: true) { :result }).to eq(:result)
+    end
+  end
+
+  describe '#with_monitoring_query_timeout' do
+    let(:connection) { double('Connection') }
+    let(:driver_dialect) { double('DriverDialect') }
+
+    let(:service) do
+      build_service(:postgresql).tap { |svc| allow(svc).to receive(:driver_dialect).and_return(driver_dialect) }
+    end
+
+    it 'defaults to a bound so a monitor never blocks indefinitely, closing the monitor-owned connection' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 5).and_yield
+      service.with_monitoring_query_timeout(connection, {}) { :ignored }
+    end
+
+    it 'uses pg_query_timeout_sec from the monitor props when set' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 2.5).and_yield
+      service.with_monitoring_query_timeout(connection, { pg_query_timeout_sec: 2.5 }) { :ignored }
+    end
+
+    it 'lets an explicit 0 disable the bound' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 0.0).and_yield
+      service.with_monitoring_query_timeout(connection, { pg_query_timeout_sec: 0.0 }) { :ignored }
+    end
+
+    it 'ignores the connection-level property in favor of the monitor props' do
+      expect(driver_dialect).to receive(:with_query_timeout).with(connection, close_on_timeout: true, timeout_sec: 5).and_yield
+      svc = build_service(:postgresql, wrapper_props: { pg_query_timeout_sec: 30.0 })
+      allow(svc).to receive(:driver_dialect).and_return(driver_dialect)
+      svc.with_monitoring_query_timeout(connection, {}) { :ignored }
+    end
+
+    it 'returns the block result' do
+      allow(driver_dialect).to receive(:with_query_timeout) { |*_args, **_opts, &block| block.call }
+      expect(service.with_monitoring_query_timeout(connection, {}) { :result }).to eq(:result)
+    end
+  end
+
   describe '#update_dialect' do
     context 'PostgreSQL driver' do
       let(:connection) { instance_double('PG::Connection') }
@@ -538,6 +606,64 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
         allow(error).to receive(:sql_state).and_return('HY000')
         allow(error).to receive(:error_number).and_return(1290)
         expect(service.read_only_error?(error)).to be true
+      end
+    end
+  end
+
+  describe 'dialect detection on a query timeout' do
+    before { require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error' }
+
+    let(:dialects) { AwsAdvancedRubyDriverWrapper::DbDialects }
+    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+    let(:timeout_error) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5) }
+    let(:connection) { instance_double('PG::Connection') }
+    let(:host) { 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com' }
+    let(:service) { build_service_with_container(:postgresql, host: host) }
+    let(:server_result) { [{ 'aurora_stat_utils' => 't', 'rds_tools' => 't' }] }
+
+    # [dialect, the query that times out]: every other query succeeds, so each rescue in each dialect is the one
+    # exercised, not just the first one reached.
+    [
+      %i[AuroraPgDialect AURORA_UTILS_EXIST_QUERY],
+      %i[AuroraPgDialect TOPOLOGY_EXISTS_QUERY],
+      %i[GlobalPgDialect AURORA_UTILS_EXIST_QUERY],
+      %i[GlobalPgDialect GLOBAL_STATUS_FUNC_EXISTS_QUERY],
+      %i[GlobalPgDialect REGION_COUNT_QUERY],
+      %i[MultiAzClusterPgDialect IS_RDS_CLUSTER_QUERY],
+      %i[RdsPgDialect PG_PROC_EXISTS_QUERY],
+      %i[RdsPgDialect EXTENSIONS_EXIST_SQL],
+      %i[PgDialect PG_PROC_EXISTS_QUERY]
+    ].each do |klass_name, query_name|
+      context "when #{klass_name} times out on #{query_name}" do
+        let(:candidate) { dialects.const_get(klass_name).new(driver_dialect) }
+
+        before do
+          timing_out_query = dialects.const_get(klass_name).const_get(query_name)
+          allow(driver_dialect).to receive(:execute) do |_conn, query|
+            raise timeout_error if query == timing_out_query
+
+            server_result
+          end
+        end
+
+        it 'raises from #dialect?' do
+          expect { candidate.dialect?(connection) }.to raise_error(timeout_error.class)
+        end
+
+        it 'propagates from #update_dialect and does not cache the endpoint dialect' do
+          allow(service).to receive(:dialect_for_code).and_return(candidate)
+
+          expect { service.update_dialect(connection) }.to raise_error(timeout_error.class)
+          expect(described_class.known_endpoint_dialects.get(host)).to be_nil
+        end
+      end
+    end
+
+    it 'still reads a query error that is not a timeout as "not this dialect"' do
+      allow(driver_dialect).to receive(:execute).and_raise(PG::UndefinedTable.new('nope'))
+      [dialects::AuroraPgDialect, dialects::GlobalPgDialect, dialects::MultiAzClusterPgDialect,
+       dialects::RdsPgDialect, dialects::PgDialect].each do |klass|
+        expect(klass.new(driver_dialect).dialect?(connection)).to be(false), klass.name
       end
     end
   end

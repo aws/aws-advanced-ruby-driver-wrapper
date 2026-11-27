@@ -15,6 +15,7 @@
 #  limitations under the License.
 
 require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_driver_dialect'
+require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error'
 require 'aws_advanced_ruby_driver_wrapper/host/host_info'
 require 'aws_advanced_ruby_driver_wrapper/postgresql'
 
@@ -50,6 +51,154 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     it 'delegates to connection.exec' do
       expect(connection).to receive(:exec).with('SELECT 1').and_return(:result)
       expect(dialect.execute(connection, 'SELECT 1')).to eq(:result)
+    end
+  end
+
+  describe '#query_timeout_error?' do
+    it 'is true only for the query timeout' do
+      expect(dialect.query_timeout_error?(described_class::QueryTimeoutError.new(5))).to be true
+      expect(dialect.query_timeout_error?(PG::ConnectionBad.new('x'))).to be false
+      expect(dialect.query_timeout_error?(StandardError.new('x'))).to be false
+    end
+
+    it 'does not raise when the timeout class is not defined' do
+      hide_const('AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError')
+      expect(dialect.query_timeout_error?(StandardError.new('x'))).to be false
+    end
+  end
+
+  describe '#with_query_timeout' do
+    let(:io) { instance_double(IO) }
+    let(:other) { instance_double(PG::Connection) }
+
+    before { allow(connection).to receive_messages(socket_io: io, finished?: false, host: 'db.example', port: 5432) }
+
+    def silent_server
+      allow(connection).to receive(:send_query)
+      allow(connection).to receive(:send_query_params)
+      allow(connection).to receive(:is_busy).and_return(true)
+      allow(io).to receive_messages(wait_readable: nil, reopen: nil)
+    end
+
+    it 'does not bound queries outside the block' do
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) { nil }
+      expect(connection).to receive(:exec).with('SELECT 1').and_return(:ok)
+      expect(dialect.execute(connection, 'SELECT 1')).to eq(:ok)
+    end
+
+    it 'raises QueryTimeoutError and closes an owned connection when the socket never becomes readable' do
+      silent_server
+      expect(connection).to receive(:close)
+      expect do
+        dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) { dialect.execute(connection, 'SELECT 1') }
+      end.to raise_error(described_class::QueryTimeoutError, /timed out after 0.05s/)
+    end
+
+    it 'logs the timeout, the host and whether the connection was closed' do
+      silent_server
+      allow(connection).to receive_messages(close: nil)
+      allow(io).to receive(:reopen)
+      allow(dialect).to receive(:logger).and_return(logger = instance_double(Logger, debug: nil, error: nil, info: nil))
+      expect do
+        dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) { dialect.execute(connection, 'SELECT 1') }
+      end.to raise_error(described_class::QueryTimeoutError)
+      expect(logger).to have_received(:info).with(/timed out after 0.05s on db.example:5432; closing the connection/)
+    end
+
+    it 'leaves the connection open and unmodified when close_on_timeout is false' do
+      silent_server
+      expect(connection).not_to receive(:close)
+      expect(io).not_to receive(:reopen)
+      expect do
+        dialect.with_query_timeout(connection, close_on_timeout: false, timeout_sec: 0.05) { dialect.execute(connection, 'ROLLBACK') }
+      end.to raise_error(described_class::QueryTimeoutError)
+    end
+
+    it 'bounds execute_with_params too' do
+      silent_server
+      allow(connection).to receive(:close)
+      expect do
+        dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) do
+          dialect.execute_with_params(connection, 'SELECT $1', [1])
+        end
+      end.to raise_error(described_class::QueryTimeoutError)
+    end
+
+    it 'returns the last result when the server answers' do
+      result = instance_double(PG::Result, check: nil)
+      allow(connection).to receive(:send_query)
+      allow(connection).to receive(:is_busy).and_return(false)
+      allow(connection).to receive(:get_result).and_return(result, nil)
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) do
+        expect(dialect.execute(connection, 'SELECT 1')).to eq(result)
+      end
+    end
+
+    it 'raises the server error from the result, not a timeout, and keeps the connection' do
+      error = PG::UndefinedFunction.new('function aurora_stat_utils() does not exist')
+      result = instance_double(PG::Result)
+      allow(result).to receive(:check).and_raise(error)
+      allow(result).to receive(:clear)
+      allow(connection).to receive(:send_query)
+      allow(connection).to receive(:is_busy).and_return(false)
+      allow(connection).to receive(:get_result).and_return(result, nil)
+      expect(connection).not_to receive(:close)
+
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) do
+        expect { dialect.execute(connection, 'SELECT aurora_stat_utils()') }.to raise_error(PG::UndefinedFunction)
+      end
+    end
+
+    it 'only bounds the given connection' do
+      expect(other).to receive(:exec).with('SELECT 1').and_return(:ok)
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) do
+        expect(dialect.execute(other, 'SELECT 1')).to eq(:ok)
+      end
+    end
+
+    it 'leaves the block unbounded for a zero or nil timeout' do
+      [0.0, nil].each do |timeout|
+        expect(connection).to receive(:exec).with('SELECT 1').and_return(:ok)
+        dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: timeout) do
+          expect(dialect.execute(connection, 'SELECT 1')).to eq(:ok)
+        end
+      end
+    end
+
+    it 'lets the innermost scope win and restores the outer one' do
+      silent_server
+      outer_result = nil
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 10) do
+        expect do
+          dialect.with_query_timeout(connection, close_on_timeout: false, timeout_sec: 0.05) { dialect.execute(connection, 'SELECT 1') }
+        end.to raise_error(described_class::QueryTimeoutError, /0.05s/)
+        expect(dialect.send(:query_timeout_for, connection)).to eq([10.0, true])
+        outer_result = :restored
+      end
+      expect(outer_result).to eq(:restored)
+      expect(dialect.send(:query_timeout_for, connection)).to be_nil
+    end
+
+    it 'removes the scope when the block raises' do
+      expect { dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 1) { raise 'boom' } }.to raise_error('boom')
+      expect(dialect.send(:query_timeout_for, connection)).to be_nil
+    end
+
+    it 'does not leak into other threads' do
+      seen = nil
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 1) do
+        Thread.new { seen = dialect.send(:query_timeout_for, connection) }.join
+      end
+      expect(seen).to be_nil
+    end
+  end
+
+  describe 'QueryTimeoutError' do
+    it 'is a PG::ConnectionBad, ending in a newline so ActiveRecord maps it to ConnectionFailed' do
+      error = described_class::QueryTimeoutError.new(5)
+      expect(error).to be_a(PG::ConnectionBad)
+      expect(error.message).to end_with("\n")
+      expect(error.message).not_to match(/connection is closed|no connection to the server/i)
     end
   end
 

@@ -235,7 +235,10 @@ module AwsAdvancedRubyDriverWrapper
         return unless @service_container.session_state_service.in_transaction?
 
         begin
-          driver_dialect.execute(conn, 'ROLLBACK')
+          # The application owns this connection: bound the wait, but leave it open if the ROLLBACK times out.
+          dialect_service.with_query_timeout(conn, close_on_timeout: false) do
+            driver_dialect.execute(conn, 'ROLLBACK')
+          end
         rescue StandardError
           nil
         end
@@ -448,7 +451,8 @@ module AwsAdvancedRubyDriverWrapper
       def attempt_reader_connection(host_info)
         conn = @service_container.plugin_manager.connect(host_info, connection_service.driver_props, false, plugin_to_skip: self)
         # Since the roles in the host list might not be accurate, we execute a query to check the instance's role.
-        role = db_dialect.host_role(conn)
+        # A candidate connection the wrapper opened and has not handed out, so it may be closed on timeout.
+        role = dialect_service.with_query_timeout(conn, close_on_timeout: true) { db_dialect.host_role(conn) }
 
         if role == Host::HostRole::READER || @failover_mode != FailoverMode::STRICT_READER
           updated_host = host_info.deep_dup(role: role)
@@ -491,7 +495,9 @@ module AwsAdvancedRubyDriverWrapper
         end
 
         conn = connect_func.call
-        if db_dialect.host_role(conn) == Host::HostRole::WRITER
+        # Not handed to the application yet, so the wrapper may close it on timeout.
+        role = dialect_service.with_query_timeout(conn, close_on_timeout: true) { db_dialect.host_role(conn) }
+        if role == Host::HostRole::WRITER
           host_service.refresh_host_list
           return conn
         end

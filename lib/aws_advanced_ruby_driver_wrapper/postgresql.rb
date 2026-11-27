@@ -510,6 +510,7 @@ module AwsAdvancedRubyDriverWrapper
 
     def ensure_pg!
       require 'pg'
+      require_relative 'driver_dialects/pg_query_timeout_error'
     rescue LoadError
       raise LoadError, "WrapperPgConnection requires 'pg'. Add it to your Gemfile: gem 'pg'"
     end

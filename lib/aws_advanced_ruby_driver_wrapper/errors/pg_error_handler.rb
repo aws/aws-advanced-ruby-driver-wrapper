@@ -109,6 +109,8 @@ module AwsAdvancedRubyDriverWrapper
 
       def connection_bad_network_error?(error)
         return false unless defined?(PG::ConnectionBad) && error.is_a?(PG::ConnectionBad)
+        # A timed-out wrapper query is a connection failure by class, whatever its message says.
+        return true if @driver_dialect.query_timeout_error?(error)
 
         msg = error.message&.downcase
         return false if msg.nil?
