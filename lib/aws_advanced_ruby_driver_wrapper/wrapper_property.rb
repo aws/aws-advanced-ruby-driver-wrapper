@@ -26,8 +26,8 @@ module AwsAdvancedRubyDriverWrapper
       @validator = validator
     end
 
-    # @return [String, Boolean, Integer, nil] the value from props, or the property's default
     # @param default [Object] used instead of the property's default when the key is in neither +props+ nor +override+
+    # @return [String, Boolean, Integer, Float, nil] the value from props, or the property's default
     def get(props, override = nil, default: @default_value)
       override&.key?(@name) ? override.fetch(@name, default) : props.fetch(@name, default)
     end
@@ -44,6 +44,8 @@ module AwsAdvancedRubyDriverWrapper
       val.is_a?(Integer) ? val : val.to_i
     end
 
+    # @param default [Object] used instead of the property's default when the key is in neither +props+ nor +override+
+    # @return [Float]
     def get_float(props, override = nil, default: @default_value)
       val = get(props, override, default: default)
       val.is_a?(Float) ? val : val.to_f
