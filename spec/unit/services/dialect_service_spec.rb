@@ -356,16 +356,6 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
         expect(result).to eq(original_dialect)
       end
 
-      it 'propagates a query timeout and does not cache the endpoint dialect' do
-        require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error'
-        timeout_error = AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5)
-        allow(connection).to receive(:exec).and_raise(timeout_error)
-        described_class.known_endpoint_dialects.remove(host)
-
-        expect { service.update_dialect(connection) }.to raise_error(timeout_error.class)
-        expect(described_class.known_endpoint_dialects.get(host)).to be_nil
-      end
-
       it 'updates to GlobalPgDialect when global functions exist' do
         aurora_utils_result = [{ 'aurora_stat_utils' => 't' }]
         global_status_result = [{ 'regproc' => 'aurora_global_db_status' }]
@@ -616,6 +606,64 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Services::DialectService do
         allow(error).to receive(:sql_state).and_return('HY000')
         allow(error).to receive(:error_number).and_return(1290)
         expect(service.read_only_error?(error)).to be true
+      end
+    end
+  end
+
+  describe 'dialect detection on a query timeout' do
+    before { require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error' }
+
+    let(:dialects) { AwsAdvancedRubyDriverWrapper::DbDialects }
+    let(:driver_dialect) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect.new }
+    let(:timeout_error) { AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5) }
+    let(:connection) { instance_double('PG::Connection') }
+    let(:host) { 'my-cluster.cluster-xyz.us-east-2.rds.amazonaws.com' }
+    let(:service) { build_service_with_container(:postgresql, host: host) }
+    let(:server_result) { [{ 'aurora_stat_utils' => 't', 'rds_tools' => 't' }] }
+
+    # [dialect, the query that times out]: every other query succeeds, so each rescue in each dialect is the one
+    # exercised, not just the first one reached.
+    [
+      %i[AuroraPgDialect AURORA_UTILS_EXIST_QUERY],
+      %i[AuroraPgDialect TOPOLOGY_EXISTS_QUERY],
+      %i[GlobalPgDialect AURORA_UTILS_EXIST_QUERY],
+      %i[GlobalPgDialect GLOBAL_STATUS_FUNC_EXISTS_QUERY],
+      %i[GlobalPgDialect REGION_COUNT_QUERY],
+      %i[MultiAzClusterPgDialect IS_RDS_CLUSTER_QUERY],
+      %i[RdsPgDialect PG_PROC_EXISTS_QUERY],
+      %i[RdsPgDialect EXTENSIONS_EXIST_SQL],
+      %i[PgDialect PG_PROC_EXISTS_QUERY]
+    ].each do |klass_name, query_name|
+      context "when #{klass_name} times out on #{query_name}" do
+        let(:candidate) { dialects.const_get(klass_name).new(driver_dialect) }
+
+        before do
+          timing_out_query = dialects.const_get(klass_name).const_get(query_name)
+          allow(driver_dialect).to receive(:execute) do |_conn, query|
+            raise timeout_error if query == timing_out_query
+
+            server_result
+          end
+        end
+
+        it 'raises from #dialect?' do
+          expect { candidate.dialect?(connection) }.to raise_error(timeout_error.class)
+        end
+
+        it 'propagates from #update_dialect and does not cache the endpoint dialect' do
+          allow(service).to receive(:dialect_for_code).and_return(candidate)
+
+          expect { service.update_dialect(connection) }.to raise_error(timeout_error.class)
+          expect(described_class.known_endpoint_dialects.get(host)).to be_nil
+        end
+      end
+    end
+
+    it 'still reads a query error that is not a timeout as "not this dialect"' do
+      allow(driver_dialect).to receive(:execute).and_raise(PG::UndefinedTable.new('nope'))
+      [dialects::AuroraPgDialect, dialects::GlobalPgDialect, dialects::MultiAzClusterPgDialect,
+       dialects::RdsPgDialect, dialects::PgDialect].each do |klass|
+        expect(klass.new(driver_dialect).dialect?(connection)).to be(false), klass.name
       end
     end
   end
