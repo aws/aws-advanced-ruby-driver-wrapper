@@ -147,6 +147,12 @@ module AwsAdvancedRubyDriverWrapper
         nil
       end
 
+      # Whether +error+ is this driver's timeout for a wrapper-internal query (see #with_query_timeout).
+      # Dialect detection must not read a timeout as "not this dialect": the answer is unknown, so it has to propagate.
+      def query_timeout_error?(_error)
+        false
+      end
+
       def network_bound_methods
         COMMON_NETWORK_BOUND_METHODS
       end

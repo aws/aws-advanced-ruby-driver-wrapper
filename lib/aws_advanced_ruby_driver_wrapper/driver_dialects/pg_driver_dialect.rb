@@ -228,6 +228,11 @@ module AwsAdvancedRubyDriverWrapper
         exception.result.error_field(::PG::PG_DIAG_SQLSTATE)
       end
 
+      # The error class is loaded on demand (it needs the pg gem), so check that it is defined before using it.
+      def query_timeout_error?(error)
+        defined?(QueryTimeoutError) == 'constant' && error.is_a?(QueryTimeoutError)
+      end
+
       def network_bound_methods
         NETWORK_BOUND_METHODS
       end

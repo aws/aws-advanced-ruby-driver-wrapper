@@ -60,7 +60,7 @@ module AwsAdvancedRubyDriverWrapper
             return true if rds_tools_enabled && !aurora_utils_enabled
           end
         rescue StandardError => e
-          raise if DialectUtils.query_timeout_error?(e)
+          raise if @driver_dialect.query_timeout_error?(e)
 
           return false
         end

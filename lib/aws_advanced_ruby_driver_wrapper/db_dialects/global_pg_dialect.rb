@@ -60,7 +60,7 @@ module AwsAdvancedRubyDriverWrapper
         aws_region_count = row.is_a?(Hash) ? row.values.first.to_i : row[0].to_i
         aws_region_count > 1
       rescue StandardError => e
-        raise if DialectUtils.query_timeout_error?(e)
+        raise if @driver_dialect.query_timeout_error?(e)
 
         false
       end

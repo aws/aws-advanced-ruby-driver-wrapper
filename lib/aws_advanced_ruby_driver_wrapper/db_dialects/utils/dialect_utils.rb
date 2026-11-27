@@ -19,16 +19,6 @@ require_relative '../../host/host_role'
 module AwsAdvancedRubyDriverWrapper
   module DbDialects
     module DialectUtils
-      # Whether +error+ is the PG driver dialect's query timeout. Dialect detection must not read a timeout as
-      # "not this dialect": the answer is unknown, so the error has to reach the caller.
-      #
-      # The class is only defined once pg_query_timeout_error.rb is loaded, so it is never named in a +rescue+
-      # clause (a missing constant there would raise NameError while an error is being handled).
-      def self.query_timeout_error?(error)
-        defined?(DriverDialects::PgDriverDialect::QueryTimeoutError) == 'constant' &&
-          error.is_a?(DriverDialects::PgDriverDialect::QueryTimeoutError)
-      end
-
       # Returns the instance identity for the given connection.
       #
       # @param driver_dialect [Object] the driver dialect used to execute queries
@@ -74,7 +64,7 @@ module AwsAdvancedRubyDriverWrapper
         end
         true
       rescue StandardError => e
-        raise if DialectUtils.query_timeout_error?(e)
+        raise if driver_dialect.query_timeout_error?(e)
 
         false
       end

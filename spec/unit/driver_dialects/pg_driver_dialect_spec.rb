@@ -54,6 +54,19 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
     end
   end
 
+  describe '#query_timeout_error?' do
+    it 'is true only for the query timeout' do
+      expect(dialect.query_timeout_error?(described_class::QueryTimeoutError.new(5))).to be true
+      expect(dialect.query_timeout_error?(PG::ConnectionBad.new('x'))).to be false
+      expect(dialect.query_timeout_error?(StandardError.new('x'))).to be false
+    end
+
+    it 'does not raise when the timeout class is not defined' do
+      hide_const('AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError')
+      expect(dialect.query_timeout_error?(StandardError.new('x'))).to be false
+    end
+  end
+
   describe '#with_query_timeout' do
     let(:io) { instance_double(IO) }
     let(:other) { instance_double(PG::Connection) }
@@ -118,6 +131,21 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect do
       allow(connection).to receive(:get_result).and_return(result, nil)
       dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) do
         expect(dialect.execute(connection, 'SELECT 1')).to eq(result)
+      end
+    end
+
+    it 'raises the server error from the result, not a timeout, and keeps the connection' do
+      error = PG::UndefinedFunction.new('function aurora_stat_utils() does not exist')
+      result = instance_double(PG::Result)
+      allow(result).to receive(:check).and_raise(error)
+      allow(result).to receive(:clear)
+      allow(connection).to receive(:send_query)
+      allow(connection).to receive(:is_busy).and_return(false)
+      allow(connection).to receive(:get_result).and_return(result, nil)
+      expect(connection).not_to receive(:close)
+
+      dialect.with_query_timeout(connection, close_on_timeout: true, timeout_sec: 0.05) do
+        expect { dialect.execute(connection, 'SELECT aurora_stat_utils()') }.to raise_error(PG::UndefinedFunction)
       end
     end
 
