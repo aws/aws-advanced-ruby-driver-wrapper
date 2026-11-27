@@ -266,7 +266,9 @@ RSpec.describe AwsAdvancedRubyDriverWrapper::Plugins::FailoverPlugin do
       end
 
       it 'does not fail the failover when the ROLLBACK times out' do
-        allow(driver_dialect).to receive(:execute).with(connection, 'ROLLBACK').and_raise(PG::ConnectionBad)
+        require 'aws_advanced_ruby_driver_wrapper/driver_dialects/pg_query_timeout_error'
+        timeout_error = AwsAdvancedRubyDriverWrapper::DriverDialects::PgDriverDialect::QueryTimeoutError.new(5)
+        allow(driver_dialect).to receive(:execute).with(connection, 'ROLLBACK').and_raise(timeout_error)
         expect(driver_dialect).not_to receive(:close_connection).with(connection)
         expect { plugin.execute('connection.exec', pipeline_callable) }
           .to raise_error(AwsAdvancedRubyDriverWrapper::Errors::TransactionStateUnknownError)
