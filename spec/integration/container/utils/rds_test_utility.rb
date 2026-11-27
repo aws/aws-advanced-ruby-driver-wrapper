@@ -658,11 +658,50 @@ module Integration
 
       target_arn = cluster_arn(target_cluster_id)
       TestUtils.logger.info("GDB switchover: #{global_cluster_id} -> #{target_cluster_id}")
-      @client.switchover_global_cluster(
-        global_cluster_identifier: global_cluster_id,
-        target_db_cluster_identifier: target_arn
-      )
+      request_global_switchover(global_cluster_id, target_arn)
       wait_until_primary_cluster(target_cluster_id, timeout_secs: timeout_secs)
+    end
+
+    # RDS rejects a switchover while the global cluster or a member is still settling from a previous
+    # transition, so wait for them to settle and retry the request, as request_cluster_failover does.
+    def request_global_switchover(global_cluster_id, target_arn, max_request_attempts: 10)
+      max_request_attempts.times do
+        wait_until_global_members_available
+        @client.switchover_global_cluster(
+          global_cluster_identifier: global_cluster_id,
+          target_db_cluster_identifier: target_arn
+        )
+        return
+      rescue Aws::RDS::Errors::InvalidDBClusterStateFault, Aws::RDS::Errors::InvalidGlobalClusterStateFault => e
+        TestUtils.logger.warn("switchover_global_cluster request failed (#{e.message}), retrying")
+        sleep(GLOBAL_TRANSITION_POLL_SECS)
+      end
+
+      raise "Failed to request a global switchover for #{global_cluster_id} after #{max_request_attempts} attempts"
+    end
+
+    # Waits until the global cluster and every member cluster report 'available', querying each member
+    # in its own region.
+    def wait_until_global_members_available
+      env = TestEnvironment.current
+      wait_until_global_cluster_available(env.global_cluster_identifier) if env.global_cluster_identifier
+      [env.cluster_name, env.secondary_cluster_identifier].compact.each do |cluster_id|
+        util = cluster_id == env.secondary_cluster_identifier ? self.class.secondary_utility : self
+        util.wait_until_cluster_has_desired_status(cluster_id, 'available')
+      end
+    end
+
+    def wait_until_global_cluster_available(global_cluster_id, timeout_secs: GLOBAL_TRANSITION_TIMEOUT_SECS)
+      deadline = Time.now + timeout_secs
+      loop do
+        status = @client.describe_global_clusters(global_cluster_identifier: global_cluster_id)
+                        .global_clusters.first&.status
+        return if status == 'available'
+
+        raise "Timeout waiting for global cluster #{global_cluster_id} to become available" if Time.now > deadline
+
+        sleep(GLOBAL_TRANSITION_POLL_SECS)
+      end
     end
 
     # Polls the global cluster members until the expected region is home to the global writer.

@@ -30,7 +30,7 @@ PERF_REPEAT_TIMES          = ENV.fetch('REPEAT_TIMES', '5').to_i
 PERF_INTER_ITERATION_SLEEP = ENV.fetch('INTER_ITERATION_SLEEP', '15').to_i
 PERF_FINISH_LATCH_TIMEOUT  = 120
 PERF_RECONNECT_TIMEOUT_SEC = 5
-PERF_SOCKET_TIMEOUT_PARAMS = [[30, 10_000], [30, 20_000], [30, 30_000]].freeze
+PERF_SOCKET_TIMEOUT_PARAMS = [[30, 5_000], [30, 10_000], [30, 20_000]].freeze
 
 RSpec.describe 'Failover Performance', :integration,
                features: [Integration::TestEnvironmentFeatures::PERFORMANCE,
