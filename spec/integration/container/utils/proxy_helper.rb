@@ -43,6 +43,10 @@ module Integration
         disable_proxy(instance_name)
       end
 
+      def silence_connectivity(instance_name)
+        disable_proxy_connectivity(TestEnvironment.current.proxy_info(instance_name))
+      end
+
       def enable_all_connectivity
         TestEnvironment.current.proxy_infos.each { |p| enable_proxy_instance(p) }
       end
